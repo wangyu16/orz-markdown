@@ -105,6 +105,7 @@ body {
   font-style: italic;
   font-size: 1.15em;
   color: var(--text-muted);
+  background-color: #e5ddd0;
 }
 
 /* Lists */
@@ -127,6 +128,7 @@ body {
 /* Code & Pre */
 .markdown-body code {
   font-family: var(--code-font);
+  color: #2d1e0f;
   background-color: rgba(0,0,0,0.05);
   padding: 0.2em 0.4em;
   border-radius: 4px;

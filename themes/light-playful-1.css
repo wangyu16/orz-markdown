@@ -119,6 +119,7 @@ body {
 /* Code */
 .markdown-body code {
   font-family: var(--code-font);
+  color: #1c1a17;
   background: rgba(255, 200, 0, 0.3);
   padding: 0.1em 0.4em;
   border-radius: 8px;

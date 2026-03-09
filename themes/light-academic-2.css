@@ -110,6 +110,7 @@ body {
 /* Code & Pre */
 .markdown-body code {
   font-family: var(--code-font);
+  color: #000000;
   font-size: 0.9em;
   background-color: #f1f3f5;
   padding: 0.1em 0.3em;

@@ -111,6 +111,7 @@ body {
   font-size: 1.25em;
   color: #4a3e38;
   text-align: center;
+  background-color: #ece2d2;
 }
 
 .markdown-body blockquote p:last-child {

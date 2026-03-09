@@ -96,11 +96,12 @@ body {
 /* Blockquotes: margin-like or abstract style */
 .markdown-body blockquote {
   margin: 2rem 3rem;
-  padding: 0;
+  padding: 0.75rem 1rem;
   font-size: 1.1rem;
   font-style: italic;
   border-left: none;
   color: var(--text-muted);
+  background-color: #f0f0e6;
 }
 
 /* Lists */
@@ -117,6 +118,7 @@ body {
 /* Code & Pre */
 .markdown-body code {
   font-family: var(--code-font);
+  color: #000000;
   font-size: 0.85em;
   background-color: transparent;
   padding: 0;
