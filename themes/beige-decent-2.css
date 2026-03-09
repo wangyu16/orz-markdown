@@ -33,6 +33,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -50,6 +51,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--header-font);
   color: #111;
   margin-top: 3em;
@@ -193,10 +195,24 @@ body {
 .markdown-body .warning { background: var(--warning-bg); color: #876d29; border-left: 4px solid var(--warning-border); }
 .markdown-body .danger { background: var(--danger-bg); color: #9c4b54; border-left: 4px solid var(--danger-border); }
 
-/* Alignment Styles */
-.markdown-body .left { text-align: left; }
-.markdown-body .right { text-align: right; }
-.markdown-body .center { text-align: center; }
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8em 1em;
+  margin: 0 1.5em 1em 0;
+  background: #e5ddd0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1em;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1em;
+}
 
 /* Spoil / Details */
 .markdown-body details.spoil {

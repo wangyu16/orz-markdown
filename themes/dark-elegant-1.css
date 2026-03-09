@@ -102,6 +102,7 @@ body {
    Article wrapper
    -------------------------------------------------------------------------- */
 .markdown-body {
+  display: flow-root;
   max-width: 860px;
   margin: 0 auto;
   background: var(--bg-surface);
@@ -114,6 +115,7 @@ body {
    Headings
    -------------------------------------------------------------------------- */
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   font-family: 'Playfair Display', Georgia, serif;
   color: var(--text-heading);
   line-height: var(--lh-tight);
@@ -422,14 +424,12 @@ p > img { margin: 0; display: inline; }
 /* --------------------------------------------------------------------------
    Containers — Layout (left / right / center)
    -------------------------------------------------------------------------- */
-.left  { float: left;      margin: 0 var(--gap) var(--gap) 0;    max-width: 45%; }
-.right { float: right;     margin: 0 0 var(--gap) var(--gap);    max-width: 45%; }
+.left  { float: left;  margin: 0 var(--gap) var(--gap) 0; max-width: 45%; }
+.right { text-align: right; margin: 0 0 var(--gap); }
 .center {
   text-align: center;
   margin: var(--gap) auto;
 }
-/* Clear floats after layout containers */
-.left + *, .right + * { clear: both; }
 
 /* --------------------------------------------------------------------------
    Container — Spoiler (uses <details> rendered by custom container renderer)
@@ -537,7 +537,7 @@ details.spoil > *:last-child { padding-bottom: 1.25rem; }
 /* Responsive: single column on small screens */
 @media (max-width: 600px) {
   .cols { grid-template-columns: 1fr; }
-  .left, .right { float: none; max-width: 100%; margin: 0 0 var(--gap); }
+  .left { float: none; max-width: 100%; margin: 0 0 var(--gap); }
 }
 
 /* --------------------------------------------------------------------------

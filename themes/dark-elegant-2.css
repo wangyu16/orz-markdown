@@ -262,6 +262,7 @@ body {
    Headings + anchors
    -------------------------------------------------------------------------- */
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.2em 0 0.7em;
   color: var(--heading);
@@ -279,7 +280,8 @@ h3:first-child {
 }
 
 h1 {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   margin-bottom: 0.8em;
   padding: 0.35em 1.1rem 0.5em;
   font-size: clamp(2rem, 4.5vw, 3.15rem);
@@ -898,34 +900,25 @@ div.danger > *:last-child {
 /* --------------------------------------------------------------------------
    Layout containers
    -------------------------------------------------------------------------- */
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--border-soft);
   border-radius: 16px;
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-4);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 /* --------------------------------------------------------------------------
@@ -1309,8 +1302,7 @@ span.qrcode svg {
     border-radius: 20px;
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);

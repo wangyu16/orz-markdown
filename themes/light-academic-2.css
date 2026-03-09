@@ -25,6 +25,7 @@ body {
 
 /* Journal layout */
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -43,6 +44,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--header-font);
   font-weight: 700;
   color: var(--text-main);
@@ -220,6 +222,25 @@ body {
 .markdown-body span.info { background: #e1f0fa; }
 .markdown-body span.warning { background: #fff4d4; }
 .markdown-body span.danger { background: #fcebeb; }
+
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.75rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: #f1f3f5;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
 
 /* Tabs & Cols */
 .markdown-body .cols {

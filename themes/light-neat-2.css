@@ -195,6 +195,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   position: relative;
   max-width: 920px;
   margin: 0 auto;
@@ -232,6 +233,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.15em 0 0.72em;
   color: var(--heading);
@@ -290,7 +292,8 @@ h2::before {
 }
 
 h3 {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   font-size: var(--fs-400);
   padding: 0.18em 0.7rem 0.28em;
   background: var(--surface-2);
@@ -780,8 +783,8 @@ div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
@@ -790,27 +793,18 @@ div.danger > *:last-child {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-soft);
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-5);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 details.spoil {
@@ -1133,8 +1127,7 @@ span.qrcode svg {
     box-shadow: 0 10px 22px rgba(166, 155, 137, 0.14), 0 3px 8px rgba(166, 155, 137, 0.08);
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);

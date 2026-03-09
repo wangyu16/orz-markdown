@@ -122,6 +122,7 @@ body {
    Article wrapper
    -------------------------------------------------------------------------- */
 .markdown-body {
+  display: flow-root;
   max-width: 860px;
   margin: 0 auto;
   background: var(--bg-surface);
@@ -134,6 +135,7 @@ body {
    Headings
    -------------------------------------------------------------------------- */
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   font-family: 'Playfair Display', Georgia, serif;
   color: var(--text-heading);
   line-height: var(--lh-tight);
@@ -442,14 +444,12 @@ p > img { margin: 0; display: inline; }
 /* --------------------------------------------------------------------------
    Containers — Layout (left / right / center)
    -------------------------------------------------------------------------- */
-.left  { float: left;      margin: 0 var(--gap) var(--gap) 0;    max-width: 45%; }
-.right { float: right;     margin: 0 0 var(--gap) var(--gap);    max-width: 45%; }
+.left  { float: left;  margin: 0 var(--gap) var(--gap) 0; max-width: 45%; }
+.right { text-align: right; margin: 0 0 var(--gap); }
 .center {
   text-align: center;
   margin: var(--gap) auto;
 }
-/* Clear floats after layout containers */
-.left + *, .right + * { clear: both; }
 
 /* --------------------------------------------------------------------------
    Container — Spoiler (uses <details> rendered by custom container renderer)
@@ -557,7 +557,7 @@ details.spoil > *:last-child { padding-bottom: 1.25rem; }
 /* Responsive: single column on small screens */
 @media (max-width: 600px) {
   .cols { grid-template-columns: 1fr; }
-  .left, .right { float: none; max-width: 100%; margin: 0 0 var(--gap); }
+  .left { float: none; max-width: 100%; margin: 0 0 var(--gap); }
 }
 
 /* --------------------------------------------------------------------------
@@ -989,6 +989,7 @@ body {
    Headings + anchors
    -------------------------------------------------------------------------- */
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.2em 0 0.7em;
   color: var(--heading);
@@ -1006,7 +1007,8 @@ h3:first-child {
 }
 
 h1 {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   margin-bottom: 0.8em;
   padding: 0.35em 1.1rem 0.5em;
   font-size: clamp(2rem, 4.5vw, 3.15rem);
@@ -1625,34 +1627,25 @@ div.danger > *:last-child {
 /* --------------------------------------------------------------------------
    Layout containers
    -------------------------------------------------------------------------- */
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--border-soft);
   border-radius: 16px;
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-4);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 /* --------------------------------------------------------------------------
@@ -2036,8 +2029,7 @@ span.qrcode svg {
     border-radius: 20px;
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);
@@ -2355,6 +2347,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.15em 0 0.7em;
   color: var(--heading);
@@ -2425,7 +2418,8 @@ h3::before {
 
 h4 {
   font-size: var(--fs-300);
-  display: inline-block;
+  display: block;
+  width: fit-content;
   color: #21485d;
   padding: 0.16em 0.58rem 0.22em;
   background: rgba(98, 176, 232, 0.08);
@@ -2445,7 +2439,8 @@ h6 {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-soft);
-  display: inline-block;
+  display: block;
+  width: fit-content;
   padding: 0.18em 0.52rem;
   background: #f8fbfe;
   border: 1px solid var(--border-soft);
@@ -2937,34 +2932,25 @@ div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 16px;
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-4);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 details.spoil {
@@ -3319,8 +3305,7 @@ span.qrcode svg {
     border-radius: 22px;
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);
@@ -3590,6 +3575,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   position: relative;
   max-width: 920px;
   margin: 0 auto;
@@ -3627,6 +3613,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.15em 0 0.72em;
   color: var(--heading);
@@ -3685,7 +3672,8 @@ h2::before {
 }
 
 h3 {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   font-size: var(--fs-400);
   padding: 0.18em 0.7rem 0.28em;
   background: var(--surface-2);
@@ -4175,8 +4163,8 @@ div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
@@ -4185,27 +4173,18 @@ div.danger > *:last-child {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-soft);
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-5);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 details.spoil {
@@ -4528,8 +4507,7 @@ span.qrcode svg {
     box-shadow: 0 10px 22px rgba(166, 155, 137, 0.14), 0 3px 8px rgba(166, 155, 137, 0.08);
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);
@@ -4638,6 +4616,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -4656,6 +4635,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--header-font);
   color: #1a1614;
   margin-top: 2.5em;
@@ -4715,6 +4695,7 @@ body {
   font-size: 1.25em;
   color: #4a3e38;
   text-align: center;
+  background-color: #ece2d2;
 }
 
 .markdown-body blockquote p:last-child {
@@ -4804,10 +4785,24 @@ body {
 .markdown-body .warning { background: var(--warning-bg); border-color: var(--warning-border); }
 .markdown-body .danger { background: var(--danger-bg); border-color: var(--danger-border); }
 
-/* Alignment Classes */
-.markdown-body .left { text-align: left; }
-.markdown-body .right { text-align: right; }
-.markdown-body .center { text-align: center; }
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8em 1em;
+  margin: 0 1.5em 1em 0;
+  background: #ebe0ce;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1em;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1em;
+}
 
 /* Spoil / Details */
 .markdown-body details.spoil {
@@ -5008,6 +5003,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -5025,6 +5021,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--header-font);
   color: #111;
   margin-top: 3em;
@@ -5080,6 +5077,7 @@ body {
   font-style: italic;
   font-size: 1.15em;
   color: var(--text-muted);
+  background-color: #e5ddd0;
 }
 
 /* Lists */
@@ -5167,10 +5165,24 @@ body {
 .markdown-body .warning { background: var(--warning-bg); color: #876d29; border-left: 4px solid var(--warning-border); }
 .markdown-body .danger { background: var(--danger-bg); color: #9c4b54; border-left: 4px solid var(--danger-border); }
 
-/* Alignment Styles */
-.markdown-body .left { text-align: left; }
-.markdown-body .right { text-align: right; }
-.markdown-body .center { text-align: center; }
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8em 1em;
+  margin: 0 1.5em 1em 0;
+  background: #e5ddd0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1em;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1em;
+}
 
 /* Spoil / Details */
 .markdown-body details.spoil {
@@ -5374,6 +5386,7 @@ body {
 
 /* Tufte inspired layout */
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -5393,6 +5406,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   color: var(--text-main);
   font-weight: 400;
   margin-top: 2em;
@@ -5445,11 +5459,12 @@ body {
 /* Blockquotes: margin-like or abstract style */
 .markdown-body blockquote {
   margin: 2rem 3rem;
-  padding: 0;
+  padding: 0.75rem 1rem;
   font-size: 1.1rem;
   font-style: italic;
   border-left: none;
   color: var(--text-muted);
+  background-color: #f0f0e6;
 }
 
 /* Lists */
@@ -5574,6 +5589,25 @@ body {
 .markdown-body span.warning { color: #a37213; border-color: #a37213; }
 .markdown-body span.danger { color: #a32a2a; border-color: #a32a2a; }
 
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.75rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: #f0f0e6;
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
+
 /* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
@@ -5662,6 +5696,7 @@ body {
 
 /* Journal layout */
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -5680,6 +5715,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--header-font);
   font-weight: 700;
   color: var(--text-main);
@@ -5858,6 +5894,25 @@ body {
 .markdown-body span.warning { background: #fff4d4; }
 .markdown-body span.danger { background: #fcebeb; }
 
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.75rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: #f1f3f5;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
+
 /* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
@@ -5952,6 +6007,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--body-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -5972,6 +6028,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--heading-font);
   color: #1a1a1a;
   letter-spacing: 0.02em;
@@ -5993,7 +6050,8 @@ body {
   font-size: 2.2rem;
   color: #00bcd4;
   border-bottom: 3px dashed #00bcd4;
-  display: inline-block;
+  display: block;
+  width: fit-content;
   transform: rotate(1deg);
 }
 
@@ -6159,6 +6217,25 @@ body {
 }
 .markdown-body details.spoil > :not(summary) { padding: 1rem; }
 
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: rgba(255, 200, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
+
 /* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
@@ -6258,6 +6335,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--body-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -6278,6 +6356,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--heading-font);
   color: #111;
   margin-top: 1.2em;
@@ -6463,6 +6542,25 @@ body {
   border-bottom: 3px solid #222;
 }
 .markdown-body details.spoil > :not(summary) { padding: 1.5rem; }
+
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: rgba(0, 0, 0, 0.04);
+  border: 3px solid var(--border-color);
+  border-radius: 12px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
 
 /* Tabs & Cols */
 .markdown-body .cols {
@@ -6946,9 +7044,12 @@ m0 0v40h399900v-40z m100 194v40h399900v-40zm0 0v40h399900v-40z"/></svg></span></
 <div class="left">
 <p>This block floats to the <strong>left</strong>. Useful for figure captions or side notes.</p>
 </div>
+<p>The paragraph which is below the <strong>left</strong> container in the source will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>.</p>
+<p>The sentence below should align to the right.</p>
 <div class="right">
 <p>This block floats to the <strong>right</strong>.</p>
 </div>
+<p>The sentence below should align center.</p>
 <div class="center">
 <p>This block is <strong>centred</strong> horizontally.</p>
 </div>

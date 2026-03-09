@@ -234,6 +234,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
+  clear: both;
   position: relative;
   margin: 2.15em 0 0.7em;
   color: var(--heading);
@@ -304,7 +305,8 @@ h3::before {
 
 h4 {
   font-size: var(--fs-300);
-  display: inline-block;
+  display: block;
+  width: fit-content;
   color: #21485d;
   padding: 0.16em 0.58rem 0.22em;
   background: rgba(98, 176, 232, 0.08);
@@ -324,7 +326,8 @@ h6 {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-soft);
-  display: inline-block;
+  display: block;
+  width: fit-content;
   padding: 0.18em 0.52rem;
   background: #f8fbfe;
   border: 1px solid var(--border-soft);
@@ -816,34 +819,25 @@ div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left,
-.right {
+.left {
+  float: left;
   max-width: min(44%, 22rem);
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 16px;
-}
-
-.left {
-  float: left;
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
 .right {
-  float: right;
-  margin: 0 0 var(--space-4) var(--space-5);
+  text-align: right;
+  margin: 0 0 var(--space-4);
 }
 
 .center {
   margin: 0 auto var(--space-5);
   text-align: center;
   max-width: min(100%, 42rem);
-}
-
-.left + *,
-.right + * {
-  clear: both;
 }
 
 details.spoil {
@@ -1198,8 +1192,7 @@ span.qrcode svg {
     border-radius: 22px;
   }
 
-  .left,
-  .right {
+  .left {
     float: none;
     max-width: 100%;
     margin: 0 0 var(--space-4);

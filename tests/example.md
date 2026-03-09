@@ -178,10 +178,15 @@ Equilibrium: $\ce{CO2 + H2O <=> H2CO3}$
 ::: left
 This block floats to the **left**. Useful for figure captions or side notes.
 :::
+The paragraph which is below the **left** container in the source will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. 
+
+The sentence below should align to the right. 
 
 ::: right
 This block floats to the **right**.
 :::
+
+The sentence below should align center. 
 
 ::: center
 This block is **centred** horizontally.

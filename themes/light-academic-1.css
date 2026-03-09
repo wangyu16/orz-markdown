@@ -25,6 +25,7 @@ body {
 
 /* Tufte inspired layout */
 .markdown-body {
+  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -44,6 +45,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   color: var(--text-main);
   font-weight: 400;
   margin-top: 2em;
@@ -225,6 +227,25 @@ body {
 .markdown-body span.info { color: #2b5585; border-color: #2b5585; }
 .markdown-body span.warning { color: #a37213; border-color: #a37213; }
 .markdown-body span.danger { color: #a32a2a; border-color: #a32a2a; }
+
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.75rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: #f0f0e6;
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
 
 /* Tabs & Cols */
 .markdown-body .cols {

@@ -31,6 +31,7 @@ body {
 }
 
 .markdown-body {
+  display: flow-root;
   font-family: var(--body-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
@@ -51,6 +52,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  clear: both;
   font-family: var(--heading-font);
   color: #111;
   margin-top: 1.2em;
@@ -236,6 +238,25 @@ body {
   border-bottom: 3px solid #222;
 }
 .markdown-body details.spoil > :not(summary) { padding: 1.5rem; }
+
+/* Layout Containers */
+.markdown-body .left {
+  float: left;
+  max-width: min(44%, 20rem);
+  padding: 0.8rem 1rem;
+  margin: 0 1.5rem 1rem 0;
+  background: rgba(0, 0, 0, 0.04);
+  border: 3px solid var(--border-color);
+  border-radius: 12px;
+}
+.markdown-body .right {
+  text-align: right;
+  margin: 0 0 1rem;
+}
+.markdown-body .center {
+  text-align: center;
+  margin: 0 0 1rem;
+}
 
 /* Tabs & Cols */
 .markdown-body .cols {
