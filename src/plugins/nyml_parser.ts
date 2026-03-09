@@ -9,7 +9,10 @@
  */
 
 class ParseError extends Error {
-  constructor(code, message, line, column = null) {
+  code: string;
+  line: number;
+  column: number | null;
+  constructor(code: string, message: string, line: number, column: number | null = null) {
     super(`Line ${line}: ${message}`);
     this.code = code;
     this.line = line;
@@ -23,7 +26,7 @@ class ParseError extends Error {
  * @param {string} s
  * @returns {number}
  */
-function leadingSpaces(s) {
+function leadingSpaces(s: string): number {
   let count = 0;
   for (const ch of s) {
     if (ch === " ") {
@@ -41,7 +44,7 @@ function leadingSpaces(s) {
  * @param {string} stripped - Line with leading/trailing whitespace removed
  * @returns {[string|null, string|null]} - [key, value] or [null, null] if no colon
  */
-function parseKeyValue(stripped) {
+function parseKeyValue(stripped: string): [string | null, string | null] {
   if (!stripped) {
     return [null, null];
   }
@@ -82,8 +85,8 @@ function parseKeyValue(stripped) {
  * @param {number} baseIndent - Indent of the key line
  * @returns {[string, number]} - [content, nextIndex]
  */
-function collectMultiline(lines, startIdx, baseIndent) {
-  const rawLines = [];
+function collectMultiline(lines: string[], startIdx: number, baseIndent: number): [string, number] {
+  const rawLines: string[] = [];
   let i = startIdx + 1;
 
   while (i < lines.length) {
@@ -114,7 +117,7 @@ function collectMultiline(lines, startIdx, baseIndent) {
   }
 
   // Apply dedent
-  const pieces = [];
+  const pieces: string[] = [];
   for (const r of rawLines) {
     if (r.trim() === "") {
       pieces.push("");
@@ -149,12 +152,12 @@ function collectMultiline(lines, startIdx, baseIndent) {
  * @param {string} text - The NYML V2 content to parse
  * @returns {Array} - A list representing the parsed data
  */
-function parseNymlV2(text) {
+function parseNymlV2(text: string): any[] {
   const lines = text.split(/\r?\n/);
-  const result = [];
+  const result: any[] = [];
 
   // Stack of [container, baseIndent]
-  const stack = [[result, -1]];
+  const stack: [any[], number][] = [[result, -1]];
 
   let i = 0;
   while (i < lines.length) {
@@ -200,7 +203,7 @@ function parseNymlV2(text) {
 
     if (value === "") {
       // Multi-value field: create a list for children
-      const newList = [];
+      const newList: any[] = [];
       parent.push({ [key]: newList });
       stack.push([newList, indent]);
       i++;
@@ -222,8 +225,8 @@ function parseNymlV2(text) {
  * @param {number} indent - Current indentation level (spaces)
  * @returns {string} - NYML formatted string
  */
-function serializeNymlV2(data, indent = 0) {
-  const lines = [];
+function serializeNymlV2(data: any[], indent: number = 0): string {
+  const lines: string[] = [];
   const prefix = " ".repeat(indent);
 
   for (const item of data) {

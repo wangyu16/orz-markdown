@@ -1,14 +1,16 @@
 {
-  "name": "markdown-it-customize",
-  "version": "0.1.0",
+  "name": "@orz-how/markdown-parser",
+  "version": "1.0.0",
   "description": "Customized markdown-it parser with official and custom plugins",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./themes/*": "./themes/*"
   },
   "files": [
-    "dist"
+    "dist",
+    "themes"
   ],
   "scripts": {
     "build": "tsc",
@@ -20,10 +22,23 @@
   "keywords": [
     "markdown",
     "markdown-it",
-    "parser"
+    "parser",
+    "plugin",
+    "katex",
+    "mermaid",
+    "smiles",
+    "qrcode",
+    "toc",
+    "footnote"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Yu Wang <yuwang@orz.how>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wangyu16/orz-markdown"
+  },
+  "homepage": "https://github.com/wangyu16/orz-markdown#readme",
+  "bugs": "https://github.com/wangyu16/orz-markdown/issues",
   "dependencies": {
     "@traptitech/markdown-it-katex": "^3.6.0",
     "katex": "^0.16.35",
