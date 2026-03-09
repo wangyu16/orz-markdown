@@ -1,0 +1,1 @@
+{"version":3,"file":"block-dispatcher.d.ts","sourceRoot":"","sources":["../../src/rules/block-dispatcher.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,UAAU,MAAM,aAAa,CAAC;AAG1C,KAAK,UAAU,GAAG,UAAU,CAAC,UAAU,CAAC;AAExC;;;GAGG;AACH,wBAAgB,eAAe,CAC7B,KAAK,EAAE,UAAU,EACjB,SAAS,EAAE,MAAM,EACjB,OAAO,EAAE,MAAM,EACf,MAAM,EAAE,OAAO,GACd,OAAO,CAyHT"}

@@ -62,7 +62,7 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 
 | Plugin Name | Alias | Syntax Example | Description |
 | :--- | :--- | :--- | :--- |
-| **Span Styles** | `sp` | `{{span[red] red text}}` | Inline span element. Perfect for colorizing or badging text (we support classes like `red`, `yellow`, `green`, `blue`). |
+| **Span Styles** | `sp` | `{{span[red] red text}}` | Inline span element. Perfect for colorizing or badging text. Supports color classes (`red`, `yellow`, `green`, `blue`) and badge classes (`success`, `info`, `warning`, `danger`). |
 | **Attributes** | N/A | `# Header {{attrs[id="my-id"]}}`| Injects continuous HTML attributes (classes, IDs, config properties) to the immediately preceding element. |
 | **Emoji** | `em` | `{{emoji smile}}` / `{{em tada}}` | Renders the specific text alias directly into the corresponding Unicode emoji natively. |
 | **Table of Content** | N/A | `{{toc}}` or `{{toc 2,3}}` | Autogenerates a Table of Contents based on document headings. Allows specifying bound heading ranges. |
