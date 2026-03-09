@@ -1,0 +1,54 @@
+{
+  "name": "markdown-it-customize",
+  "version": "0.1.0",
+  "description": "Customized markdown-it parser with official and custom plugins",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "render": "tsx scripts/render.ts",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "keywords": [
+    "markdown",
+    "markdown-it",
+    "parser"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@traptitech/markdown-it-katex": "^3.6.0",
+    "katex": "^0.16.35",
+    "markdown-it": "^14.1.1",
+    "markdown-it-anchor": "^9.2.0",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-imsize": "^2.0.1",
+    "markdown-it-ins": "^4.0.0",
+    "markdown-it-mark": "^4.0.0",
+    "markdown-it-sub": "^2.0.0",
+    "markdown-it-sup": "^2.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "node-emoji": "^2.2.0",
+    "qrcode-svg": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/markdown-it-anchor": "^7.0.0",
+    "@types/markdown-it-container": "^4.0.0",
+    "@types/markdown-it-footnote": "^3.0.4",
+    "@types/node": "^25.3.5",
+    "@types/qrcode-svg": "^1.1.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

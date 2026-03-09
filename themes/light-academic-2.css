@@ -1,0 +1,282 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Fira+Sans:wght@400;600;700&display=swap');
+
+:root {
+  --bg-color: #ffffff;
+  --text-main: #000000;
+  --text-muted: #444444;
+  --link-color: #004b93;
+  --link-hover: #003366;
+  --border-color: #000000;
+  --border-soft: #dddddd;
+  
+  --header-font: 'Fira Sans', Helvetica, Arial, sans-serif;
+  --main-font: 'Merriweather', 'Times New Roman', Times, serif;
+  --code-font: 'Liberation Mono', Courier, monospace;
+
+  --base-size: 16px;
+  --line-height: 1.6;
+}
+
+body {
+  background-color: var(--bg-color);
+  margin: 0;
+  padding: 0;
+}
+
+/* Journal layout */
+.markdown-body {
+  font-family: var(--main-font);
+  font-size: var(--base-size);
+  line-height: var(--line-height);
+  color: var(--text-main);
+  background-color: var(--bg-color);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+  text-align: left;
+}
+
+/* Headings */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-family: var(--header-font);
+  font-weight: 700;
+  color: var(--text-main);
+  margin-top: 2.2em;
+  margin-bottom: 0.8em;
+  line-height: 1.25;
+}
+
+.markdown-body h1 {
+  font-size: 2.4rem;
+  margin-top: 1rem;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.markdown-body h2 {
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 0.3rem;
+}
+
+.markdown-body h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+/* Text */
+.markdown-body p {
+  margin-bottom: 1.2rem;
+}
+
+.markdown-body a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+  color: var(--link-hover);
+}
+
+.markdown-body strong {
+  font-weight: 700;
+}
+
+/* Abstract / Blockquotes */
+.markdown-body blockquote {
+  margin: 2rem 0;
+  padding: 1.2rem 1.5rem;
+  background-color: #f8f9fa;
+  border-left: 4px solid var(--border-color);
+  font-size: 0.95em;
+  color: var(--text-main);
+}
+
+/* Lists */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+
+/* Code & Pre */
+.markdown-body code {
+  font-family: var(--code-font);
+  font-size: 0.9em;
+  background-color: #f1f3f5;
+  padding: 0.1em 0.3em;
+}
+
+.markdown-body pre {
+  background-color: #f8f9fa;
+  padding: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  border: 1px solid var(--border-soft);
+  overflow-x: auto;
+  margin-bottom: 1.2rem;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Formal Tables */
+.markdown-body table {
+  width: 100%;
+  margin: 2rem 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  font-family: var(--header-font);
+  border-top: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+}
+
+.markdown-body th {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.markdown-body tbody tr:nth-child(even) {
+  background-color: #fbfbfb;
+}
+
+/* Definition / Theorem Containers */
+.markdown-body .success,
+.markdown-body .info,
+.markdown-body .warning,
+.markdown-body .danger {
+  padding: 1rem 1.2rem;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  position: relative;
+}
+
+.markdown-body .info::before {
+  content: "Note";
+  display: block;
+  font-family: var(--header-font);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  letter-spacing: 0.05em;
+}
+.markdown-body .success::before { content: "Outcome"; /* Inherit rest from .info */ display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
+.markdown-body .warning::before { content: "Caution"; display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
+.markdown-body .danger::before { content: "Danger"; display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
+
+/* Spoil / Details */
+.markdown-body details.spoil {
+  border: 1px solid var(--border-color);
+  margin-bottom: 1.2rem;
+}
+.markdown-body details.spoil > summary {
+  padding: 0.7rem 1rem;
+  font-family: var(--header-font);
+  font-weight: 600;
+  background-color: #f1f3f5;
+  cursor: pointer;
+}
+.markdown-body details.spoil[open] > summary {
+  border-bottom: 1px solid var(--border-color);
+}
+.markdown-body details.spoil > :not(summary) {
+  padding: 1rem;
+}
+
+/* Badges */
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-block;
+  padding: 0.15em 0.5em;
+  font-family: var(--header-font);
+  font-size: 0.8em;
+  font-weight: 600;
+  border: 1px solid var(--text-main);
+  background: #fff;
+  vertical-align: baseline;
+  line-height: inherit;
+}
+.markdown-body span.success { background: #e3f5e1; }
+.markdown-body span.info { background: #e1f0fa; }
+.markdown-body span.warning { background: #fff4d4; }
+.markdown-body span.danger { background: #fcebeb; }
+
+/* Tabs & Cols */
+.markdown-body .cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.markdown-body .col {
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid var(--border-soft);
+}
+
+.markdown-body .tabs {
+  border: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+.markdown-body .tabs-bar {
+  display: flex;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--border-color);
+}
+.markdown-body .tabs-bar-btn {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  padding: 0.6rem 1rem;
+  font-family: var(--header-font);
+  font-weight: 600;
+  cursor: pointer;
+}
+.markdown-body .tabs-bar-btn.active {
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--bg-color);
+  margin-bottom: -1px;
+}
+.markdown-body .tab {
+  display: none;
+  padding: 1.2rem;
+}
+.markdown-body .tab.active { display: block; }
+.markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 1px solid var(--border-color); }
+
+/* Horizontal Rule */
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
+}
+/* Span Colours */
+.markdown-body span.red { color: #9e2a2b; font-weight: 600; }
+.markdown-body span.yellow { color: #b8860b; font-weight: 600; }
+.markdown-body span.green { color: #386641; font-weight: 600; }
+.markdown-body span.blue { color: #2a5a8c; font-weight: 600; }
+
+/* Container backgrounds */
+.markdown-body div.success { background-color: #f4faeb; }
+.markdown-body div.info { background-color: #eef6fc; }
+.markdown-body div.warning { background-color: #fdf5e6; }
+.markdown-body div.danger { background-color: #faecec; }

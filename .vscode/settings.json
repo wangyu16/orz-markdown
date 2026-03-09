@@ -1,0 +1,16 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^npm init -y 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^npm install markdown-it 2>&1 \\| tail -3$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^npx tsx scripts/create-beige\\.ts$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

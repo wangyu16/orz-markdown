@@ -1,0 +1,73 @@
+import type MarkdownIt from 'markdown-it';
+import { register } from '../registry.js';
+
+interface Heading {
+  level: number;
+  text: string;
+  anchor: string;
+}
+
+function parseRange(body: string | null): [number, number] {
+  if (!body || !body.trim()) return [1, 3];
+  const parts = body.trim().split(',').map(s => parseInt(s.trim(), 10));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return [parts[0], parts[1]];
+  }
+  return [1, 3];
+}
+
+function buildTocHTML(headings: Heading[]): string {
+  if (!headings.length) return '<ul class="toc-list"></ul>\n';
+
+  let html = '<ul class="toc-list">\n';
+  for (const h of headings) {
+    const href = h.anchor ? `#${h.anchor}` : '';
+    html += `<li style="padding-left:${(h.level - 1) * 1.25}em"><a href="${href}">${h.text}</a></li>\n`;
+  }
+  html += '</ul>\n';
+  return html;
+}
+
+export function registerToc(md: MarkdownIt): void {
+  // The render function just returns the pre-built HTML injected by the core rule
+  register({
+    type: 'block',
+    aliases: ['toc'],
+    render(_args, body, _env) {
+      return body ?? '';
+    },
+  });
+
+  md.core.ruler.push('toc_resolve', (state) => {
+    const headings: Heading[] = [];
+    const tocTokenIndices: number[] = [];
+
+    for (let i = 0; i < state.tokens.length; i++) {
+      const token = state.tokens[i];
+
+      if (token.type === 'heading_open') {
+        const level = parseInt(token.tag.slice(1), 10);
+        const inlineToken = state.tokens[i + 1];
+        const text = (inlineToken?.children ?? [])
+          .filter((t: MarkdownIt.Token) => t.type === 'text' || t.type === 'code_inline')
+          .map((t: MarkdownIt.Token) => t.content)
+          .join('');
+        const anchor = token.attrGet('id') ?? '';
+        headings.push({ level, text, anchor });
+      }
+
+      if (token.type === 'plugin_block' && token.info === 'toc') {
+        tocTokenIndices.push(i);
+      }
+    }
+
+    (state.env as Record<string, unknown>).tocHeadings = headings;
+
+    for (const idx of tocTokenIndices) {
+      const token = state.tokens[idx];
+      const [minLevel, maxLevel] = parseRange(token.content || null);
+      const filtered = headings.filter(h => h.level >= minLevel && h.level <= maxLevel);
+      token.content = buildTocHTML(filtered);
+    }
+  });
+}

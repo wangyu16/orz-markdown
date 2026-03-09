@@ -1,0 +1,704 @@
+/* ==========================================================================
+   Dark Elegant Theme — markdown-it-customize
+   Google Fonts: Playfair Display (headings) · Inter (body) · JetBrains Mono (code)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* --------------------------------------------------------------------------
+   Design Tokens
+   -------------------------------------------------------------------------- */
+:root {
+  /* Palette */
+  --bg:            #0d0f18;
+  --bg-surface:    #13161f;
+  --bg-elevated:   #1c1f2e;
+  --bg-input:      #252836;
+  --border:        #2e3248;
+  --border-subtle: #1e2130;
+
+  --text-primary:  #e4e8f0;
+  --text-secondary:#9aa3b8;
+  --text-muted:    #60677d;
+  --text-heading:  #f0f4fc;
+
+  --accent:        #5f8cff;  /* blue-violet */
+  --accent-dim:    #3f5fa8;
+  --accent-glow:   rgba(95, 140, 255, 0.15);
+
+  --link:          #82b4ff;
+  --link-visited:  #a9c2ff;
+
+  /* Code */
+  --code-bg:       #1a1d2e;
+  --code-text:     #cdd6f4;
+  --code-border:   #313554;
+
+  /* Semantic colours */
+  --success-bg:    #0d2318;  --success-border:#1a5e35;  --success-text:  #4ade80;
+  --info-bg:       #071c30;  --info-border:   #1a4f7a;  --info-text:     #60a5fa;
+  --warning-bg:    #231a07;  --warning-border:#7a560d;  --warning-text:  #fbbf24;
+  --danger-bg:     #230d0d;  --danger-border: #7a1a1a;  --danger-text:   #f87171;
+
+  /* Inline span colours */
+  --span-red:      #f87171;
+  --span-yellow:   #fbbf24;
+  --span-green:    #4ade80;
+  --span-blue:     #60a5fa;
+
+  /* Typography scale */
+  --fs-base:  1rem;         /* 16px default */
+  --fs-sm:    0.875rem;
+  --fs-xs:    0.8rem;
+  --fs-lg:    1.125rem;
+  --fs-xl:    1.25rem;
+  --lh-text:  1.75;
+  --lh-tight: 1.3;
+
+  /* Spacing */
+  --gap:   1.5rem;
+  --gap-sm:0.75rem;
+  --gap-xs:0.375rem;
+
+  /* Radii */
+  --radius:    8px;
+  --radius-sm: 4px;
+  --radius-lg: 12px;
+
+  /* Transitions */
+  --t: 0.2s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Reset & Base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: var(--fs-base);
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  line-height: var(--lh-text);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbars (WebKit)
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+/* --------------------------------------------------------------------------
+   Article wrapper
+   -------------------------------------------------------------------------- */
+.markdown-body {
+  max-width: 860px;
+  margin: 0 auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+}
+
+/* --------------------------------------------------------------------------
+   Headings
+   -------------------------------------------------------------------------- */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Playfair Display', Georgia, serif;
+  color: var(--text-heading);
+  line-height: var(--lh-tight);
+  font-weight: 700;
+  margin-top: 2.25em;
+  margin-bottom: 0.6em;
+  scroll-margin-top: 4rem;
+}
+h1:first-child, h2:first-child { margin-top: 0; }
+
+h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  background: linear-gradient(90deg, rgba(95, 140, 255, 0.1) 0%, transparent 75%);
+  border-left: 4px solid var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding: 0.2em 0 0.4em 0.7em;
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+h2 {
+  font-size: clamp(1.4rem, 3vw, 1.875rem);
+  color: #c7d7ff;
+  border-bottom: 1px solid var(--accent-dim);
+  padding-bottom: 0.3em;
+}
+h3 {
+  font-size: 1.375rem;
+  color: #a9c1f0;
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 0.65em;
+}
+h4 { font-size: 1.125rem; font-weight: 600; color: var(--accent); }
+h5 { font-size: 1rem;     font-weight: 600; color: #8eaede; }
+h6 { font-size: 0.9rem;   font-weight: 600; color: var(--text-secondary); }
+
+/* Anchor links from markdown-it-anchor */
+.header-anchor {
+  float: left;
+  margin-left: -1.25em;
+  padding-right: 0.25em;
+  opacity: 0;
+  color: var(--accent);
+  text-decoration: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75em;
+  transition: opacity var(--t);
+}
+h1:hover .header-anchor,
+h2:hover .header-anchor,
+h3:hover .header-anchor,
+h4:hover .header-anchor { opacity: 0.6; }
+
+/* --------------------------------------------------------------------------
+   Paragraphs & Spacing
+   -------------------------------------------------------------------------- */
+p { margin-bottom: var(--gap); }
+p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   Links
+   -------------------------------------------------------------------------- */
+a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: rgba(130, 180, 255, 0.35);
+  text-underline-offset: 3px;
+  transition: color var(--t), text-decoration-color var(--t);
+}
+a:hover { color: #aecfff; text-decoration-color: rgba(174, 207, 255, 0.7); }
+a:visited { color: var(--link-visited); }
+
+/* --------------------------------------------------------------------------
+   Emphasis
+   -------------------------------------------------------------------------- */
+strong { font-weight: 600; color: var(--text-heading); }
+em { font-style: italic; }
+s, del { text-decoration: line-through; color: var(--text-muted); }
+mark { background: rgba(251, 191, 36, 0.25); color: #fde68a; border-radius: 2px; padding: 0 2px; }
+ins { text-decoration: underline; text-decoration-style: dashed; color: var(--span-green); }
+sub, sup { font-size: 0.75em; }
+
+/* --------------------------------------------------------------------------
+   Inline Code
+   -------------------------------------------------------------------------- */
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875em;
+  background: var(--code-bg);
+  color: #9bc7ff;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  padding: 0.15em 0.45em;
+}
+
+/* --------------------------------------------------------------------------
+   Code Blocks
+   -------------------------------------------------------------------------- */
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  margin-bottom: var(--gap);
+  position: relative;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-sm);
+  color: var(--code-text);
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+   Blockquotes
+   -------------------------------------------------------------------------- */
+blockquote {
+  border-left: 3px solid var(--accent);
+  margin: var(--gap) 0;
+  padding: 0.75rem 1.25rem;
+  background: rgba(95, 140, 255, 0.06);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+blockquote > blockquote { border-left-color: var(--accent-dim); margin-top: 0.75rem; }
+blockquote p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   Lists
+   -------------------------------------------------------------------------- */
+ul, ol {
+  padding-left: 1.75em;
+  margin-bottom: var(--gap);
+}
+li {
+  margin-bottom: 0.35em;
+  line-height: var(--lh-text);
+}
+li > ul, li > ol { margin-top: 0.35em; margin-bottom: 0; }
+ul  { list-style-type: none; }
+ul  li::before {
+  content: '›';
+  color: var(--accent);
+  display: inline-block;
+  width: 1em;
+  margin-left: -1em;
+  font-weight: 600;
+}
+
+/* Task lists (markdown-it-task-lists) */
+.task-list-item { list-style: none; padding-left: 0; }
+.task-list-item::before { display: none; }
+.task-list-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-input);
+  vertical-align: baseline;
+  margin-right: 0.5em;
+  cursor: default;
+  position: relative;
+  display: inline-block;
+  transition: border-color var(--t), background var(--t);
+}
+.task-list-item input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.task-list-item input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 0;
+  width: 5px; height: 9px;
+  border: 2px solid #fff;
+  border-top: none; border-left: none;
+  transform: rotate(45deg);
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+.markdown-body > table, .markdown-body td table { width: 100%; }
+table {
+  border-collapse: collapse;
+  margin-bottom: var(--gap);
+  font-size: var(--fs-sm);
+  width: 100%;
+  overflow-x: auto;
+  display: block;
+}
+thead tr { background: var(--bg-elevated); }
+thead th {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding: 0.65rem 1rem;
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: baseline;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+/* --------------------------------------------------------------------------
+   Horizontal Rule
+   -------------------------------------------------------------------------- */
+hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 2.5rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   Images
+   -------------------------------------------------------------------------- */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  display: block;
+  margin: var(--gap) auto;
+}
+p > img { margin: 0; display: inline; }
+
+/* --------------------------------------------------------------------------
+   Footnotes (markdown-it-footnote)
+   -------------------------------------------------------------------------- */
+.footnotes-sep { margin: 2rem 0 1rem; }
+.footnotes {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
+}
+.footnotes ol { counter-reset: none; }
+.footnote-ref a, .footnote-backref {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.8em;
+  vertical-align: super;
+}
+
+/* --------------------------------------------------------------------------
+   KaTeX overrides
+   -------------------------------------------------------------------------- */
+.katex { font-size: 1.1em; }
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+  margin: var(--gap) 0;
+}
+.katex-error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  padding: 0.15em 0.4em;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Containers — Semantic colour boxes
+   -------------------------------------------------------------------------- */
+.success, .info, .warning, .danger {
+  border-left: 4px solid;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 1rem 1.25rem;
+  margin: var(--gap) 0;
+  position: relative;
+}
+.success { background: var(--success-bg); border-color: var(--success-border); }
+.info    { background: var(--info-bg);    border-color: var(--info-border);    }
+.warning { background: var(--warning-bg); border-color: var(--warning-border); }
+.danger  { background: var(--danger-bg);  border-color: var(--danger-border);  }
+
+.success > p:first-child > strong:first-child,
+.success > p:first-child > b:first-child { color: var(--success-text); }
+.info    > p:first-child > strong:first-child,
+.info    > p:first-child > b:first-child { color: var(--info-text); }
+.warning > p:first-child > strong:first-child,
+.warning > p:first-child > b:first-child { color: var(--warning-text); }
+.danger  > p:first-child > strong:first-child,
+.danger  > p:first-child > b:first-child { color: var(--danger-text); }
+
+/* Nested containers */
+.success .warning, .info .warning, .warning .warning, .danger .warning {
+  margin: var(--gap-sm) 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   Containers — Layout (left / right / center)
+   -------------------------------------------------------------------------- */
+.left  { float: left;      margin: 0 var(--gap) var(--gap) 0;    max-width: 45%; }
+.right { float: right;     margin: 0 0 var(--gap) var(--gap);    max-width: 45%; }
+.center {
+  text-align: center;
+  margin: var(--gap) auto;
+}
+/* Clear floats after layout containers */
+.left + *, .right + * { clear: both; }
+
+/* --------------------------------------------------------------------------
+   Container — Spoiler (uses <details> rendered by custom container renderer)
+   -------------------------------------------------------------------------- */
+details.spoil {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  margin: var(--gap) 0;
+  overflow: hidden;
+}
+details.spoil > summary {
+  cursor: pointer;
+  padding: 0.75rem 1.25rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background var(--t), color var(--t);
+}
+details.spoil > summary::-webkit-details-marker { display: none; }
+details.spoil > summary::before {
+  content: '▶';
+  font-size: 0.65em;
+  transition: transform var(--t);
+  display: inline-block;
+  color: var(--accent);
+}
+details.spoil[open] > summary::before { transform: rotate(90deg); }
+details.spoil > summary:hover { background: var(--bg-input); color: var(--text-primary); }
+details.spoil[open] > summary {
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+details.spoil > :not(summary) {
+  padding: 1rem 1.25rem;
+}
+details.spoil > p:last-child,
+details.spoil > *:last-child { padding-bottom: 1.25rem; }
+
+/* --------------------------------------------------------------------------
+   Container — Tabs
+   -------------------------------------------------------------------------- */
+.tabs {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: var(--gap) 0;
+}
+
+/* Tab bar — populated by JavaScript */
+.tabs-bar {
+  display: flex;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-bar::-webkit-scrollbar { display: none; }
+
+.tabs-bar-btn {
+  padding: 0.6rem 1.1rem;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color var(--t), border-color var(--t), background var(--t);
+}
+.tabs-bar-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+.tabs-bar-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Tab panels */
+.tab {
+  display: none;
+  padding: 1.25rem 1.5rem;
+}
+.tab.active { display: block; }
+/* Fallback: show all tabs when JS unavailable */
+.tabs:not([data-js]) .tab { display: block; }
+.tabs:not([data-js]) .tab + .tab { border-top: 1px solid var(--border-subtle); }
+
+/* --------------------------------------------------------------------------
+   Container — Columns
+   -------------------------------------------------------------------------- */
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--gap);
+  margin: var(--gap) 0;
+  align-items: start;
+}
+.col {
+  min-width: 0; /* prevent overflow */
+}
+.col > p:last-child { margin-bottom: 0; }
+
+/* Responsive: single column on small screens */
+@media (max-width: 600px) {
+  .cols { grid-template-columns: 1fr; }
+  .left, .right { float: none; max-width: 100%; margin: 0 0 var(--gap); }
+}
+
+/* --------------------------------------------------------------------------
+   TOC — in-document styles
+   (The toc plugin generates a nested <ul> at the {{toc}} position)
+   -------------------------------------------------------------------------- */
+.toc-wrapper {
+  /* Wraps the generated TOC list */
+}
+nav.toc, .toc-list {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: var(--gap) 0;
+  font-size: var(--fs-sm);
+}
+nav.toc ul, .toc-list ul {
+  padding-left: 1.25em;
+  margin-bottom: 0;
+}
+nav.toc li, .toc-list li { margin-bottom: 0.25em; }
+nav.toc li::before, .toc-list li::before { display: none; }
+nav.toc a, .toc-list a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--t);
+}
+nav.toc a:hover, .toc-list a:hover { color: var(--accent); }
+
+/* --------------------------------------------------------------------------
+   Span — Colour classes
+   -------------------------------------------------------------------------- */
+span.red    { color: var(--span-red); }
+span.yellow { color: var(--span-yellow); }
+span.green  { color: var(--span-green); }
+span.blue   { color: var(--span-blue); }
+
+/* --------------------------------------------------------------------------
+   Span — Badge classes
+   -------------------------------------------------------------------------- */
+span.success,
+span.info,
+span.warning,
+span.danger {
+  display: inline-block;
+  padding: 0.15em 0.55em;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 600;
+  line-height: inherit;
+  letter-spacing: 0.02em;
+  vertical-align: baseline;
+  border: 1px solid;
+}
+span.success { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+span.info    { background: var(--info-bg);    color: var(--info-text);    border-color: var(--info-border);    }
+span.warning { background: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+span.danger  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger-border);  }
+
+/* --------------------------------------------------------------------------
+   Custom plugin output styles
+   -------------------------------------------------------------------------- */
+
+/* test-block (Phase 5 — dev only) */
+div.test-block {
+  background: linear-gradient(135deg, #1a1a2e, #252848);
+  border: 1px dashed var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 0.75rem 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  margin: var(--gap) 0;
+}
+
+/* test-inline (Phase 5 — dev only) */
+span.test-inline {
+  background: rgba(95, 140, 255, 0.12);
+  color: var(--accent);
+  border: 1px dashed var(--accent-dim);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.4em;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875em;
+}
+
+/* YouTube embed (Phase 8) */
+div.youtube-embed {
+  position: relative;
+  padding-bottom: 56.25%; /* 16:9 */
+  height: 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #000;
+  margin: var(--gap) 0;
+}
+div.youtube-embed iframe {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  border: none;
+}
+
+/* Mermaid diagrams (Phase 10) */
+div.mermaid {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin: var(--gap) 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* SMILES / chemical structures (Phase 11) */
+div.smiles-render {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: var(--gap) 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+div.smiles-render canvas {
+  display: block;
+  margin: auto;
+  border-radius: var(--radius-sm);
+}
+
+/* QR code (Phase 9) */
+span.qrcode {
+  display: inline-block;
+  vertical-align: baseline;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  line-height: 0;
+}
+span.qrcode svg { display: block; }
+
+/* Span with arbitrary class (Phase 7) */
+.markdown-body span[class]:not(.test-inline):not(.qrcode):not(.katex):not(.katex-inner)
+:not(.success):not(.info):not(.warning):not(.danger)
+:not(.red):not(.yellow):not(.green):not(.blue) {
+  /* fallback for unrecognised span classes */
+}
+
+/* --------------------------------------------------------------------------
+   Print
+   -------------------------------------------------------------------------- */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .markdown-body { background: #fff; border: none; box-shadow: none; padding: 0; max-width: 100%; }
+  a { color: #000; text-decoration: underline; }
+  code { background: #f4f4f4; border: 1px solid #ccc; }
+  pre  { background: #f4f4f4; }
+  blockquote { border-left-color: #aaa; background: #f9f9f9; }
+  .youtube-embed { display: none; }
+}
