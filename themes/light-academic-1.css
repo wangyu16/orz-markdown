@@ -9,8 +9,8 @@
   --border-color: #333333;
   --border-soft: #cccccc;
   
-  --main-font: 'Crimson Pro', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-  --sans-font: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --main-font: 'Crimson Pro', 'Palatino Linotype', 'Book Antiqua', Palatino, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --sans-font: 'Lato', 'Helvetica Neue', Helvetica, Arial, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --code-font: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 
   --base-size: 19px;

@@ -70,8 +70,8 @@
   --span-green: #218763;
   --span-blue: #1d6db0;
 
-  --font-heading: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
   --font-scale: 1;
   --lh-copy: 1.72;
@@ -103,13 +103,13 @@
 
 body.font-serif,
 .markdown-body.font-serif {
-  --font-body: 'Lora', Georgia, serif;
+  --font-body: 'Lora', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --lh-copy: 1.82;
 }
 
 body.font-sans,
 .markdown-body.font-sans {
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
 }
 
 body.font-handwritten,

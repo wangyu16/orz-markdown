@@ -8,8 +8,8 @@
   --link-hover: #ff007f;
   --border-color: #d1cbc1;
 
-  --heading-font: 'Kalam', cursive;
-  --body-font: 'Comic Neue', cursive, sans-serif;
+  --heading-font: 'Kalam', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive;
+  --body-font: 'Comic Neue', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --code-font: 'Courier New', Courier, monospace;
 
   --base-size: 19px;

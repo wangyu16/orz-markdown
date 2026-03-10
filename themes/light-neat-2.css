@@ -71,8 +71,8 @@
   --span-green: #2f7c49;
   --span-blue: #21698a;
 
-  --font-heading: 'Space Grotesk', system-ui, sans-serif;
-  --font-body: 'Literata', Georgia, serif;
+  --font-heading: 'Space Grotesk', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --font-body: 'Literata', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
   --font-scale: 1;
   --lh-copy: 1.82;
@@ -104,13 +104,13 @@
 
 body.font-serif,
 .markdown-body.font-serif {
-  --font-body: 'Literata', Georgia, serif;
+  --font-body: 'Literata', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --lh-copy: 1.84;
 }
 
 body.font-sans,
 .markdown-body.font-sans {
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --lh-copy: 1.72;
 }
 

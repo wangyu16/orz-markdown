@@ -8,8 +8,8 @@
   --link-hover: #ff9100;
   --border-color: #202020;
 
-  --heading-font: 'Chewy', cursive;
-  --body-font: 'Patrick Hand', cursive;
+  --heading-font: 'Chewy', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive;
+  --body-font: 'Patrick Hand', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive;
   --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   /* Accent marker colors */

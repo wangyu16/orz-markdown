@@ -8,8 +8,8 @@
   --link-hover: #b85447;
   --border-color: #d6ccbe;
   
-  --header-font: 'Playfair Display', serif;
-  --main-font: 'Crimson Pro', serif;
+  --header-font: 'Playfair Display', 'Noto Serif SC', 'Noto Serif TC', serif;
+  --main-font: 'Crimson Pro', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Courier New', Courier, monospace;
 
   /* Callout colors */

@@ -8,8 +8,8 @@
   --link-hover: #1e4037;
   --border-color: #d1cfc9;
   
-  --header-font: 'DM Sans', sans-serif;
-  --main-font: 'Lora', serif;
+  --header-font: 'DM Sans', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --main-font: 'Lora', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
   /* Callout colors */

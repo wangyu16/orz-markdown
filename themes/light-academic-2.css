@@ -9,8 +9,8 @@
   --border-color: #000000;
   --border-soft: #dddddd;
   
-  --header-font: 'Fira Sans', Helvetica, Arial, sans-serif;
-  --main-font: 'Merriweather', 'Times New Roman', Times, serif;
+  --header-font: 'Fira Sans', Helvetica, Arial, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --main-font: 'Merriweather', 'Times New Roman', Times, 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Liberation Mono', Courier, monospace;
 
   --base-size: 16px;

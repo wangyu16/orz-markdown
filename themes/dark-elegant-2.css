@@ -80,8 +80,8 @@
   --span-blue: #8bdcff;
 
   /* typography */
-  --font-heading: 'Sora', system-ui, sans-serif;
-  --font-body: 'Merriweather', Georgia, serif;
+  --font-heading: 'Sora', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --font-body: 'Merriweather', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --font-code: 'IBM Plex Mono', 'Fira Code', monospace;
   --font-scale: 1;
   --lh-copy: 1.78;
@@ -118,13 +118,13 @@
    -------------------------------------------------------------------------- */
 body.font-serif,
 .markdown-body.font-serif {
-  --font-body: 'Merriweather', Georgia, serif;
+  --font-body: 'Merriweather', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --lh-copy: 1.85;
 }
 
 body.font-sans,
 .markdown-body.font-sans {
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
 }
 
 body.font-handwritten,
@@ -510,7 +510,7 @@ blockquote::before {
   position: absolute;
   left: 0.75rem;
   top: 0.15rem;
-  font-family: Georgia, serif;
+  font-family: Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   font-size: 2.8rem;
   line-height: 1;
   color: rgba(95, 209, 201, 0.42);
