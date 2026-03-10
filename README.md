@@ -14,6 +14,12 @@ npm install @orz-how/markdown-parser
 
 Import the configured markdown instance and use it to render markdown strings into HTML:
 
+> **HTML Support:** The parser is initialized with `html: true`, so any raw
+> HTML tags included in your markdown (e.g. `<div>Example</div>`) will be
+> emitted verbatim instead of being escaped. Be aware of XSS risks when
+> rendering untrusted content.
+
+
 ```javascript
 import md from '@orz-how/markdown-parser';
 

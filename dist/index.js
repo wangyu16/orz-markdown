@@ -37,7 +37,9 @@ Object.defineProperty(exports, "register", { enumerable: true, get: function () 
 var prepare_sources_js_1 = require("./prepare-sources.js");
 Object.defineProperty(exports, "prepareSources", { enumerable: true, get: function () { return prepare_sources_js_1.prepareSources; } });
 const md = new markdown_it_1.default({
-    html: false,
+    // allow raw HTML tags in source text. disabling this (the default) causes
+    // tags like `<div>...</div>` to be escaped into `&lt;div&gt;`.
+    html: true,
     linkify: true,
     typographer: true,
 });

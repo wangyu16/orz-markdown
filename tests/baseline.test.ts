@@ -16,4 +16,12 @@ describe('Phase 0 — Baseline markdown-it', () => {
   it('renders blockquote', () => {
     expect(md.render('> quote')).toBe('<blockquote>\n<p>quote</p>\n</blockquote>\n');
   });
+
+  it('allows raw HTML tags when html option enabled', () => {
+    // With `html: true` in the config the tag should not be escaped.  Note
+    // that markdown-it does not append an extra newline when the output is a
+    // top-level HTML block, hence we just check the exact string.
+    const result = md.render('<div>Example div block.</div>');
+    expect(result).toBe('<div>Example div block.</div>');
+  });
 });

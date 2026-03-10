@@ -32,7 +32,9 @@ export type { PluginDefinition } from './registry.js';
 export { prepareSources } from './prepare-sources.js';
 
 const md = new MarkdownIt({
-  html: false,
+  // allow raw HTML tags in source text. disabling this (the default) causes
+  // tags like `<div>...</div>` to be escaped into `&lt;div&gt;`.
+  html: true,
   linkify: true,
   typographer: true,
 });
