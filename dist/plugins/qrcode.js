@@ -12,8 +12,10 @@ const registry_js_1 = require("../registry.js");
         const content = body?.trim();
         if (!content)
             return '';
-        const svg = new qrcode_svg_1.default({ content, width: 96, height: 96, padding: 0, color: '#000000', background: '#ffffff' }).svg();
-        return `<span class="qrcode">${svg}</span>`;
+        const size = 96;
+        const rawSvg = new qrcode_svg_1.default({ content, width: size, height: size, padding: 0, color: '#000000', background: '#ffffff' }).svg();
+        const svg = rawSvg.replace('<svg ', `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" `);
+        return `<span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span>${svg}</span>`;
     },
 });
 //# sourceMappingURL=qrcode.js.map

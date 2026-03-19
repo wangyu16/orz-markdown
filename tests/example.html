@@ -24,6 +24,184 @@
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
 
 /* --------------------------------------------------------------------------
    Design Tokens
@@ -67,12 +245,14 @@
   --span-blue:     #60a5fa;
 
   /* Typography scale */
-  --fs-base:  1rem;         /* 16px default */
+  --base-size: 1rem;
+  --line-height: 1.75;
+  --fs-base:  var(--base-size); /* 16px default */
   --fs-sm:    0.875rem;
   --fs-xs:    0.8rem;
   --fs-lg:    1.125rem;
   --fs-xl:    1.25rem;
-  --lh-text:  1.75;
+  --lh-text:  var(--line-height);
   --lh-tight: 1.3;
 
   /* Spacing */
@@ -87,6 +267,13 @@
 
   /* Transitions */
   --t: 0.2s ease;
+
+  /* Markdown body container toggles */
+  --markdown-body-max-width: 860px;
+  --markdown-body-padding: clamp(1.5rem, 5vw, 3.5rem);
+  --markdown-body-border: 1px solid var(--border-subtle);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -95,7 +282,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-  font-size: var(--fs-base);
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -123,12 +310,13 @@ body {
    -------------------------------------------------------------------------- */
 .markdown-body {
   display: flow-root;
-  max-width: 860px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: clamp(1.5rem, 5vw, 3.5rem);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
+  padding: var(--markdown-body-padding);
 }
 
 /* --------------------------------------------------------------------------
@@ -322,14 +510,14 @@ ul  li::before {
 /* --------------------------------------------------------------------------
    Tables
    -------------------------------------------------------------------------- */
-.markdown-body > table, .markdown-body td table { width: 100%; }
+.markdown-body > table, .markdown-body td table {
+  width: max-content;
+  max-width: 100%;
+}
 table {
   border-collapse: collapse;
   margin-bottom: var(--gap);
   font-size: var(--fs-sm);
-  width: 100%;
-  overflow-x: auto;
-  display: block;
 }
 thead tr { background: var(--bg-elevated); }
 thead th {
@@ -366,10 +554,7 @@ hr {
    Images
    -------------------------------------------------------------------------- */
 img {
-  max-width: 100%;
-  height: auto;
   border-radius: var(--radius);
-  display: block;
   margin: var(--gap) auto;
 }
 p > img { margin: 0; display: inline; }
@@ -603,12 +788,10 @@ span.success,
 span.info,
 span.warning,
 span.danger {
-  display: inline-block;
   padding: 0.15em 0.55em;
   border-radius: 999px;
   font-size: 0.8em;
   font-weight: 600;
-  line-height: inherit;
   letter-spacing: 0.02em;
   vertical-align: baseline;
   border: 1px solid;
@@ -675,33 +858,19 @@ div.mermaid {
 
 /* SMILES / chemical structures (Phase 11) */
 div.smiles-render {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: var(--gap) 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
+  border-radius: 0;
 }
 div.smiles-render canvas {
-  display: block;
-  margin: auto;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 /* QR code (Phase 9) */
 span.qrcode {
-  display: inline-block;
   vertical-align: baseline;
   background: #fff;
   border-radius: var(--radius-sm);
   padding: 4px;
-  line-height: 0;
 }
-span.qrcode svg { display: block; }
 
 /* Span with arbitrary class (Phase 7) */
 .markdown-body span[class]:not(.test-inline):not(.qrcode):not(.katex):not(.katex-inner)
@@ -720,7 +889,10 @@ span.qrcode svg { display: block; }
   code { background: #f4f4f4; border: 1px solid #ccc; }
   pre  { background: #f4f4f4; }
   blockquote { border-left-color: #aaa; background: #f9f9f9; }
-  .youtube-embed { display: none; }
+  tr, iframe, video, pre, blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
   </style>
@@ -738,6 +910,184 @@ span.qrcode svg { display: block; }
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
 
 /* --------------------------------------------------------------------------
    Theme tokens
@@ -810,18 +1160,20 @@ span.qrcode svg { display: block; }
   --font-heading: 'Sora', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Merriweather', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --font-code: 'IBM Plex Mono', 'Fira Code', monospace;
+  --base-size: 1rem;
+  --line-height: 1.78;
   --font-scale: 1;
-  --lh-copy: 1.78;
+  --lh-copy: var(--line-height);
   --lh-tight: 1.22;
 
-  --fs-50: calc(0.78rem * var(--font-scale));
-  --fs-75: calc(0.875rem * var(--font-scale));
-  --fs-100: calc(1rem * var(--font-scale));
-  --fs-200: calc(1.125rem * var(--font-scale));
-  --fs-300: calc(1.25rem * var(--font-scale));
-  --fs-400: calc(1.5rem * var(--font-scale));
-  --fs-500: calc(1.85rem * var(--font-scale));
-  --fs-600: calc(2.35rem * var(--font-scale));
+  --fs-50: calc(0.78 * var(--base-size) * var(--font-scale));
+  --fs-75: calc(0.875 * var(--base-size) * var(--font-scale));
+  --fs-100: calc(var(--base-size) * var(--font-scale));
+  --fs-200: calc(1.125 * var(--base-size) * var(--font-scale));
+  --fs-300: calc(1.25 * var(--base-size) * var(--font-scale));
+  --fs-400: calc(1.5 * var(--base-size) * var(--font-scale));
+  --fs-500: calc(1.85 * var(--base-size) * var(--font-scale));
+  --fs-600: calc(2.35 * var(--base-size) * var(--font-scale));
 
   /* rhythm */
   --space-1: 0.375rem;
@@ -838,6 +1190,14 @@ span.qrcode svg { display: block; }
   --shadow: 0 26px 60px rgba(0, 0, 0, 0.42);
   --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
   --transition: 180ms ease;
+
+  /* markdown body container toggles */
+  --markdown-body-max-width: 920px;
+  --markdown-body-padding: clamp(1.5rem, 4vw, 3.5rem);
+  --markdown-body-border: 1px solid var(--border);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: var(--shadow);
+  --markdown-body-decorations-display: block;
 }
 
 /* --------------------------------------------------------------------------
@@ -856,7 +1216,7 @@ body.font-sans,
 
 body.font-handwritten,
 .markdown-body.font-handwritten {
-  --font-body: 'Caveat', 'Segoe Print', cursive;
+  --font-body: 'Hanzi Pen TC', 'Hanzi Pen SC', 'Caveat', 'Segoe Print', cursive;
   --lh-copy: 1.9;
 }
 
@@ -894,7 +1254,7 @@ body.size-xl,
 }
 
 html {
-  font-size: 100%;
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -945,18 +1305,19 @@ body {
    -------------------------------------------------------------------------- */
 .markdown-body {
   position: relative;
-  max-width: 920px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: clamp(1.5rem, 4vw, 3.5rem);
+  padding: var(--markdown-body-padding);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), var(--surface-2) 16%, var(--surface) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   overflow: hidden;
   isolation: isolate;
 }
 
 .markdown-body::before {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0;
@@ -971,6 +1332,7 @@ body {
 }
 
 .markdown-body::after {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0 auto auto 0;
@@ -1291,7 +1653,7 @@ ul > li::before {
 }
 
 ol {
-  list-style: decimal-leading-zero;
+  list-style: decimal;
 }
 
 .task-list-item {
@@ -1342,7 +1704,8 @@ ol {
    -------------------------------------------------------------------------- */
 .markdown-body > table,
 .markdown-body td table {
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 }
 
 table {
@@ -1399,9 +1762,6 @@ hr {
 }
 
 img {
-  display: block;
-  max-width: 100%;
-  height: auto;
   margin: 0 auto;
   border: 1px solid rgba(143, 223, 247, 0.14);
   border-radius: 18px;
@@ -1857,15 +2217,12 @@ span.info,
 span.warning,
 span.danger {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42em;
+  gap: 0;
   padding: 0.2em 0.62em;
   border-radius: 999px;
   border: 1px solid;
   font-size: 0.82em;
   font-weight: 700;
-  line-height: 1.25;
   vertical-align: middle;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
@@ -1874,11 +2231,7 @@ span.success::before,
 span.info::before,
 span.warning::before,
 span.danger::before {
-  content: '';
-  width: 0.48em;
-  height: 0.48em;
-  border-radius: 999px;
-  flex: 0 0 auto;
+  content: none;
 }
 
 span.success {
@@ -1887,18 +2240,10 @@ span.success {
   border-color: var(--success-border);
 }
 
-span.success::before {
-  background: linear-gradient(135deg, #b1f4cf, #4ecb82);
-}
-
 span.info {
   background: rgba(139, 220, 255, 0.12);
   color: var(--info-text);
   border-color: var(--info-border);
-}
-
-span.info::before {
-  background: linear-gradient(135deg, #caefff, #4fb2ec);
 }
 
 span.warning {
@@ -1907,21 +2252,10 @@ span.warning {
   border-color: var(--warning-border);
 }
 
-span.warning::before {
-  background: linear-gradient(135deg, #ffe6a8, #f2aa39);
-  border-radius: 3px;
-  transform: rotate(45deg);
-}
-
 span.danger {
   background: rgba(255, 156, 166, 0.12);
   color: var(--danger-text);
   border-color: var(--danger-border);
-}
-
-span.danger::before {
-  background: radial-gradient(circle, #ffd1d6 0%, #db6975 78%);
-  box-shadow: 0 0 0 1px rgba(255, 190, 196, 0.4);
 }
 
 /* --------------------------------------------------------------------------
@@ -1983,37 +2317,20 @@ div.mermaid svg {
 }
 
 div.smiles-render {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.02);
 }
 
 div.smiles-render canvas,
 canvas[data-smiles] {
-  display: block;
-  max-width: 100%;
-  border-radius: 12px;
-  background: #0a1821;
-  box-shadow: inset 0 0 0 1px rgba(143, 223, 247, 0.16);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 span.qrcode {
-  display: inline-block;
   padding: 6px;
-  line-height: 0;
   vertical-align: middle;
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
-}
-
-span.qrcode svg {
-  display: block;
 }
 
 /* --------------------------------------------------------------------------
@@ -2107,6 +2424,15 @@ span.qrcode svg {
     border-color: #bdbdbd !important;
     color: #111111 !important;
   }
+
+  tr,
+  iframe,
+  video,
+  pre,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
   </style>
@@ -2124,6 +2450,184 @@ span.qrcode svg {
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
 
 :root {
   color-scheme: light;
@@ -2186,18 +2690,20 @@ span.qrcode svg {
   --font-heading: 'Plus Jakarta Sans', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --base-size: 1rem;
+  --line-height: 1.72;
   --font-scale: 1;
-  --lh-copy: 1.72;
+  --lh-copy: var(--line-height);
   --lh-tight: 1.24;
 
-  --fs-50: calc(0.78rem * var(--font-scale));
-  --fs-75: calc(0.9rem * var(--font-scale));
-  --fs-100: calc(1rem * var(--font-scale));
-  --fs-200: calc(1.14rem * var(--font-scale));
-  --fs-300: calc(1.28rem * var(--font-scale));
-  --fs-400: calc(1.55rem * var(--font-scale));
-  --fs-500: calc(1.95rem * var(--font-scale));
-  --fs-600: calc(2.5rem * var(--font-scale));
+  --fs-50: calc(0.78 * var(--base-size) * var(--font-scale));
+  --fs-75: calc(0.9 * var(--base-size) * var(--font-scale));
+  --fs-100: calc(var(--base-size) * var(--font-scale));
+  --fs-200: calc(1.14 * var(--base-size) * var(--font-scale));
+  --fs-300: calc(1.28 * var(--base-size) * var(--font-scale));
+  --fs-400: calc(1.55 * var(--base-size) * var(--font-scale));
+  --fs-500: calc(1.95 * var(--base-size) * var(--font-scale));
+  --fs-600: calc(2.5 * var(--base-size) * var(--font-scale));
 
   --space-1: 0.35rem;
   --space-2: 0.65rem;
@@ -2212,6 +2718,14 @@ span.qrcode svg {
   --shadow: 0 18px 42px rgba(86, 125, 155, 0.12);
   --shadow-soft: 0 8px 24px rgba(96, 129, 155, 0.08);
   --transition: 180ms ease;
+
+  /* markdown body container toggles */
+  --markdown-body-max-width: 940px;
+  --markdown-body-padding: clamp(1.25rem, 3.6vw, 3.2rem);
+  --markdown-body-border: 1px solid var(--border);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: var(--shadow);
+  --markdown-body-decorations-display: block;
 }
 
 body.font-serif,
@@ -2227,7 +2741,7 @@ body.font-sans,
 
 body.font-handwritten,
 .markdown-body.font-handwritten {
-  --font-body: 'Caveat', 'Segoe Print', cursive;
+  --font-body: 'Hanzi Pen TC', 'Hanzi Pen SC', 'Caveat', 'Segoe Print', cursive;
   --lh-copy: 1.88;
 }
 
@@ -2262,7 +2776,7 @@ body.size-xl,
 }
 
 html {
-  font-size: 100%;
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -2307,18 +2821,19 @@ body {
 
 .markdown-body {
   position: relative;
-  max-width: 940px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: clamp(1.25rem, 3.6vw, 3.2rem);
+  padding: var(--markdown-body-padding);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   overflow: hidden;
   isolation: isolate;
 }
 
 .markdown-body::before {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0;
@@ -2333,6 +2848,7 @@ body {
 }
 
 .markdown-body::after {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0 auto auto 0;
@@ -2655,7 +3171,7 @@ ul > li::before {
 }
 
 ol {
-  list-style: decimal-leading-zero;
+  list-style: decimal;
 }
 
 .task-list-item {
@@ -2702,15 +3218,12 @@ ol {
 
 .markdown-body > table,
 .markdown-body td table {
-  width: 100%;
-}
+  width: max-content;
+  width: max-content;
+  max-width: 100%;
 
 table {
-  display: block;
-  overflow-x: auto;
   border-collapse: separate;
-  border-spacing: 0;
-  border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
@@ -2755,9 +3268,6 @@ hr {
 }
 
 img {
-  display: block;
-  max-width: 100%;
-  height: auto;
   margin: 0 auto;
   border: 1px solid #dde8f3;
   border-radius: 18px;
@@ -3143,15 +3653,12 @@ span.success,
 span.info,
 span.warning,
 span.danger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42em;
+  gap: 0;
   padding: 0.18em 0.62em;
   border-radius: 999px;
   border: 1px solid;
   font-size: 0.82em;
   font-weight: 700;
-  line-height: 1.24;
   vertical-align: middle;
 }
 
@@ -3159,11 +3666,7 @@ span.success::before,
 span.info::before,
 span.warning::before,
 span.danger::before {
-  content: '';
-  width: 0.45em;
-  height: 0.45em;
-  border-radius: 999px;
-  flex: 0 0 auto;
+  content: none;
 }
 
 span.success {
@@ -3172,18 +3675,10 @@ span.success {
   border-color: var(--success-border);
 }
 
-span.success::before {
-  background: var(--success-text);
-}
-
 span.info {
   background: rgba(70, 154, 230, 0.14);
   color: var(--info-text);
   border-color: var(--info-border);
-}
-
-span.info::before {
-  background: var(--info-text);
 }
 
 span.warning {
@@ -3192,18 +3687,10 @@ span.warning {
   border-color: var(--warning-border);
 }
 
-span.warning::before {
-  background: var(--warning-text);
-}
-
 span.danger {
   background: rgba(223, 108, 119, 0.15);
   color: var(--danger-text);
   border-color: var(--danger-border);
-}
-
-span.danger::before {
-  background: var(--danger-text);
 }
 
 div.test-block {
@@ -3262,37 +3749,20 @@ div.mermaid svg {
 }
 
 div.smiles-render {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface-2);
 }
 
 div.smiles-render canvas,
 canvas[data-smiles] {
-  display: block;
-  max-width: 100%;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(46, 139, 207, 0.12);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 span.qrcode {
-  display: inline-block;
   padding: 6px;
-  line-height: 0;
   vertical-align: middle;
   background: #fff;
   border-radius: 12px;
   box-shadow: var(--shadow-soft);
-}
-
-span.qrcode svg {
-  display: block;
 }
 
 @media (max-width: 720px) {
@@ -3374,6 +3844,15 @@ span.qrcode svg {
     border-color: #bdbdbd !important;
     color: #111 !important;
   }
+
+  tr,
+  iframe,
+  video,
+  pre,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
   </style>
@@ -3391,6 +3870,184 @@ span.qrcode svg {
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Source+Sans+3:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
 
 :root {
   color-scheme: light;
@@ -3454,18 +4111,20 @@ span.qrcode svg {
   --font-heading: 'Space Grotesk', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Literata', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --base-size: 1rem;
+  --line-height: 1.82;
   --font-scale: 1;
-  --lh-copy: 1.82;
+  --lh-copy: var(--line-height);
   --lh-tight: 1.2;
 
-  --fs-50: calc(0.78rem * var(--font-scale));
-  --fs-75: calc(0.9rem * var(--font-scale));
-  --fs-100: calc(1rem * var(--font-scale));
-  --fs-200: calc(1.12rem * var(--font-scale));
-  --fs-300: calc(1.26rem * var(--font-scale));
-  --fs-400: calc(1.48rem * var(--font-scale));
-  --fs-500: calc(1.9rem * var(--font-scale));
-  --fs-600: calc(2.45rem * var(--font-scale));
+  --fs-50: calc(0.78 * var(--base-size) * var(--font-scale));
+  --fs-75: calc(0.9 * var(--base-size) * var(--font-scale));
+  --fs-100: calc(var(--base-size) * var(--font-scale));
+  --fs-200: calc(1.12 * var(--base-size) * var(--font-scale));
+  --fs-300: calc(1.26 * var(--base-size) * var(--font-scale));
+  --fs-400: calc(1.48 * var(--base-size) * var(--font-scale));
+  --fs-500: calc(1.9 * var(--base-size) * var(--font-scale));
+  --fs-600: calc(2.45 * var(--base-size) * var(--font-scale));
 
   --space-1: 0.35rem;
   --space-2: 0.64rem;
@@ -3480,6 +4139,13 @@ span.qrcode svg {
   --shadow: 0 16px 32px rgba(166, 155, 137, 0.16), 0 4px 12px rgba(166, 155, 137, 0.1);
   --shadow-soft: 0 10px 22px rgba(190, 181, 166, 0.14), 0 2px 8px rgba(190, 181, 166, 0.08);
   --transition: 180ms ease;
+
+  --markdown-body-max-width: 920px;
+  --markdown-body-padding: clamp(1.25rem, 3.4vw, 3rem);
+  --markdown-body-border: 1px solid var(--border-strong);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: var(--shadow);
+  --markdown-body-decorations-display: block;
 }
 
 body.font-serif,
@@ -3496,7 +4162,7 @@ body.font-sans,
 
 body.font-handwritten,
 .markdown-body.font-handwritten {
-  --font-body: 'Caveat', 'Segoe Print', cursive;
+  --font-body: 'Hanzi Pen TC', 'Hanzi Pen SC', 'Caveat', 'Segoe Print', cursive;
   --lh-copy: 1.9;
 }
 
@@ -3531,7 +4197,7 @@ body.size-xl,
 }
 
 html {
-  font-size: 100%;
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -3577,18 +4243,19 @@ body {
 .markdown-body {
   display: flow-root;
   position: relative;
-  max-width: 920px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: clamp(1.25rem, 3.4vw, 3rem);
+  padding: var(--markdown-body-padding);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: var(--shadow);
+  box-shadow: var(--markdown-body-shadow);
 }
 
 .markdown-body::before {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0.9rem;
@@ -3598,6 +4265,7 @@ body {
 }
 
 .markdown-body::after {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   left: 1.2rem;
@@ -3922,7 +4590,7 @@ ul > li::before {
 }
 
 ol {
-  list-style: decimal-leading-zero;
+  list-style: decimal;
 }
 
 .task-list-item {
@@ -3969,12 +4637,11 @@ ol {
 
 .markdown-body > table,
 .markdown-body td table {
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 }
 
 table {
-  display: block;
-  overflow-x: auto;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--border-strong);
@@ -4018,9 +4685,6 @@ hr {
 }
 
 img {
-  display: block;
-  max-width: 100%;
-  height: auto;
   margin: 0 auto;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -4370,8 +5034,6 @@ span.success,
 span.info,
 span.warning,
 span.danger {
-  display: inline-flex;
-  align-items: center;
   padding: 0.18em 0.58em;
   border: 1px solid;
   border-radius: 7px;
@@ -4463,38 +5125,21 @@ div.mermaid svg {
 }
 
 div.smiles-render {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface-2);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
 }
 
 div.smiles-render canvas,
 canvas[data-smiles] {
-  display: block;
-  max-width: 100%;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: inset 0 0 0 1px rgba(22, 122, 114, 0.1);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 span.qrcode {
-  display: inline-block;
   padding: 6px;
-  line-height: 0;
   vertical-align: middle;
   background: #fff;
   border-radius: 10px;
   box-shadow: var(--shadow-soft);
-}
-
-span.qrcode svg {
-  display: block;
 }
 
 @media (max-width: 720px) {
@@ -4576,12 +5221,200 @@ span.qrcode svg {
     border-color: #bdbdbd !important;
     color: #111 !important;
   }
+
+  tr,
+  iframe,
+  video,
+  pre,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
   </style>
   <style id="theme-5" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
 
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
+
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #f4ecdf;
   --text-main: #4d4036;
@@ -4589,12 +5422,11 @@ span.qrcode svg {
   --link-color: #944238;
   --link-hover: #b85447;
   --border-color: #d6ccbe;
-  
+
   --header-font: 'Playfair Display', 'Noto Serif SC', 'Noto Serif TC', serif;
   --main-font: 'Crimson Pro', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Courier New', Courier, monospace;
 
-  /* Callout colors */
   --info-bg: #eef3f6;
   --info-border: #628bc4;
   --success-bg: #eff4ec;
@@ -4604,9 +5436,14 @@ span.qrcode svg {
   --danger-bg: #fbefef;
   --danger-border: #c96767;
 
-  /* Font size variables for easy adjustment */
   --base-size: 18px;
   --line-height: 1.7;
+
+  --markdown-body-max-width: 800px;
+  --markdown-body-padding: 4rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -4622,13 +5459,16 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 800px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 4rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   text-align: justify;
 }
 
-/* Headers */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -4660,9 +5500,10 @@ body {
   padding-bottom: 0.2em;
 }
 
-.markdown-body h3 { font-size: 1.4em; }
+.markdown-body h3 {
+  font-size: 1.4em;
+}
 
-/* Paragraphs & Text Styling */
 .markdown-body p {
   margin-bottom: 1.5em;
 }
@@ -4685,24 +5526,7 @@ body {
   color: #1a1614;
 }
 
-/* Blockquotes: Magazine pull-quote style */
-.markdown-body blockquote {
-  margin: 2.5em 2em;
-  padding: 1.5em 2em;
-  border-top: 2px solid var(--text-muted);
-  border-bottom: 2px solid var(--text-muted);
-  font-style: italic;
-  font-size: 1.25em;
-  color: #4a3e38;
-  text-align: center;
-  background-color: #ece2d2;
-}
-
-.markdown-body blockquote p:last-child {
-  margin-bottom: 0;
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 2em;
@@ -4721,7 +5545,7 @@ body {
   margin-right: 0.5em;
 }
 
-/* Code & Pre */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   background-color: #f2eee8;
@@ -4747,9 +5571,24 @@ body {
   font-size: 0.9em;
 }
 
-/* Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2.5em 2em;
+  padding: 1.5em 2em;
+  border-top: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  font-style: italic;
+  font-size: 1.25em;
+  color: #4a3e38;
+  text-align: center;
+  background-color: #ece2d2;
+}
+
+.markdown-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
 .markdown-body table {
-  width: 100%;
   border-collapse: collapse;
   margin-bottom: 2em;
   font-size: 0.95em;
@@ -4769,7 +5608,23 @@ body {
   color: #1a1614;
 }
 
-/* Custom Containers */
+.markdown-body hr {
+  border: 0;
+  height: 1px;
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--border-color), rgba(0, 0, 0, 0));
+  margin: 3em 0;
+}
+
+.markdown-body img {
+  margin: 1.5em auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -4780,12 +5635,26 @@ body {
   border-radius: 0 4px 4px 0;
 }
 
-.markdown-body .info { background: var(--info-bg); border-color: var(--info-border); }
-.markdown-body .success { background: var(--success-bg); border-color: var(--success-border); }
-.markdown-body .warning { background: var(--warning-bg); border-color: var(--warning-border); }
-.markdown-body .danger { background: var(--danger-bg); border-color: var(--danger-border); }
+.markdown-body .info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
 
-/* Layout Containers */
+.markdown-body .success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.markdown-body .warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.markdown-body .danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -4795,16 +5664,17 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 4px;
 }
+
 .markdown-body .right {
   text-align: right;
   margin: 0 0 1em;
 }
+
 .markdown-body .center {
   text-align: center;
   margin: 0 0 1em;
 }
 
-/* Spoil / Details */
 .markdown-body details.spoil {
   background-color: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -4833,33 +5703,6 @@ body {
   background-color: #f6efe4;
 }
 
-/* Colored Text */
-.markdown-body span.red { color: #b73a3a; }
-.markdown-body span.yellow { color: #b58900; }
-.markdown-body span.green { color: #438f4d; }
-.markdown-body span.blue { color: #266baf; }
-
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  font-size: 0.75em;
-  font-family: var(--header-font);
-  font-weight: bold;
-  padding: 0.25em 0.6em;
-  border-radius: 12px;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.markdown-body span.success { background-color: var(--success-border); }
-.markdown-body span.info { background-color: var(--info-border); }
-.markdown-body span.warning { background-color: var(--warning-border); }
-.markdown-body span.danger { background-color: var(--danger-border); }
-
-/* Tabs & Cols Structure */
 .markdown-body .tabs {
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -4937,11 +5780,12 @@ body {
   border-radius: 4px;
   background: #f6efe4;
 }
+
 .markdown-body .col > *:last-child {
   margin-bottom: 0;
 }
 
-/* TOC */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body .table-of-contents {
   background-color: #f7f3eb;
   padding: 1.5em 2em;
@@ -4960,16 +5804,255 @@ body {
   padding-left: 0;
 }
 
-.markdown-body hr {
-  border: 0;
-  height: 1px;
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--border-color), rgba(0, 0, 0, 0));
-  margin: 3em 0;
+.markdown-body span.red {
+  color: #b73a3a;
+}
+
+.markdown-body span.yellow {
+  color: #b58900;
+}
+
+.markdown-body span.green {
+  color: #438f4d;
+}
+
+.markdown-body span.blue {
+  color: #266baf;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  font-size: 0.75em;
+  font-family: var(--header-font);
+  font-weight: bold;
+  padding: 0.25em 0.6em;
+  border-radius: 12px;
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+
+.markdown-body span.success {
+  background-color: var(--success-border);
+}
+
+.markdown-body span.info {
+  background-color: var(--info-border);
+}
+
+.markdown-body span.warning {
+  background-color: var(--warning-border);
+}
+
+.markdown-body span.danger {
+  background-color: var(--danger-border);
+}
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border-radius: 4px;
+}
+
+/* 8. Print */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+    padding: 0;
+  }
+
+  .markdown-body {
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+  }
+
 }
   </style>
   <style id="theme-6" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
 
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
+
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #eee6d8;
   --text-main: #4a3c31;
@@ -4977,12 +6060,11 @@ body {
   --link-color: #2f6154;
   --link-hover: #1e4037;
   --border-color: #d1cfc9;
-  
+
   --header-font: 'DM Sans', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --main-font: 'Lora', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
-  /* Callout colors */
   --info-bg: rgba(74, 144, 226, 0.12);
   --info-border: #80a4c9;
   --success-bg: rgba(67, 181, 92, 0.12);
@@ -4994,6 +6076,12 @@ body {
 
   --base-size: 17px;
   --line-height: 1.8;
+
+  --markdown-body-max-width: 760px;
+  --markdown-body-padding: 5rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -5009,12 +6097,15 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 760px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 5rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
 }
 
-/* Headers */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -5043,12 +6134,11 @@ body {
   font-weight: 600;
 }
 
-.markdown-body h3 { 
-  font-size: 1.3em; 
+.markdown-body h3 {
+  font-size: 1.3em;
   font-weight: 500;
 }
 
-/* Paragraphs & Text Styling */
 .markdown-body p {
   margin-bottom: 1.6em;
 }
@@ -5069,18 +6159,7 @@ body {
   font-weight: 600;
 }
 
-/* Blockquotes: Clean minimalist vertical bar */
-.markdown-body blockquote {
-  margin: 2em 0;
-  padding: 0.5em 0 0.5em 1.5em;
-  border-left: 3px solid var(--link-color);
-  font-style: italic;
-  font-size: 1.15em;
-  color: var(--text-muted);
-  background-color: #e5ddd0;
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 1.5em;
@@ -5097,11 +6176,11 @@ body {
   font-weight: 500;
 }
 
-/* Code & Pre */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   color: #2d1e0f;
-  background-color: rgba(0,0,0,0.05);
+  background-color: rgba(0, 0, 0, 0.05);
   padding: 0.2em 0.4em;
   border-radius: 4px;
   font-size: 0.85em;
@@ -5114,7 +6193,7 @@ body {
   border-radius: 8px;
   overflow-x: auto;
   margin-bottom: 1.6em;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .markdown-body pre code {
@@ -5124,9 +6203,18 @@ body {
   font-size: 0.9em;
 }
 
-/* Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2em 0;
+  padding: 0.5em 0 0.5em 1.5em;
+  border-left: 3px solid var(--link-color);
+  font-style: italic;
+  font-size: 1.15em;
+  color: var(--text-muted);
+  background-color: #e5ddd0;
+}
+
 .markdown-body table {
-  width: 100%;
   border-collapse: collapse;
   margin-bottom: 2em;
   font-size: 0.95em;
@@ -5148,7 +6236,23 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Custom Containers */
+.markdown-body hr {
+  border: 0;
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 3em 0;
+}
+
+.markdown-body img {
+  margin: 1.5em auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -5160,12 +6264,30 @@ body {
   font-size: 0.95em;
 }
 
-.markdown-body .info { background: var(--info-bg); color: #436485; border-left: 4px solid var(--info-border); }
-.markdown-body .success { background: var(--success-bg); color: #4a7553; border-left: 4px solid var(--success-border); }
-.markdown-body .warning { background: var(--warning-bg); color: #876d29; border-left: 4px solid var(--warning-border); }
-.markdown-body .danger { background: var(--danger-bg); color: #9c4b54; border-left: 4px solid var(--danger-border); }
+.markdown-body .info {
+  background: var(--info-bg);
+  color: #436485;
+  border-left: 4px solid var(--info-border);
+}
 
-/* Layout Containers */
+.markdown-body .success {
+  background: var(--success-bg);
+  color: #4a7553;
+  border-left: 4px solid var(--success-border);
+}
+
+.markdown-body .warning {
+  background: var(--warning-bg);
+  color: #876d29;
+  border-left: 4px solid var(--warning-border);
+}
+
+.markdown-body .danger {
+  background: var(--danger-bg);
+  color: #9c4b54;
+  border-left: 4px solid var(--danger-border);
+}
+
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -5175,16 +6297,17 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 8px;
 }
+
 .markdown-body .right {
   text-align: right;
   margin: 0 0 1em;
 }
+
 .markdown-body .center {
   text-align: center;
   margin: 0 0 1em;
 }
 
-/* Spoil / Details */
 .markdown-body details.spoil {
   background-color: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -5238,30 +6361,6 @@ body {
   background-color: #f6f0e6;
 }
 
-/* Colored Text */
-.markdown-body span.red { color: #d33c4b; }
-.markdown-body span.yellow { color: #e6a700; }
-.markdown-body span.green { color: #43b55c; }
-.markdown-body span.blue { color: #4a90e2; }
-
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  font-size: 0.75em;
-  font-family: var(--header-font);
-  font-weight: 600;
-  padding: 0.3em 0.8em;
-  border-radius: 20px;
-  color: #fff;
-}
-.markdown-body span.success { background-color: var(--success-border); }
-.markdown-body span.info { background-color: var(--info-border); }
-.markdown-body span.warning { background-color: var(--warning-border); }
-.markdown-body span.danger { background-color: var(--danger-border); }
-
-/* Tabs & Cols Structure */
 .markdown-body .tabs {
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -5342,25 +6441,263 @@ body {
   margin-bottom: 0;
 }
 
-/* TOC */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body .table-of-contents {
   margin: 2.5em 0;
   padding: 2em;
-  background-color: rgba(0,0,0,0.02);
+  background-color: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   font-family: var(--header-font);
 }
 
-.markdown-body hr {
-  border: 0;
-  height: 1px;
-  background-color: var(--border-color);
-  margin: 3em 0;
+.markdown-body span.red {
+  color: #d33c4b;
+}
+
+.markdown-body span.yellow {
+  color: #e6a700;
+}
+
+.markdown-body span.green {
+  color: #43b55c;
+}
+
+.markdown-body span.blue {
+  color: #4a90e2;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  font-size: 0.75em;
+  font-family: var(--header-font);
+  font-weight: 600;
+  padding: 0.3em 0.8em;
+  border-radius: 20px;
+  color: #fff;
+}
+
+.markdown-body span.success {
+  background-color: var(--success-border);
+}
+
+.markdown-body span.info {
+  background-color: var(--info-border);
+}
+
+.markdown-body span.warning {
+  background-color: var(--warning-border);
+}
+
+.markdown-body span.danger {
+  background-color: var(--danger-border);
+}
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border-radius: 6px;
+}
+
+/* 8. Print */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+    padding: 0;
+  }
+
+  .markdown-body {
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+  }
+
 }
   </style>
   <style id="theme-7" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
 
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
+
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #fffff8;
   --text-main: #111111;
@@ -5369,13 +6706,19 @@ body {
   --link-hover: #b30000;
   --border-color: #333333;
   --border-soft: #cccccc;
-  
+
   --main-font: 'Crimson Pro', 'Palatino Linotype', 'Book Antiqua', Palatino, 'Noto Serif SC', 'Noto Serif TC', serif;
   --sans-font: 'Lato', 'Helvetica Neue', Helvetica, Arial, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --code-font: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 
   --base-size: 19px;
   --line-height: 1.7;
+
+  --markdown-body-max-width: 820px;
+  --markdown-body-padding: 4rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -5384,7 +6727,6 @@ body {
   padding: 0;
 }
 
-/* Tufte inspired layout */
 .markdown-body {
   display: flow-root;
   font-family: var(--main-font);
@@ -5392,14 +6734,17 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 820px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 4rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   text-align: justify;
   hyphens: auto;
 }
 
-/* Headings */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -5434,7 +6779,6 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Text */
 .markdown-body p {
   margin-top: 0;
   margin-bottom: 1.4rem;
@@ -5456,18 +6800,7 @@ body {
   font-weight: 600;
 }
 
-/* Blockquotes: margin-like or abstract style */
-.markdown-body blockquote {
-  margin: 2rem 3rem;
-  padding: 0.75rem 1rem;
-  font-size: 1.1rem;
-  font-style: italic;
-  border-left: none;
-  color: var(--text-muted);
-  background-color: #f0f0e6;
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 2rem;
@@ -5478,7 +6811,7 @@ body {
   margin-bottom: 0.4rem;
 }
 
-/* Code & Pre */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   color: #000000;
@@ -5497,9 +6830,18 @@ body {
   margin-bottom: 1.4rem;
 }
 
-/* Booktabs style Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2rem 3rem;
+  padding: 0.75rem 1rem;
+  font-size: 1.1rem;
+  font-style: italic;
+  border-left: none;
+  color: var(--text-muted);
+  background-color: #f0f0e6;
+}
+
 .markdown-body table {
-  width: auto;
   min-width: 70%;
   margin: 2rem auto;
   border-collapse: collapse;
@@ -5529,7 +6871,29 @@ body {
   vertical-align: middle;
 }
 
-/* Custom Containers */
+.markdown-body hr {
+  border: 0;
+  text-align: center;
+  margin: 2.5rem 0;
+}
+
+.markdown-body hr::before {
+  content: '* * *';
+  font-size: 1.5rem;
+  letter-spacing: 0.5em;
+  color: var(--text-main);
+}
+
+.markdown-body img {
+  margin: 1.4rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -5543,53 +6907,22 @@ body {
   border-left-width: 4px;
 }
 
-.markdown-body .success { border-left-color: #2e8540; }
-.markdown-body .info { border-left-color: #2b5585; }
-.markdown-body .warning { border-left-color: #a37213; }
-.markdown-body .danger { border-left-color: #a32a2a; }
-
-/* Spoil / Details */
-.markdown-body details.spoil {
-  border: 1px solid var(--border-soft);
-  margin-bottom: 1.4rem;
-  background: #fff;
-}
-.markdown-body details.spoil > summary {
-  padding: 0.8rem 1.2rem;
-  font-family: var(--sans-font);
-  cursor: pointer;
-  background: #fdfdfd;
-  font-weight: bold;
-}
-.markdown-body details.spoil[open] > summary {
-  border-bottom: 1px solid var(--border-soft);
-}
-.markdown-body details.spoil > :not(summary) {
-  padding: 1.2rem;
+.markdown-body .success {
+  border-left-color: #2e8540;
 }
 
-/* Callout Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  display: inline-block;
-  padding: 0.1em 0.5em;
-  font-family: var(--sans-font);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid;
-  border-radius: 2px;
-  vertical-align: middle;
-  line-height: inherit;
+.markdown-body .info {
+  border-left-color: #2b5585;
 }
-.markdown-body span.success { color: #2e8540; border-color: #2e8540; }
-.markdown-body span.info { color: #2b5585; border-color: #2b5585; }
-.markdown-body span.warning { color: #a37213; border-color: #a37213; }
-.markdown-body span.danger { color: #a32a2a; border-color: #a32a2a; }
 
-/* Layout Containers */
+.markdown-body .warning {
+  border-left-color: #a37213;
+}
+
+.markdown-body .danger {
+  border-left-color: #a32a2a;
+}
+
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -5599,22 +6932,46 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 2px;
 }
+
 .markdown-body .right {
   text-align: right;
   margin: 0 0 1rem;
 }
+
 .markdown-body .center {
   text-align: center;
   margin: 0 0 1rem;
 }
 
-/* Tabs & Cols */
+.markdown-body details.spoil {
+  border: 1px solid var(--border-soft);
+  margin-bottom: 1.4rem;
+  background: #fff;
+}
+
+.markdown-body details.spoil > summary {
+  padding: 0.8rem 1.2rem;
+  font-family: var(--sans-font);
+  cursor: pointer;
+  background: #fdfdfd;
+  font-weight: bold;
+}
+
+.markdown-body details.spoil[open] > summary {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.markdown-body details.spoil > :not(summary) {
+  padding: 1.2rem;
+}
+
 .markdown-body .cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 2rem;
   margin-bottom: 1.5rem;
 }
+
 .markdown-body .col {
   padding: 1rem;
   border: 1px solid var(--border-soft);
@@ -5624,11 +6981,13 @@ body {
   border: 1px solid var(--border-soft);
   margin-bottom: 1.5rem;
 }
+
 .markdown-body .tabs-bar {
   display: flex;
   border-bottom: 1px solid var(--border-soft);
   background: #fdfdfd;
 }
+
 .markdown-body .tabs-bar-btn {
   background: none;
   border: none;
@@ -5637,40 +6996,285 @@ body {
   font-family: var(--sans-font);
   font-size: 0.9rem;
 }
+
 .markdown-body .tabs-bar-btn.active {
   background: #fff;
   border-bottom: 2px solid var(--text-main);
   font-weight: bold;
 }
+
 .markdown-body .tab {
   display: none;
   padding: 1.5rem;
 }
-.markdown-body .tab.active { display: block; }
-.markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 1px solid var(--border-soft); }
 
-/* Horizontal Rule */
-.markdown-body hr {
-  border: 0;
-  text-align: center;
-  margin: 2.5rem 0;
+.markdown-body .tab.active {
+  display: block;
 }
-.markdown-body hr::before {
-  content: '* * *';
-  font-size: 1.5rem;
-  letter-spacing: 0.5em;
-  color: var(--text-main);
+
+.markdown-body .tabs:not([data-js]) .tab {
+  display: block;
+  border-top: 1px solid var(--border-soft);
 }
-/* Span Colours */
-.markdown-body span.red { color: #9e2a2b; font-weight: 600; }
-.markdown-body span.yellow { color: #b8860b; font-weight: 600; }
-.markdown-body span.green { color: #386641; font-weight: 600; }
-.markdown-body span.blue { color: #2a5a8c; font-weight: 600; }
+
+/* 7. Navigation, footnotes, and plugin output */
+.markdown-body span.red {
+  color: #9e2a2b;
+  font-weight: 600;
+}
+
+.markdown-body span.yellow {
+  color: #b8860b;
+  font-weight: 600;
+}
+
+.markdown-body span.green {
+  color: #386641;
+  font-weight: 600;
+}
+
+.markdown-body span.blue {
+  color: #2a5a8c;
+  font-weight: 600;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  padding: 0.1em 0.5em;
+  font-family: var(--sans-font);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border: 1px solid;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.markdown-body span.success {
+  color: #2e8540;
+  border-color: #2e8540;
+}
+
+.markdown-body span.info {
+  color: #2b5585;
+  border-color: #2b5585;
+}
+
+.markdown-body span.warning {
+  color: #a37213;
+  border-color: #a37213;
+}
+
+.markdown-body span.danger {
+  color: #a32a2a;
+  border-color: #a32a2a;
+}
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border: 1px solid var(--border-soft);
+}
+
+/* 8. Print */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+    padding: 0;
+  }
+
+  .markdown-body {
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
 
   </style>
   <style id="theme-8" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Fira+Sans:wght@400;600;700&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
 
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
+
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #ffffff;
   --text-main: #000000;
@@ -5686,6 +7290,12 @@ body {
 
   --base-size: 16px;
   --line-height: 1.6;
+
+  --markdown-body-max-width: 860px;
+  --markdown-body-padding: 4rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -5694,7 +7304,6 @@ body {
   padding: 0;
 }
 
-/* Journal layout */
 .markdown-body {
   display: flow-root;
   font-family: var(--main-font);
@@ -5702,13 +7311,16 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 860px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 4rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   text-align: left;
 }
 
-/* Headings */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -5744,7 +7356,6 @@ body {
   font-weight: 600;
 }
 
-/* Text */
 .markdown-body p {
   margin-bottom: 1.2rem;
 }
@@ -5763,7 +7374,7 @@ body {
   font-weight: 700;
 }
 
-/* Abstract / Blockquotes */
+/* 5. Structural blocks */
 .markdown-body blockquote {
   margin: 2rem 0;
   padding: 1.2rem 1.5rem;
@@ -5773,14 +7384,14 @@ body {
   color: var(--text-main);
 }
 
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 1.8rem;
   margin-bottom: 1.2rem;
 }
 
-/* Code & Pre */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   color: #000000;
@@ -5803,15 +7414,22 @@ body {
   padding: 0;
 }
 
-/* Formal Tables */
 .markdown-body table {
-  width: 100%;
   margin: 2rem 0;
   border-collapse: collapse;
   font-size: 0.9em;
   font-family: var(--header-font);
   border-top: 2px solid var(--border-color);
   border-bottom: 2px solid var(--border-color);
+}
+
+.markdown-body img {
+  margin: 1.2rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
 }
 
 .markdown-body th,
@@ -5829,7 +7447,7 @@ body {
   background-color: #fbfbfb;
 }
 
-/* Definition / Theorem Containers */
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -5841,21 +7459,13 @@ body {
   position: relative;
 }
 
-.markdown-body .info::before {
-  content: "Note";
-  display: block;
-  font-family: var(--header-font);
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  text-transform: uppercase;
-  font-size: 0.85em;
-  letter-spacing: 0.05em;
+.markdown-body .info::before,
+.markdown-body .success::before,
+.markdown-body .warning::before,
+.markdown-body .danger::before {
+  content: none;
 }
-.markdown-body .success::before { content: "Outcome"; /* Inherit rest from .info */ display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
-.markdown-body .warning::before { content: "Caution"; display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
-.markdown-body .danger::before { content: "Danger"; display: block; font-family: var(--header-font); font-weight: 700; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85em; }
 
-/* Spoil / Details */
 .markdown-body details.spoil {
   border: 1px solid var(--border-color);
   margin-bottom: 1.2rem;
@@ -5874,27 +7484,6 @@ body {
   padding: 1rem;
 }
 
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  display: inline-block;
-  padding: 0.15em 0.5em;
-  font-family: var(--header-font);
-  font-size: 0.8em;
-  font-weight: 600;
-  border: 1px solid var(--text-main);
-  background: #fff;
-  vertical-align: baseline;
-  line-height: inherit;
-}
-.markdown-body span.success { background: #e3f5e1; }
-.markdown-body span.info { background: #e1f0fa; }
-.markdown-body span.warning { background: #fff4d4; }
-.markdown-body span.danger { background: #fcebeb; }
-
-/* Layout Containers */
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -5913,7 +7502,6 @@ body {
   margin: 0 0 1rem;
 }
 
-/* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -5956,17 +7544,33 @@ body {
 .markdown-body .tab.active { display: block; }
 .markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 1px solid var(--border-color); }
 
-/* Horizontal Rule */
 .markdown-body hr {
   border: none;
   border-top: 1px solid var(--border-color);
   margin: 2rem 0;
 }
-/* Span Colours */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body span.red { color: #9e2a2b; font-weight: 600; }
 .markdown-body span.yellow { color: #b8860b; font-weight: 600; }
 .markdown-body span.green { color: #386641; font-weight: 600; }
 .markdown-body span.blue { color: #2a5a8c; font-weight: 600; }
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  padding: 0.15em 0.5em;
+  font-family: var(--header-font);
+  font-size: 0.8em;
+  font-weight: 600;
+  border: 1px solid var(--text-main);
+  background: #fff;
+  vertical-align: baseline;
+}
+.markdown-body span.success { background: #e3f5e1; }
+.markdown-body span.info { background: #e1f0fa; }
+.markdown-body span.warning { background: #fff4d4; }
+.markdown-body span.danger { background: #fcebeb; }
 
 /* Container backgrounds */
 .markdown-body div.success { background-color: #f4faeb; }
@@ -5974,9 +7578,198 @@ body {
 .markdown-body div.warning { background-color: #fdf5e6; }
 .markdown-body div.danger { background-color: #faecec; }
 
+.markdown-body span.qrcode {
+  background: #fff;
+  border: 1px solid var(--border-soft);
+}
+
+/* 8. Print */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .markdown-body { max-width: 100%; padding: 0; border: none; box-shadow: none; }
+}
+
   </style>
   <style id="theme-9" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
 
 :root {
   --bg-color: #fcf9f2;
@@ -5998,6 +7791,12 @@ body {
   --note-blue: #cde6fa;
   --note-yellow: #fef1ac;
   --note-pink: #fad1e1;
+
+  --markdown-body-max-width: 800px;
+  --markdown-body-padding: 3rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -6013,9 +7812,12 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 800px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 3rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   /* subtle notebook paper lines background */
   background-image: repeating-linear-gradient(transparent, transparent 1.5rem, rgba(0, 150, 255, 0.08) 1.5rem, rgba(0, 150, 255, 0.08) 1.6rem);
   background-attachment: local;
@@ -6124,7 +7926,6 @@ body {
 
 /* Tables */
 .markdown-body table {
-  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   margin: 2rem 0;
@@ -6132,6 +7933,14 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.markdown-body img {
+  margin: 1.4rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
 }
 .markdown-body th, .markdown-body td {
   padding: 0.8rem 1rem;
@@ -6185,7 +7994,6 @@ body {
 .markdown-body span.info,
 .markdown-body span.warning,
 .markdown-body span.danger {
-  display: inline-block;
   padding: 0.2em 0.8em;
   font-family: var(--heading-font);
   font-size: 0.9em;
@@ -6288,22 +8096,206 @@ body {
   border-top: 4px dotted #ccc;
   margin: 3rem 0;
 }
-/* Span Colours */
-.markdown-body span.red { color: #ff595e; font-weight: bold; }
-.markdown-body span.yellow { color: #e5a910; font-weight: bold; }
-.markdown-body span.green { color: #8ac926; font-weight: bold; }
-.markdown-body span.blue { color: #1982c4; font-weight: bold; }
-
-/* Span Colours */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body span.red { color: #ff595e; font-weight: bold; }
 .markdown-body span.yellow { color: #d49a00; font-weight: bold; }
 .markdown-body span.green { color: #8ac926; font-weight: bold; }
 .markdown-body span.blue { color: #1982c4; font-weight: bold; }
 
+.markdown-body span.qrcode {
+  background: #fff;
+  border-radius: 8px;
+}
+
+/* 8. Print */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .markdown-body { max-width: 100%; padding: 0; border: none; box-shadow: none; }
+}
+
   </style>
   <style id="theme-10" media="not all">
 @import url('https://fonts.googleapis.com/css2?family=Chewy&family=Patrick+Hand&display=swap');
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
 
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}
+
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #ffffff;
   --text-main: #202020;
@@ -6324,6 +8316,11 @@ body {
 
   --base-size: 21px;
   --line-height: 1.5;
+
+  --markdown-body-max-width: 820px;
+  --markdown-body-padding: 3rem;
+  --markdown-body-border: 4px solid var(--border-color);
+  --markdown-body-shadow: 8px 8px 0px rgba(0,0,0,0.1);
 }
 
 body {
@@ -6341,15 +8338,15 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: #ffffff;
-  max-width: 820px;
+  max-width: var(--markdown-body-max-width);
   margin: 2rem auto;
-  padding: 3rem;
-  border: 4px solid var(--border-color);
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; /* Magic hand-drawn box */
-  box-shadow: 8px 8px 0px rgba(0,0,0,0.1);
+  box-shadow: var(--markdown-body-shadow);
 }
 
-/* Headings */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -6402,7 +8399,6 @@ body {
   transform: rotate(-1deg);
 }
 
-/* Links */
 .markdown-body a {
   color: var(--text-main);
   text-decoration: none;
@@ -6415,22 +8411,10 @@ body {
   background-position: 0 100%;
 }
 
-/* Text */
 .markdown-body p { margin-bottom: 1.2rem; }
 .markdown-body strong { color: var(--link-color); }
 
-/* Blockquote */
-.markdown-body blockquote {
-  margin: 2rem 0;
-  padding: 1rem 1.5rem;
-  background: #f4f4f4;
-  border: 3px dashed var(--border-color);
-  border-radius: 15px;
-  font-size: 1.1em;
-  color: var(--text-muted);
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul, .markdown-body ol {
   margin-bottom: 1.5rem;
   padding-left: 2rem;
@@ -6438,7 +8422,7 @@ body {
 .markdown-body li { margin-bottom: 0.5rem; }
 .markdown-body li::marker { font-family: var(--heading-font); color: var(--c-blue); }
 
-/* Code */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   background: #f4f4f4;
@@ -6468,12 +8452,29 @@ body {
   font-weight: normal;
 }
 
-/* Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2rem 0;
+  padding: 1rem 1.5rem;
+  background: #f4f4f4;
+  border: 3px dashed var(--border-color);
+  border-radius: 15px;
+  font-size: 1.1em;
+  color: var(--text-muted);
+}
+
 .markdown-body table {
-  width: 100%;
   border-collapse: collapse;
   margin: 2rem 0;
   border: 3px solid var(--border-color);
+}
+.markdown-body img {
+  margin: 1.2rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
 }
 .markdown-body th, .markdown-body td {
   padding: 0.8rem;
@@ -6487,7 +8488,7 @@ body {
   text-align: left;
 }
 
-/* Callout Note Boxes (Marker Box effect) */
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -6504,27 +8505,6 @@ body {
 .markdown-body .warning { box-shadow: 6px 6px 0px var(--c-yellow); }
 .markdown-body .danger { box-shadow: 6px 6px 0px var(--c-pink); }
 
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  display: inline-block;
-  padding: 0.1em 0.6em;
-  font-family: var(--heading-font);
-  font-size: 0.9em;
-  border-radius: 8px;
-  vertical-align: middle;
-  border: 2px solid #222;
-  box-shadow: 2px 2px 0px #222;
-  line-height: 1.2;
-}
-.markdown-body span.success { background: var(--c-green); }
-.markdown-body span.info { background: var(--c-blue); }
-.markdown-body span.warning { background: var(--c-yellow); }
-.markdown-body span.danger { background: var(--c-pink); }
-
-/* Spoilers */
 .markdown-body details.spoil {
   background: #fff;
   border: 3px solid #222;
@@ -6543,7 +8523,6 @@ body {
 }
 .markdown-body details.spoil > :not(summary) { padding: 1.5rem; }
 
-/* Layout Containers */
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -6562,7 +8541,6 @@ body {
   margin: 0 0 1rem;
 }
 
-/* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -6610,30 +8588,52 @@ body {
 .markdown-body .tab.active { display: block; }
 .markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 3px solid #222; }
 
-/* Horizontal Rule */
 .markdown-body hr {
   border: none;
   height: 4px;
   background: repeating-linear-gradient(to right, #222, #222 10px, transparent 10px, transparent 20px);
   margin: 3rem 0;
 }
-/* Span Colours */
-.markdown-body span.red { color: #ff6b6b; font-weight: bold; }
-.markdown-body span.yellow { color: #feca57; font-weight: bold; }
-.markdown-body span.green { color: #1dd1a1; font-weight: bold; }
-.markdown-body span.blue { color: #54a0ff; font-weight: bold; }
-
-/* Span Colours */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body span.red { color: #ff6b6b; font-weight: bold; }
 .markdown-body span.yellow { color: #e1b12c; font-weight: bold; }
 .markdown-body span.green { color: #1dd1a1; font-weight: bold; }
 .markdown-body span.blue { color: #54a0ff; font-weight: bold; }
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  padding: 0.1em 0.6em;
+  font-family: var(--heading-font);
+  font-size: 0.9em;
+  border-radius: 8px;
+  vertical-align: middle;
+  border: 2px solid #222;
+  box-shadow: 2px 2px 0px #222;
+}
+.markdown-body span.success { background: var(--c-green); }
+.markdown-body span.info { background: var(--c-blue); }
+.markdown-body span.warning { background: var(--c-yellow); }
+.markdown-body span.danger { background: var(--c-pink); }
 
 /* Container text colors */
 .markdown-body div.success { color: #1dd1a1; }
 .markdown-body div.info { color: #54a0ff; }
 .markdown-body div.warning { color: #e1b12c; }
 .markdown-body div.danger { color: #ff6b6b; }
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border: 2px solid #222;
+  border-radius: 8px;
+}
+
+/* 8. Print */
+@media print {
+  body { background: #fff; color: #000; padding: 0; background-image: none; }
+  .markdown-body { max-width: 100%; margin: 0; padding: 0; border: none; box-shadow: none; }
+}
 
   </style>
 
@@ -7129,8 +9129,8 @@ the info string (e.g. <code>::: tab Python</code>).</p>
     allowfullscreen></iframe>
 </div>
 <h3 id="qrcode-%E2%80%94-inline-qr-code" tabindex="-1">qrcode — Inline QR code</h3>
-<p>Scan this QR: <span class="qrcode"><?xml version="1.0" standalone="yes"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
+<p>Scan this QR: <span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span><?xml version="1.0" standalone="yes"?>
+<svg viewBox="0 0 96 96" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
   <rect x="0" y="0" width="96" height="96" style="fill:#ffffff;shape-rendering:crispEdges;"/>
   <rect x="0" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
   <rect x="3.84" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
@@ -7452,8 +9452,8 @@ the info string (e.g. <code>::: tab Python</code>).</p>
   <rect x="88.32" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
   <rect x="92.16" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
 </svg></span>.</p>
-<p>Full name alias: <span class="qrcode"><?xml version="1.0" standalone="yes"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
+<p>Full name alias: <span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span><?xml version="1.0" standalone="yes"?>
+<svg viewBox="0 0 96 96" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
   <rect x="0" y="0" width="96" height="96" style="fill:#ffffff;shape-rendering:crispEdges;"/>
   <rect x="0" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
   <rect x="4.571428571428571" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
@@ -8042,6 +10042,128 @@ tags:
 })();
 </script>
 
+  <!-- Reusable runtime enhancements -->
+  <script>
+(function (global) {
+  var expandedQr = null;
+  var expandedSourceQr = null;
+
+  function collapseQr() {
+    if (!expandedQr) return;
+
+    if (expandedSourceQr) {
+      expandedSourceQr.classList.remove('is-expanded');
+      expandedSourceQr.setAttribute('aria-expanded', 'false');
+    }
+
+    if (expandedQr.parentNode) {
+      expandedQr.parentNode.removeChild(expandedQr);
+    }
+
+    if (global.document && global.document.body) {
+      global.document.body.style.overflow = '';
+    }
+    expandedQr = null;
+    expandedSourceQr = null;
+  }
+
+  function toggleQr(node) {
+    if (expandedSourceQr === node) {
+      collapseQr();
+      return;
+    }
+
+    collapseQr();
+    if (!global.document || !global.document.body) {
+      return;
+    }
+
+    expandedSourceQr = node;
+    expandedSourceQr.classList.add('is-expanded');
+    expandedSourceQr.setAttribute('aria-expanded', 'true');
+
+    expandedQr = node.cloneNode(true);
+    expandedQr.classList.add('qrcode-overlay', 'is-expanded');
+    expandedQr.setAttribute('aria-hidden', 'true');
+    expandedQr.removeAttribute('aria-expanded');
+    expandedQr.removeAttribute('tabindex');
+    expandedQr.removeAttribute('role');
+    expandedQr.addEventListener('click', function (event) {
+      event.stopPropagation();
+      collapseQr();
+    });
+
+    global.document.body.appendChild(expandedQr);
+
+    if (global.document && global.document.body) {
+      global.document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function initQrCodes(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+
+    Array.prototype.slice.call(root.querySelectorAll('.qrcode')).forEach(function (node) {
+      if (node.getAttribute('data-qr-ready') === '1') return;
+
+      node.setAttribute('data-qr-ready', '1');
+      node.addEventListener('click', function (event) {
+        event.stopPropagation();
+        toggleQr(node);
+      });
+      node.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleQr(node);
+        }
+        if (event.key === 'Escape') {
+          collapseQr();
+        }
+      });
+    });
+  }
+
+  function init(root) {
+    initQrCodes(root || global.document);
+  }
+
+  function bindGlobalHandlers() {
+    if (!global.document || global.__orzMarkdownRuntimeBound) return;
+    global.__orzMarkdownRuntimeBound = true;
+
+    global.document.addEventListener('click', function (event) {
+      if (expandedQr && !expandedQr.contains(event.target)) {
+        collapseQr();
+      }
+    });
+
+    global.document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        collapseQr();
+      }
+    });
+  }
+
+  global.OrzMarkdownRuntime = Object.assign({}, global.OrzMarkdownRuntime, {
+    init: init,
+    initQrCodes: initQrCodes,
+    collapseQr: collapseQr,
+  });
+
+  bindGlobalHandlers();
+
+  if (global.document) {
+    if (global.document.readyState === 'loading') {
+      global.document.addEventListener('DOMContentLoaded', function () {
+        init(global.document);
+      }, { once: true });
+    } else {
+      init(global.document);
+    }
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+</script>
+
   <!-- Theme switcher logic -->
   <script>
 (function () {
@@ -8057,7 +10179,6 @@ tags:
   var label = document.getElementById('theme-label');
   var optionButtons = Array.prototype.slice.call(document.querySelectorAll('.theme-option'));
   var mermaidNodes = Array.prototype.slice.call(document.querySelectorAll('.mermaid'));
-
   mermaidNodes.forEach(function (node) {
     if (!node.hasAttribute('data-source')) {
       node.setAttribute('data-source', (node.textContent || '').trim());

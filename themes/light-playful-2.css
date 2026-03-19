@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Chewy&family=Patrick+Hand&display=swap');
+@import './common.css';
 
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #ffffff;
   --text-main: #202020;
@@ -20,6 +22,11 @@
 
   --base-size: 21px;
   --line-height: 1.5;
+
+  --markdown-body-max-width: 820px;
+  --markdown-body-padding: 3rem;
+  --markdown-body-border: 4px solid var(--border-color);
+  --markdown-body-shadow: 8px 8px 0px rgba(0,0,0,0.1);
 }
 
 body {
@@ -37,15 +44,15 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: #ffffff;
-  max-width: 820px;
+  max-width: var(--markdown-body-max-width);
   margin: 2rem auto;
-  padding: 3rem;
-  border: 4px solid var(--border-color);
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; /* Magic hand-drawn box */
-  box-shadow: 8px 8px 0px rgba(0,0,0,0.1);
+  box-shadow: var(--markdown-body-shadow);
 }
 
-/* Headings */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -98,7 +105,6 @@ body {
   transform: rotate(-1deg);
 }
 
-/* Links */
 .markdown-body a {
   color: var(--text-main);
   text-decoration: none;
@@ -111,22 +117,10 @@ body {
   background-position: 0 100%;
 }
 
-/* Text */
 .markdown-body p { margin-bottom: 1.2rem; }
 .markdown-body strong { color: var(--link-color); }
 
-/* Blockquote */
-.markdown-body blockquote {
-  margin: 2rem 0;
-  padding: 1rem 1.5rem;
-  background: #f4f4f4;
-  border: 3px dashed var(--border-color);
-  border-radius: 15px;
-  font-size: 1.1em;
-  color: var(--text-muted);
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul, .markdown-body ol {
   margin-bottom: 1.5rem;
   padding-left: 2rem;
@@ -134,7 +128,7 @@ body {
 .markdown-body li { margin-bottom: 0.5rem; }
 .markdown-body li::marker { font-family: var(--heading-font); color: var(--c-blue); }
 
-/* Code */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   background: #f4f4f4;
@@ -164,12 +158,29 @@ body {
   font-weight: normal;
 }
 
-/* Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2rem 0;
+  padding: 1rem 1.5rem;
+  background: #f4f4f4;
+  border: 3px dashed var(--border-color);
+  border-radius: 15px;
+  font-size: 1.1em;
+  color: var(--text-muted);
+}
+
 .markdown-body table {
-  width: 100%;
   border-collapse: collapse;
   margin: 2rem 0;
   border: 3px solid var(--border-color);
+}
+.markdown-body img {
+  margin: 1.2rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
 }
 .markdown-body th, .markdown-body td {
   padding: 0.8rem;
@@ -183,7 +194,7 @@ body {
   text-align: left;
 }
 
-/* Callout Note Boxes (Marker Box effect) */
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -200,27 +211,6 @@ body {
 .markdown-body .warning { box-shadow: 6px 6px 0px var(--c-yellow); }
 .markdown-body .danger { box-shadow: 6px 6px 0px var(--c-pink); }
 
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  display: inline-block;
-  padding: 0.1em 0.6em;
-  font-family: var(--heading-font);
-  font-size: 0.9em;
-  border-radius: 8px;
-  vertical-align: middle;
-  border: 2px solid #222;
-  box-shadow: 2px 2px 0px #222;
-  line-height: 1.2;
-}
-.markdown-body span.success { background: var(--c-green); }
-.markdown-body span.info { background: var(--c-blue); }
-.markdown-body span.warning { background: var(--c-yellow); }
-.markdown-body span.danger { background: var(--c-pink); }
-
-/* Spoilers */
 .markdown-body details.spoil {
   background: #fff;
   border: 3px solid #222;
@@ -239,7 +229,6 @@ body {
 }
 .markdown-body details.spoil > :not(summary) { padding: 1.5rem; }
 
-/* Layout Containers */
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -258,7 +247,6 @@ body {
   margin: 0 0 1rem;
 }
 
-/* Tabs & Cols */
 .markdown-body .cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -306,27 +294,49 @@ body {
 .markdown-body .tab.active { display: block; }
 .markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 3px solid #222; }
 
-/* Horizontal Rule */
 .markdown-body hr {
   border: none;
   height: 4px;
   background: repeating-linear-gradient(to right, #222, #222 10px, transparent 10px, transparent 20px);
   margin: 3rem 0;
 }
-/* Span Colours */
-.markdown-body span.red { color: #ff6b6b; font-weight: bold; }
-.markdown-body span.yellow { color: #feca57; font-weight: bold; }
-.markdown-body span.green { color: #1dd1a1; font-weight: bold; }
-.markdown-body span.blue { color: #54a0ff; font-weight: bold; }
-
-/* Span Colours */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body span.red { color: #ff6b6b; font-weight: bold; }
 .markdown-body span.yellow { color: #e1b12c; font-weight: bold; }
 .markdown-body span.green { color: #1dd1a1; font-weight: bold; }
 .markdown-body span.blue { color: #54a0ff; font-weight: bold; }
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  padding: 0.1em 0.6em;
+  font-family: var(--heading-font);
+  font-size: 0.9em;
+  border-radius: 8px;
+  vertical-align: middle;
+  border: 2px solid #222;
+  box-shadow: 2px 2px 0px #222;
+}
+.markdown-body span.success { background: var(--c-green); }
+.markdown-body span.info { background: var(--c-blue); }
+.markdown-body span.warning { background: var(--c-yellow); }
+.markdown-body span.danger { background: var(--c-pink); }
 
 /* Container text colors */
 .markdown-body div.success { color: #1dd1a1; }
 .markdown-body div.info { color: #54a0ff; }
 .markdown-body div.warning { color: #e1b12c; }
 .markdown-body div.danger { color: #ff6b6b; }
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border: 2px solid #222;
+  border-radius: 8px;
+}
+
+/* 8. Print */
+@media print {
+  body { background: #fff; color: #000; padding: 0; background-image: none; }
+  .markdown-body { max-width: 100%; margin: 0; padding: 0; border: none; box-shadow: none; }
+}

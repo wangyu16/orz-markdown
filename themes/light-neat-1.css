@@ -11,6 +11,7 @@
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import './common.css';
 
 :root {
   color-scheme: light;
@@ -73,18 +74,20 @@
   --font-heading: 'Plus Jakarta Sans', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --base-size: 1rem;
+  --line-height: 1.72;
   --font-scale: 1;
-  --lh-copy: 1.72;
+  --lh-copy: var(--line-height);
   --lh-tight: 1.24;
 
-  --fs-50: calc(0.78rem * var(--font-scale));
-  --fs-75: calc(0.9rem * var(--font-scale));
-  --fs-100: calc(1rem * var(--font-scale));
-  --fs-200: calc(1.14rem * var(--font-scale));
-  --fs-300: calc(1.28rem * var(--font-scale));
-  --fs-400: calc(1.55rem * var(--font-scale));
-  --fs-500: calc(1.95rem * var(--font-scale));
-  --fs-600: calc(2.5rem * var(--font-scale));
+  --fs-50: calc(0.78 * var(--base-size) * var(--font-scale));
+  --fs-75: calc(0.9 * var(--base-size) * var(--font-scale));
+  --fs-100: calc(var(--base-size) * var(--font-scale));
+  --fs-200: calc(1.14 * var(--base-size) * var(--font-scale));
+  --fs-300: calc(1.28 * var(--base-size) * var(--font-scale));
+  --fs-400: calc(1.55 * var(--base-size) * var(--font-scale));
+  --fs-500: calc(1.95 * var(--base-size) * var(--font-scale));
+  --fs-600: calc(2.5 * var(--base-size) * var(--font-scale));
 
   --space-1: 0.35rem;
   --space-2: 0.65rem;
@@ -99,6 +102,14 @@
   --shadow: 0 18px 42px rgba(86, 125, 155, 0.12);
   --shadow-soft: 0 8px 24px rgba(96, 129, 155, 0.08);
   --transition: 180ms ease;
+
+  /* markdown body container toggles */
+  --markdown-body-max-width: 940px;
+  --markdown-body-padding: clamp(1.25rem, 3.6vw, 3.2rem);
+  --markdown-body-border: 1px solid var(--border);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: var(--shadow);
+  --markdown-body-decorations-display: block;
 }
 
 body.font-serif,
@@ -114,7 +125,7 @@ body.font-sans,
 
 body.font-handwritten,
 .markdown-body.font-handwritten {
-  --font-body: 'Caveat', 'Segoe Print', cursive;
+  --font-body: 'Hanzi Pen TC', 'Hanzi Pen SC', 'Caveat', 'Segoe Print', cursive;
   --lh-copy: 1.88;
 }
 
@@ -149,7 +160,7 @@ body.size-xl,
 }
 
 html {
-  font-size: 100%;
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -194,18 +205,19 @@ body {
 
 .markdown-body {
   position: relative;
-  max-width: 940px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: clamp(1.25rem, 3.6vw, 3.2rem);
+  padding: var(--markdown-body-padding);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   overflow: hidden;
   isolation: isolate;
 }
 
 .markdown-body::before {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0;
@@ -220,6 +232,7 @@ body {
 }
 
 .markdown-body::after {
+  display: var(--markdown-body-decorations-display);
   content: '';
   position: absolute;
   inset: 0 auto auto 0;
@@ -542,7 +555,7 @@ ul > li::before {
 }
 
 ol {
-  list-style: decimal-leading-zero;
+  list-style: decimal;
 }
 
 .task-list-item {
@@ -589,15 +602,12 @@ ol {
 
 .markdown-body > table,
 .markdown-body td table {
-  width: 100%;
-}
+  width: max-content;
+  width: max-content;
+  max-width: 100%;
 
 table {
-  display: block;
-  overflow-x: auto;
   border-collapse: separate;
-  border-spacing: 0;
-  border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
@@ -642,9 +652,6 @@ hr {
 }
 
 img {
-  display: block;
-  max-width: 100%;
-  height: auto;
   margin: 0 auto;
   border: 1px solid #dde8f3;
   border-radius: 18px;
@@ -1030,15 +1037,12 @@ span.success,
 span.info,
 span.warning,
 span.danger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42em;
+  gap: 0;
   padding: 0.18em 0.62em;
   border-radius: 999px;
   border: 1px solid;
   font-size: 0.82em;
   font-weight: 700;
-  line-height: 1.24;
   vertical-align: middle;
 }
 
@@ -1046,11 +1050,7 @@ span.success::before,
 span.info::before,
 span.warning::before,
 span.danger::before {
-  content: '';
-  width: 0.45em;
-  height: 0.45em;
-  border-radius: 999px;
-  flex: 0 0 auto;
+  content: none;
 }
 
 span.success {
@@ -1059,18 +1059,10 @@ span.success {
   border-color: var(--success-border);
 }
 
-span.success::before {
-  background: var(--success-text);
-}
-
 span.info {
   background: rgba(70, 154, 230, 0.14);
   color: var(--info-text);
   border-color: var(--info-border);
-}
-
-span.info::before {
-  background: var(--info-text);
 }
 
 span.warning {
@@ -1079,18 +1071,10 @@ span.warning {
   border-color: var(--warning-border);
 }
 
-span.warning::before {
-  background: var(--warning-text);
-}
-
 span.danger {
   background: rgba(223, 108, 119, 0.15);
   color: var(--danger-text);
   border-color: var(--danger-border);
-}
-
-span.danger::before {
-  background: var(--danger-text);
 }
 
 div.test-block {
@@ -1149,37 +1133,20 @@ div.mermaid svg {
 }
 
 div.smiles-render {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface-2);
 }
 
 div.smiles-render canvas,
 canvas[data-smiles] {
-  display: block;
-  max-width: 100%;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(46, 139, 207, 0.12);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 span.qrcode {
-  display: inline-block;
   padding: 6px;
-  line-height: 0;
   vertical-align: middle;
   background: #fff;
   border-radius: 12px;
   box-shadow: var(--shadow-soft);
-}
-
-span.qrcode svg {
-  display: block;
 }
 
 @media (max-width: 720px) {
@@ -1260,5 +1227,14 @@ span.qrcode svg {
   span.danger {
     border-color: #bdbdbd !important;
     color: #111 !important;
+  }
+
+  tr,
+  iframe,
+  video,
+  pre,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

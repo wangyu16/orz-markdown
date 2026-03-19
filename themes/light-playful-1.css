@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap');
+@import './common.css';
 
 :root {
   --bg-color: #fcf9f2;
@@ -20,6 +21,12 @@
   --note-blue: #cde6fa;
   --note-yellow: #fef1ac;
   --note-pink: #fad1e1;
+
+  --markdown-body-max-width: 800px;
+  --markdown-body-padding: 3rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -35,9 +42,12 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 800px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 3rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   /* subtle notebook paper lines background */
   background-image: repeating-linear-gradient(transparent, transparent 1.5rem, rgba(0, 150, 255, 0.08) 1.5rem, rgba(0, 150, 255, 0.08) 1.6rem);
   background-attachment: local;
@@ -146,7 +156,6 @@ body {
 
 /* Tables */
 .markdown-body table {
-  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   margin: 2rem 0;
@@ -154,6 +163,14 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.markdown-body img {
+  margin: 1.4rem auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
 }
 .markdown-body th, .markdown-body td {
   padding: 0.8rem 1rem;
@@ -207,7 +224,6 @@ body {
 .markdown-body span.info,
 .markdown-body span.warning,
 .markdown-body span.danger {
-  display: inline-block;
   padding: 0.2em 0.8em;
   font-family: var(--heading-font);
   font-size: 0.9em;
@@ -310,14 +326,19 @@ body {
   border-top: 4px dotted #ccc;
   margin: 3rem 0;
 }
-/* Span Colours */
-.markdown-body span.red { color: #ff595e; font-weight: bold; }
-.markdown-body span.yellow { color: #e5a910; font-weight: bold; }
-.markdown-body span.green { color: #8ac926; font-weight: bold; }
-.markdown-body span.blue { color: #1982c4; font-weight: bold; }
-
-/* Span Colours */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body span.red { color: #ff595e; font-weight: bold; }
 .markdown-body span.yellow { color: #d49a00; font-weight: bold; }
 .markdown-body span.green { color: #8ac926; font-weight: bold; }
 .markdown-body span.blue { color: #1982c4; font-weight: bold; }
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border-radius: 8px;
+}
+
+/* 8. Print */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .markdown-body { max-width: 100%; padding: 0; border: none; box-shadow: none; }
+}

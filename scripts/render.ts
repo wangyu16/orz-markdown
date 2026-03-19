@@ -8,10 +8,32 @@
 import fs from 'fs';
 import path from 'path';
 import { md } from '../src/index.js';
+import { browserRuntimeScript } from '../src/runtime.js';
 
 const ROOT = process.cwd();  // run from project root
 const INPUT  = path.join(ROOT, 'tests', 'example.md');
 const OUTPUT = path.join(ROOT, 'tests', 'example.html');
+
+function loadThemeCss(filePath: string, seen = new Set<string>()): string {
+  const resolvedPath = path.resolve(filePath);
+  if (seen.has(resolvedPath)) {
+    return '';
+  }
+
+  seen.add(resolvedPath);
+
+  const css = fs.readFileSync(resolvedPath, 'utf8');
+  const importPattern = /@import\s+(?:url\()?['"]([^'"]+)['"]\)?\s*;/g;
+
+  return css.replace(importPattern, (fullMatch, importTarget: string) => {
+    if (/^(https?:)?\/\//.test(importTarget)) {
+      return fullMatch;
+    }
+
+    const importedPath = path.resolve(path.dirname(resolvedPath), importTarget);
+    return loadThemeCss(importedPath, seen);
+  });
+}
 
 type ThemeDefinition = {
   styleId: string;
@@ -109,7 +131,7 @@ const source    = fs.readFileSync(INPUT, 'utf8');
 const body      = md.render(source, { markdownBasePath: path.dirname(INPUT) });
 const themes    = THEMES.map((theme) => ({
   ...theme,
-  css: fs.readFileSync(path.join(ROOT, 'themes', theme.file), 'utf8'),
+  css: loadThemeCss(path.join(ROOT, 'themes', theme.file)),
 }));
 
 const inlinedThemeStyles = themes.map((theme, index) => `  <style id="${theme.styleId}" media="${index === 0 ? 'all' : 'not all'}">
@@ -187,7 +209,6 @@ const THEME_JS = `
   var label = document.getElementById('theme-label');
   var optionButtons = Array.prototype.slice.call(document.querySelectorAll('.theme-option'));
   var mermaidNodes = Array.prototype.slice.call(document.querySelectorAll('.mermaid'));
-
   mermaidNodes.forEach(function (node) {
     if (!node.hasAttribute('data-source')) {
       node.setAttribute('data-source', (node.textContent || '').trim());
@@ -597,6 +618,9 @@ ${themeMenuItems}
 
   <!-- Tabs component -->
   <script>${TABS_JS}</script>
+
+  <!-- Reusable runtime enhancements -->
+  <script>${browserRuntimeScript}</script>
 
   <!-- Theme switcher logic -->
   <script>${THEME_JS}</script>

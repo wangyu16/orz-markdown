@@ -2,6 +2,8 @@
 
 A deeply customized markdown-it parser configured with several official plugins and many custom plugins designed to render interactive objects, embedded rich media, and invisible data. Crafted alongside beautifully optimized CSS themes for an excellent out-of-the-box rendering experience.
 
+Rendered HTML is intended to live inside a `.markdown-body` container and be paired with one of the bundled themes.
+
 ## Installation
 
 Install the package via npm:
@@ -29,8 +31,23 @@ const markdownSource = `
 `;
 
 const html = md.render(markdownSource);
-console.log(html);
+
+document.body.innerHTML = `<article class="markdown-body">${html}</article>`;
 ```
+
+## Browser Runtime
+
+Some rendered features expect a small browser runtime layer after the HTML is mounted. This currently includes QR-code expand/collapse behavior and is designed so more client-side enhancements can share the same entry point.
+
+```javascript
+import { getBrowserRuntimeScript } from '@orz-how/markdown-parser/runtime';
+
+const runtimeScript = document.createElement('script');
+runtimeScript.textContent = getBrowserRuntimeScript();
+document.body.appendChild(runtimeScript);
+```
+
+If your app controls initialization directly, the runtime also exposes `window.OrzMarkdownRuntime.init(root)` and `window.OrzMarkdownRuntime.initQrCodes(root)`.
 
 ## Themes
 
@@ -43,7 +60,30 @@ import '@orz-how/markdown-parser/themes/light-academic-1.css';
 // Or try: dark-elegant-2.css, light-playful-1.css, etc!
 ```
 
+Each shipped theme now imports a shared structural stylesheet internally, so you only need to import a single theme file.
+
+The bundled themes cover the parser's custom output, including:
+
+- semantic containers
+- tabs and columns
+- KaTeX blocks
+- Mermaid placeholders
+- SMILES canvases
+- clickable QR codes with overlay expansion hooks
+
 For a full list of provided themes and the underlying CSS class reference for theme authors, please read the [Themes Documentation](themes/README.md).
+
+## Packaging
+
+To rebuild distributable assets locally:
+
+```sh
+npm run build
+npm test
+npm pack
+```
+
+The generated tarball is written to the repository root and includes `dist/` and `themes/`.
 
 ## Official Plugins Bundled
 

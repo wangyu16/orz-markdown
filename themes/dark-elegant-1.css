@@ -4,6 +4,7 @@
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import './common.css';
 
 /* --------------------------------------------------------------------------
    Design Tokens
@@ -47,12 +48,14 @@
   --span-blue:     #60a5fa;
 
   /* Typography scale */
-  --fs-base:  1rem;         /* 16px default */
+  --base-size: 1rem;
+  --line-height: 1.75;
+  --fs-base:  var(--base-size); /* 16px default */
   --fs-sm:    0.875rem;
   --fs-xs:    0.8rem;
   --fs-lg:    1.125rem;
   --fs-xl:    1.25rem;
-  --lh-text:  1.75;
+  --lh-text:  var(--line-height);
   --lh-tight: 1.3;
 
   /* Spacing */
@@ -67,6 +70,13 @@
 
   /* Transitions */
   --t: 0.2s ease;
+
+  /* Markdown body container toggles */
+  --markdown-body-max-width: 860px;
+  --markdown-body-padding: clamp(1.5rem, 5vw, 3.5rem);
+  --markdown-body-border: 1px solid var(--border-subtle);
+  --markdown-body-radius: var(--radius-lg);
+  --markdown-body-shadow: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -75,7 +85,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-  font-size: var(--fs-base);
+  font-size: var(--base-size);
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -103,12 +113,13 @@ body {
    -------------------------------------------------------------------------- */
 .markdown-body {
   display: flow-root;
-  max-width: 860px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: clamp(1.5rem, 5vw, 3.5rem);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
+  padding: var(--markdown-body-padding);
 }
 
 /* --------------------------------------------------------------------------
@@ -302,14 +313,14 @@ ul  li::before {
 /* --------------------------------------------------------------------------
    Tables
    -------------------------------------------------------------------------- */
-.markdown-body > table, .markdown-body td table { width: 100%; }
+.markdown-body > table, .markdown-body td table {
+  width: max-content;
+  max-width: 100%;
+}
 table {
   border-collapse: collapse;
   margin-bottom: var(--gap);
   font-size: var(--fs-sm);
-  width: 100%;
-  overflow-x: auto;
-  display: block;
 }
 thead tr { background: var(--bg-elevated); }
 thead th {
@@ -346,10 +357,7 @@ hr {
    Images
    -------------------------------------------------------------------------- */
 img {
-  max-width: 100%;
-  height: auto;
   border-radius: var(--radius);
-  display: block;
   margin: var(--gap) auto;
 }
 p > img { margin: 0; display: inline; }
@@ -583,12 +591,10 @@ span.success,
 span.info,
 span.warning,
 span.danger {
-  display: inline-block;
   padding: 0.15em 0.55em;
   border-radius: 999px;
   font-size: 0.8em;
   font-weight: 600;
-  line-height: inherit;
   letter-spacing: 0.02em;
   vertical-align: baseline;
   border: 1px solid;
@@ -655,33 +661,19 @@ div.mermaid {
 
 /* SMILES / chemical structures (Phase 11) */
 div.smiles-render {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: var(--gap) 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
+  border-radius: 0;
 }
 div.smiles-render canvas {
-  display: block;
-  margin: auto;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 /* QR code (Phase 9) */
 span.qrcode {
-  display: inline-block;
   vertical-align: baseline;
   background: #fff;
   border-radius: var(--radius-sm);
   padding: 4px;
-  line-height: 0;
 }
-span.qrcode svg { display: block; }
 
 /* Span with arbitrary class (Phase 7) */
 .markdown-body span[class]:not(.test-inline):not(.qrcode):not(.katex):not(.katex-inner)
@@ -700,5 +692,8 @@ span.qrcode svg { display: block; }
   code { background: #f4f4f4; border: 1px solid #ccc; }
   pre  { background: #f4f4f4; }
   blockquote { border-left-color: #aaa; background: #f9f9f9; }
-  .youtube-embed { display: none; }
+  tr, iframe, video, pre, blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }

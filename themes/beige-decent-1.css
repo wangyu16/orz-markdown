@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500&display=swap');
+@import './common.css';
 
+/* 1. Tokens and global setup */
 :root {
   --bg-color: #f4ecdf;
   --text-main: #4d4036;
@@ -7,12 +9,11 @@
   --link-color: #944238;
   --link-hover: #b85447;
   --border-color: #d6ccbe;
-  
+
   --header-font: 'Playfair Display', 'Noto Serif SC', 'Noto Serif TC', serif;
   --main-font: 'Crimson Pro', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Courier New', Courier, monospace;
 
-  /* Callout colors */
   --info-bg: #eef3f6;
   --info-border: #628bc4;
   --success-bg: #eff4ec;
@@ -22,9 +23,14 @@
   --danger-bg: #fbefef;
   --danger-border: #c96767;
 
-  /* Font size variables for easy adjustment */
   --base-size: 18px;
   --line-height: 1.7;
+
+  --markdown-body-max-width: 800px;
+  --markdown-body-padding: 4rem 2rem;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
 }
 
 body {
@@ -40,13 +46,16 @@ body {
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: 800px;
+  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
-  padding: 4rem 2rem;
+  padding: var(--markdown-body-padding);
+  border: var(--markdown-body-border);
+  border-radius: var(--markdown-body-radius);
+  box-shadow: var(--markdown-body-shadow);
   text-align: justify;
 }
 
-/* Headers */
+/* 2. Headings and body copy */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -78,9 +87,10 @@ body {
   padding-bottom: 0.2em;
 }
 
-.markdown-body h3 { font-size: 1.4em; }
+.markdown-body h3 {
+  font-size: 1.4em;
+}
 
-/* Paragraphs & Text Styling */
 .markdown-body p {
   margin-bottom: 1.5em;
 }
@@ -103,24 +113,7 @@ body {
   color: #1a1614;
 }
 
-/* Blockquotes: Magazine pull-quote style */
-.markdown-body blockquote {
-  margin: 2.5em 2em;
-  padding: 1.5em 2em;
-  border-top: 2px solid var(--text-muted);
-  border-bottom: 2px solid var(--text-muted);
-  font-style: italic;
-  font-size: 1.25em;
-  color: #4a3e38;
-  text-align: center;
-  background-color: #ece2d2;
-}
-
-.markdown-body blockquote p:last-child {
-  margin-bottom: 0;
-}
-
-/* Lists */
+/* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 2em;
@@ -139,7 +132,7 @@ body {
   margin-right: 0.5em;
 }
 
-/* Code & Pre */
+/* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
   background-color: #f2eee8;
@@ -165,9 +158,24 @@ body {
   font-size: 0.9em;
 }
 
-/* Tables */
+/* 5. Structural blocks */
+.markdown-body blockquote {
+  margin: 2.5em 2em;
+  padding: 1.5em 2em;
+  border-top: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  font-style: italic;
+  font-size: 1.25em;
+  color: #4a3e38;
+  text-align: center;
+  background-color: #ece2d2;
+}
+
+.markdown-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
 .markdown-body table {
-  width: 100%;
   border-collapse: collapse;
   margin-bottom: 2em;
   font-size: 0.95em;
@@ -187,7 +195,23 @@ body {
   color: #1a1614;
 }
 
-/* Custom Containers */
+.markdown-body hr {
+  border: 0;
+  height: 1px;
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--border-color), rgba(0, 0, 0, 0));
+  margin: 3em 0;
+}
+
+.markdown-body img {
+  margin: 1.5em auto;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+/* 6. Containers and layout helpers */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
@@ -198,12 +222,26 @@ body {
   border-radius: 0 4px 4px 0;
 }
 
-.markdown-body .info { background: var(--info-bg); border-color: var(--info-border); }
-.markdown-body .success { background: var(--success-bg); border-color: var(--success-border); }
-.markdown-body .warning { background: var(--warning-bg); border-color: var(--warning-border); }
-.markdown-body .danger { background: var(--danger-bg); border-color: var(--danger-border); }
+.markdown-body .info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
 
-/* Layout Containers */
+.markdown-body .success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.markdown-body .warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.markdown-body .danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
 .markdown-body .left {
   float: left;
   max-width: min(44%, 20rem);
@@ -213,16 +251,17 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 4px;
 }
+
 .markdown-body .right {
   text-align: right;
   margin: 0 0 1em;
 }
+
 .markdown-body .center {
   text-align: center;
   margin: 0 0 1em;
 }
 
-/* Spoil / Details */
 .markdown-body details.spoil {
   background-color: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -251,33 +290,6 @@ body {
   background-color: #f6efe4;
 }
 
-/* Colored Text */
-.markdown-body span.red { color: #b73a3a; }
-.markdown-body span.yellow { color: #b58900; }
-.markdown-body span.green { color: #438f4d; }
-.markdown-body span.blue { color: #266baf; }
-
-/* Badges */
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  font-size: 0.75em;
-  font-family: var(--header-font);
-  font-weight: bold;
-  padding: 0.25em 0.6em;
-  border-radius: 12px;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.markdown-body span.success { background-color: var(--success-border); }
-.markdown-body span.info { background-color: var(--info-border); }
-.markdown-body span.warning { background-color: var(--warning-border); }
-.markdown-body span.danger { background-color: var(--danger-border); }
-
-/* Tabs & Cols Structure */
 .markdown-body .tabs {
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -355,11 +367,12 @@ body {
   border-radius: 4px;
   background: #f6efe4;
 }
+
 .markdown-body .col > *:last-child {
   margin-bottom: 0;
 }
 
-/* TOC */
+/* 7. Navigation, footnotes, and plugin output */
 .markdown-body .table-of-contents {
   background-color: #f7f3eb;
   padding: 1.5em 2em;
@@ -378,9 +391,69 @@ body {
   padding-left: 0;
 }
 
-.markdown-body hr {
-  border: 0;
-  height: 1px;
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--border-color), rgba(0, 0, 0, 0));
-  margin: 3em 0;
+.markdown-body span.red {
+  color: #b73a3a;
+}
+
+.markdown-body span.yellow {
+  color: #b58900;
+}
+
+.markdown-body span.green {
+  color: #438f4d;
+}
+
+.markdown-body span.blue {
+  color: #266baf;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  font-size: 0.75em;
+  font-family: var(--header-font);
+  font-weight: bold;
+  padding: 0.25em 0.6em;
+  border-radius: 12px;
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+
+.markdown-body span.success {
+  background-color: var(--success-border);
+}
+
+.markdown-body span.info {
+  background-color: var(--info-border);
+}
+
+.markdown-body span.warning {
+  background-color: var(--warning-border);
+}
+
+.markdown-body span.danger {
+  background-color: var(--danger-border);
+}
+
+.markdown-body span.qrcode {
+  background: #fff;
+  border-radius: 4px;
+}
+
+/* 8. Print */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+    padding: 0;
+  }
+
+  .markdown-body {
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+  }
+
 }
