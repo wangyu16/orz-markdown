@@ -175,8 +175,8 @@ Equilibrium: $\ce{CO2 + H2O <=> H2CO3}$
 
 ### Containers — Layout
 
-::: left
-This block floats to the **left**. Useful for figure captions or side notes.
+::: left 30%
+This block floats to the **left**. Useful for figure captions or side notes. Allow to set relative width, such as `::: left 30%`. 
 :::
 The paragraph which is below the **left** container in the source will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. The paragraph will shown on the right side of the container **left**. 
 
@@ -204,9 +204,9 @@ It can contain any markdown: **bold**, *italic*, `code`.
 ### Containers — Columns
 
 Naming convention: use `cols` as wrapper; each `col` is one column.
-Two `col` blocks → two equal columns; three → thirds; etc.
+Two `col` blocks → two equal columns; three → thirds; etc. Allow to set relative width, such as `:::: cols 1 2 1` results in three cols with width ratio 1:2:1. Without specifying the ratio, it will be even width. 
 
-:::: cols
+:::: cols 1 2 1
 ::: col
 **Column One**
 
@@ -246,6 +246,14 @@ println!("Hello from Rust!");
 ```
 :::
 ::::
+
+### Containers - Arbitary class name
+
+::: className
+
+This should result in a `<div>` container with class name 'className'. 
+
+:::
 
 ---
 
