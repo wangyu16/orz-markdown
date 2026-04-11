@@ -47,7 +47,16 @@ md.use(container, 'info');
 md.use(container, 'warning');
 md.use(container, 'danger');
 // Layout containers
-md.use(container, 'left');
+md.use(container, 'left', {
+  render(tokens: MarkdownIt.Token[], idx: number) {
+    if (tokens[idx].nesting === 1) {
+      const width = tokens[idx].info.trim().slice('left'.length).trim();
+      if (width) return `<div class="left" style="max-width: ${width}; width: ${width}">\n`;
+      return '<div class="left">\n';
+    }
+    return '</div>\n';
+  },
+});
 md.use(container, 'right');
 md.use(container, 'center');
 // Interactive containers
@@ -72,8 +81,39 @@ md.use(container, 'tab', {
     return '</div>\n';
   },
 });
-md.use(container, 'cols');
+md.use(container, 'cols', {
+  render(tokens: MarkdownIt.Token[], idx: number) {
+    if (tokens[idx].nesting === 1) {
+      const rest = tokens[idx].info.trim().slice('cols'.length).trim();
+      if (rest) {
+        // Plain numbers become fr units; CSS lengths (%, px, em, …) pass through as-is
+        const cols = rest.split(/\s+/).map(p => /^\d+(\.\d+)?$/.test(p) ? `${p}fr` : p).join(' ');
+        return `<div class="cols" style="grid-template-columns: ${cols}">\n`;
+      }
+      return '<div class="cols">\n';
+    }
+    return '</div>\n';
+  },
+});
 md.use(container, 'col');
+// Catch-all: ::: ClassName → <div class="ClassName"> for any identifier not already registered
+const RESERVED_CONTAINERS = new Set([
+  'success', 'info', 'warning', 'danger',
+  'left', 'right', 'center',
+  'spoil', 'tabs', 'tab',
+  'cols', 'col',
+]);
+md.use(container, 'div', {
+  validate: (params: string) => {
+    const name = params.trim().split(/\s+/)[0];
+    return /^[A-Za-z][A-Za-z0-9_-]*$/.test(name) && !RESERVED_CONTAINERS.has(name);
+  },
+  render(tokens: MarkdownIt.Token[], idx: number) {
+    const name = tokens[idx].info.trim().split(/\s+/)[0];
+    if (tokens[idx].nesting === 1) return `<div class="${name}">\n`;
+    return '</div>\n';
+  },
+});
 md.use(footnote);
 md.use(imsize);
 md.use(mark);

@@ -52,7 +52,17 @@ md.use(markdown_it_container_1.default, 'info');
 md.use(markdown_it_container_1.default, 'warning');
 md.use(markdown_it_container_1.default, 'danger');
 // Layout containers
-md.use(markdown_it_container_1.default, 'left');
+md.use(markdown_it_container_1.default, 'left', {
+    render(tokens, idx) {
+        if (tokens[idx].nesting === 1) {
+            const width = tokens[idx].info.trim().slice('left'.length).trim();
+            if (width)
+                return `<div class="left" style="max-width: ${width}; width: ${width}">\n`;
+            return '<div class="left">\n';
+        }
+        return '</div>\n';
+    },
+});
 md.use(markdown_it_container_1.default, 'right');
 md.use(markdown_it_container_1.default, 'center');
 // Interactive containers
@@ -77,8 +87,40 @@ md.use(markdown_it_container_1.default, 'tab', {
         return '</div>\n';
     },
 });
-md.use(markdown_it_container_1.default, 'cols');
+md.use(markdown_it_container_1.default, 'cols', {
+    render(tokens, idx) {
+        if (tokens[idx].nesting === 1) {
+            const rest = tokens[idx].info.trim().slice('cols'.length).trim();
+            if (rest) {
+                // Plain numbers become fr units; CSS lengths (%, px, em, …) pass through as-is
+                const cols = rest.split(/\s+/).map(p => /^\d+(\.\d+)?$/.test(p) ? `${p}fr` : p).join(' ');
+                return `<div class="cols" style="grid-template-columns: ${cols}">\n`;
+            }
+            return '<div class="cols">\n';
+        }
+        return '</div>\n';
+    },
+});
 md.use(markdown_it_container_1.default, 'col');
+// Catch-all: ::: ClassName → <div class="ClassName"> for any identifier not already registered
+const RESERVED_CONTAINERS = new Set([
+    'success', 'info', 'warning', 'danger',
+    'left', 'right', 'center',
+    'spoil', 'tabs', 'tab',
+    'cols', 'col',
+]);
+md.use(markdown_it_container_1.default, 'div', {
+    validate: (params) => {
+        const name = params.trim().split(/\s+/)[0];
+        return /^[A-Za-z][A-Za-z0-9_-]*$/.test(name) && !RESERVED_CONTAINERS.has(name);
+    },
+    render(tokens, idx) {
+        const name = tokens[idx].info.trim().split(/\s+/)[0];
+        if (tokens[idx].nesting === 1)
+            return `<div class="${name}">\n`;
+        return '</div>\n';
+    },
+});
 md.use(markdown_it_footnote_1.default);
 md.use(markdown_it_imsize_1.default);
 md.use(markdown_it_mark_1.default);
