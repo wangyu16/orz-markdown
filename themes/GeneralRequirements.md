@@ -14,5 +14,5 @@ General requirements for all theme css
 
 ## Remaining problems
 
-- Neat II has not be revised
-- QR image enlarge provides a big container, but the qr image is still very small in it. 
+- Neat II has not be revised [fixed]
+- QR image enlarge provides a big container, but the qr image is still very small in it. [fixed]

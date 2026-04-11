@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Fira+Sans:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Vollkorn:ital,wght@0,400;0,600;0,700;1,400&family=Fira+Sans:wght@400;600;700&display=swap');
 @import './common.css';
 
 /* 1. Tokens and global setup */
@@ -12,7 +12,7 @@
   --border-soft: #dddddd;
   
   --header-font: 'Fira Sans', Helvetica, Arial, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --main-font: 'Merriweather', 'Times New Roman', Times, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --main-font: 'Vollkorn', 'Times New Roman', Times, 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Liberation Mono', Courier, monospace;
 
   --base-size: 16px;
@@ -106,9 +106,14 @@ body {
   margin: 2rem 0;
   padding: 1.2rem 1.5rem;
   background-color: #f8f9fa;
-  border-left: 4px solid var(--border-color);
+  border: 1px solid var(--border-soft);
   font-size: 0.95em;
   color: var(--text-main);
+}
+
+.markdown-body blockquote blockquote {
+  font-size: 1em;
+  margin: 0.75em 0;
 }
 
 /* 3. Lists and task lists */
@@ -141,6 +146,28 @@ body {
   padding: 0;
 }
 
+/* KaTeX math */
+.markdown-body .katex {
+  font-size: 1.05em;
+}
+.markdown-body .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 0.5rem;
+  margin: 1.5rem 0;
+  background: #f8f9fa;
+  border: 1px solid var(--border-soft);
+}
+.markdown-body .katex-error {
+  background: #fff3f3;
+  color: #a32a2a;
+  border: 1px solid #e0a0a0;
+  border-radius: 2px;
+  padding: 0.15em 0.35em;
+  font-family: var(--code-font);
+  font-size: 0.85em;
+}
+
 .markdown-body table {
   margin: 2rem 0;
   border-collapse: collapse;
@@ -168,6 +195,65 @@ body {
 .markdown-body th {
   font-weight: 600;
   border-bottom: 1px solid var(--border-color);
+}
+
+.markdown-body .task-list-item {
+  list-style: none;
+  padding-left: 0;
+}
+.markdown-body .task-list-item input[type="checkbox"],
+.markdown-body .task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--border-color);
+  border-radius: 2px;
+  background: var(--bg-color);
+  vertical-align: -0.1em;
+  margin-right: 0.5em;
+  cursor: default;
+  position: relative;
+  display: inline-block;
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked,
+.markdown-body .task-list-item-checkbox:checked {
+  background: var(--link-color);
+  border-color: var(--link-color);
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked::after,
+.markdown-body .task-list-item-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+/* Footnotes */
+.markdown-body .footnotes-sep {
+  margin: 2rem 0 1rem;
+}
+.markdown-body .footnotes {
+  font-size: 0.88em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-soft);
+  padding-top: 1rem;
+}
+.markdown-body .footnotes ol {
+  margin-bottom: 0;
+}
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  color: var(--link-color);
+  text-decoration: none;
+  font-size: 0.85em;
+  vertical-align: super;
 }
 
 .markdown-body tbody tr:nth-child(even) {
@@ -308,6 +394,65 @@ body {
 .markdown-body span.qrcode {
   background: #fff;
   border: 1px solid var(--border-soft);
+}
+
+/* TOC */
+.markdown-body nav.toc,
+.markdown-body .toc-list {
+  background: #f8f9fa;
+  border: 1px solid var(--border-soft);
+  padding: 1rem 1.5rem;
+  margin: 2rem 0;
+  font-family: var(--header-font);
+  font-size: 0.9em;
+}
+.markdown-body nav.toc ul,
+.markdown-body .toc-list ul {
+  padding-left: 1.25em;
+  margin-bottom: 0;
+}
+.markdown-body nav.toc li,
+.markdown-body .toc-list li {
+  margin-bottom: 0.3em;
+}
+.markdown-body nav.toc a,
+.markdown-body .toc-list a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+.markdown-body nav.toc a:hover,
+.markdown-body .toc-list a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* Focus indicators */
+.markdown-body a:focus-visible,
+.markdown-body .tabs-bar-btn:focus-visible,
+.markdown-body details.spoil > summary:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+  text-decoration: none;
+}
+.markdown-body .task-list-item input[type="checkbox"]:focus-visible,
+.markdown-body .task-list-item-checkbox:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .markdown-body {
+    padding: 2rem 1.25rem;
+  }
+  .markdown-body .left {
+    float: none;
+    max-width: 100%;
+    margin: 0 0 1.2rem;
+  }
+  .markdown-body .cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 8. Print */

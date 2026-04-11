@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Cardo:ital,wght@0,400;0,700;1,400&display=swap');
 @import './common.css';
 
 /* 1. Tokens and global setup */
@@ -10,18 +10,22 @@
   --link-hover: #1e4037;
   --border-color: #d1cfc9;
 
-  --header-font: 'DM Sans', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --main-font: 'Lora', 'Noto Serif SC', 'Noto Serif TC', serif;
+  --header-font: 'Josefin Sans', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --main-font: 'Cardo', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
   --info-bg: rgba(74, 144, 226, 0.12);
   --info-border: #80a4c9;
+  --info-text: #436485;
   --success-bg: rgba(67, 181, 92, 0.12);
   --success-border: #7dbf8c;
+  --success-text: #4a7553;
   --warning-bg: rgba(230, 167, 0, 0.12);
   --warning-border: #cca23b;
+  --warning-text: #876d29;
   --danger-bg: rgba(211, 60, 75, 0.12);
   --danger-border: #c46d75;
+  --danger-text: #9c4b54;
 
   --base-size: 17px;
   --line-height: 1.8;
@@ -125,6 +129,44 @@ body {
   font-weight: 500;
 }
 
+.markdown-body .task-list-item {
+  list-style: none;
+  padding-left: 0;
+}
+.markdown-body .task-list-item input[type="checkbox"],
+.markdown-body .task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--border-color);
+  border-radius: 3px;
+  background: #fff;
+  vertical-align: -0.1em;
+  margin-right: 0.5em;
+  cursor: default;
+  position: relative;
+  display: inline-block;
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked,
+.markdown-body .task-list-item-checkbox:checked {
+  background: var(--link-color);
+  border-color: var(--link-color);
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked::after,
+.markdown-body .task-list-item-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
 /* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
@@ -156,11 +198,17 @@ body {
 .markdown-body blockquote {
   margin: 2em 0;
   padding: 0.5em 0 0.5em 1.5em;
-  border-left: 3px solid var(--link-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   font-style: italic;
   font-size: 1.15em;
   color: var(--text-muted);
   background-color: #e5ddd0;
+}
+
+.markdown-body blockquote blockquote {
+  font-size: 1em;
+  margin: 0.75em 0;
 }
 
 .markdown-body table {
@@ -209,32 +257,33 @@ body {
   padding: 1.2em 1.5em;
   margin: 1.5em 0;
   border-radius: 8px;
+  border: 1px solid;
   font-family: var(--header-font);
   font-size: 0.95em;
 }
 
 .markdown-body .info {
   background: var(--info-bg);
-  color: #436485;
-  border-left: 4px solid var(--info-border);
+  color: var(--info-text);
+  border-color: var(--info-border);
 }
 
 .markdown-body .success {
   background: var(--success-bg);
-  color: #4a7553;
-  border-left: 4px solid var(--success-border);
+  color: var(--success-text);
+  border-color: var(--success-border);
 }
 
 .markdown-body .warning {
   background: var(--warning-bg);
-  color: #876d29;
-  border-left: 4px solid var(--warning-border);
+  color: var(--warning-text);
+  border-color: var(--warning-border);
 }
 
 .markdown-body .danger {
   background: var(--danger-bg);
-  color: #9c4b54;
-  border-left: 4px solid var(--danger-border);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
 }
 
 .markdown-body .left {
@@ -391,12 +440,41 @@ body {
 }
 
 /* 7. Navigation, footnotes, and plugin output */
-.markdown-body .table-of-contents {
+.markdown-body .toc-wrapper {
+  /* Container element */
+}
+
+.markdown-body nav.toc,
+.markdown-body .toc-list {
   margin: 2.5em 0;
-  padding: 2em;
+  padding: 1.5em 2em;
   background-color: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   font-family: var(--header-font);
+  font-size: 0.9em;
+}
+
+.markdown-body nav.toc ul,
+.markdown-body .toc-list ul {
+  padding-left: 1.5em;
+  margin-bottom: 0;
+}
+
+.markdown-body nav.toc li,
+.markdown-body .toc-list li {
+  margin-bottom: 0.3em;
+}
+
+.markdown-body nav.toc a,
+.markdown-body .toc-list a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.markdown-body nav.toc a:hover,
+.markdown-body .toc-list a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
 }
 
 .markdown-body span.red {
@@ -446,6 +524,40 @@ body {
 .markdown-body span.qrcode {
   background: #fff;
   border-radius: 6px;
+}
+
+/* Focus indicators */
+.markdown-body a:focus-visible,
+.markdown-body .tabs-bar-btn:focus-visible,
+.markdown-body details.spoil > summary:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+  border-radius: 4px;
+  text-decoration: none;
+}
+.markdown-body .task-list-item input[type="checkbox"]:focus-visible,
+.markdown-body .task-list-item-checkbox:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .markdown-body {
+    padding: 2.5rem 1.25rem;
+    font-size: 15px;
+  }
+  .markdown-body .left {
+    float: none;
+    max-width: 100%;
+    margin: 0 0 1.6em;
+  }
+  .markdown-body .cols {
+    grid-template-columns: 1fr;
+  }
+  .markdown-body h1 {
+    font-size: 2em;
+  }
 }
 
 /* 8. Print */

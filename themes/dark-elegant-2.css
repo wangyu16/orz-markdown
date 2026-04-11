@@ -1,6 +1,6 @@
-/* ========================================================================== 
+/* ==========================================================================
    Dark Elegant Theme 2 — markdown-it-customize
-  Google Fonts: Sora (headings) · Merriweather / Source Sans 3 / Caveat / IBM Plex Mono (body options)
+  Google Fonts: Sora (headings) · Vollkorn / Source Sans 3 / Caveat / Fira Code (body options)
 
    Optional modifiers on <body> or .markdown-body:
    - .font-serif
@@ -10,7 +10,7 @@
    - .size-xs | .size-sm | .size-lg | .size-xl
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Vollkorn:ital,wght@0,400;0,600;0,700;1,400&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 @import './common.css';
 
 /* --------------------------------------------------------------------------
@@ -35,16 +35,16 @@
   --text-muted: #6f8796;
   --heading: #f5fbff;
 
-  --accent: #5fd1c9;
-  --accent-2: #8be5de;
-  --accent-deep: #1e7f7f;
-  --accent-warm: #f1b76a;
-  --accent-warm-soft: rgba(241, 183, 106, 0.18);
-  --accent-glow: rgba(95, 209, 201, 0.18);
-  --accent-grid: rgba(95, 209, 201, 0.08);
+  --accent: #e07c4a;
+  --accent-2: #f09d70;
+  --accent-deep: #a9492a;
+  --accent-warm: #b08dcf;
+  --accent-warm-soft: rgba(176, 141, 207, 0.18);
+  --accent-glow: rgba(224, 124, 74, 0.18);
+  --accent-grid: rgba(224, 124, 74, 0.06);
 
-  --link: #8fdff7;
-  --link-hover: #c3f2ff;
+  --link: #e0aa8a;
+  --link-hover: #f5cdb0;
   --link-visited: #c1b0ff;
 
   /* code */
@@ -82,8 +82,8 @@
 
   /* typography */
   --font-heading: 'Sora', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --font-body: 'Merriweather', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
-  --font-code: 'IBM Plex Mono', 'Fira Code', monospace;
+  --font-body: 'Vollkorn', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --font-code: 'Fira Code', 'JetBrains Mono', monospace;
   --base-size: 1rem;
   --line-height: 1.78;
   --font-scale: 1;
@@ -129,7 +129,7 @@
    -------------------------------------------------------------------------- */
 body.font-serif,
 .markdown-body.font-serif {
-  --font-body: 'Merriweather', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --font-body: 'Vollkorn', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --lh-copy: 1.85;
 }
 
@@ -146,7 +146,7 @@ body.font-handwritten,
 
 body.font-typewrite,
 .markdown-body.font-typewrite {
-  --font-body: 'IBM Plex Mono', monospace;
+  --font-body: 'Fira Code', monospace;
   --lh-copy: 1.82;
 }
 
@@ -188,8 +188,8 @@ body {
   min-height: 100vh;
   padding: clamp(1.25rem, 3vw, 2.5rem);
   background:
-    radial-gradient(circle at top left, rgba(95, 209, 201, 0.08), transparent 28%),
-    radial-gradient(circle at top right, rgba(241, 183, 106, 0.06), transparent 22%),
+    radial-gradient(circle at top left, rgba(224, 124, 74, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(176, 141, 207, 0.06), transparent 22%),
     linear-gradient(180deg, var(--bg-ambient) 0%, var(--bg) 58%, #050b10 100%);
   color: var(--text);
   font-family: var(--font-body);
@@ -198,7 +198,7 @@ body {
 }
 
 ::selection {
-  background: rgba(95, 209, 201, 0.28);
+  background: rgba(224, 124, 74, 0.25);
   color: var(--heading);
 }
 
@@ -221,7 +221,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(95, 209, 201, 0.48);
+  background: rgba(224, 124, 74, 0.48);
 }
 
 /* --------------------------------------------------------------------------
@@ -298,7 +298,7 @@ h1 {
   margin-bottom: 0.8em;
   padding: 0.35em 1.1rem 0.5em;
   font-size: clamp(2rem, 4.5vw, 3.15rem);
-  background: rgba(95, 209, 201, 0.08);
+  background: rgba(224, 124, 74, 0.08);
   border: 1px solid rgba(122, 165, 185, 0.18);
   border-radius: 18px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -311,7 +311,7 @@ h1::after {
   right: 1.1rem;
   bottom: 0.18rem;
   height: 2px;
-  background: linear-gradient(90deg, var(--accent), rgba(241, 183, 106, 0.45));
+  background: linear-gradient(90deg, var(--accent), transparent);
   border-radius: 999px;
 }
 
@@ -323,18 +323,17 @@ h2 {
 
 h3 {
   font-size: var(--fs-400);
-  padding-left: 0.9rem;
+  padding-left: 0;
 }
 
 h3::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.16em;
-  bottom: 0.16em;
-  width: 4px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(241, 183, 106, 0.72), rgba(95, 209, 201, 0.72));
+  content: '◆';
+  display: inline-block;
+  font-size: 0.45em;
+  margin-right: 0.55em;
+  vertical-align: 0.2em;
+  color: var(--accent);
+  opacity: 0.85;
 }
 
 h4 {
@@ -421,7 +420,7 @@ a {
  a:hover {
   color: var(--link-hover);
   text-decoration-color: rgba(195, 242, 255, 0.72);
-  text-shadow: 0 0 18px rgba(95, 209, 201, 0.18);
+  text-shadow: 0 0 18px rgba(224, 124, 74, 0.18);
 }
 
  a:visited {
@@ -452,7 +451,7 @@ mark {
 
 ins {
   color: var(--accent-2);
-  text-decoration: underline wavy rgba(95, 209, 201, 0.72) 1.5px;
+  text-decoration: underline wavy rgba(224, 124, 74, 0.72) 1.5px;
   text-underline-offset: 0.18em;
 }
 
@@ -512,8 +511,8 @@ blockquote {
   position: relative;
   padding: 1.15rem 1.35rem 1.15rem 1.65rem;
   color: #c6d8e2;
-  background: rgba(95, 209, 201, 0.05);
-  border: 1px solid rgba(95, 209, 201, 0.16);
+  background: rgba(224, 124, 74, 0.05);
+  border: 1px solid rgba(224, 124, 74, 0.16);
   border-radius: 20px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
@@ -526,7 +525,7 @@ blockquote::before {
   font-family: Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   font-size: 2.8rem;
   line-height: 1;
-  color: rgba(95, 209, 201, 0.42);
+  color: rgba(224, 124, 74, 0.42);
 }
 
 blockquote > *:last-child {
@@ -573,7 +572,7 @@ ul > li::before {
   height: 0.42rem;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent-warm), var(--accent));
-  box-shadow: 0 0 10px rgba(95, 209, 201, 0.22);
+  box-shadow: 0 0 8px rgba(224, 124, 74, 0.18);
 }
 
 ol {
@@ -646,7 +645,7 @@ table {
 thead th {
   padding: 0.82rem 1rem;
   border-bottom: 1px solid var(--border-strong);
-  background: rgba(95, 209, 201, 0.08);
+  background: rgba(224, 124, 74, 0.06);
   color: var(--heading);
   font-size: var(--fs-75);
   font-weight: 700;
@@ -668,7 +667,7 @@ tbody tr:nth-child(even) td {
 }
 
 tbody tr:hover td {
-  background: rgba(95, 209, 201, 0.07);
+  background: rgba(224, 124, 74, 0.06);
 }
 
 tbody tr:last-child td {
@@ -682,7 +681,7 @@ hr {
   height: 1px;
   margin: var(--space-6) 0;
   border: 0;
-  background: linear-gradient(90deg, transparent, rgba(95, 209, 201, 0.45), rgba(241, 183, 106, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgba(224, 124, 74, 0.45), rgba(176, 141, 207, 0.4), transparent);
 }
 
 img {
@@ -967,7 +966,7 @@ details.spoil > summary::before {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 999px;
-  background: rgba(95, 209, 201, 0.14);
+  background: rgba(224, 124, 74, 0.14);
   color: var(--accent-2);
   transition: transform var(--transition), background var(--transition);
 }
@@ -977,7 +976,7 @@ details.spoil[open] > summary::before {
 }
 
 details.spoil > summary:hover {
-  background: rgba(95, 209, 201, 0.08);
+  background: rgba(224, 124, 74, 0.08);
 }
 
 details.spoil[open] > summary {
@@ -1032,7 +1031,7 @@ details.spoil > :not(summary) {
 .tabs-bar-btn.active {
   color: #041116;
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
-  box-shadow: 0 8px 20px rgba(95, 209, 201, 0.28);
+  box-shadow: 0 8px 20px rgba(224, 124, 74, 0.28);
 }
 
 .tab {
@@ -1085,7 +1084,7 @@ details.spoil > :not(summary) {
 nav.toc,
 .toc-list {
   padding: 1rem 1.15rem;
-  background: rgba(95, 209, 201, 0.045);
+  background: rgba(224, 124, 74, 0.045);
   border: 1px solid var(--border);
   border-radius: 20px;
 }
@@ -1188,8 +1187,8 @@ span.danger {
 div.test-block {
   padding: 0.85rem 1rem;
   margin-bottom: var(--space-5);
-  background: rgba(95, 209, 201, 0.06);
-  border: 1px dashed rgba(95, 209, 201, 0.4);
+  background: rgba(224, 124, 74, 0.06);
+  border: 1px dashed rgba(224, 124, 74, 0.4);
   border-radius: 16px;
   color: var(--accent-2);
   font-family: var(--font-code);
@@ -1200,9 +1199,9 @@ span.test-inline {
   display: inline-block;
   padding: 0.12em 0.4em;
   border-radius: 8px;
-  border: 1px dashed rgba(95, 209, 201, 0.4);
+  border: 1px dashed rgba(224, 124, 74, 0.4);
   color: var(--accent-2);
-  background: rgba(95, 209, 201, 0.12);
+  background: rgba(224, 124, 74, 0.12);
   font-family: var(--font-code);
   font-size: 0.88em;
 }
@@ -1255,6 +1254,23 @@ span.qrcode {
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* --------------------------------------------------------------------------
+   Focus indicators
+   -------------------------------------------------------------------------- */
+a:focus-visible,
+.tabs-bar-btn:focus-visible,
+details.spoil > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.task-list-item-checkbox:focus-visible,
+.task-list-item input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* --------------------------------------------------------------------------

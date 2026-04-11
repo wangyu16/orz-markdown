@@ -1,6 +1,6 @@
 /* ==========================================================================
    Light Neat Theme 1 — markdown-it-customize
-   Google Fonts: Plus Jakarta Sans (headings) · Source Sans 3 / Lora / Caveat / IBM Plex Mono
+   Google Fonts: Figtree (headings) · Source Sans 3 / Cardo / Caveat / Fira Code (body options)
 
    Optional modifiers on <body> or .markdown-body:
    - .font-serif
@@ -10,7 +10,7 @@
    - .size-xs | .size-sm | .size-lg | .size-xl
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Cardo:ital,wght@0,400;0,700;1,400&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 @import './common.css';
 
 :root {
@@ -71,9 +71,9 @@
   --span-green: #218763;
   --span-blue: #1d6db0;
 
-  --font-heading: 'Plus Jakarta Sans', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --font-heading: 'Figtree', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --font-code: 'Fira Code', 'JetBrains Mono', monospace;
   --base-size: 1rem;
   --line-height: 1.72;
   --font-scale: 1;
@@ -114,7 +114,7 @@
 
 body.font-serif,
 .markdown-body.font-serif {
-  --font-body: 'Lora', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --font-body: 'Cardo', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --lh-copy: 1.82;
 }
 
@@ -131,7 +131,7 @@ body.font-handwritten,
 
 body.font-typewrite,
 .markdown-body.font-typewrite {
-  --font-body: 'IBM Plex Mono', monospace;
+  --font-body: 'Fira Code', monospace;
   --lh-copy: 1.78;
 }
 
@@ -293,12 +293,9 @@ h1::after {
 
 h2 {
   font-size: clamp(1.55rem, 3vw, 2.1rem);
-  padding: 0.16em 0 0.32em 0.85rem;
+  padding: 0.16em 0 0.32em;
   color: var(--accent-strong);
-  background: linear-gradient(90deg, rgba(98, 176, 232, 0.08), transparent 58%);
-  border-left: 3px solid var(--accent-2);
-  border-bottom: 1px solid var(--border-soft);
-  border-radius: 0 12px 12px 0;
+  border-bottom: 2px solid var(--border-strong);
 }
 
 h2::after {
@@ -330,8 +327,10 @@ h4 {
 h5 {
   font-size: var(--fs-200);
   color: #365d78;
-  padding-left: 0.7rem;
-  border-left: 2px solid rgba(72, 183, 168, 0.48);
+  padding: 0.12em 0.5rem;
+  background: rgba(98, 176, 232, 0.07);
+  border-radius: 6px;
+  width: fit-content;
 }
 
 h6 {
@@ -491,23 +490,11 @@ pre code {
 }
 
 blockquote {
-  position: relative;
-  padding: 1.1rem 1.25rem 1.1rem 1.5rem;
+  padding: 1.1rem 1.25rem;
   color: #3e6077;
   background: linear-gradient(180deg, rgba(98, 176, 232, 0.1), rgba(98, 176, 232, 0.04));
   border: 1px solid #dbeaf6;
   border-radius: 18px;
-}
-
-blockquote::before {
-  content: '';
-  position: absolute;
-  left: 0.8rem;
-  top: 0.9rem;
-  bottom: 0.9rem;
-  width: 4px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-warm));
 }
 
 blockquote blockquote {
@@ -603,8 +590,8 @@ ol {
 .markdown-body > table,
 .markdown-body td table {
   width: max-content;
-  width: max-content;
   max-width: 100%;
+}
 
 table {
   border-collapse: separate;
@@ -1147,6 +1134,23 @@ span.qrcode {
   background: #fff;
   border-radius: 12px;
   box-shadow: var(--shadow-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Focus indicators
+   -------------------------------------------------------------------------- */
+a:focus-visible,
+.tabs-bar-btn:focus-visible,
+details.spoil > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.task-list-item-checkbox:focus-visible,
+.task-list-item input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {

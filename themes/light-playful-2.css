@@ -169,6 +169,11 @@ body {
   color: var(--text-muted);
 }
 
+.markdown-body blockquote blockquote {
+  font-size: 1em;
+  margin: 0.5em 0;
+}
+
 .markdown-body table {
   border-collapse: collapse;
   margin: 2rem 0;
@@ -333,6 +338,153 @@ body {
   background: #fff;
   border: 2px solid #222;
   border-radius: 8px;
+}
+
+/* TOC */
+.markdown-body nav.toc,
+.markdown-body .toc-list {
+  background: #fff;
+  border: 3px solid #222;
+  border-radius: 8px;
+  box-shadow: 4px 4px 0px var(--c-yellow);
+  padding: 1.2rem 1.5rem;
+  margin: 2rem 0;
+  font-family: var(--body-font);
+}
+.markdown-body nav.toc ul,
+.markdown-body .toc-list ul {
+  padding-left: 1.5em;
+  margin-bottom: 0;
+}
+.markdown-body nav.toc li,
+.markdown-body .toc-list li {
+  margin-bottom: 0.4em;
+}
+.markdown-body nav.toc li::marker,
+.markdown-body .toc-list li::marker {
+  font-family: var(--heading-font);
+  color: var(--c-blue);
+}
+.markdown-body nav.toc a,
+.markdown-body .toc-list a {
+  color: var(--text-main);
+  text-decoration: none;
+  font-weight: bold;
+  background: linear-gradient(180deg, transparent 60%, var(--c-yellow) 0);
+  background-size: 100% 120%;
+}
+.markdown-body nav.toc a:hover,
+.markdown-body .toc-list a:hover {
+  color: var(--link-color);
+}
+
+/* Task lists */
+.markdown-body .task-list-item input[type="checkbox"],
+.markdown-body .task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  border: 3px solid #222;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 2px 2px 0px #222;
+  vertical-align: -0.15em;
+  margin-right: 0.5em;
+  cursor: default;
+  position: relative;
+  display: inline-block;
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked,
+.markdown-body .task-list-item-checkbox:checked {
+  background: var(--c-green);
+  border-color: #222;
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked::after,
+.markdown-body .task-list-item-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -2px;
+  width: 5px;
+  height: 9px;
+  border: 2.5px solid #222;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+/* Footnotes */
+.markdown-body .footnotes-sep {
+  margin: 3rem 0 1rem;
+  height: 4px;
+  background: repeating-linear-gradient(to right, #222, #222 10px, transparent 10px, transparent 20px);
+}
+.markdown-body .footnotes {
+  font-size: 0.88em;
+  color: var(--text-muted);
+  padding-top: 0.5rem;
+  font-family: var(--body-font);
+}
+.markdown-body .footnotes ol {
+  margin-bottom: 0;
+}
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  color: var(--link-color);
+  text-decoration: none;
+  font-size: 0.85em;
+  vertical-align: super;
+}
+
+/* Focus indicators */
+.markdown-body a:focus-visible,
+.markdown-body .tabs-bar-btn:focus-visible,
+.markdown-body details.spoil > summary:focus-visible {
+  outline: 3px solid #222;
+  outline-offset: 3px;
+  box-shadow: 3px 3px 0px var(--c-yellow);
+  text-decoration: none;
+}
+.markdown-body .task-list-item input[type="checkbox"]:focus-visible,
+.markdown-body .task-list-item-checkbox:focus-visible {
+  outline: 3px solid #222;
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  body {
+    padding: 1rem;
+    background-size: 20px 20px;
+  }
+  .markdown-body {
+    margin: 0.5rem auto;
+    padding: 1.5rem;
+    border-radius: 20px 8px 18px 8px / 8px 18px 8px 20px;
+  }
+  .markdown-body h1 {
+    font-size: 2.2rem;
+    transform: none;
+  }
+  .markdown-body h2 {
+    transform: none;
+    font-size: 1.8rem;
+  }
+  .markdown-body h3 {
+    transform: none;
+  }
+  .markdown-body .left {
+    float: none;
+    max-width: 100%;
+    margin: 0 0 1rem;
+  }
+  .markdown-body .cols {
+    grid-template-columns: 1fr;
+  }
+  .markdown-body pre {
+    transform: none;
+  }
 }
 
 /* 8. Print */

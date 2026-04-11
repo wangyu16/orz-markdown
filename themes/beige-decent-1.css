@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Alegreya:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 @import './common.css';
 
 /* 1. Tokens and global setup */
@@ -10,8 +10,8 @@
   --link-hover: #b85447;
   --border-color: #d6ccbe;
 
-  --header-font: 'Playfair Display', 'Noto Serif SC', 'Noto Serif TC', serif;
-  --main-font: 'Crimson Pro', 'Noto Serif SC', 'Noto Serif TC', serif;
+  --header-font: 'Abril Fatface', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  --main-font: 'Alegreya', 'Noto Serif SC', 'Noto Serif TC', serif;
   --code-font: 'Courier New', Courier, monospace;
 
   --info-bg: #eef3f6;
@@ -72,8 +72,9 @@ body {
 }
 
 .markdown-body h1 {
+  font-family: 'Abril Fatface', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   font-size: 2.75em;
-  font-weight: 900;
+  font-weight: 400;
   text-align: center;
   border-bottom: 2px solid var(--text-main);
   padding-bottom: 0.3em;
@@ -132,6 +133,40 @@ body {
   margin-right: 0.5em;
 }
 
+.markdown-body .task-list-item input[type="checkbox"],
+.markdown-body .task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--border-color);
+  border-radius: 3px;
+  background: #fff;
+  vertical-align: -0.1em;
+  margin-right: 0.5em;
+  cursor: default;
+  position: relative;
+  display: inline-block;
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked,
+.markdown-body .task-list-item-checkbox:checked {
+  background: var(--link-color);
+  border-color: var(--link-color);
+}
+.markdown-body .task-list-item input[type="checkbox"]:checked::after,
+.markdown-body .task-list-item-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
 /* 4. Code and math */
 .markdown-body code {
   font-family: var(--code-font);
@@ -169,6 +204,12 @@ body {
   color: #4a3e38;
   text-align: center;
   background-color: #ece2d2;
+}
+
+.markdown-body blockquote blockquote {
+  font-size: 1em;
+  margin: 0.75em 0;
+  padding: 0.75em 1em;
 }
 
 .markdown-body blockquote p:last-child {
@@ -218,8 +259,8 @@ body {
 .markdown-body .danger {
   padding: 1em 1.5em;
   margin: 1.5em 0;
-  border-left: 4px solid;
-  border-radius: 0 4px 4px 0;
+  border: 1px solid;
+  border-radius: 4px;
 }
 
 .markdown-body .info {
@@ -373,22 +414,47 @@ body {
 }
 
 /* 7. Navigation, footnotes, and plugin output */
-.markdown-body .table-of-contents {
+.markdown-body .toc-wrapper {
+  /* Container element */
+}
+
+.markdown-body nav.toc,
+.markdown-body .toc-list {
   background-color: #f7f3eb;
   padding: 1.5em 2em;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   margin: 2em 0;
   font-family: var(--header-font);
+  font-size: 0.9em;
 }
 
-.markdown-body .table-of-contents ul {
+.markdown-body nav.toc ul,
+.markdown-body .toc-list ul {
   list-style-type: none;
   padding-left: 1.5em;
+  margin-bottom: 0;
 }
 
-.markdown-body .table-of-contents > ul {
+.markdown-body nav.toc > ul,
+.markdown-body .toc-list > ul {
   padding-left: 0;
+}
+
+.markdown-body nav.toc li,
+.markdown-body .toc-list li {
+  margin-bottom: 0.3em;
+}
+
+.markdown-body nav.toc a,
+.markdown-body .toc-list a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.markdown-body nav.toc a:hover,
+.markdown-body .toc-list a:hover {
+  text-decoration: underline;
 }
 
 .markdown-body span.red {
@@ -439,6 +505,40 @@ body {
 .markdown-body span.qrcode {
   background: #fff;
   border-radius: 4px;
+}
+
+/* Focus indicators */
+.markdown-body a:focus-visible,
+.markdown-body .tabs-bar-btn:focus-visible,
+.markdown-body details.spoil > summary:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+  text-decoration: none;
+}
+.markdown-body .task-list-item input[type="checkbox"]:focus-visible,
+.markdown-body .task-list-item-checkbox:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .markdown-body {
+    padding: 2rem 1.25rem;
+    font-size: 17px;
+  }
+  .markdown-body .left {
+    float: none;
+    max-width: 100%;
+    margin: 0 0 1.5em;
+  }
+  .markdown-body .cols {
+    grid-template-columns: 1fr;
+  }
+  .markdown-body h1 {
+    font-size: 2em;
+  }
 }
 
 /* 8. Print */

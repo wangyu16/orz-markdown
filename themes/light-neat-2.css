@@ -1,6 +1,6 @@
 /* ==========================================================================
    Light Neat Theme 2 — markdown-it-customize
-   Google Fonts: Space Grotesk (headings) · Literata / Source Sans 3 / Caveat / IBM Plex Mono
+   Epilogue (headings) · Literata / Source Sans 3 / Caveat / Fira Code (body options)
 
    Optional modifiers on <body> or .markdown-body:
    - .font-serif
@@ -10,7 +10,7 @@
    - .size-xs | .size-sm | .size-lg | .size-xl
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Source+Sans+3:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Source+Sans+3:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 @import './common.css';
 
 :root {
@@ -72,9 +72,9 @@
   --span-green: #2f7c49;
   --span-blue: #21698a;
 
-  --font-heading: 'Space Grotesk', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+  --font-heading: 'Epilogue', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Literata', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
-  --font-code: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --font-code: 'Fira Code', 'JetBrains Mono', monospace;
   --base-size: 1rem;
   --line-height: 1.82;
   --font-scale: 1;
@@ -132,7 +132,7 @@ body.font-handwritten,
 
 body.font-typewrite,
 .markdown-body.font-typewrite {
-  --font-body: 'IBM Plex Mono', monospace;
+  --font-body: 'Fira Code', monospace;
   --lh-copy: 1.78;
 }
 
@@ -213,8 +213,6 @@ body {
   background: var(--surface);
   border: var(--markdown-body-border);
   border-radius: var(--markdown-body-radius);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--markdown-body-shadow);
 }
 
@@ -269,13 +267,13 @@ h1 {
 }
 
 h1::before {
-  content: 'SECTION';
+  content: '';
   display: block;
-  margin-bottom: 0.45rem;
-  color: var(--accent-ink);
-  font-size: var(--fs-50);
-  font-weight: 700;
-  letter-spacing: 0.28em;
+  width: 3rem;
+  height: 3px;
+  background: var(--accent);
+  margin-bottom: 0.5rem;
+  border-radius: 999px;
 }
 
 h1::after {
@@ -290,17 +288,12 @@ h1::after {
 
 h2 {
   font-size: clamp(1.5rem, 3vw, 2.05rem);
-  padding-left: 0.9rem;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--border-strong);
 }
 
 h2::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.18em;
-  bottom: 0.18em;
-  width: 4px;
-  background: var(--accent-warm);
+  display: none;
 }
 
 h3 {
@@ -443,7 +436,7 @@ code {
 pre {
   position: relative;
   overflow-x: auto;
-  padding: 2.15rem 1.25rem 1.18rem;
+  padding: 2rem 1.25rem 1.18rem;
   background: linear-gradient(180deg, var(--code-bg) 0%, var(--code-bg-2) 100%);
   border: 1px solid var(--code-border);
   border-radius: 16px;
@@ -451,33 +444,15 @@ pre {
 }
 
 pre::before {
-  content: 'CODE';
-  position: absolute;
-  left: 0.95rem;
-  top: 0.75rem;
-  display: inline-flex;
-  align-items: center;
-  padding: 0.16rem 0.52rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.58);
-  color: var(--accent-ink);
-  font-family: var(--font-heading);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  opacity: 0.9;
-}
-
-pre::after {
   content: '';
   position: absolute;
-  left: 4.8rem;
-  right: 1rem;
-  top: 1.15rem;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(22, 122, 114, 0.22), rgba(212, 143, 65, 0.18), transparent 75%);
+  left: 1rem;
+  top: 0.75rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #f0c060;
+  box-shadow: 1rem 0 0 #90c878, 2rem 0 0 #80b4e0;
 }
 
 pre code {
@@ -725,8 +700,6 @@ div.danger {
   padding: 1rem 1.1rem;
   border: 1px solid;
   border-radius: 14px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-soft);
 }
 
@@ -798,8 +771,6 @@ div.danger > *:last-child {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 14px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-soft);
   margin: 0 var(--space-5) var(--space-4) 0;
 }
@@ -1104,6 +1075,23 @@ span.qrcode {
   background: #fff;
   border-radius: 10px;
   box-shadow: var(--shadow-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Focus indicators
+   -------------------------------------------------------------------------- */
+a:focus-visible,
+.tabs-bar-btn:focus-visible,
+details.spoil > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.task-list-item-checkbox:focus-visible,
+.task-list-item input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
