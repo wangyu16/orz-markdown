@@ -90,21 +90,23 @@ The generated tarball is written to the repository root and includes `dist/` and
 This project builds upon `markdown-it` and pre-configures a curated selection of official and popular community plugins.
 
 - **markdown-it-anchor**: Header anchors
-- **markdown-it-container**: 
+- **markdown-it-container**:
   - Semantic Blocks: `success`, `info`, `warning`, `danger`
-  - Layout Blocks: `left`, `right`, `center`
-  - Interactive Blocks: `spoil` (spoilers), `tabs/tab`, `cols/col`
+  - Layout Blocks: `left` (optional CSS width arg, e.g. `::: left 30%`), `right`, `center`
+  - Interactive Blocks: `spoil` (spoilers), `tabs/tab`, `cols/col` (optional width ratios, e.g. `:::: cols 1 2 1`)
+  - Arbitrary class: any `::: ClassName` not in the reserved list above becomes `<div class="ClassName">`
+  - Note: a space between `:::` and the name is required; nesting uses more colons on the outer level
 - **markdown-it-footnote**: Footnotes syntax (`[^1]`)
 - **markdown-it-imsize**: Image sizing (`![alt](url =100x200)`)
 - **markdown-it-mark**: Highlighted text (`==marked==`)
-- **markdown-it-sub` & `markdown-it-sup**: Subscript (`~sub~`) and Superscript (`^sup^`)
+- **markdown-it-sub** & **markdown-it-sup**: Subscript (`~sub~`) and Superscript (`^sup^`)
 - **markdown-it-ins**: Inserted text (`++inserted++`)
 - **markdown-it-task-lists**: GitHub-style task lists (`- [x] Task`)
 - **@traptitech/markdown-it-katex**: Math rendering, capable of rendering block math (`$$E=mc^2$$`), inline math (`$E=mc^2$`), and built-in `mhchem` chemistry extension.
 
 ## Custom Plugin Syntax Reference
 
-We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom plugins added out-of-the-box. The multi-line blocks simply ignore line breaks natively inside them unless handled by the plugin. 
+We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom plugins. Single-line: `{{name body}}`. Multi-line: `{{name\nbody\n}}`. Both forms close with `}}` — there is no `{{/name}}` closing tag.
 
 | Plugin Name | Alias | Syntax Example | Description |
 | :--- | :--- | :--- | :--- |

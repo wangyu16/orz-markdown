@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+
+  <!-- Google Fonts preconnect hints (needed when using a theme with Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- KaTeX CSS — required for all math rendering ($...$ and $$...$$) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
+
+  <!-- Highlight.js — pick a theme that matches your color scheme.
+       Light themes: github.min.css, stackoverflow-light.min.css
+       Dark themes:  atom-one-dark.min.css, github-dark.min.css           -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+
+  <!-- Parser stylesheet — choose one of the bundled themes or link your own.
+       Bundled themes (each imports common.css automatically):
+         dark-elegant-1.css  dark-elegant-2.css
+         light-neat-1.css    light-neat-2.css
+         beige-decent-1.css  beige-decent-2.css
+         light-academic-1.css light-academic-2.css
+         light-playful-1.css  light-playful-2.css
+       Minimal no-frills stylesheet (feature support only): minimal.css     -->
+  <link rel="stylesheet" href="./minimal.css">
+</head>
+<body>
+
+  <!-- All rendered HTML from md.render() goes inside this article element.
+       The .markdown-body class is required — all theme styles are scoped under it. -->
+  <article class="markdown-body">
+    <!-- INSERT RENDERED HTML HERE -->
+  </article>
+
+  <!-- =====================================================================
+       Required client-side libraries and runtime scripts.
+       These must appear after the body content so the DOM is ready.
+       ===================================================================== -->
+
+  <!-- Highlight.js — syntax-highlights fenced code blocks -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>if (typeof hljs !== 'undefined') hljs.highlightAll();</script>
+
+  <!-- Mermaid.js — renders {{mermaid}} / {{mm}} diagram blocks client-side.
+       The .mermaid div contains the raw Mermaid DSL emitted by the parser.  -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>if (typeof mermaid !== 'undefined') mermaid.initialize({ startOnLoad: true });</script>
+
+  <!-- SmilesDrawer — renders {{smiles}} / {{sm}} chemical structure canvases.
+       Draws into canvas[data-smiles] elements emitted by the parser.        -->
+  <script src="https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js"></script>
+  <script>
+if (typeof SmilesDrawer !== 'undefined') {
+  document.querySelectorAll('canvas[data-smiles]').forEach(function (canvas, i) {
+    if (!canvas.id) canvas.id = 'smiles-canvas-' + i;
+    var drawer = new SmilesDrawer.Drawer({ width: canvas.width || 250, height: canvas.height || 180 });
+    SmilesDrawer.parse(canvas.getAttribute('data-smiles'), function (tree) {
+      drawer.draw(tree, canvas, 'light', false);
+    });
+  });
+}
+  </script>
+
+  <!-- Tabs component — builds the .tabs-bar and activates .tab panels.
+       Must run after the DOM is painted so .tabs elements are found.        -->
+  <script>
+(function () {
+  document.querySelectorAll('.tabs').forEach(function (tabs) {
+    tabs.setAttribute('data-js', '1');
+    var panels = tabs.querySelectorAll(':scope > .tab');
+    if (!panels.length) return;
+
+    var bar = document.createElement('div');
+    bar.className = 'tabs-bar';
+    panels.forEach(function (panel, i) {
+      var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
+      var btn   = document.createElement('button');
+      btn.className   = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', function () {
+        tabs.querySelectorAll('.tabs-bar-btn').forEach(function (b) { b.classList.remove('active'); });
+        panels.forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        panel.classList.add('active');
+      });
+      bar.appendChild(btn);
+    });
+    tabs.insertBefore(bar, tabs.firstChild);
+    panels[0].classList.add('active');
+  });
+})();
+  </script>
+
+  <!-- QR code runtime — click to expand {{qrcode}} / {{qr}} overlays.
+       Provides window.OrzMarkdownRuntime.init(root) for programmatic use.  -->
+  <script>
+(function (global) {
+  var expandedQr = null;
+  var expandedSourceQr = null;
+
+  function collapseQr() {
+    if (!expandedQr) return;
+    if (expandedSourceQr) {
+      expandedSourceQr.classList.remove('is-expanded');
+      expandedSourceQr.setAttribute('aria-expanded', 'false');
+    }
+    if (expandedQr.parentNode) expandedQr.parentNode.removeChild(expandedQr);
+    expandedQr = null;
+    expandedSourceQr = null;
+    if (global.document && global.document.body) global.document.body.style.overflow = '';
+  }
+
+  function toggleQr(node) {
+    if (expandedSourceQr === node) { collapseQr(); return; }
+    if (expandedQr) collapseQr();
+    expandedSourceQr = node;
+    node.classList.add('is-expanded');
+    node.setAttribute('aria-expanded', 'true');
+    expandedQr = node.cloneNode(true);
+    expandedQr.classList.add('qrcode-overlay', 'is-expanded');
+    expandedQr.setAttribute('aria-hidden', 'true');
+    expandedQr.removeAttribute('aria-expanded');
+    expandedQr.removeAttribute('tabindex');
+    expandedQr.removeAttribute('role');
+    expandedQr.addEventListener('click', function (event) {
+      event.stopPropagation();
+      collapseQr();
+    });
+    global.document.body.appendChild(expandedQr);
+    if (global.document && global.document.body) global.document.body.style.overflow = 'hidden';
+  }
+
+  function initQrCodes(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    Array.prototype.slice.call(root.querySelectorAll('.qrcode')).forEach(function (node) {
+      if (node.getAttribute('data-qr-ready') === '1') return;
+      node.setAttribute('data-qr-ready', '1');
+      node.setAttribute('tabindex', '0');
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-expanded', 'false');
+      node.addEventListener('click', function (event) {
+        event.stopPropagation();
+        toggleQr(node);
+      });
+      node.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleQr(node);
+        }
+      });
+    });
+  }
+
+  function bindGlobalHandlers() {
+    global.document.addEventListener('click', function () { collapseQr(); });
+    global.document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') collapseQr();
+    });
+  }
+
+  function init(doc) {
+    initQrCodes(doc);
+    bindGlobalHandlers();
+  }
+
+  global.OrzMarkdownRuntime = { init: init, initQrCodes: initQrCodes };
+
+  if (global.document) {
+    if (global.document.readyState === 'loading') {
+      global.document.addEventListener('DOMContentLoaded', function () { init(global.document); }, { once: true });
+    } else {
+      init(global.document);
+    }
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+  </script>
+
+</body>
+</html>

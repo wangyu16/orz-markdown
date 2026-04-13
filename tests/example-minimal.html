@@ -1,0 +1,1982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+
+  <!-- Google Fonts preconnect hints (needed when using a theme with Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- KaTeX CSS — required for all math rendering ($...$ and $$...$$) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
+
+  <!-- Highlight.js — pick a theme that matches your color scheme.
+       Light themes: github.min.css, stackoverflow-light.min.css
+       Dark themes:  atom-one-dark.min.css, github-dark.min.css           -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+
+  <!-- Parser stylesheet — choose one of the bundled themes or link your own.
+       Bundled themes (each imports common.css automatically):
+         dark-elegant-1.css  dark-elegant-2.css
+         light-neat-1.css    light-neat-2.css
+         beige-decent-1.css  beige-decent-2.css
+         light-academic-1.css light-academic-2.css
+         light-playful-1.css  light-playful-2.css
+       Minimal no-frills stylesheet (feature support only): minimal.css     -->
+  <style>
+/* ==========================================================================
+   Minimal Functional Stylesheet — @orz-how/markdown-parser
+   Based on common.css structural rules + stripped-down theme styles.
+
+   This file provides all necessary layout and visual distinction to render
+   every parser feature correctly. It contains NO decorative styles:
+   no gradients, no shadows, no custom fonts, no fancy borders or ornaments.
+
+   Use one of the bundled theme stylesheets for a polished visual experience.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Shared structural rules (from common.css) — required for correct behavior
+   -------------------------------------------------------------------------- */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* QR code inline widget */
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+  background: #fff; /* keep white so QR SVG is readable on any background */
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+/* QR code expanded overlay */
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+}
+
+/* Print rules */
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+
+  tr, img, svg, canvas, iframe, video, pre, blockquote,
+  .smiles-render, .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed { display: none !important; }
+  .qrcode__icon  { display: none !important; }
+}
+
+/* --------------------------------------------------------------------------
+   Base reset & page layout
+   -------------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 1rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #222;
+  background: #f4f4f4;
+}
+
+/* --------------------------------------------------------------------------
+   Article wrapper
+   -------------------------------------------------------------------------- */
+
+.markdown-body {
+  display: flow-root;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem;
+  background: #fff;
+  border: 1px solid #ddd;
+}
+
+.markdown-body > :first-child { margin-top: 0; }
+
+/* --------------------------------------------------------------------------
+   Headings
+   -------------------------------------------------------------------------- */
+
+h1, h2, h3, h4, h5, h6 {
+  clear: both;
+  margin: 2em 0 0.6em;
+  font-weight: 700;
+  line-height: 1.3;
+  scroll-margin-top: 4rem;
+}
+
+h1:first-child, h2:first-child { margin-top: 0; }
+
+h1 { font-size: 2rem;    text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 0.4em; }
+h2 { font-size: 1.6rem;  border-bottom: 1px solid #ccc; padding-bottom: 0.2em; }
+h3 { font-size: 1.3rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem; }
+h6 { font-size: 0.9rem;  color: #555; }
+
+/* Heading permalink anchor — hidden until hover */
+.header-anchor {
+  float: left;
+  margin-left: -1.2em;
+  padding-right: 0.3em;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+h1:hover .header-anchor,
+h2:hover .header-anchor,
+h3:hover .header-anchor,
+h4:hover .header-anchor,
+h5:hover .header-anchor,
+h6:hover .header-anchor { opacity: 0.5; }
+
+/* --------------------------------------------------------------------------
+   Block spacing
+   -------------------------------------------------------------------------- */
+
+p, ul, ol, blockquote, pre, table,
+.toc-wrapper, details.spoil, .tabs, .cols, .youtube-embed, .mermaid, .smiles-render {
+  margin: 0 0 1.5rem;
+}
+
+p:last-child,
+ul:last-child,
+ol:last-child,
+blockquote:last-child,
+pre:last-child,
+table:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   Inline text elements
+   -------------------------------------------------------------------------- */
+
+a { color: #0060cc; text-underline-offset: 0.15em; }
+a:visited { color: #5050aa; }
+strong { font-weight: 700; }
+s, del { color: #888; text-decoration: line-through; }
+mark { background: #ffe284; padding: 0.05em 0.2em; }
+ins { text-decoration: underline; color: #167857; }
+sub, sup { font-size: 0.72em; }
+
+/* --------------------------------------------------------------------------
+   Code
+   -------------------------------------------------------------------------- */
+
+code {
+  font-family: monospace;
+  font-size: 0.9em;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 1rem;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+}
+
+pre code {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+/* --------------------------------------------------------------------------
+   Blockquote
+   -------------------------------------------------------------------------- */
+
+blockquote {
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #ccc;
+  color: #555;
+  background: #f9f9f9;
+}
+
+blockquote blockquote { background: #efefef; margin-top: 0.75rem; }
+blockquote > *:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   Lists
+   -------------------------------------------------------------------------- */
+
+ul, ol { padding-left: 1.5rem; }
+li { margin-bottom: 0.3rem; }
+li > ul, li > ol { margin-top: 0.3rem; margin-bottom: 0; }
+
+/* Task lists */
+.task-list-item { list-style: none; padding-left: 0; }
+.task-list-item-checkbox,
+.task-list-item input[type='checkbox'] {
+  margin-right: 0.5rem;
+  vertical-align: -0.1em;
+}
+
+/* --------------------------------------------------------------------------
+   Table
+   -------------------------------------------------------------------------- */
+
+table { border-collapse: collapse; }
+
+th, td {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #ccc;
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  background: #f0f0f0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+tbody tr:nth-child(even) td { background: #fafafa; }
+
+/* --------------------------------------------------------------------------
+   Horizontal rule
+   -------------------------------------------------------------------------- */
+
+hr {
+  height: 1px;
+  margin: 2rem 0;
+  border: 0;
+  background: #ddd;
+}
+
+/* --------------------------------------------------------------------------
+   Image
+   -------------------------------------------------------------------------- */
+
+img { margin: 0 auto; }
+
+/* --------------------------------------------------------------------------
+   Footnotes
+   -------------------------------------------------------------------------- */
+
+.footnote-ref { font-size: 0.85em; }
+.footnote-ref a, .footnote-backref { color: #0060cc; text-decoration: none; }
+.footnotes-sep { margin: 2rem 0 1rem; }
+.footnotes {
+  font-size: 0.875rem;
+  color: #555;
+  border-top: 1px solid #ddd;
+  padding-top: 1rem;
+}
+.footnotes ol { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   KaTeX math
+   -------------------------------------------------------------------------- */
+
+.katex { font-size: 1.06em; }
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 1rem;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+}
+
+.katex-error {
+  color: #c0392b;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+/* --------------------------------------------------------------------------
+   Semantic containers — success / info / warning / danger
+   -------------------------------------------------------------------------- */
+
+div.success, div.info, div.warning, div.danger {
+  margin-bottom: 1.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid;
+}
+
+div.success > *:last-child,
+div.info    > *:last-child,
+div.warning > *:last-child,
+div.danger  > *:last-child { margin-bottom: 0; }
+
+div.success { background: #efffed; border-color: #5ab85a; color: #1a5e2a; }
+div.info    { background: #e8f4fd; border-color: #5a9fd4; color: #1a4a70; }
+div.warning { background: #fff8e1; border-color: #e0a820; color: #7a5c00; }
+div.danger  { background: #fff0f0; border-color: #d45a5a; color: #7a1a1a; }
+
+/* First strong/bold in a callout adopts the callout's text color */
+div.success > p:first-child > strong:first-child { color: #1a5e2a; }
+div.info    > p:first-child > strong:first-child { color: #1a4a70; }
+div.warning > p:first-child > strong:first-child { color: #7a5c00; }
+div.danger  > p:first-child > strong:first-child { color: #7a1a1a; }
+
+/* --------------------------------------------------------------------------
+   Layout containers — left / right / center
+   -------------------------------------------------------------------------- */
+
+.left {
+  float: left;
+  max-width: min(44%, 22rem);
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  margin: 0 1.5rem 1rem 0;
+  background: #fafafa;
+}
+
+.right { text-align: right; margin-bottom: 1rem; }
+
+.center {
+  text-align: center;
+  margin: 0 auto 1.5rem;
+  max-width: min(100%, 42rem);
+}
+
+/* --------------------------------------------------------------------------
+   Spoiler (details/summary)
+   -------------------------------------------------------------------------- */
+
+details.spoil {
+  border: 1px solid #ccc;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+details.spoil > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-weight: 600;
+  background: #f5f5f5;
+}
+
+details.spoil > summary::-webkit-details-marker { display: none; }
+
+details.spoil > summary::before { content: '+'; font-weight: 700; }
+details.spoil[open] > summary::before { content: '–'; }
+details.spoil[open] > summary { border-bottom: 1px solid #ddd; }
+details.spoil > :not(summary) { padding: 0.75rem 1rem 1rem; }
+
+/* --------------------------------------------------------------------------
+   Tabs
+   -------------------------------------------------------------------------- */
+
+.tabs {
+  border: 1px solid #ccc;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.tabs-bar {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.35rem;
+  overflow-x: auto;
+  border-bottom: 1px solid #ccc;
+  background: #f5f5f5;
+  scrollbar-width: none;
+}
+
+.tabs-bar::-webkit-scrollbar { display: none; }
+
+.tabs-bar-btn {
+  border: 1px solid transparent;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.tabs-bar-btn:hover { background: #e5e5e5; }
+.tabs-bar-btn.active { background: #fff; border-color: #ccc; }
+
+/* Panel visibility — controlled by JS */
+.tab { display: none; padding: 1rem; }
+.tab.active { display: block; }
+
+/* Fallback when JS has not run: show all panels */
+.tabs:not([data-js]) .tab { display: block; }
+.tabs:not([data-js]) .tab + .tab { border-top: 1px solid #ddd; }
+
+/* --------------------------------------------------------------------------
+   Columns grid
+   -------------------------------------------------------------------------- */
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.col {
+  min-width: 0;
+  padding: 0.875rem 1rem;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.col > *:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   Table of contents
+   -------------------------------------------------------------------------- */
+
+.toc-wrapper { position: relative; }
+
+nav.toc,
+.toc-list {
+  padding: 0.875rem 1.1rem;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+nav.toc ul, .toc-list ul { margin: 0; padding-left: 1.1rem; }
+nav.toc li, .toc-list li { margin-bottom: 0.2rem; list-style: none; }
+nav.toc li::before, .toc-list li::before { display: none; }
+nav.toc a, .toc-list a { text-decoration: none; color: #0060cc; }
+nav.toc a:hover, .toc-list a:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------------------------
+   Span colour classes
+   -------------------------------------------------------------------------- */
+
+span.red    { color: #c0392b; }
+span.yellow { color: #9a7615; }
+span.green  { color: #218763; }
+span.blue   { color: #1d6db0; }
+
+/* Inline badge variants */
+span.success,
+span.info,
+span.warning,
+span.danger {
+  padding: 0.1em 0.5em;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+span.success { background: #efffed; color: #1a5e2a; border-color: #5ab85a; }
+span.info    { background: #e8f4fd; color: #1a4a70; border-color: #5a9fd4; }
+span.warning { background: #fff8e1; color: #7a5c00; border-color: #e0a820; }
+span.danger  { background: #fff0f0; color: #7a1a1a; border-color: #d45a5a; }
+
+/* --------------------------------------------------------------------------
+   YouTube embed — 16:9 responsive wrapper (structural, not decorative)
+   -------------------------------------------------------------------------- */
+
+div.youtube-embed {
+  position: relative;
+  overflow: hidden;
+  height: 0;
+  padding-bottom: 56.25%; /* 16:9 ratio */
+  background: #e8e8e8;
+}
+
+div.youtube-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Mermaid diagram container
+   -------------------------------------------------------------------------- */
+
+div.mermaid {
+  overflow-x: auto;
+  text-align: center;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+div.mermaid svg { max-width: 100%; height: auto; }
+
+/* --------------------------------------------------------------------------
+   Focus indicators
+   -------------------------------------------------------------------------- */
+
+a:focus-visible,
+.tabs-bar-btn:focus-visible,
+details.spoil > summary:focus-visible {
+  outline: 2px solid #0060cc;
+  outline-offset: 2px;
+}
+
+.task-list-item-checkbox:focus-visible,
+.task-list-item input[type='checkbox']:focus-visible {
+  outline: 2px solid #0060cc;
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .markdown-body { padding: 1rem; }
+  .left { float: none; max-width: 100%; margin: 0 0 1rem; }
+  .cols { grid-template-columns: 1fr; }
+}
+
+@media print {
+  body { padding: 0; background: #fff; }
+  .markdown-body { max-width: 100%; padding: 0; border: 0; }
+  a { color: #0b57d0; }
+  .header-anchor { display: none !important; }
+  div.youtube-embed { display: none !important; }
+}
+
+  </style>
+</head>
+<body>
+
+  <!-- All rendered HTML from md.render() goes inside this article element.
+       The .markdown-body class is required — all theme styles are scoped under it. -->
+  <article class="markdown-body">
+<h1 id="markdown-elements-reference" tabindex="-1">Markdown Elements Reference</h1>
+<ul class="toc-list">
+<li style="padding-left:0em"><a href="#markdown-elements-reference">Markdown Elements Reference</a></li>
+<li style="padding-left:1.25em"><a href="#1.-standard-markdown">1. Standard Markdown</a></li>
+<li style="padding-left:2.5em"><a href="#headings">Headings</a></li>
+<li style="padding-left:0em"><a href="#heading-1">Heading 1</a></li>
+<li style="padding-left:1.25em"><a href="#heading-2">Heading 2</a></li>
+<li style="padding-left:2.5em"><a href="#heading-3">Heading 3</a></li>
+<li style="padding-left:2.5em"><a href="#text-formatting">Text Formatting</a></li>
+<li style="padding-left:2.5em"><a href="#links-and-images">Links and Images</a></li>
+<li style="padding-left:2.5em"><a href="#blockquotes">Blockquotes</a></li>
+<li style="padding-left:2.5em"><a href="#lists">Lists</a></li>
+<li style="padding-left:2.5em"><a href="#code-blocks">Code Blocks</a></li>
+<li style="padding-left:2.5em"><a href="#tables">Tables</a></li>
+<li style="padding-left:2.5em"><a href="#horizontal-rule">Horizontal Rule</a></li>
+<li style="padding-left:2.5em"><a href="#footnotes">Footnotes</a></li>
+<li style="padding-left:1.25em"><a href="#2.-official-plugins">2. Official Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#mark-(highlighted)">Mark (highlighted)</a></li>
+<li style="padding-left:2.5em"><a href="#subscript-and-superscript">Subscript and Superscript</a></li>
+<li style="padding-left:2.5em"><a href="#inserted-text">Inserted Text</a></li>
+<li style="padding-left:2.5em"><a href="#task-lists">Task Lists</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-inline-math">KaTeX — Inline Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-display-math">KaTeX — Display Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-mhchem-chemistry">KaTeX — mhchem Chemistry</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-semantic">Containers — Semantic</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-layout">Containers — Layout</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-spoiler">Containers — Spoiler</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-columns">Containers — Columns</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-tabs">Containers — Tabs</a></li>
+<li style="padding-left:2.5em"><a href="#containers---arbitary-class-name">Containers - Arbitary class name</a></li>
+<li style="padding-left:1.25em"><a href="#3.-custom-plugins">3. Custom Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#test-block-%E2%9C%93">test-block ✓</a></li>
+<li style="padding-left:2.5em"><a href="#test-inline-%E2%9C%93">test-inline ✓</a></li>
+<li style="padding-left:2.5em"><a href="#span%5Bclass%5D-%E2%80%94-inline-coloured-%2F-styled-text">span[class] — Inline coloured / styled text</a></li>
+<li style="padding-left:2.5em"><a href="#emoji-%E2%80%94-unicode-emoji-from-name">emoji — Unicode emoji from name</a></li>
+<li style="padding-left:2.5em"><a href="#space-%E2%80%94-inline-horizontal-whitespace">space — Inline horizontal whitespace</a></li>
+<li style="padding-left:2.5em"><a href="#youtube-%E2%80%94-embedded-video">youtube — Embedded video</a></li>
+<li style="padding-left:2.5em"><a href="#qrcode-%E2%80%94-inline-qr-code">qrcode — Inline QR code</a></li>
+<li style="padding-left:2.5em"><a href="#mermaid-%E2%80%94-diagram-(rendered-client-side)">mermaid — Diagram (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#smiles-%E2%80%94-chemical-structure-(rendered-client-side)">smiles — Chemical structure (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#yaml-%E2%80%94-invisible-metadata-block">yaml — Invisible metadata block</a></li>
+<li style="padding-left:2.5em"><a href="#nyml-%E2%80%94-invisible-nyml-parsed-block">nyml — Invisible nyml parsed block</a></li>
+<li style="padding-left:2.5em"><a href="#toc-%E2%80%94-table-of-contents">toc — Table of contents</a></li>
+<li style="padding-left:2.5em"><a href="#attrs-%E2%80%94-attribute-injection">attrs — Attribute injection</a></li>
+<li style="padding-left:1.25em"><a href="#my-section">My Section </a></li>
+<li style="padding-left:2.5em"><a href="#markdown-include-%E2%80%94-embed-external-file">markdown-include — Embed external file</a></li>
+<li style="padding-left:1.25em"><a href="#4.-span-css-classes">4. Span CSS Classes</a></li>
+<li style="padding-left:2.5em"><a href="#colour-classes">Colour classes</a></li>
+<li style="padding-left:2.5em"><a href="#badge-classes">Badge classes</a></li>
+<li style="padding-left:1.25em"><a href="#5.-mixed-%2F-nesting-tests">5. Mixed / Nesting Tests</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-blockquote">Inline in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-blockquote">Block in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-list">Block in list</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-container">Block in container</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-table">Inline in table</a></li>
+<li style="padding-left:2.5em"><a href="#nested-containers">Nested containers</a></li>
+<li style="padding-left:2.5em"><a href="#math-in-container">Math in container</a></li>
+<li style="padding-left:0em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95">中文測試 中文测试</a></li>
+<li style="padding-left:1.25em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-1">中文測試 中文测试</a></li>
+<li style="padding-left:2.5em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-2">中文測試 中文测试</a></li>
+<li style="padding-left:1.25em"><a href="#html-elements">HTML elements</a></li>
+</ul>
+<hr>
+<h2 id="1.-standard-markdown" tabindex="-1">1. Standard Markdown</h2>
+<h3 id="headings" tabindex="-1">Headings</h3>
+<h1 id="heading-1" tabindex="-1">Heading 1</h1>
+<h2 id="heading-2" tabindex="-1">Heading 2</h2>
+<h3 id="heading-3" tabindex="-1">Heading 3</h3>
+<h4 id="heading-4" tabindex="-1">Heading 4</h4>
+<h5 id="heading-5" tabindex="-1">Heading 5</h5>
+<h6 id="heading-6" tabindex="-1">Heading 6</h6>
+<h3 id="text-formatting" tabindex="-1">Text Formatting</h3>
+<p>Regular paragraph text. Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<p><strong>Bold text</strong>, <em>italic text</em>, <em><strong>bold and italic</strong></em>, <s>strikethrough</s>.</p>
+<p><code>Inline code</code> within a sentence.</p>
+<p>A line with a hard break
+(two trailing spaces before the line break).</p>
+<h3 id="links-and-images" tabindex="-1">Links and Images</h3>
+<p><a href="https://example.com">External link</a> — <a href="https://example.com" title="Example title">Link with title</a></p>
+<p>Auto-detected URL: <a href="https://example.com">https://example.com</a></p>
+<p><img src="https://cdn.britannica.com/34/240534-050-B8C4B11E/Porcupine-fish-Diodon-hystox.jpg" alt="Image with size" width="200" height="100"></p>
+<h3 id="blockquotes" tabindex="-1">Blockquotes</h3>
+<blockquote>
+<p>Single-level blockquote.</p>
+</blockquote>
+<blockquote>
+<p>Nested blockquote:</p>
+<blockquote>
+<p>Inner level one.</p>
+<blockquote>
+<p>Inner level two.</p>
+</blockquote>
+</blockquote>
+</blockquote>
+<h3 id="lists" tabindex="-1">Lists</h3>
+<p>Unordered:</p>
+<ul>
+<li>Item one</li>
+<li>Item two
+<ul>
+<li>Nested A</li>
+<li>Nested B
+<ul>
+<li>Deeper</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Item three</li>
+</ul>
+<p>Ordered:</p>
+<ol>
+<li>First</li>
+<li>Second
+<ol>
+<li>Nested ordered</li>
+<li>Another nested</li>
+</ol>
+</li>
+<li>Third</li>
+</ol>
+<h3 id="code-blocks" tabindex="-1">Code Blocks</h3>
+<p>Inline: <code>const x = 42;</code></p>
+<p>Fenced (JavaScript):</p>
+<pre><code class="language-javascript">function greet(name) {
+  return `Hello, ${name}!`;
+}
+console.log(greet(&quot;world&quot;));
+</code></pre>
+<p>Fenced (Python):</p>
+<pre><code class="language-python">def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+</code></pre>
+<p>Indented code block (4 spaces):</p>
+<pre><code>SELECT *
+FROM users
+WHERE active = 1;
+</code></pre>
+<h3 id="tables" tabindex="-1">Tables</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Left aligned</th>
+<th style="text-align:center">Centered</th>
+<th style="text-align:right">Right aligned</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Cell A1</td>
+<td style="text-align:center">Cell B1</td>
+<td style="text-align:right">Cell C1</td>
+</tr>
+<tr>
+<td style="text-align:left">Cell A2</td>
+<td style="text-align:center">Cell B2</td>
+<td style="text-align:right">Cell C2</td>
+</tr>
+<tr>
+<td style="text-align:left">Cell A3</td>
+<td style="text-align:center">Cell B3</td>
+<td style="text-align:right">Cell C3</td>
+</tr>
+</tbody>
+</table>
+<h3 id="horizontal-rule" tabindex="-1">Horizontal Rule</h3>
+<hr>
+<h3 id="footnotes" tabindex="-1">Footnotes</h3>
+<p>This sentence has a footnote.<sup class="footnote-ref"><a href="#fn1" id="fnref1">[1]</a></sup> And another one.<sup class="footnote-ref"><a href="#fn2" id="fnref2">[2]</a></sup></p>
+<hr>
+<h2 id="2.-official-plugins" tabindex="-1">2. Official Plugins</h2>
+<h3 id="mark-(highlighted)" tabindex="-1">Mark (<mark>highlighted</mark>)</h3>
+<p>Here is some <mark>highlighted text</mark> using the mark plugin.</p>
+<h3 id="subscript-and-superscript" tabindex="-1">Subscript and Superscript</h3>
+<p>Chemical formula: H<sub>2</sub>O. Superscript: x<sup>2</sup> + y<sup>2</sup> = r<sup>2</sup>.</p>
+<h3 id="inserted-text" tabindex="-1">Inserted Text</h3>
+<p><ins>Inserted text</ins> is underlined.</p>
+<h3 id="task-lists" tabindex="-1">Task Lists</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> Completed task</li>
+<li class="task-list-item"><input class="task-list-item-checkbox" disabled="" type="checkbox"> Pending task</li>
+<li class="task-list-item"><input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> Another done item</li>
+<li class="task-list-item"><input class="task-list-item-checkbox" disabled="" type="checkbox"> One more to do</li>
+</ul>
+<h3 id="katex-%E2%80%94-inline-math" tabindex="-1">KaTeX — Inline Math</h3>
+<p>Einstein’s equation: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">E</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord mathnormal">m</span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span>.</p>
+<p>Maxwell’s equations: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">∇</mi><mo>×</mo><mi mathvariant="bold">B</mi><mo>=</mo><msub><mi>μ</mi><mn>0</mn></msub><mi mathvariant="bold">J</mi><mo>+</mo><msub><mi>μ</mi><mn>0</mn></msub><msub><mi>ε</mi><mn>0</mn></msub><mfrac><mrow><mi mathvariant="normal">∂</mi><mi mathvariant="bold">E</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>t</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\nabla \times \mathbf{B} = \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord">∇</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6861em;"></span><span class="mord mathbf">B</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8805em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathbf">J</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.2251em;vertical-align:-0.345em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">ε</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8801em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal mtight">t</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight" style="margin-right:0.05556em;">∂</span><span class="mord mathbf mtight">E</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></p>
+<h3 id="katex-%E2%80%94-display-math" tabindex="-1">KaTeX — Display Math</h3>
+<p class="katex-block "><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msubsup><mo>∫</mo><mrow><mo>−</mo><mi mathvariant="normal">∞</mi></mrow><mi mathvariant="normal">∞</mi></msubsup><msup><mi>e</mi><mrow><mo>−</mo><msup><mi>x</mi><mn>2</mn></msup></mrow></msup><mi>d</mi><mi>x</mi><mo>=</mo><msqrt><mi>π</mi></msqrt></mrow><annotation encoding="application/x-tex">\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.3846em;vertical-align:-0.9703em;"></span><span class="mop"><span class="mop op-symbol large-op" style="margin-right:0.44445em;position:relative;top:-0.0011em;">∫</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4143em;"><span style="top:-1.7881em;margin-left:-0.4445em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">∞</span></span></span></span><span style="top:-3.8129em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∞</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9703em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:1.0369em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-2.931em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mord mathnormal">d</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.04em;vertical-align:-0.1908em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8492em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-2.8092em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1908em;"><span></span></span></span></span></span></span></span></span></span></p>
+<p class="katex-block "><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><msup><mi mathvariant="normal">∂</mi><mn>2</mn></msup><mi>u</mi></mrow><mrow><mi mathvariant="normal">∂</mi><msup><mi>t</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><msup><mi>c</mi><mn>2</mn></msup><msup><mi mathvariant="normal">∇</mi><mn>2</mn></msup><mi>u</mi></mrow><annotation encoding="application/x-tex">\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.1771em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4911em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord mathnormal">u</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord"><span class="mord">∇</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord mathnormal">u</span></span></span></span></span></p>
+<h3 id="katex-%E2%80%94-mhchem-chemistry" tabindex="-1">KaTeX — mhchem Chemistry</h3>
+<p>Chemical reaction: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mtext> </mtext><mi mathvariant="normal">H</mi><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mrow></mrow><mo>+</mo><mrow></mrow><mi mathvariant="normal">O</mi><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mover><mo stretchy="true" minsize="3.0em">→</mo><mpadded width="+0.6em" lspace="0.3em"><mrow></mrow></mpadded></mover><mn>2</mn><mtext> </mtext><mi mathvariant="normal">H</mi><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mi mathvariant="normal">O</mi></mrow><annotation encoding="application/x-tex">\ce{2H2 + O2 -&gt; 2H2O}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathrm">H</span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"></span><span class="mord mathrm">O</span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel x-arrow"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.622em;"><span style="top:-3.144em;"><span class="pstrut" style="height:2.522em;"></span><span class="sizing reset-size6 size3 mtight x-arrow-pad"><span class="mord mtight"></span></span></span><span class="svg-align" style="top:-2.511em;"><span class="pstrut" style="height:2.522em;"></span><span class="hide-tail" style="height:0.522em;min-width:1.469em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.522em" viewBox="0 0 400000 522" preserveAspectRatio="xMaxYMin slice"><path d="M0 241v40h399891c-47.3 35.3-84 78-110 128
+-16.7 32-27.7 63.7-33 95 0 1.3-.2 2.7-.5 4-.3 1.3-.5 2.3-.5 3 0 7.3 6.7 11 20
+ 11 8 0 13.2-.8 15.5-2.5 2.3-1.7 4.2-5.5 5.5-11.5 2-13.3 5.7-27 11-41 14.7-44.7
+ 39-84.5 73-119.5s73.7-60.2 119-75.5c6-2 9-5.7 9-11s-3-9-9-11c-45.3-15.3-85
+-40.5-119-75.5s-58.3-74.8-73-119.5c-4.7-14-8.3-27.3-11-40-1.3-6.7-3.2-10.8-5.5
+-12.5-2.3-1.7-7.5-2.5-15.5-2.5-14 0-21 3.7-21 11 0 2 2 10.3 6 25 20.7 83.3 67
+ 151.7 139 205zm0 0v40h399900v-40z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.011em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathrm">H</span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathrm">O</span></span></span></span></span></p>
+<p>Equilibrium: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">O</mi></mrow><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mrow></mrow><mo>+</mo><mrow></mrow><mi mathvariant="normal">H</mi><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mi mathvariant="normal">O</mi><mover><mo stretchy="true" minsize="3.0em">⇌</mo><mpadded width="+0.6em" lspace="0.3em"><mrow></mrow></mpadded></mover><mi mathvariant="normal">H</mi><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>2</mn></mpadded></msub><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">O</mi></mrow><msub><mpadded width="0px"><mphantom><mi>X</mi></mphantom></mpadded><mpadded height="0px"><mn>3</mn></mpadded></msub></mrow><annotation encoding="application/x-tex">\ce{CO2 + H2O &lt;=&gt; H2CO3}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.869em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord"><span class="mord mathrm">CO</span></span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"></span><span class="mord mathrm">H</span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathrm">O</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel x-arrow"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.719em;"><span style="top:-3.435em;"><span class="pstrut" style="height:2.716em;"></span><span class="sizing reset-size6 size3 mtight x-arrow-pad"><span class="mord mtight"></span></span></span><span class="svg-align" style="top:-2.608em;"><span class="pstrut" style="height:2.716em;"></span><span class="stretchy" style="height:0.716em;min-width:1.75em;"><span class="halfarrow-left" style="height:0.716em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.716em" viewBox="0 0 400000 716" preserveAspectRatio="xMinYMin slice"><path d="M7 435c-4 4-6.3 8.7-7 14 0 5.3.7 9 2 11s5.3 5.3 12
+ 10c90.7 54 156 130 196 228 3.3 10.7 6.3 16.3 9 17 2 .7 5 1 9 1h5c10.7 0 16.7
+-2 18-6 2-2.7 1-9.7-3-21-32-87.3-82.7-157.7-152-211l-3-3h399907v-40H7zm93 0
+v40h399900v-40zM0 241v40h399900v-40zm0 0v40h399900v-40z"/></svg></span><span class="halfarrow-right" style="height:0.716em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.716em" viewBox="0 0 400000 716" preserveAspectRatio="xMaxYMin slice"><path d="M0 241v40h399993c4.7-4.7 7-9.3 7-14 0-9.3-3.7-15.3-11
+-18-92.7-56.7-159-133.7-199-231-3.3-9.3-6-14.7-8-16-2-1.3-7-2-15-2-10.7 0-16.7
+ 2-18 6-2 2.7-1 9.7 3 21 15.3 42 36.7 81.8 64 119.5 27.3 37.7 58 69.2 92 94.5z
+m0 0v40h399900v-40z m100 194v40h399900v-40zm0 0v40h399900v-40z"/></svg></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.108em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord mathrm">H</span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathrm">CO</span></span><span class="mord"><span class="mord"><span class="mord rlap"><span class="inner"><span class="mord" style="color:transparent;"><span class="mord mathnormal" style="margin-right:0.07847em;color:transparent;">X</span></span></span><span class="fix"></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:-0.15em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0em;"><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mord mtight"><span class="mord mtight">3</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></p>
+<h3 id="containers-%E2%80%94-semantic" tabindex="-1">Containers — Semantic</h3>
+<div class="success">
+<p><strong>Success!</strong> Operation completed without errors.</p>
+</div>
+<div class="info">
+<p><strong>Note:</strong> This is an informational message providing context.</p>
+</div>
+<div class="warning">
+<p><strong>Warning:</strong> Please review before proceeding with this action.</p>
+</div>
+<div class="danger">
+<p><strong>Danger!</strong> This action is irreversible and may cause data loss.</p>
+</div>
+<h3 id="containers-%E2%80%94-layout" tabindex="-1">Containers — Layout</h3>
+<div class="left" style="max-width: 30%; width: 30%">
+<p>This block floats to the <strong>left</strong>. Useful for figure captions or side notes. Allow to set relative width, such as <code>::: left 30%</code>.</p>
+</div>
+<p>The paragraph which is below the <strong>left</strong> container in the source will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>. The paragraph will shown on the right side of the container <strong>left</strong>.</p>
+<p>The sentence below should align to the right.</p>
+<div class="right">
+<p>This block floats to the <strong>right</strong>.</p>
+</div>
+<p>The sentence below should align center.</p>
+<div class="center">
+<p>This block is <strong>centred</strong> horizontally.</p>
+</div>
+<h3 id="containers-%E2%80%94-spoiler" tabindex="-1">Containers — Spoiler</h3>
+<details class="spoil"><summary>Click to reveal</summary>
+<p>This content is hidden until the reader chooses to see it.
+It can contain any markdown: <strong>bold</strong>, <em>italic</em>, <code>code</code>.</p>
+</details>
+<h3 id="containers-%E2%80%94-columns" tabindex="-1">Containers — Columns</h3>
+<p>Naming convention: use <code>cols</code> as wrapper; each <code>col</code> is one column.
+Two <code>col</code> blocks → two equal columns; three → thirds; etc. Allow to set relative width, such as <code>:::: cols 1 2 1</code> results in three cols with width ratio 1:2:1. Without specifying the ratio, it will be even width.</p>
+<div class="cols" style="grid-template-columns: 1fr 2fr 1fr">
+<div class="col">
+<p><strong>Column One</strong></p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+</div>
+<div class="col">
+<p><strong>Column Two</strong></p>
+<p>Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</div>
+<div class="col">
+<p><strong>Column Three</strong></p>
+<p>Ut enim ad minim veniam, quis nostrud exercitation ullamco.</p>
+</div>
+</div>
+<h3 id="containers-%E2%80%94-tabs" tabindex="-1">Containers — Tabs</h3>
+<p>Naming convention: use <code>tabs</code> as wrapper; each <code>tab</code> carries its label in
+the info string (e.g. <code>::: tab Python</code>).</p>
+<div class="tabs">
+<div class="tab" data-label="Python">
+<pre><code class="language-python">print(&quot;Hello from Python&quot;)
+</code></pre>
+</div>
+<div class="tab" data-label="JavaScript">
+<pre><code class="language-javascript">console.log(&quot;Hello from JavaScript&quot;);
+</code></pre>
+</div>
+<div class="tab" data-label="Rust">
+<pre><code class="language-rust">println!(&quot;Hello from Rust!&quot;);
+</code></pre>
+</div>
+</div>
+<h3 id="containers---arbitary-class-name" tabindex="-1">Containers - Arbitary class name</h3>
+<div class="className">
+<p>This should result in a <code>&lt;div&gt;</code> container with class name ‘className’.</p>
+</div>
+<hr>
+<h2 id="3.-custom-plugins" tabindex="-1">3. Custom Plugins</h2>
+<p><em>Plugins not yet implemented render as literal text — they will become live as each phase is completed.</em></p>
+<h3 id="test-block-%E2%9C%93" tabindex="-1">test-block ✓</h3>
+<div class="test-block">TestPluginBlock</div>
+<h3 id="test-inline-%E2%9C%93" tabindex="-1">test-inline ✓</h3>
+<p>A paragraph with a <span class="test-inline">TestPluginInline</span> embedded inline.</p>
+<h3 id="span%5Bclass%5D-%E2%80%94-inline-coloured-%2F-styled-text" tabindex="-1">span[class] — Inline coloured / styled text</h3>
+<p>This sentence contains <span class="red">red text</span>, <span class="blue">blue text</span>,
+<span class="green">green text</span>, and <span class="yellow">yellow text</span>.</p>
+<p>A span with <strong>bold inside</strong>: <span class="info"><strong>important note</strong></span>.</p>
+<p>Alias <code>sp</code>: <span class="warning">watch out</span>.</p>
+<h3 id="emoji-%E2%80%94-unicode-emoji-from-name" tabindex="-1">emoji — Unicode emoji from name</h3>
+<p>A smile: 😄 and a rocket: 🚀.</p>
+<p>Party time: 🎉 (alias <code>em</code>).</p>
+<p>If the name doesn’t exist: {{emoji nonexistent_xyz}} (stays literal).</p>
+<h3 id="space-%E2%80%94-inline-horizontal-whitespace" tabindex="-1">space — Inline horizontal whitespace</h3>
+<p>Column A:<span style="display:inline-block;width:2rem"></span>Column B:<span style="display:inline-block;width:4rem"></span>Column C.</p>
+<h3 id="youtube-%E2%80%94-embedded-video" tabindex="-1">youtube — Embedded video</h3>
+<div class="youtube-embed">
+  <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen></iframe>
+</div>
+<p>Alias <code>yt</code>:</p>
+<div class="youtube-embed">
+  <iframe src="https://www.youtube.com/embed/9bZkp7q19f0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen></iframe>
+</div>
+<h3 id="qrcode-%E2%80%94-inline-qr-code" tabindex="-1">qrcode — Inline QR code</h3>
+<p>Scan this QR: <span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span><?xml version="1.0" standalone="yes"?>
+<svg viewBox="0 0 96 96" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
+  <rect x="0" y="0" width="96" height="96" style="fill:#ffffff;shape-rendering:crispEdges;"/>
+  <rect x="0" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="0" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="3.84" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="7.68" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="11.52" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="15.36" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="19.2" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="23.04" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="26.88" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="26.88" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="26.88" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="26.88" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="30.72" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="26.88" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="34.56" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="38.4" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="42.239999999999995" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="46.08" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="49.92" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="26.88" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="53.76" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="26.88" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="57.599999999999994" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="26.88" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="61.44" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="65.28" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="69.12" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="72.96" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="65.28" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="76.8" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="80.64" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="61.44" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="84.47999999999999" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="30.72" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="34.56" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="49.92" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="72.96" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="88.32" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="3.84" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="7.68" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="11.52" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="15.36" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="19.2" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="23.04" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="38.4" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="42.239999999999995" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="46.08" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="53.76" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="57.599999999999994" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="69.12" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="76.8" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="80.64" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="84.47999999999999" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="88.32" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="92.16" y="92.16" width="3.84" height="3.84" style="fill:#000000;shape-rendering:crispEdges;"/>
+</svg></span>.</p>
+<p>Full name alias: <span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span><?xml version="1.0" standalone="yes"?>
+<svg viewBox="0 0 96 96" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" version="1.1" width="96" height="96">
+  <rect x="0" y="0" width="96" height="96" style="fill:#ffffff;shape-rendering:crispEdges;"/>
+  <rect x="0" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="4.571428571428571" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="86.85714285714285" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="0" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="13.714285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="18.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="22.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="22.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="22.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="22.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="22.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="4.571428571428571" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="86.85714285714285" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="27.428571428571427" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="32" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="32" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="59.42857142857142" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="36.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="32" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="41.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="32" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="45.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="4.571428571428571" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="32" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="59.42857142857142" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="86.85714285714285" y="50.285714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="32" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="54.857142857142854" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="59.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="59.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="59.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="86.85714285714285" y="59.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="4.571428571428571" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="64" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="36.57142857142857" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="68.57142857142857" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="54.857142857142854" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="59.42857142857142" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="73.14285714285714" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="77.71428571428571" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="59.42857142857142" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="82.28571428571428" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="64" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="73.14285714285714" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="91.42857142857142" y="86.85714285714285" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="0" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="4.571428571428571" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="9.142857142857142" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="13.714285714285714" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="18.285714285714285" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="22.857142857142854" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="27.428571428571427" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="41.14285714285714" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="45.71428571428571" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="50.285714285714285" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="68.57142857142857" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="77.71428571428571" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+  <rect x="82.28571428571428" y="91.42857142857142" width="4.571428571428571" height="4.571428571428571" style="fill:#000000;shape-rendering:crispEdges;"/>
+</svg></span>.</p>
+<h3 id="mermaid-%E2%80%94-diagram-(rendered-client-side)" tabindex="-1">mermaid — Diagram (rendered client-side)</h3>
+<div class="mermaid">graph LR
+    A[Start] --&gt; B{Decision}
+    B -- Yes --&gt; C[Action]
+    B -- No --&gt; D[Skip]
+    C --&gt; E[End]
+    D --&gt; E</div>
+<p>Sequence diagram:</p>
+<div class="mermaid">sequenceDiagram
+    Alice-&gt;&gt;Bob: Hello Bob!
+    Bob--&gt;&gt;Alice: Hi Alice!</div>
+<h3 id="smiles-%E2%80%94-chemical-structure-(rendered-client-side)" tabindex="-1">smiles — Chemical structure (rendered client-side)</h3>
+<p>Benzene:</p>
+<div class="smiles-render">
+  <canvas data-smiles="C1=CC=CC=C1" width="250" height="180"></canvas>
+</div>
+<p>Aspirin (acetylsalicylic acid):</p>
+<div class="smiles-render">
+  <canvas data-smiles="CC(=O)OC1=CC=CC=C1C(=O)O" width="250" height="180"></canvas>
+</div>
+<h3 id="yaml-%E2%80%94-invisible-metadata-block" tabindex="-1">yaml — Invisible metadata block</h3>
+<script type="application/yaml">
+title: My Document
+author: Jane Doe
+date: 2024-01-15
+tags:
+  - markdown
+  - demo
+</script>
+<h3 id="nyml-%E2%80%94-invisible-nyml-parsed-block" tabindex="-1">nyml — Invisible nyml parsed block</h3>
+<script type="application/json" id="nyml-data">
+[
+  {
+    "title": "My NYML Document"
+  },
+  {
+    "author": "Jane Doe"
+  },
+  {
+    "comments": "This is a multiline\ncomment in NYML.\n"
+  }
+]
+</script>
+<h3 id="toc-%E2%80%94-table-of-contents" tabindex="-1">toc — Table of contents</h3>
+<ul class="toc-list">
+<li style="padding-left:0em"><a href="#markdown-elements-reference">Markdown Elements Reference</a></li>
+<li style="padding-left:1.25em"><a href="#1.-standard-markdown">1. Standard Markdown</a></li>
+<li style="padding-left:2.5em"><a href="#headings">Headings</a></li>
+<li style="padding-left:0em"><a href="#heading-1">Heading 1</a></li>
+<li style="padding-left:1.25em"><a href="#heading-2">Heading 2</a></li>
+<li style="padding-left:2.5em"><a href="#heading-3">Heading 3</a></li>
+<li style="padding-left:2.5em"><a href="#text-formatting">Text Formatting</a></li>
+<li style="padding-left:2.5em"><a href="#links-and-images">Links and Images</a></li>
+<li style="padding-left:2.5em"><a href="#blockquotes">Blockquotes</a></li>
+<li style="padding-left:2.5em"><a href="#lists">Lists</a></li>
+<li style="padding-left:2.5em"><a href="#code-blocks">Code Blocks</a></li>
+<li style="padding-left:2.5em"><a href="#tables">Tables</a></li>
+<li style="padding-left:2.5em"><a href="#horizontal-rule">Horizontal Rule</a></li>
+<li style="padding-left:2.5em"><a href="#footnotes">Footnotes</a></li>
+<li style="padding-left:1.25em"><a href="#2.-official-plugins">2. Official Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#mark-(highlighted)">Mark (highlighted)</a></li>
+<li style="padding-left:2.5em"><a href="#subscript-and-superscript">Subscript and Superscript</a></li>
+<li style="padding-left:2.5em"><a href="#inserted-text">Inserted Text</a></li>
+<li style="padding-left:2.5em"><a href="#task-lists">Task Lists</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-inline-math">KaTeX — Inline Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-display-math">KaTeX — Display Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-mhchem-chemistry">KaTeX — mhchem Chemistry</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-semantic">Containers — Semantic</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-layout">Containers — Layout</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-spoiler">Containers — Spoiler</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-columns">Containers — Columns</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-tabs">Containers — Tabs</a></li>
+<li style="padding-left:2.5em"><a href="#containers---arbitary-class-name">Containers - Arbitary class name</a></li>
+<li style="padding-left:1.25em"><a href="#3.-custom-plugins">3. Custom Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#test-block-%E2%9C%93">test-block ✓</a></li>
+<li style="padding-left:2.5em"><a href="#test-inline-%E2%9C%93">test-inline ✓</a></li>
+<li style="padding-left:2.5em"><a href="#span%5Bclass%5D-%E2%80%94-inline-coloured-%2F-styled-text">span[class] — Inline coloured / styled text</a></li>
+<li style="padding-left:2.5em"><a href="#emoji-%E2%80%94-unicode-emoji-from-name">emoji — Unicode emoji from name</a></li>
+<li style="padding-left:2.5em"><a href="#space-%E2%80%94-inline-horizontal-whitespace">space — Inline horizontal whitespace</a></li>
+<li style="padding-left:2.5em"><a href="#youtube-%E2%80%94-embedded-video">youtube — Embedded video</a></li>
+<li style="padding-left:2.5em"><a href="#qrcode-%E2%80%94-inline-qr-code">qrcode — Inline QR code</a></li>
+<li style="padding-left:2.5em"><a href="#mermaid-%E2%80%94-diagram-(rendered-client-side)">mermaid — Diagram (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#smiles-%E2%80%94-chemical-structure-(rendered-client-side)">smiles — Chemical structure (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#yaml-%E2%80%94-invisible-metadata-block">yaml — Invisible metadata block</a></li>
+<li style="padding-left:2.5em"><a href="#nyml-%E2%80%94-invisible-nyml-parsed-block">nyml — Invisible nyml parsed block</a></li>
+<li style="padding-left:2.5em"><a href="#toc-%E2%80%94-table-of-contents">toc — Table of contents</a></li>
+<li style="padding-left:2.5em"><a href="#attrs-%E2%80%94-attribute-injection">attrs — Attribute injection</a></li>
+<li style="padding-left:1.25em"><a href="#my-section">My Section </a></li>
+<li style="padding-left:2.5em"><a href="#markdown-include-%E2%80%94-embed-external-file">markdown-include — Embed external file</a></li>
+<li style="padding-left:1.25em"><a href="#4.-span-css-classes">4. Span CSS Classes</a></li>
+<li style="padding-left:2.5em"><a href="#colour-classes">Colour classes</a></li>
+<li style="padding-left:2.5em"><a href="#badge-classes">Badge classes</a></li>
+<li style="padding-left:1.25em"><a href="#5.-mixed-%2F-nesting-tests">5. Mixed / Nesting Tests</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-blockquote">Inline in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-blockquote">Block in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-list">Block in list</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-container">Block in container</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-table">Inline in table</a></li>
+<li style="padding-left:2.5em"><a href="#nested-containers">Nested containers</a></li>
+<li style="padding-left:2.5em"><a href="#math-in-container">Math in container</a></li>
+<li style="padding-left:0em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95">中文測試 中文测试</a></li>
+<li style="padding-left:1.25em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-1">中文測試 中文测试</a></li>
+<li style="padding-left:2.5em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-2">中文測試 中文测试</a></li>
+<li style="padding-left:1.25em"><a href="#html-elements">HTML elements</a></li>
+</ul>
+<p>With range (headings 2–3 only):</p>
+<ul class="toc-list">
+<li style="padding-left:1.25em"><a href="#1.-standard-markdown">1. Standard Markdown</a></li>
+<li style="padding-left:2.5em"><a href="#headings">Headings</a></li>
+<li style="padding-left:1.25em"><a href="#heading-2">Heading 2</a></li>
+<li style="padding-left:2.5em"><a href="#heading-3">Heading 3</a></li>
+<li style="padding-left:2.5em"><a href="#text-formatting">Text Formatting</a></li>
+<li style="padding-left:2.5em"><a href="#links-and-images">Links and Images</a></li>
+<li style="padding-left:2.5em"><a href="#blockquotes">Blockquotes</a></li>
+<li style="padding-left:2.5em"><a href="#lists">Lists</a></li>
+<li style="padding-left:2.5em"><a href="#code-blocks">Code Blocks</a></li>
+<li style="padding-left:2.5em"><a href="#tables">Tables</a></li>
+<li style="padding-left:2.5em"><a href="#horizontal-rule">Horizontal Rule</a></li>
+<li style="padding-left:2.5em"><a href="#footnotes">Footnotes</a></li>
+<li style="padding-left:1.25em"><a href="#2.-official-plugins">2. Official Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#mark-(highlighted)">Mark (highlighted)</a></li>
+<li style="padding-left:2.5em"><a href="#subscript-and-superscript">Subscript and Superscript</a></li>
+<li style="padding-left:2.5em"><a href="#inserted-text">Inserted Text</a></li>
+<li style="padding-left:2.5em"><a href="#task-lists">Task Lists</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-inline-math">KaTeX — Inline Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-display-math">KaTeX — Display Math</a></li>
+<li style="padding-left:2.5em"><a href="#katex-%E2%80%94-mhchem-chemistry">KaTeX — mhchem Chemistry</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-semantic">Containers — Semantic</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-layout">Containers — Layout</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-spoiler">Containers — Spoiler</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-columns">Containers — Columns</a></li>
+<li style="padding-left:2.5em"><a href="#containers-%E2%80%94-tabs">Containers — Tabs</a></li>
+<li style="padding-left:2.5em"><a href="#containers---arbitary-class-name">Containers - Arbitary class name</a></li>
+<li style="padding-left:1.25em"><a href="#3.-custom-plugins">3. Custom Plugins</a></li>
+<li style="padding-left:2.5em"><a href="#test-block-%E2%9C%93">test-block ✓</a></li>
+<li style="padding-left:2.5em"><a href="#test-inline-%E2%9C%93">test-inline ✓</a></li>
+<li style="padding-left:2.5em"><a href="#span%5Bclass%5D-%E2%80%94-inline-coloured-%2F-styled-text">span[class] — Inline coloured / styled text</a></li>
+<li style="padding-left:2.5em"><a href="#emoji-%E2%80%94-unicode-emoji-from-name">emoji — Unicode emoji from name</a></li>
+<li style="padding-left:2.5em"><a href="#space-%E2%80%94-inline-horizontal-whitespace">space — Inline horizontal whitespace</a></li>
+<li style="padding-left:2.5em"><a href="#youtube-%E2%80%94-embedded-video">youtube — Embedded video</a></li>
+<li style="padding-left:2.5em"><a href="#qrcode-%E2%80%94-inline-qr-code">qrcode — Inline QR code</a></li>
+<li style="padding-left:2.5em"><a href="#mermaid-%E2%80%94-diagram-(rendered-client-side)">mermaid — Diagram (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#smiles-%E2%80%94-chemical-structure-(rendered-client-side)">smiles — Chemical structure (rendered client-side)</a></li>
+<li style="padding-left:2.5em"><a href="#yaml-%E2%80%94-invisible-metadata-block">yaml — Invisible metadata block</a></li>
+<li style="padding-left:2.5em"><a href="#nyml-%E2%80%94-invisible-nyml-parsed-block">nyml — Invisible nyml parsed block</a></li>
+<li style="padding-left:2.5em"><a href="#toc-%E2%80%94-table-of-contents">toc — Table of contents</a></li>
+<li style="padding-left:2.5em"><a href="#attrs-%E2%80%94-attribute-injection">attrs — Attribute injection</a></li>
+<li style="padding-left:1.25em"><a href="#my-section">My Section </a></li>
+<li style="padding-left:2.5em"><a href="#markdown-include-%E2%80%94-embed-external-file">markdown-include — Embed external file</a></li>
+<li style="padding-left:1.25em"><a href="#4.-span-css-classes">4. Span CSS Classes</a></li>
+<li style="padding-left:2.5em"><a href="#colour-classes">Colour classes</a></li>
+<li style="padding-left:2.5em"><a href="#badge-classes">Badge classes</a></li>
+<li style="padding-left:1.25em"><a href="#5.-mixed-%2F-nesting-tests">5. Mixed / Nesting Tests</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-blockquote">Inline in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-blockquote">Block in blockquote</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-list">Block in list</a></li>
+<li style="padding-left:2.5em"><a href="#block-in-container">Block in container</a></li>
+<li style="padding-left:2.5em"><a href="#inline-in-table">Inline in table</a></li>
+<li style="padding-left:2.5em"><a href="#nested-containers">Nested containers</a></li>
+<li style="padding-left:2.5em"><a href="#math-in-container">Math in container</a></li>
+<li style="padding-left:1.25em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-1">中文測試 中文测试</a></li>
+<li style="padding-left:2.5em"><a href="#%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-2">中文測試 中文测试</a></li>
+<li style="padding-left:1.25em"><a href="#html-elements">HTML elements</a></li>
+</ul>
+<h3 id="attrs-%E2%80%94-attribute-injection" tabindex="-1">attrs — Attribute injection</h3>
+<p>Inject a class onto the preceding element:</p>
+<p class="highlight">A paragraph with injected class. </p>
+<p>A heading with a custom id:</p>
+<h2 id="custom-id" tabindex="-1">My Section </h2>
+<h3 id="markdown-include-%E2%80%94-embed-external-file" tabindex="-1">markdown-include — Embed external file</h3>
+<h1 id="math-included" tabindex="-1">Math Included</h1>
+<p>Euler’s identity: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mi>i</mi><mi>π</mi></mrow></msup><mo>+</mo><mn>1</mn><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">e^{i\pi} + 1 = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.908em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">iπ</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></p>
+<hr class="footnotes-sep">
+<section class="footnotes">
+<ol class="footnotes-list">
+<li id="fn1" class="footnote-item"> <a href="#fnref1" class="footnote-backref">↩︎</a></li>
+<li id="fn2" class="footnote-item"> <a href="#fnref2" class="footnote-backref">↩︎</a></li>
+</ol>
+</section>
+<hr>
+<h2 id="4.-span-css-classes" tabindex="-1">4. Span CSS Classes</h2>
+<h3 id="colour-classes" tabindex="-1">Colour classes</h3>
+<p><span class="red">red</span>, <span class="yellow">yellow</span>, <span class="green">green</span>, <span class="blue">blue</span>.</p>
+<h3 id="badge-classes" tabindex="-1">Badge classes</h3>
+<p><span class="success">success</span>, <span class="info">info</span>, <span class="warning">warning</span>, <span class="danger">danger</span>.</p>
+<hr>
+<h2 id="5.-mixed-%2F-nesting-tests" tabindex="-1">5. Mixed / Nesting Tests</h2>
+<h3 id="inline-in-blockquote" tabindex="-1">Inline in blockquote</h3>
+<blockquote>
+<p>This is a blockquote with a <span class="test-inline">TestPluginInline</span> and
+<mark>highlighted</mark> text inside.</p>
+</blockquote>
+<h3 id="block-in-blockquote" tabindex="-1">Block in blockquote</h3>
+<blockquote>
+<div class="test-block">TestPluginBlock</div>
+</blockquote>
+<h3 id="block-in-list" tabindex="-1">Block in list</h3>
+<ul>
+<li>Normal item</li>
+<li>
+<div class="test-block">TestPluginBlock</div>
+</li>
+<li>Another item</li>
+</ul>
+<h3 id="block-in-container" tabindex="-1">Block in container</h3>
+<div class="warning">
+<div class="test-block">TestPluginBlock</div>
+<p>A warning with an embedded block plugin and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">E</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord mathnormal">m</span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span>.</p>
+</div>
+<h3 id="inline-in-table" tabindex="-1">Inline in table</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Feature</th>
+<th style="text-align:left">Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Official plugins</td>
+<td style="text-align:left"><span class="success">done</span></td>
+</tr>
+<tr>
+<td style="text-align:left">Block dispatch</td>
+<td style="text-align:left"><span class="success">done</span></td>
+</tr>
+<tr>
+<td style="text-align:left">Inline dispatch</td>
+<td style="text-align:left"><span class="success">done</span></td>
+</tr>
+<tr>
+<td style="text-align:left">Emoji plugin</td>
+<td style="text-align:left"><span class="warning">in progress</span></td>
+</tr>
+<tr>
+<td style="text-align:left">Mermaid plugin</td>
+<td style="text-align:left"><span class="danger">not started</span></td>
+</tr>
+</tbody>
+</table>
+<h3 id="nested-containers" tabindex="-1">Nested containers</h3>
+<div class="info">
+<p>This info box contains a warning inside:</p>
+<div class="warning">
+<p>Nested warning message.</p>
+</div>
+<p>Back to info content.</p>
+</div>
+<h3 id="math-in-container" tabindex="-1">Math in container</h3>
+<div class="info">
+<p><strong>Euler’s identity</strong> is considered the most beautiful equation:</p>
+<p class="katex-block "><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msup><mi>e</mi><mrow><mi>i</mi><mi>π</mi></mrow></msup><mo>+</mo><mn>1</mn><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">e^{i\pi} + 1 = 0
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.958em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8747em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">iπ</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></span></p>
+<p>It relates five fundamental constants of mathematics.</p>
+</div>
+<hr>
+<h1 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95" tabindex="-1">中文測試 中文测试</h1>
+<h2 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-1" tabindex="-1">中文測試 中文测试</h2>
+<h3 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-2" tabindex="-1">中文測試 中文测试</h3>
+<h4 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-3" tabindex="-1">中文測試 中文测试</h4>
+<h5 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-4" tabindex="-1">中文測試 中文测试</h5>
+<h6 id="%E4%B8%AD%E6%96%87%E6%B8%AC%E8%A9%A6-%E4%B8%AD%E6%96%87%E6%B5%8B%E8%AF%95-5" tabindex="-1">中文測試 中文测试</h6>
+<p>壬戌之秋，七月既望，蘇子與客泛舟游於赤壁之下。清風徐來，水波不興。舉酒屬客，誦明月之詩，歌窈窕之章。少焉，月出於東山之上，徘徊於斗牛之間。白露橫江，水光接天。縱一葦之所如，凌萬頃之茫然。浩浩乎如馮虛御風，而不知其所止；飄飄乎如遺世獨立，羽化而登仙。</p>
+<p>壬戌之秋，七月既望，苏子与客泛舟游于赤壁之下。清风徐来，水波不兴。举酒属客，诵明月之诗，歌窈窕之章。少焉，月出于东山之上，徘徊于斗牛之间。白露横江，水光接天。纵一苇之所如，凌万顷之茫然。浩浩乎如冯虚御风，而不知其所止；飘飘乎如遗世独立，羽化而登仙。</p>
+<h2 id="html-elements" tabindex="-1">HTML elements</h2>
+<iframe src=“https://ourworldindata.org/grapher/plastic-production-polymer?tab=chart” loading=“lazy” style=“width: 100%; height: 600px; border: 0px none;” allow=“web-share; clipboard-write”></iframe>
+<div>Example div block. </div>
+<p><em>End of example file.</em></p>
+<hr class="footnotes-sep">
+<section class="footnotes">
+<ol class="footnotes-list">
+<li id="fn1" class="footnote-item"><p>This is the first footnote text. <a href="#fnref1" class="footnote-backref">↩︎</a></p>
+</li>
+<li id="fn2" class="footnote-item"><p>This is the second footnote, with <strong>bold</strong> and <em>italic</em> content. <a href="#fnref2" class="footnote-backref">↩︎</a></p>
+</li>
+</ol>
+</section>
+
+  </article>
+
+  <!-- =====================================================================
+       Required client-side libraries and runtime scripts.
+       These must appear after the body content so the DOM is ready.
+       ===================================================================== -->
+
+  <!-- Highlight.js — syntax-highlights fenced code blocks -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>if (typeof hljs !== 'undefined') hljs.highlightAll();</script>
+
+  <!-- Mermaid.js — renders {{mermaid}} / {{mm}} diagram blocks client-side.
+       The .mermaid div contains the raw Mermaid DSL emitted by the parser.  -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>if (typeof mermaid !== 'undefined') mermaid.initialize({ startOnLoad: true });</script>
+
+  <!-- SmilesDrawer — renders {{smiles}} / {{sm}} chemical structure canvases.
+       Draws into canvas[data-smiles] elements emitted by the parser.        -->
+  <script src="https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js"></script>
+  <script>
+if (typeof SmilesDrawer !== 'undefined') {
+  document.querySelectorAll('canvas[data-smiles]').forEach(function (canvas, i) {
+    if (!canvas.id) canvas.id = 'smiles-canvas-' + i;
+    var drawer = new SmilesDrawer.Drawer({ width: canvas.width || 250, height: canvas.height || 180 });
+    SmilesDrawer.parse(canvas.getAttribute('data-smiles'), function (tree) {
+      drawer.draw(tree, canvas, 'light', false);
+    });
+  });
+}
+  </script>
+
+  <!-- Tabs component — builds the .tabs-bar and activates .tab panels.
+       Must run after the DOM is painted so .tabs elements are found.        -->
+  <script>
+(function () {
+  document.querySelectorAll('.tabs').forEach(function (tabs) {
+    tabs.setAttribute('data-js', '1');
+    var panels = tabs.querySelectorAll(':scope > .tab');
+    if (!panels.length) return;
+
+    var bar = document.createElement('div');
+    bar.className = 'tabs-bar';
+    panels.forEach(function (panel, i) {
+      var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
+      var btn   = document.createElement('button');
+      btn.className   = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', function () {
+        tabs.querySelectorAll('.tabs-bar-btn').forEach(function (b) { b.classList.remove('active'); });
+        panels.forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        panel.classList.add('active');
+      });
+      bar.appendChild(btn);
+    });
+    tabs.insertBefore(bar, tabs.firstChild);
+    panels[0].classList.add('active');
+  });
+})();
+  </script>
+
+  <!-- QR code runtime — click to expand {{qrcode}} / {{qr}} overlays.
+       Provides window.OrzMarkdownRuntime.init(root) for programmatic use.  -->
+  <script>
+(function (global) {
+  var expandedQr = null;
+  var expandedSourceQr = null;
+
+  function collapseQr() {
+    if (!expandedQr) return;
+    if (expandedSourceQr) {
+      expandedSourceQr.classList.remove('is-expanded');
+      expandedSourceQr.setAttribute('aria-expanded', 'false');
+    }
+    if (expandedQr.parentNode) expandedQr.parentNode.removeChild(expandedQr);
+    expandedQr = null;
+    expandedSourceQr = null;
+    if (global.document && global.document.body) global.document.body.style.overflow = '';
+  }
+
+  function toggleQr(node) {
+    if (expandedSourceQr === node) { collapseQr(); return; }
+    if (expandedQr) collapseQr();
+    expandedSourceQr = node;
+    node.classList.add('is-expanded');
+    node.setAttribute('aria-expanded', 'true');
+    expandedQr = node.cloneNode(true);
+    expandedQr.classList.add('qrcode-overlay', 'is-expanded');
+    expandedQr.setAttribute('aria-hidden', 'true');
+    expandedQr.removeAttribute('aria-expanded');
+    expandedQr.removeAttribute('tabindex');
+    expandedQr.removeAttribute('role');
+    expandedQr.addEventListener('click', function (event) {
+      event.stopPropagation();
+      collapseQr();
+    });
+    global.document.body.appendChild(expandedQr);
+    if (global.document && global.document.body) global.document.body.style.overflow = 'hidden';
+  }
+
+  function initQrCodes(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    Array.prototype.slice.call(root.querySelectorAll('.qrcode')).forEach(function (node) {
+      if (node.getAttribute('data-qr-ready') === '1') return;
+      node.setAttribute('data-qr-ready', '1');
+      node.setAttribute('tabindex', '0');
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-expanded', 'false');
+      node.addEventListener('click', function (event) {
+        event.stopPropagation();
+        toggleQr(node);
+      });
+      node.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleQr(node);
+        }
+      });
+    });
+  }
+
+  function bindGlobalHandlers() {
+    global.document.addEventListener('click', function () { collapseQr(); });
+    global.document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') collapseQr();
+    });
+  }
+
+  function init(doc) {
+    initQrCodes(doc);
+    bindGlobalHandlers();
+  }
+
+  global.OrzMarkdownRuntime = { init: init, initQrCodes: initQrCodes };
+
+  if (global.document) {
+    if (global.document.readyState === 'loading') {
+      global.document.addEventListener('DOMContentLoaded', function () { init(global.document); }, { once: true });
+    } else {
+      init(global.document);
+    }
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+  </script>
+
+</body>
+</html>
