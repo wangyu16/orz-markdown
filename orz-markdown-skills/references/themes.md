@@ -1,4 +1,4 @@
-# Custom Theme Guide — @orz-how/markdown-parser
+# Custom Theme Guide — orz-markdown
 
 How to write a CSS theme for the parser. A theme is a single CSS file that imports `common.css` for structural rules and then styles every element the parser emits.
 
@@ -8,7 +8,7 @@ How to write a CSS theme for the parser. A theme is a single CSS file that impor
 
 Option A — start from scratch with shared infrastructure:
 ```css
-@import '@orz-how/markdown-parser/themes/common.css';
+@import 'orz-markdown/themes/common.css';
 /* or relative path when living alongside the bundled themes: */
 @import './common.css';
 ```

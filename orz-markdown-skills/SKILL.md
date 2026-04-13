@@ -1,19 +1,19 @@
 ---
 name: orz-markdown
-description: "@orz-how/markdown-parser usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 10 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project."
+description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 10 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project."
 compatibility:
   runtime: "Node.js 20+, ESM"
-  package: "@orz-how/markdown-parser"
+  package: "orz-markdown"
 ---
 
-# @orz-how/markdown-parser
+# orz-markdown
 
 A deeply customized `markdown-it` instance with 10+ plugins, 9 official plugin bundles, and 10 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
 
 ## Rendering (Node.js / ESM)
 
 ```javascript
-import md from '@orz-how/markdown-parser';
+import md from 'orz-markdown';
 
 const html = md.render(markdownSource);
 const page = `<article class="markdown-body">${html}</article>`;
@@ -26,7 +26,7 @@ Parser is configured with `html: true` — raw HTML in source is emitted verbati
 If the source contains `{{markdown https://...}}`:
 
 ```javascript
-import md, { prepareSources } from '@orz-how/markdown-parser';
+import md, { prepareSources } from 'orz-markdown';
 
 const resolved = await prepareSources(markdownSource);
 const html = md.render(resolved, { markdownBasePath: '/local/base/path' });
@@ -60,7 +60,7 @@ CDN URLs (pinned versions):
 For programmatic control after mounting HTML dynamically:
 
 ```javascript
-import { getBrowserRuntimeScript } from '@orz-how/markdown-parser/runtime';
+import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 const script = document.createElement('script');
 script.textContent = getBrowserRuntimeScript();
 document.body.appendChild(script);
@@ -88,10 +88,10 @@ Ten bundled themes — each auto-imports `common.css` (structural rules for tabl
 
 ```javascript
 // With bundler:
-import '@orz-how/markdown-parser/themes/light-neat-1.css';
+import 'orz-markdown/themes/light-neat-1.css';
 
 // Plain HTML:
-// <link rel="stylesheet" href="node_modules/@orz-how/markdown-parser/themes/light-neat-1.css">
+// <link rel="stylesheet" href="node_modules/orz-markdown/themes/light-neat-1.css">
 ```
 
 For custom themes start from `assets/minimal.css` (structural only, no decoration) and add your visual layer. See `references/themes.md` for the design token pattern, element checklist, and design guidelines. See `references/css-classes.md` for the full list of every CSS class the parser emits.

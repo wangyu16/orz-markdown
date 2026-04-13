@@ -1,4 +1,4 @@
-# Syntax Reference — @orz-how/markdown-parser
+# Syntax Reference — orz-markdown
 
 Complete syntax reference for all features. Covers standard markdown, official plugin extensions, containers, and all custom `{{...}}` plugins.
 

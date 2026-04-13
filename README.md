@@ -1,6 +1,6 @@
-# @orz-how/markdown-parser
+# orz-markdown
 
-A deeply customized markdown-it parser configured with several official plugins and many custom plugins designed to render interactive objects, embedded rich media, and invisible data. Crafted alongside beautifully optimized CSS themes for an excellent out-of-the-box rendering experience.
+A deeply customized markdown-it parser configured with several official plugins and many custom plugins designed to render interactive objects, embedded rich media, and invisible data. Crafted alongside beautifully optimized CSS themes for an excellent out-of-the-box rendering experience. An agent skill is available for using this markdown parser with AI agents. 
 
 Rendered HTML is intended to live inside a `.markdown-body` container and be paired with one of the bundled themes.
 
@@ -9,7 +9,7 @@ Rendered HTML is intended to live inside a `.markdown-body` container and be pai
 Install the package via npm:
 
 ```sh
-npm install @orz-how/markdown-parser
+npm install orz-markdown
 ```
 
 ## Quick Start
@@ -23,7 +23,7 @@ Import the configured markdown instance and use it to render markdown strings in
 
 
 ```javascript
-import md from '@orz-how/markdown-parser';
+import md from 'orz-markdown';
 
 const markdownSource = `
 # Hello World
@@ -40,7 +40,7 @@ document.body.innerHTML = `<article class="markdown-body">${html}</article>`;
 Some rendered features expect a small browser runtime layer after the HTML is mounted. This currently includes QR-code expand/collapse behavior and is designed so more client-side enhancements can share the same entry point.
 
 ```javascript
-import { getBrowserRuntimeScript } from '@orz-how/markdown-parser/runtime';
+import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 
 const runtimeScript = document.createElement('script');
 runtimeScript.textContent = getBrowserRuntimeScript();
@@ -56,7 +56,7 @@ We provide multiple ready-to-use CSS themes for rendering the output! You do not
 Themes can be easily imported directly from the `themes` directory if you are using a bundler (like Vite, Webpack, etc.):
 
 ```javascript
-import '@orz-how/markdown-parser/themes/light-academic-1.css';
+import 'orz-markdown/themes/light-academic-1.css';
 // Or try: dark-elegant-2.css, light-playful-1.css, etc!
 ```
 

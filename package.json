@@ -1,5 +1,5 @@
 {
-  "name": "@orz-how/markdown-parser",
+  "name": "orz-markdown",
   "version": "1.0.0",
   "description": "Customized markdown-it parser with official and custom plugins",
   "main": "dist/index.js",

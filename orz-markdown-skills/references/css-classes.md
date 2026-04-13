@@ -1,4 +1,4 @@
-# CSS Class Reference — @orz-how/markdown-parser
+# CSS Class Reference — orz-markdown
 
 Every CSS class and structural HTML element emitted by the parser. Use this as the definitive spec when writing or auditing a theme. All selectors should be scoped under `.markdown-body` in theme files.
 
