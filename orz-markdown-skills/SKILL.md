@@ -1,6 +1,6 @@
 ---
 name: orz-markdown
-description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 10 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project."
+description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 10 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project. ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
 compatibility:
   runtime: "Node.js 20+, ESM"
   package: "orz-markdown"
@@ -117,7 +117,7 @@ Escape with backslash: `\{{name}}` renders as literal `{{name}}`.
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
 | **smiles** | `sm` | `{{smiles C1=CC=CC=C1}}` (chemical structure) |
 | **toc** | — | `{{toc}}` or `{{toc 2,3}}` (heading levels) |
-| **attrs** | — | `# Title {{attrs[id="hero"]}}` |
+| **attrs** | — | `# Title{{attrs[id="hero"]}}` |
 | **markdown** | `md`, `md-include` | `{{md ./path/to/file.md}}` |
 | **yaml** | `yml` | `{{yaml\nkey: val\n}}` (invisible metadata) |
 | **nyml** | — | `{{nyml\nkey: val\n}}` (parsed to JSON) |
@@ -153,11 +153,22 @@ Space between `:::` and name is required. Nesting uses more colons on the outer 
 
 ---
 
+## Stable Block IDs — editing rules
+
+Documents may carry stable block IDs on headings: `## Title{{attrs[#blk-abc12345]}}` (canonical form: no space before the marker). These IDs are the block's permanent identity for the host application.
+
+**The non-negotiables:** IDs are immutable — when editing or rewriting a section, preserve its `{{attrs[#blk-...]}}` marker exactly, even if you rewrite the heading text completely. Never reuse, invent, regenerate, or duplicate an ID, and never convert to or from Pandoc `{#id}` syntax (unsupported; corrupts the heading).
+
+**Before any edit to a document containing `{{attrs[#blk-...]}}`, read `references/block-ids.md`** — it has the full rules and a pre-save checklist.
+
+---
+
 ## Reference Files
 
 | File | When to read |
 |---|---|
 | `references/syntax.md` | Full syntax with examples for every plugin, container, and extended markdown feature |
+| `references/block-ids.md` | Stable block-ID preservation rules — REQUIRED reading before editing documents that use `{{attrs[#blk-...]}}` |
 | `references/themes.md` | Custom theme guide: design tokens, element checklist, 10 design guidelines |
 | `references/css-classes.md` | Every CSS class and HTML element the parser emits — the spec for theme authors |
 | `assets/template.html` | Ready-to-use HTML page template with all scripts and CDN links wired up |
