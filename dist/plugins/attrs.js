@@ -51,7 +51,17 @@ function registerAttrs(md) {
                     }
                 }
                 // Remove the marker token from inline children
+                const markerWasLast = j === children.length - 1;
                 children.splice(j, 1);
+                // `## Title {{attrs[#x]}}` would otherwise leave a trailing space in
+                // the heading text (and in TOC entries). Trim it when the marker was
+                // the last child, so removal leaves no whitespace artifact.
+                if (markerWasLast) {
+                    const prevChild = children[j - 1];
+                    if (prevChild && prevChild.type === 'text') {
+                        prevChild.content = prevChild.content.replace(/\s+$/, '');
+                    }
+                }
                 j--;
             }
         }

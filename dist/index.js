@@ -132,10 +132,14 @@ md.use(markdown_it_katex_1.default, { enableMhchem: true });
 // Custom dispatchers
 md.block.ruler.after('blockquote', 'plugin_block_dispatcher', block_dispatcher_js_1.blockDispatcher, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
 md.inline.ruler.after('escape', 'plugin_inline_dispatcher', inline_dispatcher_js_1.inlineDispatcher);
-// Register plugins that need access to the md instance
+// Register plugins that need access to the md instance.
+// Order matters: attrs must register before toc so the `attrs_resolve` core
+// rule runs before `toc_resolve` — TOC links must use the final heading ids,
+// including custom ids set via {{attrs[#...]}} (which override the
+// markdown-it-anchor slug).
 (0, span_js_1.registerSpan)(md);
-(0, toc_js_1.registerToc)(md);
 (0, attrs_js_1.registerAttrs)(md);
+(0, toc_js_1.registerToc)(md);
 (0, markdown_include_js_1.registerMarkdownInclude)(md);
 // Renderer for plugin_block tokens
 md.renderer.rules['plugin_block'] = (tokens, idx, _options, env) => {
