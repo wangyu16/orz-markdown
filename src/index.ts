@@ -133,10 +133,14 @@ md.block.ruler.after(
 
 md.inline.ruler.after('escape', 'plugin_inline_dispatcher', inlineDispatcher);
 
-// Register plugins that need access to the md instance
+// Register plugins that need access to the md instance.
+// Order matters: attrs must register before toc so the `attrs_resolve` core
+// rule runs before `toc_resolve` — TOC links must use the final heading ids,
+// including custom ids set via {{attrs[#...]}} (which override the
+// markdown-it-anchor slug).
 registerSpan(md);
-registerToc(md);
 registerAttrs(md);
+registerToc(md);
 registerMarkdownInclude(md);
 
 // Renderer for plugin_block tokens

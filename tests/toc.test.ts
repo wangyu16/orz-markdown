@@ -42,4 +42,27 @@ describe('Phase 13 — TOC plugin', () => {
     // markdown-it-anchor sets id="my-section" on the h2
     expect(html).toContain('href="#my-section"');
   });
+
+  it('toc links use custom heading ids set via {{attrs[#...]}} (regression: attrs_resolve must run before toc_resolve)', () => {
+    const html = md.render(
+      '{{toc}}\n\n## Stoichiometry {{attrs[#blk-st01]}}\n\ntext\n\n## Stoichiometry\n\ntext'
+    );
+
+    // TOC link for the attrs-carrying heading points at the custom id, not the anchor slug
+    expect(html).toContain('href="#blk-st01"');
+    expect(html).not.toContain('href="#stoichiometry"');
+    // Plain heading keeps its markdown-it-anchor slug (deduped to -1, slug assigned before attrs override)
+    expect(html).toContain('href="#stoichiometry-1"');
+
+    // Both TOC targets actually exist in the rendered document
+    expect(html).toContain('id="blk-st01"');
+    expect(html).toContain('id="stoichiometry-1"');
+
+    // Every TOC href resolves to an element id in the output (no dead links)
+    const tocHrefs = [...html.matchAll(/<a href="#([^"]+)">/g)].map(m => m[1]);
+    expect(tocHrefs).toHaveLength(2);
+    for (const href of tocHrefs) {
+      expect(html).toContain(`id="${href}"`);
+    }
+  });
 });
