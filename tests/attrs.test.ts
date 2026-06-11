@@ -36,4 +36,24 @@ describe('Phase 14 — Attrs plugin', () => {
     expect(html).not.toContain('{{attrs');
     expect(html).toContain('Hello');
   });
+
+  // Pins the core-rule ordering: attrs_resolve runs after markdown-it-anchor,
+  // so a custom heading id always overrides the generated slug. Stable block
+  // ids (blk-...) downstream depend on this — do not let a plugin-order
+  // refactor silently break it.
+  it('heading id from {{attrs[#...]}} overrides the markdown-it-anchor slug', () => {
+    const html = md.render('## Acid-Base Theory{{attrs[#blk-abc12345]}}');
+    expect(html).toContain('id="blk-abc12345"');
+    // The anchor slug must not survive anywhere in the output
+    expect(html).not.toContain('acid-base-theory');
+  });
+
+  it('custom heading id is stable when the heading text is edited', () => {
+    const before = md.render('## Acid-Base Theory{{attrs[#blk-abc12345]}}');
+    const after = md.render('## Totally Renamed Heading{{attrs[#blk-abc12345]}}');
+    expect(before).toContain('id="blk-abc12345"');
+    expect(after).toContain('id="blk-abc12345"');
+    // Renaming the heading must not change or remove the id
+    expect(after).not.toContain('totally-renamed-heading');
+  });
 });
