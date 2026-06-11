@@ -56,4 +56,14 @@ describe('Phase 14 — Attrs plugin', () => {
     // Renaming the heading must not change or remove the id
     expect(after).not.toContain('totally-renamed-heading');
   });
+
+  it('removing the attrs marker leaves no trailing space in heading or TOC text', () => {
+    const html = md.render('{{toc}}\n\n## Title {{attrs[#x]}}');
+    // Heading text is exactly "Title" — no trailing space before </h2>
+    expect(html).toContain('>Title</h2>');
+    expect(html).not.toContain('Title </h2>');
+    // TOC entry text is also trimmed
+    expect(html).toContain('>Title</a>');
+    expect(html).not.toContain('Title </a>');
+  });
 });
