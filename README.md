@@ -83,7 +83,19 @@ npm test
 npm pack
 ```
 
-The generated tarball is written to the repository root and includes `dist/` and `themes/`.
+The generated tarball is written to the repository root and includes `dist/`, `themes/`, and `orz-markdown-skills/`.
+
+## Agent Skill
+
+The package ships an Agent Skill that teaches AI coding agents how to render with orz-markdown, write `{{...}}` plugin and `:::` container syntax, set up display pages, and work with the bundled themes. It also documents the block-ID preservation rules agents must follow when editing documents that use stable `{{attrs[#blk-...]}}` heading ids.
+
+In the installed package, the skill lives at a stable path:
+
+```
+node_modules/orz-markdown/orz-markdown-skills/SKILL.md
+```
+
+with supporting files under `orz-markdown-skills/references/` and `orz-markdown-skills/assets/`. Point your agent tooling at that directory (e.g. copy or symlink it into your agent's skills folder).
 
 ## Official Plugins Bundled
 
