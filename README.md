@@ -37,7 +37,7 @@ document.body.innerHTML = `<article class="markdown-body">${html}</article>`;
 
 ## Browser Runtime
 
-Some rendered features expect a small browser runtime layer after the HTML is mounted. This currently includes QR-code expand/collapse behavior and is designed so more client-side enhancements can share the same entry point.
+Some rendered features expect a small browser runtime layer after the HTML is mounted. This includes QR-code expand/collapse behavior and **copy-as-Markdown**, and is designed so more client-side enhancements can share the same entry point.
 
 ```javascript
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
@@ -48,6 +48,20 @@ document.body.appendChild(runtimeScript);
 ```
 
 If your app controls initialization directly, the runtime also exposes `window.OrzMarkdownRuntime.init(root)` and `window.OrzMarkdownRuntime.initQrCodes(root)`.
+
+### Copy as Markdown
+
+Once the runtime is loaded, selecting rendered content and copying it (Cmd/Ctrl-C) places **Markdown source** on the clipboard instead of HTML. A built-in DOM→Markdown walker reconstructs headings, emphasis, inline code, links, `==mark==`/`++ins++`/`~~del~~`/`~sub~`/`^sup^`, bullet/ordered/nested lists, task lists, tables (with alignment), blockquotes, fenced code (with language), images, and inline/display math.
+
+It only transforms selections inside an element with class `markdown-body` (wrap your rendered output in one, e.g. `<article class="markdown-body">…</article>`, or mark a container with `data-orz-copy`), and never touches selections inside `<input>`, `<textarea>`, or `contenteditable` regions.
+
+Generated constructs that lose their source after client-side rendering — `mermaid`, `smiles`, `qrcode`, `youtube` — carry a `data-md` attribute that the walker emits verbatim. As a result a copied table of contents yields its heading links (not `{{toc 2,3}}`) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md` attributes** if you post-process the HTML.
+
+You can also convert a node programmatically:
+
+```javascript
+const markdown = window.OrzMarkdownRuntime.elementToMarkdown(someElement);
+```
 
 ## Themes
 

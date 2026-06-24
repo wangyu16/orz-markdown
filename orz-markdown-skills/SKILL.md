@@ -67,6 +67,10 @@ document.body.appendChild(script);
 // or call directly: window.OrzMarkdownRuntime.init(rootElement)
 ```
 
+The runtime also provides **copy-as-Markdown**: with it loaded, copying a selection inside `.markdown-body` puts Markdown source on the clipboard, not HTML (tables, lists, math, code, etc. are reconstructed). It skips selections inside `<input>`/`<textarea>`/`contenteditable`. Convert a node directly with `window.OrzMarkdownRuntime.elementToMarkdown(node)`.
+
+> **Do not strip `data-md` attributes.** `mermaid`, `smiles`, `qrcode`, and `youtube` output carry a `data-md` breadcrumb so copy recovers their source after client-side rendering (e.g. a copied QR yields `{{qr ...}}`, not its SVG). Preserve these attributes if you post-process the HTML.
+
 ---
 
 ## Themes
