@@ -82,8 +82,40 @@ exports.browserRuntimeScript = String.raw `
     });
   }
 
+  function initTabs(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    Array.prototype.slice.call(root.querySelectorAll('.tabs')).forEach(function (tabs) {
+      // data-js both guards re-init and switches the theme CSS from the no-JS
+      // fallback (all panels shown) to JS mode (only the .active panel shown).
+      if (tabs.getAttribute('data-js') === '1') return;
+      var panels = Array.prototype.slice.call(tabs.querySelectorAll(':scope > .tab'));
+      if (!panels.length) return;
+      tabs.setAttribute('data-js', '1');
+
+      var bar = global.document.createElement('div');
+      bar.className = 'tabs-bar';
+      panels.forEach(function (panel, i) {
+        var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
+        var btn = global.document.createElement('button');
+        btn.className = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
+        btn.textContent = label;
+        btn.addEventListener('click', function () {
+          Array.prototype.slice.call(tabs.querySelectorAll('.tabs-bar-btn')).forEach(function (b) { b.classList.remove('active'); });
+          panels.forEach(function (p) { p.classList.remove('active'); });
+          btn.classList.add('active');
+          panel.classList.add('active');
+        });
+        bar.appendChild(btn);
+      });
+      tabs.insertBefore(bar, tabs.firstChild);
+      panels[0].classList.add('active');
+    });
+  }
+
   function init(root) {
-    initQrCodes(root || global.document);
+    var r = root || global.document;
+    initQrCodes(r);
+    initTabs(r);
   }
 
   // ---- copy-as-markdown: DOM -> Markdown walker ---------------------------
@@ -448,6 +480,7 @@ exports.browserRuntimeScript = String.raw `
   global.OrzMarkdownRuntime = Object.assign({}, global.OrzMarkdownRuntime, {
     init: init,
     initQrCodes: initQrCodes,
+    initTabs: initTabs,
     collapseQr: collapseQr,
     elementToMarkdown: elementToMarkdown,
   });

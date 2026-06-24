@@ -10857,39 +10857,7 @@ tags:
   <!-- SmilesDrawer — renders [data-smiles] canvas elements client-side -->
   <script src="https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js"></script>
 
-  <!-- Tabs component -->
-  <script>
-(function () {
-  document.querySelectorAll('.tabs').forEach(function (tabs) {
-    tabs.setAttribute('data-js', '1');
-    var panels = tabs.querySelectorAll(':scope > .tab');
-    if (!panels.length) return;
-
-    // Build the tab bar
-    var bar = document.createElement('div');
-    bar.className = 'tabs-bar';
-    panels.forEach(function (panel, i) {
-      var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
-      var btn   = document.createElement('button');
-      btn.className   = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
-      btn.textContent = label;
-      btn.addEventListener('click', function () {
-        tabs.querySelectorAll('.tabs-bar-btn').forEach(function (b) { b.classList.remove('active'); });
-        panels.forEach(function (p) { p.classList.remove('active'); });
-        btn.classList.add('active');
-        panel.classList.add('active');
-      });
-      bar.appendChild(btn);
-    });
-    tabs.insertBefore(bar, tabs.firstChild);
-
-    // Show first tab by default
-    panels[0].classList.add('active');
-  });
-})();
-</script>
-
-  <!-- Reusable runtime enhancements -->
+  <!-- Reusable runtime enhancements (QR, tabs, copy-as-markdown) -->
   <script>
 (function (global) {
   var expandedQr = null;
@@ -10970,8 +10938,38 @@ tags:
     });
   }
 
+  function initTabs(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    Array.prototype.slice.call(root.querySelectorAll('.tabs')).forEach(function (tabs) {
+      if (tabs.getAttribute('data-tabs-ready') === '1') return;
+      var panels = Array.prototype.slice.call(tabs.querySelectorAll(':scope > .tab'));
+      if (!panels.length) return;
+      tabs.setAttribute('data-tabs-ready', '1');
+
+      var bar = global.document.createElement('div');
+      bar.className = 'tabs-bar';
+      panels.forEach(function (panel, i) {
+        var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
+        var btn = global.document.createElement('button');
+        btn.className = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
+        btn.textContent = label;
+        btn.addEventListener('click', function () {
+          Array.prototype.slice.call(tabs.querySelectorAll('.tabs-bar-btn')).forEach(function (b) { b.classList.remove('active'); });
+          panels.forEach(function (p) { p.classList.remove('active'); });
+          btn.classList.add('active');
+          panel.classList.add('active');
+        });
+        bar.appendChild(btn);
+      });
+      tabs.insertBefore(bar, tabs.firstChild);
+      panels[0].classList.add('active');
+    });
+  }
+
   function init(root) {
-    initQrCodes(root || global.document);
+    var r = root || global.document;
+    initQrCodes(r);
+    initTabs(r);
   }
 
   // ---- copy-as-markdown: DOM -> Markdown walker ---------------------------
@@ -11336,6 +11334,7 @@ tags:
   global.OrzMarkdownRuntime = Object.assign({}, global.OrzMarkdownRuntime, {
     init: init,
     initQrCodes: initQrCodes,
+    initTabs: initTabs,
     collapseQr: collapseQr,
     elementToMarkdown: elementToMarkdown,
   });

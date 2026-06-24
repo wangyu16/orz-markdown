@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-06-24
+
+### Fixed
+
+- Browser safety: `markdown-include` no longer throws `process is not defined`
+  when the parser runs in a browser bundle. `process.cwd()` is now guarded; in
+  the browser the include simply renders empty (filesystem reads aren't
+  available there).
+
+### Changed
+
+- Tab interactivity moved into `browserRuntimeScript` as
+  `OrzMarkdownRuntime.initTabs(root)` (run by `init()`), so every page that
+  embeds the runtime gets working `::: tabs` — not just the standalone demo.
+  The bespoke tabs script was removed from `scripts/render.ts`.
+
 ## [1.2.1] - 2026-06-24
 
 ### Fixed

@@ -154,42 +154,6 @@ const themeMetadata = JSON.stringify(themes.map(({ styleId, name, colorScheme, m
 // ── JavaScript snippets bundled into the page ────────────────────────────────
 
 /**
- * Tabs initialisation
- * Finds every .tabs element, reads the data-label from each .tab child,
- * builds a tab bar at the top, and wires click handlers.
- */
-const TABS_JS = `
-(function () {
-  document.querySelectorAll('.tabs').forEach(function (tabs) {
-    tabs.setAttribute('data-js', '1');
-    var panels = tabs.querySelectorAll(':scope > .tab');
-    if (!panels.length) return;
-
-    // Build the tab bar
-    var bar = document.createElement('div');
-    bar.className = 'tabs-bar';
-    panels.forEach(function (panel, i) {
-      var label = panel.getAttribute('data-label') || 'Tab ' + (i + 1);
-      var btn   = document.createElement('button');
-      btn.className   = 'tabs-bar-btn' + (i === 0 ? ' active' : '');
-      btn.textContent = label;
-      btn.addEventListener('click', function () {
-        tabs.querySelectorAll('.tabs-bar-btn').forEach(function (b) { b.classList.remove('active'); });
-        panels.forEach(function (p) { p.classList.remove('active'); });
-        btn.classList.add('active');
-        panel.classList.add('active');
-      });
-      bar.appendChild(btn);
-    });
-    tabs.insertBefore(bar, tabs.firstChild);
-
-    // Show first tab by default
-    panels[0].classList.add('active');
-  });
-})();
-`;
-
-/**
  * Theme switcher, Mermaid renderer, and SMILES renderer
  * Reads the saved theme from localStorage on load, applies it by toggling
  * the inlined theme styles, updates theme-dependent assets, and drives
@@ -616,10 +580,7 @@ ${themeMenuItems}
   <!-- SmilesDrawer — renders [data-smiles] canvas elements client-side -->
   <script src="https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js"></script>
 
-  <!-- Tabs component -->
-  <script>${TABS_JS}</script>
-
-  <!-- Reusable runtime enhancements -->
+  <!-- Reusable runtime enhancements (QR, tabs, copy-as-markdown) -->
   <script>${browserRuntimeScript}</script>
 
   <!-- Theme switcher logic -->

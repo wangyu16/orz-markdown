@@ -16,8 +16,11 @@ export function registerMarkdownInclude(md: MarkdownIt): void {
       // Guard against nested includes
       if (envObj['markdownIncludeActive']) return '';
 
-      // Resolve path: prefer env.markdownBasePath (document dir) over process.cwd()
-      const basePath = (envObj['markdownBasePath'] as string | undefined) ?? process.cwd();
+      // Resolve path: prefer env.markdownBasePath (document dir) over the cwd.
+      // Guard `process` so this stays usable in a browser bundle (no Node
+      // globals); there the fs read below fails and the include renders empty.
+      const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '.';
+      const basePath = (envObj['markdownBasePath'] as string | undefined) ?? cwd;
       const resolved = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(basePath, filePath);
