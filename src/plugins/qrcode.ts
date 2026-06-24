@@ -1,6 +1,14 @@
 import QRCode from 'qrcode-svg';
 import { register } from '../registry.js';
 
+function escapeAttr(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 register({
   type: 'inline',
   aliases: ['qr', 'qrcode'],
@@ -13,6 +21,9 @@ register({
       '<svg ',
       `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" `,
     );
-    return `<span class="qrcode" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span>${svg}</span>`;
+    // `data-md` carries the source: the QR content is otherwise encoded only in
+    // the SVG modules and cannot be recovered for copy-as-markdown.
+    const directive = escapeAttr(`{{qr ${content}}}`);
+    return `<span class="qrcode" data-md="${directive}" role="button" tabindex="0" aria-label="Expand QR code" aria-expanded="false"><span class="qrcode__icon" aria-hidden="true">⤢</span>${svg}</span>`;
   },
 });

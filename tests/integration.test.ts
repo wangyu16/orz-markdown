@@ -193,22 +193,22 @@ describe('Phase 16 — Integration: block plugins nesting', () => {
 
   // mermaid
   it('mermaid standalone', () => {
-    expect(md.render('{{mermaid graph LR}}')).toContain('<div class="mermaid">graph LR</div>');
+    expect(md.render('{{mermaid graph LR}}')).toContain('<div class="mermaid" data-md="{{mermaid&#10;graph LR&#10;}}">graph LR</div>');
   });
   it('mermaid in blockquote', () => {
     const html = md.render('> {{mermaid graph LR}}');
-    expectContainsAll(html, ['<blockquote>', '<div class="mermaid">']);
+    expectContainsAll(html, ['<blockquote>', '<div class="mermaid" data-md=']);
   });
   it('mermaid in list item', () => {
     const html = md.render('- {{mermaid graph LR}}');
-    expectContainsAll(html, ['<li>', '<div class="mermaid">']);
+    expectContainsAll(html, ['<li>', '<div class="mermaid" data-md=']);
   });
   it('mermaid in nested list', () => {
-    expect(md.render('- a\n  - {{mermaid graph LR}}')).toContain('<div class="mermaid">');
+    expect(md.render('- a\n  - {{mermaid graph LR}}')).toContain('<div class="mermaid" data-md=');
   });
   it('mermaid in custom container', () => {
     const html = md.render('::: success\n{{mermaid graph LR}}\n:::');
-    expectContainsAll(html, ['<div class="success">', '<div class="mermaid">']);
+    expectContainsAll(html, ['<div class="success">', '<div class="mermaid" data-md=']);
   });
 
   // smiles
