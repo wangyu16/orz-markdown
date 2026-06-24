@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-24
+
+### Added
+
+- Copy-as-Markdown: selecting and copying rendered content now yields Markdown
+  source instead of HTML, for every document (the handler ships in
+  `browserRuntimeScript`). A dependency-free DOM→Markdown walker reconstructs
+  headings, emphasis, code, links, mark/ins/del/sub/sup, bullet/ordered/nested
+  lists, task lists, tables (with alignment), blockquotes, fenced code (with
+  language), images, and inline/display math (recovered from the KaTeX
+  `<annotation>`). The copy handler ignores selections inside inputs/textareas
+  and only acts within `.markdown-body` (or `[data-orz-copy]`). Exposed as
+  `OrzMarkdownRuntime.elementToMarkdown(node)`.
+- `data-md` breadcrumbs on generated constructs whose source is otherwise lost
+  after client-side rendering — `mermaid`, `smiles`, `qrcode`, `youtube`. The
+  walker emits these verbatim, so a table of contents copies its heading links
+  (not `{{toc 2,3}}`) and a QR code copies `{{qr ...}}` (not its SVG).
+
 ## [1.1.0] - 2026-06-11
 
 ### Fixed
