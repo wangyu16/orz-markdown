@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Copy-as-Markdown now copies the whole block when a selection sits entirely
+  within a table, blockquote, or code block. Browsers often clone such
+  selections without the wrapping element, so previously copying a whole table
+  or blockquote yielded only its inner text (no pipes / no `>`); the selection
+  is now promoted to the containing block. The DOM→Markdown walker also
+  reconstructs a table from bare `thead`/`tbody`/`tr` nodes as a fallback.
+  (Not yet published to npm.)
+
 ## [1.2.0] - 2026-06-24
 
 ### Added

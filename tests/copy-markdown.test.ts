@@ -95,6 +95,19 @@ suite('copy-as-markdown walker', () => {
     expect(copyOf('> quoted line', 'blockquote')).toBe('> quoted line');
   });
 
+  it('reconstructs a table from bare thead/tbody (wrapper-less selection)', () => {
+    // Simulates a selection inside a table that was cloned without its <table>.
+    const doc = win.document;
+    const root = doc.createElement('div');
+    root.className = 'markdown-body';
+    root.innerHTML = md.render('| A | B |\n|:--|--:|\n| 1 | 2 |');
+    const table = root.querySelector('table')!;
+    const wrap = doc.createElement('div');
+    // copy only the table's internals (thead + tbody), no <table> wrapper
+    for (const child of Array.from(table.childNodes)) wrap.appendChild(child.cloneNode(true));
+    expect(elementToMarkdown(wrap)).toBe('| A | B |\n| :--- | ---: |\n| 1 | 2 |');
+  });
+
   it('fenced code blocks keep the language', () => {
     expect(copyOf('```js\nconsole.log(1);\n```', 'pre'))
       .toBe('```js\nconsole.log(1);\n```');

@@ -174,11 +174,10 @@ export const browserRuntimeScript = String.raw`
     return '---';
   }
 
-  function rt_table(tbl) {
+  function rt_tableRows(headRow, bodyRows) {
     var rows = [];
-    var aligns = [];
     var header = [];
-    var headRow = tbl.querySelector ? tbl.querySelector('thead tr') : null;
+    var aligns = [];
     if (headRow) {
       var hc = headRow.children;
       for (var i = 0; i < hc.length; i++) { header.push(rt_inlineChildren(hc[i]).trim()); aligns.push(rt_align(hc[i])); }
@@ -187,7 +186,6 @@ export const browserRuntimeScript = String.raw`
     var seps = [];
     for (var s = 0; s < header.length; s++) seps.push(rt_sep(aligns[s]));
     rows.push('| ' + seps.join(' | ') + ' |');
-    var bodyRows = tbl.querySelectorAll ? tbl.querySelectorAll('tbody tr') : [];
     for (var r = 0; r < bodyRows.length; r++) {
       var cells = [];
       var tds = bodyRows[r].children;
@@ -195,6 +193,27 @@ export const browserRuntimeScript = String.raw`
       rows.push('| ' + cells.join(' | ') + ' |');
     }
     return rows.join('\n');
+  }
+
+  function rt_table(tbl) {
+    var headRow = tbl.querySelector ? tbl.querySelector('thead tr') : null;
+    var bodyRows = tbl.querySelectorAll ? tbl.querySelectorAll('tbody tr') : [];
+    return rt_tableRows(headRow, bodyRows);
+  }
+
+  // Reconstruct a table from bare table-internal nodes (thead/tbody/tr), e.g.
+  // when a selection inside a table loses its <table> wrapper.
+  function rt_tableFromParts(parts) {
+    var headRow = null;
+    var bodyRows = [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      var tag = p.tagName.toLowerCase();
+      if (tag === 'thead') { var tr = p.querySelector ? p.querySelector('tr') : null; if (tr && !headRow) headRow = tr; }
+      else if (tag === 'tbody') { var trs = p.querySelectorAll ? p.querySelectorAll('tr') : []; for (var j = 0; j < trs.length; j++) bodyRows.push(trs[j]); }
+      else if (tag === 'tr') { if (!headRow) headRow = p; else bodyRows.push(p); }
+    }
+    return rt_tableRows(headRow, bodyRows);
   }
 
   function rt_codeBlock(pre) {
@@ -271,6 +290,19 @@ export const browserRuntimeScript = String.raw`
         parts.push(items.join('\n'));
         continue;
       }
+      // Bare table-internal nodes (selection inside a table that lost its
+      // <table> wrapper) — reconstruct a Markdown table.
+      if (k.nodeType === 1 && /^(thead|tbody|tr)$/.test(k.tagName.toLowerCase())) {
+        var trows = [];
+        while (i < kids.length) {
+          var tk = kids[i];
+          if (tk.nodeType === 1 && /^(thead|tbody|tr)$/.test(tk.tagName.toLowerCase())) { trows.push(tk); i++; }
+          else if (tk.nodeType === 3 && !(tk.nodeValue || '').trim()) { i++; }
+          else break;
+        }
+        parts.push(rt_tableFromParts(trows));
+        continue;
+      }
       var s = rt_blockNode(k);
       if (s && s.replace(/\s/g, '') !== '') parts.push(s.replace(/\s+$/, ''));
       i++;
@@ -334,13 +366,30 @@ export const browserRuntimeScript = String.raw`
     return false;
   }
 
+  function rt_isCopyRoot(node) {
+    return node.nodeType === 1 && node.classList &&
+      (node.classList.contains('markdown-body') || rt_attr(node, 'data-orz-copy') != null);
+  }
   function rt_withinCopyRoot(node) {
     while (node) {
-      if (node.nodeType === 1 && node.classList &&
-          (node.classList.contains('markdown-body') || rt_attr(node, 'data-orz-copy') != null)) return true;
+      if (rt_isCopyRoot(node)) return true;
       node = node.parentNode;
     }
     return false;
+  }
+
+  // When a selection sits entirely within one table/blockquote/pre, copy that
+  // whole block: a partial table/quote/code fragment isn't valid Markdown, and
+  // browsers often clone such selections without the wrapping element.
+  function rt_promotableBlock(node) {
+    while (node && !rt_isCopyRoot(node)) {
+      if (node.nodeType === 1) {
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'table' || tag === 'blockquote' || tag === 'pre') return node;
+      }
+      node = node.parentNode;
+    }
+    return null;
   }
 
   function onCopy(event) {
@@ -350,9 +399,20 @@ export const browserRuntimeScript = String.raw`
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     if (rt_isEditable(sel.anchorNode) || rt_isEditable(sel.focusNode)) return;
     if (!rt_withinCopyRoot(sel.anchorNode) && !rt_withinCopyRoot(sel.focusNode)) return;
-    var container = global.document.createElement('div');
-    for (var i = 0; i < sel.rangeCount; i++) container.appendChild(sel.getRangeAt(i).cloneContents());
-    var md = elementToMarkdown(container);
+
+    var md;
+    var range0 = sel.getRangeAt(0);
+    var common = range0.commonAncestorContainer;
+    var promoted = rt_promotableBlock(common.nodeType === 1 ? common : common.parentNode);
+    if (promoted && sel.rangeCount === 1) {
+      var pwrap = global.document.createElement('div');
+      pwrap.appendChild(promoted.cloneNode(true));
+      md = elementToMarkdown(pwrap);
+    } else {
+      var container = global.document.createElement('div');
+      for (var i = 0; i < sel.rangeCount; i++) container.appendChild(sel.getRangeAt(i).cloneContents());
+      md = elementToMarkdown(container);
+    }
     if (!md) return;
     var cd = event.clipboardData || global.clipboardData;
     if (cd && cd.setData) {
