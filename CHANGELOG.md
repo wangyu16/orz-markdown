@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reconstructs `{{sp[class] body}}` (e.g. `{{sp[red] text}}`,
   `{{sp[success] ✓ Done}}`). Other spans (`{{space}}` has no class, emoji emits
   text) are unaffected.
+- Copy-as-Markdown now recovers `::: container` blocks. The walker emitted only a
+  container's inner content; it now reconstructs the directive — `::: info`,
+  `::: center`, `::: spoil Title`, and nested `:::: cols`/`::: col` and
+  `:::: tabs`/`::: tab Label` (fence length grows so nesting re-parses; the
+  JS-injected `.tabs-bar` is skipped).
 
 ## [1.2.2] - 2026-06-24
 
