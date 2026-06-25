@@ -405,7 +405,10 @@ exports.browserRuntimeScript = String.raw `
     var dm = rt_attr(node, 'data-md');
     if (dm != null) return dm;
     if (node.classList) {
-      if (node.classList.contains('katex-display')) {
+      // Display math: the katex-display span OR its katex-block <p> wrapper.
+      // Without this the wrapper is walked as a paragraph and the inner katex is
+      // emitted as inline math instead of a block equation.
+      if (node.classList.contains('katex-display') || node.classList.contains('katex-block')) {
         var k = node.querySelector ? node.querySelector('.katex') : null;
         return rt_katex(k || node, true);
       }
@@ -478,6 +481,10 @@ exports.browserRuntimeScript = String.raw `
       if (node.nodeType === 1) {
         var tag = node.tagName.toLowerCase();
         if (tag === 'table' || tag === 'blockquote' || tag === 'pre') return node;
+        // A selection inside a display equation copies the whole block equation;
+        // a partial KaTeX fragment is not valid Markdown.
+        if (node.classList &&
+            (node.classList.contains('katex-block') || node.classList.contains('katex-display'))) return node;
         if (rt_containerName(node)) container = node;
       }
       node = node.parentNode;

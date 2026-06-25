@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Copy-as-Markdown now recovers **block (display) math** as `$$…$$`. Display math
+  renders as `<p class="katex-block"><span class="katex-display">…`; the walker
+  treated that wrapper as a paragraph and emitted the inner equation as *inline*
+  `$…$`. It now detects the `katex-block`/`katex-display` wrapper (→ `$$…$$`), and a
+  selection inside a display equation promotes to the whole equation.
 - Copy-as-Markdown now recovers `{{sp[…] …}}` spans. The DOM→Markdown walker
   previously emitted only the inner text of a `<span class="…">`; it now
   reconstructs `{{sp[class] body}}` (e.g. `{{sp[red] text}}`,
