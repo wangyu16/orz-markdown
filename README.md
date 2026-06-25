@@ -87,6 +87,18 @@ The bundled themes cover the parser's custom output, including:
 
 For a full list of provided themes and the underlying CSS class reference for theme authors, please read the [Themes Documentation](themes/README.md).
 
+### Embedding with your own CSS
+
+Building a host app that renders with `md.render()` but supplies its **own**
+stylesheet and page shell — a slide engine, a document viewer, an editor? Read
+the **[embedding guide](orz-markdown-skills/references/embedding.md)**. It gathers
+the full integration contract in one checklist: the CSS classes you must style
+(and the gotcha where a host CSS reset, e.g. reveal.js, strips `strong`/`em`/
+`sub`/`sup`), the JavaScript you must wire (the browser runtime for tabs/QR/copy,
+plus loading and drawing mermaid/smiles/Chart.js yourself), and exactly what
+copy-as-Markdown needs (the runtime, `.markdown-body`, and preserved `data-md`
+breadcrumbs and plugin classes).
+
 ## Packaging
 
 To rebuild distributable assets locally:

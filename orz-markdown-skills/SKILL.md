@@ -98,7 +98,7 @@ import 'orz-markdown/themes/light-neat-1.css';
 // <link rel="stylesheet" href="node_modules/orz-markdown/themes/light-neat-1.css">
 ```
 
-For custom themes start from `assets/minimal.css` (structural only, no decoration) and add your visual layer. See `references/themes.md` for the design token pattern, element checklist, and design guidelines. See `references/css-classes.md` for the full list of every CSS class the parser emits.
+For custom themes start from `assets/minimal.css` (structural only, no decoration) and add your visual layer. See `references/themes.md` for the design token pattern, element checklist, and design guidelines. See `references/css-classes.md` for the full list of every CSS class the parser emits. **Building a host app that supplies its own CSS and page shell (a slide engine, viewer, or editor)?** Read `references/embedding.md` — it gathers the CSS contract, the JS runtime + diagram-drawing duties, and the copy-as-Markdown requirements into one checklist (and the non-obvious gotchas, like a host CSS reset stripping bold/sub/sup).
 
 ---
 
@@ -175,5 +175,6 @@ Documents may carry stable block IDs on headings: `## Title{{attrs[#blk-abc12345
 | `references/block-ids.md` | Stable block-ID preservation rules — REQUIRED reading before editing documents that use `{{attrs[#blk-...]}}` |
 | `references/themes.md` | Custom theme guide: design tokens, element checklist, 10 design guidelines |
 | `references/css-classes.md` | Every CSS class and HTML element the parser emits — the spec for theme authors |
+| `references/embedding.md` | Host-integration guide for apps that bring their own CSS/shell (slide engines, viewers, editors): the CSS contract + reset gotchas, the JS runtime + diagram drawing, and what copy-as-Markdown needs |
 | `assets/template.html` | Ready-to-use HTML page template with all scripts and CDN links wired up |
 | `assets/minimal.css` | Structural-only stylesheet — starting point for custom themes |
