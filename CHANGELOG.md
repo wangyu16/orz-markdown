@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   via copy-as-markdown). The host runtime draws it with Chart.js, the same way
   smiles canvases are painted. (Not yet published to npm.)
 
+### Fixed
+
+- Copy-as-Markdown now recovers `{{sp[…] …}}` spans. The DOM→Markdown walker
+  previously emitted only the inner text of a `<span class="…">`; it now
+  reconstructs `{{sp[class] body}}` (e.g. `{{sp[red] text}}`,
+  `{{sp[success] ✓ Done}}`). Other spans (`{{space}}` has no class, emoji emits
+  text) are unaffected.
+
 ## [1.2.2] - 2026-06-24
 
 ### Fixed

@@ -191,6 +191,9 @@ exports.browserRuntimeScript = String.raw `
       case 'br': return '  \n';
       case 'img': return rt_img(node);
       case 'input': return '';
+      case 'span':
+        var spCls = (rt_attr(node, 'class') || '').trim();
+        return spCls ? '{{sp[' + spCls + '] ' + rt_inlineChildren(node) + '}}' : rt_inlineChildren(node);
       default: return rt_inlineChildren(node);
     }
   }
