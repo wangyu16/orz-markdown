@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `::: center`, `::: spoil Title`, and nested `:::: cols`/`::: col` and
   `:::: tabs`/`::: tab Label` (fence length grows so nesting re-parses; the
   JS-injected `.tabs-bar` is skipped).
+- Copy-as-Markdown promotes a selection sitting inside a `::: container` to the
+  whole container, so copying its content includes the `:::` fence — mirroring
+  the existing table/blockquote/code-block promotion. Containers nest, so the
+  selection is promoted to the **outermost** one (a copy inside one column of a
+  `:::: cols` yields the full `:::: cols … ::::`, not the inner `::: col`).
 
 ## [1.2.2] - 2026-06-24
 

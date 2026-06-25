@@ -462,18 +462,23 @@ export const browserRuntimeScript = String.raw`
     return false;
   }
 
-  // When a selection sits entirely within one table/blockquote/pre, copy that
-  // whole block: a partial table/quote/code fragment isn't valid Markdown, and
-  // browsers often clone such selections without the wrapping element.
+  // When a selection sits entirely within one table/blockquote/pre — or inside a
+  // ::: container — copy that whole block, so the wrapper is included (a partial
+  // table/quote fragment isn't valid Markdown, and a copied container should keep
+  // its ::: fence). Browsers often clone such selections without the wrapper.
+  // Tables/quotes/code don't nest, so the innermost wins; containers DO nest
+  // (cols > col, tabs > tab), so promote to the OUTERMOST one.
   function rt_promotableBlock(node) {
+    var container = null;
     while (node && !rt_isCopyRoot(node)) {
       if (node.nodeType === 1) {
         var tag = node.tagName.toLowerCase();
         if (tag === 'table' || tag === 'blockquote' || tag === 'pre') return node;
+        if (rt_containerName(node)) container = node;
       }
       node = node.parentNode;
     }
-    return null;
+    return container;
   }
 
   function onCopy(event) {
