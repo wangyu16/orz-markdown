@@ -29,6 +29,7 @@ require("./plugins/space.js");
 require("./plugins/youtube.js");
 require("./plugins/mermaid.js");
 require("./plugins/smiles.js");
+require("./plugins/chart.js");
 require("./plugins/qrcode.js");
 require("./plugins/yaml.js");
 require("./plugins/nyml.js");

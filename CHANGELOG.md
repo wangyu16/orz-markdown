@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `{{chart}}` plugin — declarative bar/line/pie/doughnut charts from a tiny
+  line-based config (`type:`, `labels:`, `series: Name = …` / `data: …`,
+  optional `title:`). Emits a `<canvas class="orz-chart" data-chart="…">` with
+  the Chart.js config as escaped JSON plus a `data-md` breadcrumb (round-trips
+  via copy-as-markdown). The host runtime draws it with Chart.js, the same way
+  smiles canvases are painted. (Not yet published to npm.)
+
 ## [1.2.2] - 2026-06-24
 
 ### Fixed

@@ -23,6 +23,7 @@ import './plugins/space.js';
 import './plugins/youtube.js';
 import './plugins/mermaid.js';
 import './plugins/smiles.js';
+import './plugins/chart.js';
 import './plugins/qrcode.js';
 import './plugins/yaml.js';
 import './plugins/nyml.js';
