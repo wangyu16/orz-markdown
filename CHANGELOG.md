@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New bundled theme **`dark-elegant-3.css` ("Nocturne")** — a VS Code-dark theme:
+  Lora serif body, colourful headings (blue/amber/green/red/pink), blue accents, and
+  decorative touches (underline bars, ✦ markers, star rules, quote-mark blockquotes,
+  translucent blurred callouts).
 - `orz-markdown/preview-frame` export with `getPreviewFrameAssets()` — a one-call
   helper for host apps that mount rendered output in an `<iframe>` (viewers,
   editors, slide/page engines). Returns the pinned CDN URLs, the browser runtime,

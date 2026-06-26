@@ -10,7 +10,7 @@
     ['light-academic-1', 'Academic'], ['light-academic-2', 'Academic 2'],
     ['beige-decent-1', 'Beige'], ['beige-decent-2', 'Beige 2'],
     ['light-playful-1', 'Playful'], ['light-playful-2', 'Playful 2'],
-    ['dark-elegant-1', 'Dark Elegant'], ['dark-elegant-2', 'Dark Elegant 2']
+    ['dark-elegant-1', 'Dark Elegant'], ['dark-elegant-2', 'Dark Elegant 2'], ['dark-elegant-3', 'Nocturne']
   ];
   // Preview-iframe assets (CDN URLs, runtime, highlight/mermaid/smiles/chart wiring)
   // come from orz-markdown's shared helper, exposed on the bundle as

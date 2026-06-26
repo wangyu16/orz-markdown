@@ -1,7 +1,7 @@
 /* orz Markdown editor — service worker. Caches the app shell (renderer, editor,
  * themes) and the CDN editor/maths assets so the app installs and works offline.
  * Mermaid/SMILES are loaded lazily only when used, so they need network. */
-var CACHE = 'orz-md-v4';
+var CACHE = 'orz-md-v5';
 var CM = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/';
 var HLJS = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/';
 var ASSETS = [
@@ -11,7 +11,7 @@ var ASSETS = [
   './themes/light-academic-1.css', './themes/light-academic-2.css',
   './themes/beige-decent-1.css', './themes/beige-decent-2.css',
   './themes/light-playful-1.css', './themes/light-playful-2.css',
-  './themes/dark-elegant-1.css', './themes/dark-elegant-2.css',
+  './themes/dark-elegant-1.css', './themes/dark-elegant-2.css', './themes/dark-elegant-3.css',
   CM + 'codemirror.min.css', CM + 'codemirror.min.js', CM + 'mode/markdown/markdown.min.js',
   CM + 'theme/material-darker.min.css',
   HLJS + 'highlight.min.js', HLJS + 'styles/github.min.css', HLJS + 'styles/atom-one-dark.min.css',
