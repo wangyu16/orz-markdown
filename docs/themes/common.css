@@ -1,0 +1,178 @@
+/* Shared structural rules for all themes. Theme files should keep visual styling
+   and variables, while this file handles cross-theme behavior and layout hooks. */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-body span.qrcode.is-expanded {
+  visibility: hidden;
+}
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media print {
+  table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  img,
+  svg,
+  canvas,
+  iframe,
+  video,
+  pre,
+  blockquote,
+  .smiles-render,
+  .qrcode {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .youtube-embed {
+    display: none !important;
+  }
+
+  .qrcode__icon {
+    display: none !important;
+  }
+}

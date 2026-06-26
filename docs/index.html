@@ -4,85 +4,58 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>orz-markdown — a markdown family that travels in one file</title>
-<meta name="description" content="orz-markdown: a customized markdown-it parser, and a family of self-contained, editable HTML document tools (.md.html, .slides.html, .paged.html). Plus a document verifier.">
-<style>
-  :root { --bg:#fbfbf9; --fg:#1c1c1f; --muted:#6b6b72; --line:#e6e6df; --accent:#2e6db5; --seal:#6ea84d; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.6 system-ui,-apple-system,sans-serif; }
-  .wrap { max-width:780px; margin:0 auto; padding:40px 20px 90px; }
-  a { color:var(--accent); text-decoration:none; } a:hover{text-decoration:underline;}
-  header { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
-  header .logo svg { height:54px; width:auto; display:block; }
-  h1 { font-size:2rem; margin:0; }
-  .tag { color:var(--muted); font-size:1.1rem; margin:.2em 0 1.8em; }
-  h2 { font-size:1.15rem; margin:2em 0 .6em; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
-  .card h3 { margin:0 0 .25em; font-size:1.05rem; }
-  .card .ext { font:600 .8rem ui-monospace,monospace; color:var(--seal); }
-  .card p { margin:.4em 0 0; font-size:.94rem; color:#444; }
-  .cta { display:inline-block; margin-top:10px; background:var(--accent); color:#fff; padding:10px 16px; border-radius:9px; font-weight:600; }
-  .cta:hover { filter:brightness(1.06); text-decoration:none; }
-  code { background:#f1f1ec; padding:1px 6px; border-radius:5px; font-size:.9em; }
-  footer { margin-top:3em; padding-top:1em; border-top:1px solid var(--line); color:var(--muted); font-size:.9rem; }
-  ul.compact { padding-left:1.2em; } ul.compact li { margin:.25em 0; }
-</style>
+<meta name="description" content="orz-markdown: a customized markdown parser, a family of self-contained editable HTML document tools (.md.html, .slides.html, .paged.html), an installable editor, and a document verifier.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <span class="logo"><svg viewBox="-5 -5 180 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fd16a"/><stop offset="1" stop-color="#5f9e44"/></linearGradient></defs><rect x="1.5" y="1.5" width="170" height="87" rx="14" fill="url(#g)"/><text x="86" y="62" font-family="Georgia,serif" font-size="58" font-weight="700" fill="#fff" text-anchor="middle">orz</text></svg></span>
-    <h1>orz-markdown</h1>
-  </header>
-  <p class="tag">A customized Markdown parser — and a family of <strong>self-contained, editable</strong> HTML document tools that travel in a single file.</p>
+<nav class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
 
-  <p>Write in Markdown; get one portable <code>.html</code> file that renders beautifully in any browser, can be
-  <strong>edited and saved in place</strong>, and copies back to clean Markdown. Pick the shape your document needs:</p>
+<main><div class="wrap">
+  <h1>Markdown that travels in one file</h1>
+  <p class="lead"><strong>orz-markdown</strong> is a customized Markdown parser — and a family of
+  <strong>self-contained, editable</strong> HTML documents. Write in Markdown; get one portable
+  <code>.html</code> that renders anywhere, edits and saves in place, and copies back to clean Markdown.</p>
 
+  <p><a class="btn" href="./editor.html">Open the editor →</a>
+     &nbsp; <a class="btn ghost" href="./guide.html">Get started</a></p>
+
+  <h2>Pick the shape your document needs</h2>
   <div class="grid">
-    <div class="card">
-      <span class="ext">.md.html</span>
-      <h3>orz-mdhtml</h3>
-      <p>A continuous document — the classic article/notes view.</p>
-      <p><a href="https://github.com/wangyu16/orz-mdhtml">GitHub →</a></p>
-    </div>
-    <div class="card">
-      <span class="ext">.slides.html</span>
-      <h3>orz-slides</h3>
-      <p>A reveal.js slide deck — present from one file, anywhere.</p>
-      <p><a href="https://github.com/wangyu16/orz-slides">GitHub →</a></p>
-    </div>
-    <div class="card">
-      <span class="ext">.paged.html</span>
-      <h3>orz-paged</h3>
-      <p>Print pages (paged.js) — export to PDF by printing.</p>
-      <p><a href="https://github.com/wangyu16/orz-paged">GitHub →</a></p>
-    </div>
+    <div class="card"><span class="ext">.md.html</span><h3>orz-mdhtml</h3>
+      <p>A continuous document — articles &amp; notes.</p><p><a href="./family.html#mdhtml">About</a> · <a href="https://github.com/wangyu16/orz-mdhtml">GitHub</a></p></div>
+    <div class="card"><span class="ext">.slides.html</span><h3>orz-slides</h3>
+      <p>A reveal.js deck — present from one file.</p><p><a href="./family.html#slides">About</a> · <a href="https://github.com/wangyu16/orz-slides">GitHub</a></p></div>
+    <div class="card"><span class="ext">.paged.html</span><h3>orz-paged</h3>
+      <p>Print pages (paged.js) — export to PDF by printing.</p><p><a href="./family.html#paged">About</a> · <a href="https://github.com/wangyu16/orz-paged">GitHub</a></p></div>
   </div>
 
-  <h2>The parser</h2>
-  <p><code>orz-markdown</code> is a markdown-it build with custom <code>{{…}}</code> plugins (mermaid, qr, youtube,
-  smiles, toc, span, charts…), <code>:::</code> containers, KaTeX math, and bundled themes — the engine all three
-  tools render with. <a href="https://github.com/wangyu16/orz-markdown">GitHub</a> ·
-  <a href="https://www.npmjs.com/package/orz-markdown">npm</a></p>
-
-  <h2>Verify a document</h2>
-  <p>These files are <strong>programs</strong>: opening one runs the JavaScript inside it. Before you trust a file
-  from someone else, check it — the verifier hashes its embedded framework against the genuine published packages and
-  scans the content for embedded code. It runs entirely in your browser.</p>
-  <p><a class="cta" href="./verify.html">Verify a file →</a></p>
-
-  <h2>Good to know</h2>
+  <h2>Also here</h2>
   <ul class="compact">
-    <li>Editing &amp; in-place Save need a Chromium-based browser (File System Access); viewing works everywhere.</li>
-    <li>Treat these files like downloaded programs — only open or edit ones from a source you trust.</li>
-    <li>When a newer framework ships, the in-file editor offers a one-click, opt-in update.</li>
+    <li><a href="./editor.html"><strong>The editor</strong></a> — a small, installable Markdown editor that renders with orz-markdown. Set it as your default <code>.md</code> editor; works offline.</li>
+    <li><a href="./verify.html"><strong>The verifier</strong></a> — check whether a file carries the genuine, unmodified orz framework before you trust it.</li>
+    <li><a href="./features.html"><strong>Features</strong></a> — the <code>{{…}}</code> plugins, <code>:::</code> containers, math, diagrams, themes, copy-as-Markdown.</li>
   </ul>
 
+  <div class="callout" style="margin-top:1.6em">
+    <strong>These files are programs.</strong> Opening one runs the JavaScript inside it, so treat them like
+    downloaded apps — only open or edit files from a source you trust. <a href="./verify.html">Verify a file →</a>
+  </div>
+
   <footer>
-    Built with orz-markdown · <a href="https://github.com/wangyu16/orz-markdown">source</a> ·
+    <a href="https://github.com/wangyu16/orz-markdown">orz-markdown on GitHub</a> ·
+    <a href="https://www.npmjs.com/package/orz-markdown">npm</a> ·
     served from <code>markdown.orz.how</code>
   </footer>
-</div>
+</div></main>
 </body>
 </html>

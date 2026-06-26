@@ -1,0 +1,20 @@
+{
+  "name": "orz Markdown editor",
+  "short_name": "orz Markdown",
+  "description": "A simple Markdown editor that renders with orz-markdown. Installable, offline-capable.",
+  "start_url": "./editor.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5f9e44",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./editor.html",
+      "accept": { "text/markdown": [".md", ".markdown"], "text/plain": [".md", ".markdown"] }
+    }
+  ],
+  "launch_handler": { "client_mode": "focus-existing" }
+}

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orz Markdown editor</title>
+<meta name="description" content="A simple Markdown editor that renders with orz-markdown. Installable, offline-capable, and registers as a .md handler.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#5f9e44">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<!-- KaTeX styling for rendered math (math itself is pre-rendered by orz-markdown) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
+<!-- CodeMirror (editor) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<!-- orz-markdown content theme for the preview -->
+<link rel="stylesheet" href="./themes/light-neat-1.css">
+<style>
+  :root { --bar:#23262c; --fg:#1c1c1f; --line:#e5e5de; --accent:#2e6db5; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { display:flex; flex-direction:column; font:15px/1.5 system-ui,-apple-system,sans-serif; color:var(--fg); }
+  #bar { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:7px 12px; background:var(--bar); color:#dfe3ea; }
+  #bar .logo img { height:24px; width:auto; display:block; }
+  #bar .name { font-weight:700; margin-right:8px; }
+  #bar .sp { flex:1; }
+  #bar button, #bar select { font:inherit; font-size:13px; color:#e6e8ec; background:#34383f; border:1px solid #454b55;
+    border-radius:7px; padding:6px 11px; cursor:pointer; }
+  #bar button:hover { background:#3f444d; }
+  #bar button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #bar .file { color:#9aa3b2; font-size:12.5px; margin-left:4px; max-width:30vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #bar .dot { color:#e0a44a; margin-left:2px; opacity:0; } body[data-dirty="1"] #bar .dot { opacity:1; }
+  #main { flex:1; min-height:0; display:grid; grid-template-columns:1fr 6px 1fr; }
+  #ed { min-width:0; } #ed .CodeMirror { height:100%; font:14px/1.55 ui-monospace,Menlo,Consolas,monospace; }
+  #split { background:var(--line); cursor:col-resize; }
+  #pv { min-width:0; overflow:auto; background:#fff; }
+  #preview { max-width:46em; margin:0 auto; padding:28px 30px 60px; }
+  [data-view="editor"] #main { grid-template-columns:1fr 0 0; }
+  [data-view="preview"] #main { grid-template-columns:0 0 1fr; }
+  #toast { position:fixed; left:50%; bottom:16px; transform:translateX(-50%) translateY(18px); background:#111; color:#fff;
+    padding:8px 15px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s,transform .2s; pointer-events:none; }
+  #toast.show { opacity:.95; transform:translateX(-50%) translateY(0); }
+  @media (max-width:680px){ #main{grid-template-columns:1fr!important;} #split{display:none;} body:not([data-view="preview"]) #pv{display:none;} body[data-view="preview"] #ed{display:none;} }
+</style>
+</head>
+<body data-view="split">
+  <div id="bar">
+    <a class="logo" href="./" title="orz-markdown"><img src="./orz.svg" alt="orz-markdown"></a>
+    <span class="name">Markdown</span>
+    <button id="b-new">New</button>
+    <button id="b-open">Open</button>
+    <button id="b-save" class="primary">Save</button>
+    <button id="b-saveas">Save as…</button>
+    <span class="file" id="fname">untitled.md</span><span class="dot">●</span>
+    <span class="sp"></span>
+    <select id="b-view" title="View"><option value="split">Split</option><option value="editor">Editor</option><option value="preview">Preview</option></select>
+    <select id="b-theme" title="Preview theme">
+      <option value="light-neat-1">Neat</option>
+      <option value="light-academic-1">Academic</option>
+      <option value="beige-decent-1">Beige</option>
+      <option value="light-playful-1">Playful</option>
+    </select>
+  </div>
+  <div id="main">
+    <div id="ed"><textarea id="ta" spellcheck="false"></textarea></div>
+    <div id="split"></div>
+    <div id="pv"><article id="preview" class="markdown-body"></article></div>
+  </div>
+  <div id="toast"></div>
+
+<script src="./orzmd.browser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="./editor.js"></script>
+</body>
+</html>

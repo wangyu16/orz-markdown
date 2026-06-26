@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide — orz-markdown</title>
+<meta name="description" content="How to use orz-markdown: the installable editor, generating .md.html / .slides.html / .paged.html with the CLIs, the in-file editor, and verifying files.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
+</head>
+<body>
+<nav class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a><a href="./family.html">The family</a><a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a><a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+
+<main><div class="wrap">
+  <h1>Guide</h1>
+  <p class="lead">Three ways to use orz-markdown — pick what fits.</p>
+
+  <h2>1 · The editor (no install of anything)</h2>
+  <p>Open <a href="./editor.html">the editor</a> and start typing — it renders live with orz-markdown.
+  In Chrome or Edge you can <strong>install it</strong> (address-bar install icon, or “Install app”), after which:</p>
+  <ul class="compact">
+    <li>It opens in its own window and works <strong>offline</strong>.</li>
+    <li>It registers as a <code>.md</code> handler — set it as your default and <strong>double-click any
+      <code>.md</code></strong> to edit it; <kbd>Ctrl/⌘-S</kbd> saves back to the same file.</li>
+  </ul>
+  <p class="callout">File-association and in-place Save use Chromium-only APIs (Chrome/Edge, desktop). In other
+  browsers the editor still runs — use <em>Open</em> / <em>Save as</em>.</p>
+
+  <h2>2 · Generate a self-contained document (CLI)</h2>
+  <p>Install a family tool, then turn a Markdown file into one portable <code>.html</code>:</p>
+  <pre><code># a continuous document
+npx orz-mdhtml  notes.md            # → notes.md.html
+
+# a slide deck
+npx orz-slides  deck.md             # → deck.slides.html
+
+# a print/PDF document
+npx orz-paged   paper.md            # → paper.paged.html</code></pre>
+  <p>Each writes a single self-contained file. Open it in a browser to read/present/print; click the edit
+  affordance to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
+  jsDelivr; the default <code>--inline</code> embeds it for offline use.</p>
+
+  <h2>3 · Render with the parser (developers)</h2>
+  <pre><code>import md from 'orz-markdown';
+const html = md.render('# Hello {{emoji wave}}');
+// place inside &lt;article class="markdown-body"&gt;…&lt;/article&gt; with a bundled theme</code></pre>
+  <p>See the <a href="./features.html">features</a> and the
+  <a href="https://github.com/wangyu16/orz-markdown">README</a> for the full syntax, themes, and the agent skill.</p>
+
+  <h2>Verifying a file someone sent you</h2>
+  <p>These documents are <strong>programs</strong> — opening one runs its embedded code. Before trusting a file
+  from an untrusted source, run it through <a href="./verify.html">the verifier</a>: it hashes the embedded
+  framework against the genuine published packages and scans the content for embedded scripts, entirely in your
+  browser. Treat anything it can’t confirm like a downloaded app.</p>
+
+  <p style="margin-top:2em"><a class="btn" href="./editor.html">Open the editor →</a>
+     &nbsp;<a class="btn ghost" href="./verify.html">Verify a file</a></p>
+
+  <footer><a href="./">Home</a> · <a href="./family.html">The family</a> · <a href="https://github.com/wangyu16/orz-markdown">GitHub</a></footer>
+</div></main>
+</body>
+</html>
