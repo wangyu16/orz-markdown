@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   var THEMES = [
-    ['light-neat-1', 'Neat'], ['light-neat-2', 'Neat 2'],
+    ['light-neat-1', 'Neat'], ['light-neat-2', 'Neat 2'], ['light-neat-3', 'Orchard'],
     ['light-academic-1', 'Academic'], ['light-academic-2', 'Academic 2'],
     ['beige-decent-1', 'Beige'], ['beige-decent-2', 'Beige 2'],
     ['light-playful-1', 'Playful'], ['light-playful-2', 'Playful 2'],

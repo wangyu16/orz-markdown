@@ -83,6 +83,7 @@ Ten bundled themes — each auto-imports `common.css` (structural rules for tabl
 | `dark-elegant-2.css` | Dark elegant variant | Dark |
 | `light-neat-1.css` | Figtree · clean modern sans | Light |
 | `light-neat-2.css` | Light neat variant | Light |
+| `light-neat-3.css` | Bricolage · calm green "Orchard" | Light |
 | `beige-decent-1.css` | Warm beige · print-like prose | Light |
 | `beige-decent-2.css` | Beige decent variant | Light |
 | `light-academic-1.css` | Alegreya · justified scholarly prose | Light |

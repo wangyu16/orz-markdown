@@ -6,7 +6,7 @@ var CM = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/';
 var ASSETS = [
   './', './editor.html', './editor.js', './orzmd.browser.js', './manifest.webmanifest', './icon.svg', './orz.svg',
   './themes/common.css',
-  './themes/light-neat-1.css', './themes/light-neat-2.css',
+  './themes/light-neat-1.css', './themes/light-neat-2.css', './themes/light-neat-3.css',
   './themes/light-academic-1.css', './themes/light-academic-2.css',
   './themes/beige-decent-1.css', './themes/beige-decent-2.css',
   './themes/light-playful-1.css', './themes/light-playful-2.css',
