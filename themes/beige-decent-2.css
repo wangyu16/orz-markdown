@@ -31,7 +31,7 @@
   --line-height: 1.8;
 
   --markdown-body-max-width: 760px;
-  --markdown-body-padding: 5rem 2rem;
+  --markdown-body-padding: 2.5rem 2rem 5rem;
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
@@ -59,6 +59,8 @@ body {
 }
 
 /* 2. Headings and body copy */
+.markdown-body > :first-child { margin-top: 0; }
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,

@@ -16,8 +16,8 @@
 :root {
   color-scheme: light;
 
-  --bg: #edf4fa;
-  --bg-soft: #f6fafe;
+  --bg: #f7f9fb;
+  --bg-soft: #ffffff;
   --surface: #ffffff;
   --surface-2: #f5f9fd;
   --surface-3: #eef4fa;
@@ -170,8 +170,8 @@ body {
   min-height: 100vh;
   padding: clamp(0.9rem, 2.5vw, 2rem);
   background:
-    radial-gradient(circle at top left, rgba(98, 176, 232, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(72, 183, 168, 0.1), transparent 22%),
+    radial-gradient(circle at top left, rgba(98, 176, 232, 0.06), transparent 28%),
+    radial-gradient(circle at top right, rgba(72, 183, 168, 0.05), transparent 22%),
     linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
   color: var(--text);
   font-family: var(--font-body);
