@@ -112,6 +112,149 @@
     <button id="update-dismiss">Later</button>
   </div>
 
+<script type="text/markdown" id="welcome">
+# orz Markdown — a feature tour
+
+Welcome! This default document renders **every** feature orz Markdown supports.
+Edit on the left and the preview updates live. Open a `.md` file (or install this
+app and set it as your default `.md` editor) to work on your own documents.
+
+{{toc 2,3}}
+
+## Text
+
+**Bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline code`,
+==highlight==, ++inserted++, super^script^ and sub~script~, and a
+[link](https://markdown.orz.how).
+
+> A blockquote can hold **any** Markdown, including lists and code.
+
+## Lists
+
+- Bullet item
+  - Nested item
+  - Another nested item
+- Second item
+
+1. Ordered item
+2. Second item
+3. Third item
+
+- [x] A completed task
+- [ ] A pending task
+
+## Table
+
+| Feature  | Inline | Block |
+|:---------|:------:|------:|
+| Math     |   ✓    |   ✓   |
+| Diagrams |        |   ✓   |
+| Themes   |        |   ✓   |
+
+## Code
+
+```js
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+```
+
+## Math
+
+Inline math $e^{i\pi} + 1 = 0$, and a display equation:
+
+$$\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$$
+
+Chemistry with mhchem: $\ce{CO2 + H2O -> H2CO3}$
+
+## Plugins
+
+Emoji {{emoji rocket}} {{emoji sparkles}} {{emoji tada}}, colored
+{{sp[green] spans}}, and badges {{sp[success] ok}} {{sp[warning] check}} {{sp[danger] stop}}.
+
+A scannable QR code: {{qr https://markdown.orz.how}}
+
+A flowchart:
+
+{{mermaid
+graph LR
+  Write --> Render --> Share
+  Render --> Edit --> Render
+}}
+
+A chart:
+
+{{chart
+type: bar
+labels: Mon, Tue, Wed, Thu
+data: 4, 7, 5, 9
+}}
+
+Aspirin, drawn from a SMILES string:
+
+{{smiles CC(=O)Oc1ccccc1C(=O)O}}
+
+## Containers
+
+::: info
+**Info.** A neutral note worth highlighting.
+:::
+
+::: success
+**Success.** Everything passed.
+:::
+
+::: warning
+**Warning.** Double-check this part.
+:::
+
+::: danger
+**Danger.** This action is risky.
+:::
+
+Two columns side by side:
+
+:::: cols 1 1
+::: col
+**Left column**
+
+Content flows here.
+:::
+::: col
+**Right column**
+
+And here.
+:::
+::::
+
+Tabbed content:
+
+:::: tabs
+::: tab Overview
+The first tab's content.
+:::
+::: tab Details
+The second tab's content.
+:::
+::::
+
+A spoiler:
+
+::: spoil Click to reveal
+Hidden until you open it.
+:::
+
+## Footnotes
+
+Here is a statement with a footnote.[^note]
+
+[^note]: And here is the footnote text.
+
+---
+
+That's the tour. Switch the **theme** and **text size** in the toolbar — your
+choices are saved and restored next time.
+</script>
 <script src="./orzmd.browser.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>

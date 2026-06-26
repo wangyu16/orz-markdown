@@ -21,7 +21,9 @@
   };
   var SUN = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4"/>';
   var MOON = '<path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8z"/>';
-  var WELCOME = '# The orz Markdown editor\n\nType on the left; it renders with **orz-markdown** on the right.\n\n- Open a `.md` file, or install this app and set it as your default `.md` editor\n- **Save** writes back to the same file · works **offline**\n- Switch the **preview theme** and toggle **dark mode** in the toolbar\n\nIt supports the full feature set: math, diagrams, containers, and the `{{…}}` plugins:\n\nInline math $E = mc^2$ and a display equation:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\n\n::: info\nA semantic container. {{sp[green] colored span}} and an emoji {{emoji sparkles}}.\n:::\n\n```js\nconst hello = "world";\n```\n';
+  // Default document (a tour of every feature) lives as a hidden markdown <script>
+  // in the page, so we don't have to escape backslashes/backticks in JS.
+  var WELCOME = (function () { var e = document.getElementById('welcome'); return e ? e.textContent.replace(/^\n+/, '').replace(/\s+$/, '') : '# orz Markdown\n'; })();
 
   var cm, frame, frameReady = false, fileHandle = null, dirty = false, rTimer = null, theme;
   var splitCols = '', sync = true, driver = 'ed', fontScale = 1;
