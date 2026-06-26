@@ -35,7 +35,12 @@
       if (!window.Chart) return;
       root.querySelectorAll('canvas.orz-chart[data-chart]').forEach(function (cv) {
         if (cv.__d) return; cv.__d = 1;
-        try { var cfg = JSON.parse(cv.getAttribute('data-chart') || '{}'); cfg.options = Object.assign({ responsive: false, animation: false }, cfg.options || {}); new window.Chart(cv, cfg); } catch (e) {}
+        // wrap + make responsive so the chart fits its container instead of overflowing
+        var wrap = cv.ownerDocument.createElement('div');
+        wrap.style.cssText = 'position:relative;width:100%;max-width:420px;margin:.4em auto';
+        cv.parentNode.insertBefore(wrap, cv); wrap.appendChild(cv);
+        cv.removeAttribute('width'); cv.removeAttribute('height'); cv.style.width = ''; cv.style.height = '';
+        try { var cfg = JSON.parse(cv.getAttribute('data-chart') || '{}'); cfg.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, cfg.options || {}); new window.Chart(cv, cfg); } catch (e) {}
       });
     });
   }

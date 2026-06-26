@@ -88,7 +88,9 @@ p { margin:.7em 0; }
 @media (max-width:760px){ .demo.split{ grid-template-columns:1fr; } }
 .demo .src { background:var(--code-bg); color:var(--code-fg); margin:0; padding:16px 18px; overflow:auto;
   font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; }
-.demo .srctext { display:block; white-space:pre; }
+/* the source is a <code>; override the global inline-code pill so it isn't light-on-light, and let it wrap */
+.demo .srctext { display:block; white-space:pre-wrap; overflow-wrap:anywhere; background:none; color:inherit;
+  padding:0; border:0; font:inherit; border-radius:0; }
 .demo .src .cap, .demo .out .cap { display:block; font:600 .7rem ui-sans-serif,system-ui,sans-serif;
   letter-spacing:.07em; text-transform:uppercase; opacity:.55; margin-bottom:9px; }
 .demo .out { padding:18px 20px; min-width:0; border-left:1px solid var(--line); }
@@ -128,6 +130,7 @@ p { margin:.7em 0; }
 .render mark,.render .mark { background:#fdeb9c; padding:0 3px; border-radius:3px; }
 .render .katex-display { margin:.6em 0; overflow-x:auto; overflow-y:hidden; }
 .render .qrcode svg, .render .mermaid svg { max-width:160px; height:auto; }
+.render canvas { max-width:100%; height:auto; }
 
 /* ---- feature rows / misc ---- */
 .section { padding:8px 0; } .section + .section { margin-top:8px; }
