@@ -24,6 +24,7 @@
   var WELCOME = '# The orz Markdown editor\n\nType on the left; it renders with **orz-markdown** on the right.\n\n- Open a `.md` file, or install this app and set it as your default `.md` editor\n- **Save** writes back to the same file · works **offline**\n- Switch the **preview theme** and toggle **dark mode** in the toolbar\n\nIt supports the full feature set: math, diagrams, containers, and the `{{…}}` plugins:\n\nInline math $E = mc^2$ and a display equation:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\n\n::: info\nA semantic container. {{sp[green] colored span}} and an emoji {{emoji sparkles}}.\n:::\n\n```js\nconst hello = "world";\n```\n';
 
   var cm, frame, frameReady = false, fileHandle = null, dirty = false, rTimer = null, theme;
+  var splitCols = '', sync = true, driver = 'ed';
   var root = document.documentElement;
   function $(id) { return document.getElementById(id); }
   function toast(m) { var t = $('toast'); t.textContent = m; t.classList.add('show'); setTimeout(function () { t.classList.remove('show'); }, 1800); }
@@ -36,7 +37,17 @@
       '<style>html{height:100%}body{margin:0;min-height:100%}.orz-wrap{max-width:46em;margin:0 auto;padding:32px 34px 72px}img{max-width:100%}</style>' +
       '</head><body><div class="orz-wrap"><article class="markdown-body" id=c></article></div></body></html>';
   }
-  function buildFrame() { frame.srcdoc = shell(theme); frame.onload = function () { frameReady = true; render(); }; }
+  function buildFrame() {
+    frame.srcdoc = shell(theme);
+    frame.onload = function () {
+      frameReady = true;
+      var w = frame.contentWindow;
+      w.addEventListener('scroll', pvToEd, { passive: true });
+      w.addEventListener('wheel', function () { driver = 'pv'; }, { passive: true });
+      w.addEventListener('mousedown', function () { driver = 'pv'; });
+      render();
+    };
+  }
   function inject(iwin, src, cb) {
     var d = iwin.document; if (d.querySelector('script[data-l="' + src + '"]')) { cb && cb(); return; }
     var s = d.createElement('script'); s.src = src; s.async = true; s.setAttribute('data-l', src);
@@ -112,14 +123,48 @@
     $('i-dark').innerHTML = m === 'dark' ? SUN : MOON;
     if (m === 'dark') { ensureCss(CM_DARK); if (cm) cm.setOption('theme', 'material-darker'); } else if (cm) cm.setOption('theme', 'default');
   }
-  function setView(v) { root.setAttribute('data-view', v); Array.prototype.forEach.call($('seg-view').children, function (b) { b.classList.toggle('on', b.getAttribute('data-v') === v); }); if (cm) setTimeout(function () { cm.refresh(); }, 30); }
+  function setView(v) {
+    root.setAttribute('data-view', v);
+    Array.prototype.forEach.call($('seg-view').children, function (b) { b.classList.toggle('on', b.getAttribute('data-v') === v); });
+    // clear the dragged inline ratio outside split view so the CSS collapse rules win; restore it on return
+    $('main').style.gridTemplateColumns = (v === 'split') ? splitCols : '';
+    if (cm) setTimeout(function () { cm.refresh(); }, 30);
+  }
 
-  /* splitter */
+  /* splitter (drag to resize panes) */
   function wireSplit() {
     var s = $('split'), main = $('main'), drag = false;
-    s.addEventListener('mousedown', function (e) { drag = true; e.preventDefault(); document.body.style.userSelect = 'none'; });
-    document.addEventListener('mousemove', function (e) { if (!drag) return; var p = Math.max(15, Math.min(85, e.clientX / window.innerWidth * 100)); main.style.gridTemplateColumns = p + '% 6px ' + (100 - p) + '%'; });
-    document.addEventListener('mouseup', function () { if (drag) { drag = false; document.body.style.userSelect = ''; if (cm) cm.refresh(); } });
+    s.addEventListener('mousedown', function (e) { drag = true; e.preventDefault(); document.body.classList.add('resizing'); });
+    document.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var p = Math.max(15, Math.min(85, e.clientX / window.innerWidth * 100));
+      splitCols = p + '% 6px ' + (100 - p) + '%';
+      main.style.gridTemplateColumns = splitCols;
+    });
+    document.addEventListener('mouseup', function () { if (!drag) return; drag = false; document.body.classList.remove('resizing'); if (cm) cm.refresh(); });
+  }
+
+  /* scroll sync (editor <-> preview), toggleable. Only the pane the user is
+     actually interacting with (the "driver", set on pointer-enter / editor focus)
+     propagates; the other pane's induced scroll events are ignored, so a
+     programmatic scroll can never bounce back and fight the user. */
+  function pvEl() { var d = frame.contentDocument; return d ? (d.scrollingElement || d.documentElement) : null; }
+  function edToPv() {
+    if (!sync || driver !== 'ed') return;
+    var el = pvEl(); if (!el) return;
+    var info = cm.getScrollInfo(); var r = info.top / ((info.height - info.clientHeight) || 1);
+    el.scrollTop = r * (el.scrollHeight - el.clientHeight);
+  }
+  function pvToEd() {
+    if (!sync || driver !== 'pv') return;
+    var el = pvEl(); if (!el) return;
+    var r = el.scrollTop / ((el.scrollHeight - el.clientHeight) || 1); var info = cm.getScrollInfo();
+    cm.scrollTo(null, r * (info.height - info.clientHeight));
+  }
+  function setSync(on) {
+    sync = on; try { localStorage.setItem('orz-md:sync', on ? '1' : '0'); } catch (e) {}
+    $('b-sync').classList.toggle('on', on); $('b-sync').title = 'Sync scrolling: ' + (on ? 'on' : 'off');
+    if (on) { driver = 'ed'; edToPv(); }
   }
 
   /* boot */
@@ -131,10 +176,18 @@
     $('b-theme').value = theme;
     cm = window.CodeMirror.fromTextArea($('ta'), { mode: 'markdown', lineNumbers: true, lineWrapping: true });
     cm.on('change', function () { setDirty(true); schedule(); });
+    cm.on('scroll', edToPv);
+    cm.on('focus', function () { driver = 'ed'; });
+    $('ed').addEventListener('mouseenter', function () { driver = 'ed'; });
+    $('ed').addEventListener('wheel', function () { driver = 'ed'; }, { passive: true });
+    frame.addEventListener('mouseenter', function () { driver = 'pv'; });
     setChrome(chrome);
     $('b-new').onclick = newDoc; $('b-open').onclick = openFile; $('b-save').onclick = save; $('b-saveas').onclick = saveAs;
     $('b-theme').onchange = function () { setTheme(this.value); };
     $('b-dark').onclick = function () { setChrome(root.getAttribute('data-chrome') === 'dark' ? 'light' : 'dark'); };
+    var syncPref = (function () { try { return localStorage.getItem('orz-md:sync'); } catch (e) { return null; } })();
+    setSync(syncPref !== '0');
+    $('b-sync').onclick = function () { setSync(!sync); };
     Array.prototype.forEach.call($('seg-view').children, function (b) { b.onclick = function () { setView(b.getAttribute('data-v')); }; });
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && /^s$/i.test(e.key)) { e.preventDefault(); save(); }
