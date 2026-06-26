@@ -85,7 +85,7 @@ body.size-xl, .markdown-body.size-xl { --font-scale: 1.18; }
   padding: var(--markdown-body-padding);
   color: var(--text-color);
   font-family: var(--font-body);
-  font-size: 1.12rem;
+  font-size: 1rem;
   line-height: 1.8;
   word-wrap: break-word;
   overflow-wrap: break-word;

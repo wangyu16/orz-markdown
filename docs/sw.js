@@ -1,7 +1,7 @@
 /* orz Markdown editor — service worker. Caches the app shell (renderer, editor,
  * themes) and the CDN editor/maths assets so the app installs and works offline.
  * Mermaid/SMILES are loaded lazily only when used, so they need network. */
-var CACHE = 'orz-md-v5';
+var CACHE = 'orz-md-v6';
 var CM = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/';
 var HLJS = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/';
 var ASSETS = [
