@@ -4,64 +4,152 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The editable family · orz-markdown</title>
-<meta name="description" content="The orz editable-document family: .md.html (orz-mdhtml), .slides.html (orz-slides), .paged.html (orz-paged): self-contained, editable HTML you can save in place and print to PDF.">
+<meta name="description" content="The orz editable-document family: .md.html (orz-mdhtml), .slides.html (orz-slides), .paged.html (orz-paged). Self-contained, editable HTML you can save in place and print to PDF.">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
 <link rel="stylesheet" href="./site.css">
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top"><div class="bar">
   <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
   <span class="links">
-    <a href="./features.html">Features</a><a href="./family.html">The family</a><a href="./guide.html">Guide</a>
-    <a href="./verify.html">Verify</a><a class="cta" href="./editor.html">Open editor</a>
+    <a href="./features.html">Features</a>
+    <a href="./family.html" class="here">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
   </span>
 </div></nav>
 
-<main><div class="wrap">
-  <h1>The editable family</h1>
-  <p class="lead">Three tools, one renderer. Each turns Markdown into a <strong>single, self-contained,
-  editable</strong> HTML file, in different shapes for different documents.</p>
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <h1>The editable document family</h1>
+    <p class="lead" style="max-width:680px">Three tools, one renderer. Each turns your Markdown into a single,
+    self-contained, <strong>editable</strong> HTML file. Different shapes for different documents.</p>
+  </div></section>
 
-  <h2>What they all share</h2>
-  <ul class="compact">
-    <li><strong>One portable file.</strong> The Markdown source lives inside; the file renders itself on open.</li>
-    <li><strong>Edit in place.</strong> A built-in pop-out editor (CodeMirror) with live preview; Save writes back to the same file (Chromium browsers, via the File System Access API).</li>
-    <li><strong>Copy as Markdown.</strong> Select rendered content, copy, get clean Markdown source.</li>
-    <li><strong>Self-updating, opt-in.</strong> When a newer framework ships, the editor offers a one-click update from the canonical packages.</li>
-    <li><strong>Self-contained or CDN.</strong> <code>--inline</code> embeds the engine + theme (works offline); <code>--cdn</code> references jsDelivr. Fonts, images, and math/diagram libraries load from CDN at view time.</li>
-  </ul>
+  <div class="wide">
 
-  <h2 id="mdhtml">orz-mdhtml &nbsp;<span class="ext" style="font-size:.9rem">.md.html</span></h2>
-  <p>A <strong>continuous document</strong>: the classic article, README, or notes view, rendered in a themed
-  iframe for true WYSIWYG. The editor sits beside a live preview with optional scroll-sync.
-  <a href="https://github.com/wangyu16/orz-mdhtml">GitHub</a></p>
+  <!-- SHARED -->
+  <section class="section" style="margin-top:24px">
+    <h2>What they all share</h2>
+    <div class="grid c3">
+      <div class="card"><h3 style="margin-top:0">One portable file</h3><p>The Markdown source lives inside the file; it renders itself on open. Nothing to install to read it.</p></div>
+      <div class="card"><h3 style="margin-top:0">Edit in place</h3><p>A built-in editor with live preview. Save writes back to the same file (in Chromium browsers).</p></div>
+      <div class="card"><h3 style="margin-top:0">Copy as Markdown</h3><p>Select rendered content, copy, and get clean Markdown source back, ready to reuse anywhere.</p></div>
+      <div class="card"><h3 style="margin-top:0">Self-updating, opt-in</h3><p>When a newer framework ships, the editor offers a one-click update from the canonical packages.</p></div>
+      <div class="card"><h3 style="margin-top:0">Offline or CDN</h3><p><code>--inline</code> embeds the engine and theme for offline use; <code>--cdn</code> makes a smaller file.</p></div>
+      <div class="card"><h3 style="margin-top:0">Verifiable</h3><p>The embedded framework hashes against the published packages, so tampering is detectable.</p></div>
+    </div>
+  </section>
 
-  <h2 id="slides">orz-slides &nbsp;<span class="ext" style="font-size:.9rem">.slides.html</span></h2>
-  <p>A <strong>reveal.js slide deck</strong> you present from one file in any browser. A layout grammar
-  (<code>2col</code>, splits, regions), structure templates (title/section/closing), and presenter tools:
-  speaker view, step-reveal fragments, a timer, slide numbers. <a href="https://github.com/wangyu16/orz-slides">GitHub</a></p>
+  <!-- MDHTML -->
+  <section class="section" id="mdhtml" style="margin-top:46px">
+    <div class="grid c2" style="align-items:center;gap:34px">
+      <div>
+        <span class="ext">.md.html</span>
+        <h2 style="margin:.4em 0 .2em">orz-mdhtml</h2>
+        <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A continuous document.</p>
+        <p>The classic article, README, or notes view, rendered for true WYSIWYG. The editor sits beside a live
+        preview with optional scroll-sync, exactly like the one on this site.</p>
+        <ul class="compact">
+          <li><strong>Best for</strong> articles, documentation, notes, web-style reading.</li>
+          <li>Resizable split, theme switch, copy-as-Markdown.</li>
+        </ul>
+        <p><a href="https://github.com/wangyu16/orz-mdhtml">orz-mdhtml on GitHub →</a></p>
+      </div>
+      <div class="mock">
+        <div class="chrome"><i></i><i></i><i></i><span>notes.md.html</span></div>
+        <div class="screen" data-demo style="padding:16px 18px">
+          <div class="render"></div>
+          <script type="text/markdown">
+# Field notes {{emoji seedling}}
 
-  <h2 id="paged">orz-paged &nbsp;<span class="ext" style="font-size:.9rem">.paged.html</span></h2>
-  <p>A <strong>paginated print document</strong>: Markdown laid out as pages with <a href="https://pagedjs.org/">paged.js</a>
-  (A4/Letter, margins, running headers/footers, page numbers). Edit side-by-side, then <strong>export to PDF
-  by printing</strong>, with no PDF binary and no server. Curated templates for articles, letters, CVs, reports, and
-  exams. <a href="https://github.com/wangyu16/orz-paged">GitHub</a></p>
+::: info
+A continuous, themed document.
+:::
 
-  <h2>Which one?</h2>
-  <table>
-    <tr><th>You want…</th><th>Use</th></tr>
-    <tr><td>An article, note, README, or web-style document</td><td><code>.md.html</code></td></tr>
-    <tr><td>To present slides from a single file</td><td><code>.slides.html</code></td></tr>
-    <tr><td>A print/PDF document: paper, report, CV, exam</td><td><code>.paged.html</code></td></tr>
-    <tr><td>Just to edit Markdown and keep the <code>.md</code></td><td>the <a href="./editor.html">editor</a></td></tr>
-  </table>
+- Renders **anywhere**
+- Edits in place
+- $a^2 + b^2 = c^2$
+          </script>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <div class="callout" style="margin-top:1.6em">
-    <strong>Editing &amp; in-place Save need a Chromium-based browser</strong> (Chrome/Edge). Viewing,
-    presenting, and printing work in any modern browser.
+  <!-- SLIDES -->
+  <section class="section" id="slides" style="margin-top:46px">
+    <div class="grid c2" style="align-items:center;gap:34px">
+      <div class="slide">
+        <div class="t">Present from one file</div>
+        <ul><li>Layout grammar &amp; templates</li><li>Speaker view, fragments, timer</li><li>Runs in any browser</li></ul>
+      </div>
+      <div>
+        <span class="ext">.slides.html</span>
+        <h2 style="margin:.4em 0 .2em">orz-slides</h2>
+        <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A reveal.js slide deck.</p>
+        <p>Present from a single file in any browser. A layout grammar (columns, splits, regions), structure
+        templates (title, section, closing), and presenter tools: speaker view, step-reveal fragments, a timer,
+        and slide numbers.</p>
+        <ul class="compact">
+          <li><strong>Best for</strong> talks, lectures, lightweight decks you can email.</li>
+        </ul>
+        <p><a href="https://github.com/wangyu16/orz-slides">orz-slides on GitHub →</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGED -->
+  <section class="section" id="paged" style="margin-top:46px">
+    <div class="grid c2" style="align-items:center;gap:34px">
+      <div>
+        <span class="ext">.paged.html</span>
+        <h2 style="margin:.4em 0 .2em">orz-paged</h2>
+        <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A paginated print document.</p>
+        <p>Markdown laid out as pages with <a href="https://pagedjs.org/">paged.js</a>: A4 or Letter, margins,
+        running headers and footers, page numbers. Edit side by side, then <strong>export to PDF by printing</strong>.
+        No PDF binary, no server. Curated templates for articles, letters, CVs, reports, and exams.</p>
+        <ul class="compact">
+          <li><strong>Best for</strong> papers, reports, CVs, exams, anything destined for paper or PDF.</li>
+        </ul>
+        <p><a href="https://github.com/wangyu16/orz-paged">orz-paged on GitHub →</a></p>
+      </div>
+      <div class="page">
+        <div class="ttl">A Short Report</div>
+        <div class="meta">Yu Wang · 2026</div>
+        <div class="body2">
+          <div class="ln" style="width:90%"></div><div class="ln"></div><div class="ln" style="width:80%"></div>
+          <div class="ln"></div><div class="ln" style="width:60%"></div><div class="ln"></div>
+          <div class="ln" style="width:85%"></div><div class="ln" style="width:70%"></div><div class="ln"></div>
+          <div class="ln" style="width:50%"></div><div class="ln"></div><div class="ln" style="width:75%"></div>
+        </div>
+        <div class="pn">1</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHICH -->
+  <section class="section" style="margin-top:46px">
+    <h2>Which one?</h2>
+    <table>
+      <tr><th>You want…</th><th>Use</th></tr>
+      <tr><td>An article, note, README, or web-style document</td><td><span class="ext">.md.html</span></td></tr>
+      <tr><td>To present slides from a single file</td><td><span class="ext">.slides.html</span></td></tr>
+      <tr><td>A print or PDF document: paper, report, CV, exam</td><td><span class="ext">.paged.html</span></td></tr>
+      <tr><td>Just to edit Markdown and keep the <code>.md</code></td><td><a href="./editor.html">the editor</a></td></tr>
+    </table>
+    <div class="callout amber" style="margin-top:18px"><strong>Editing and in-place Save need a Chromium-based
+    browser</strong> (Chrome or Edge). Viewing, presenting, and printing work in any modern browser.</div>
+    <footer><div class="row">
+      <a href="./">Home</a><a href="./guide.html">Guide</a><a href="./verify.html">Verify a file</a>
+    </div></footer>
+  </section>
+
   </div>
+</main>
 
-  <footer><a href="./">Home</a> · <a href="./guide.html">Guide</a> · <a href="./verify.html">Verify a file</a></footer>
-</div></main>
+<script src="./orzmd.browser.js"></script>
+<script src="./demos.js"></script>
 </body>
 </html>

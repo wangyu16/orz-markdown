@@ -4,65 +4,111 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guide · orz-markdown</title>
-<meta name="description" content="How to use orz-markdown: the installable editor, generating .md.html / .slides.html / .paged.html with the CLIs, the in-file editor, and verifying files.">
+<meta name="description" content="How to use orz-markdown: the installable editor, generating .md.html / .slides.html / .paged.html with the CLIs, the parser API, and verifying files.">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./site.css">
+<style>
+  #u-editor:checked ~ .labels label[for="u-editor"],
+  #u-cli:checked ~ .labels label[for="u-cli"],
+  #u-parser:checked ~ .labels label[for="u-parser"] { background:var(--surface); color:var(--brand-ink); box-shadow:0 -2px 0 var(--brand) inset; }
+  #u-editor:checked ~ .panels .p-editor,
+  #u-cli:checked ~ .panels .p-cli,
+  #u-parser:checked ~ .panels .p-parser { display:block; }
+</style>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top"><div class="bar">
   <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
   <span class="links">
-    <a href="./features.html">Features</a><a href="./family.html">The family</a><a href="./guide.html">Guide</a>
-    <a href="./verify.html">Verify</a><a class="cta" href="./editor.html">Open editor</a>
+    <a href="./features.html">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./guide.html" class="here">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
   </span>
 </div></nav>
 
-<main><div class="wrap">
-  <h1>Guide</h1>
-  <p class="lead">Three ways to use orz-markdown. Pick what fits.</p>
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wrap">
+    <h1>Three ways to use it</h1>
+    <p class="lead">Pick what fits: write in the browser editor, generate a self-contained document with a CLI,
+    or render with the parser in your own code.</p>
+  </div></section>
 
-  <h2>1 · The editor (no install of anything)</h2>
-  <p>Open <a href="./editor.html">the editor</a> and start typing; it renders live with orz-markdown.
-  In Chrome or Edge you can <strong>install it</strong> (address-bar install icon, or “Install app”), after which:</p>
-  <ul class="compact">
-    <li>It opens in its own window and works <strong>offline</strong>.</li>
-    <li>It registers as a <code>.md</code> handler, so set it as your default and <strong>double-click any
-      <code>.md</code></strong> to edit it; <kbd>Ctrl/⌘-S</kbd> saves back to the same file.</li>
-  </ul>
-  <p class="callout">File-association and in-place Save use Chromium-only APIs (Chrome/Edge, desktop). In other
-  browsers the editor still runs; use <em>Open</em> / <em>Save as</em>.</p>
-
-  <h2>2 · Generate a self-contained document (CLI)</h2>
-  <p>Install a family tool, then turn a Markdown file into one portable <code>.html</code>:</p>
-  <pre><code># a continuous document
-npx orz-mdhtml  notes.md            # → notes.md.html
+  <div class="wrap">
+    <div class="tabs-ui">
+      <input type="radio" name="use" id="u-editor" checked>
+      <input type="radio" name="use" id="u-cli">
+      <input type="radio" name="use" id="u-parser">
+      <div class="labels">
+        <label for="u-editor">In the browser</label>
+        <label for="u-cli">With the CLI</label>
+        <label for="u-parser">In your code</label>
+      </div>
+      <div class="panels">
+        <!-- EDITOR -->
+        <div class="panel p-editor">
+          <h2 style="margin-top:.2em">The editor (nothing to install)</h2>
+          <p>Open <a href="./editor.html">the editor</a> and start typing. It renders live with orz-markdown. In
+          Chrome or Edge you can <strong>install it</strong> (the install icon in the address bar), and then:</p>
+          <ul class="compact">
+            <li>It opens in its own window and works <strong>offline</strong>.</li>
+            <li>It registers as a <code>.md</code> handler. Set it as your default and <strong>double-click any
+              <code>.md</code></strong> to edit it; <span class="kbd">Ctrl/⌘ S</span> saves back to the same file.</li>
+            <li>Switch the preview theme and toggle dark mode from the toolbar.</li>
+          </ul>
+          <p class="callout amber" style="margin-top:14px">File association and in-place Save use Chromium-only APIs.
+          In other browsers the editor still runs; use <em>Open</em> and <em>Save as</em>.</p>
+          <p style="margin-top:16px"><a class="btn" href="./editor.html">Open the editor →</a></p>
+        </div>
+        <!-- CLI -->
+        <div class="panel p-cli">
+          <h2 style="margin-top:.2em">Generate a self-contained file</h2>
+          <p>Install a family tool, then turn a Markdown file into one portable, editable <code>.html</code>:</p>
+          <pre><code># a continuous document
+npx orz-mdhtml  notes.md       # -> notes.md.html
 
 # a slide deck
-npx orz-slides  deck.md             # → deck.slides.html
+npx orz-slides  deck.md        # -> deck.slides.html
 
-# a print/PDF document
-npx orz-paged   paper.md            # → paper.paged.html</code></pre>
-  <p>Each writes a single self-contained file. Open it in a browser to read/present/print; click the edit
-  affordance to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
-  jsDelivr; the default <code>--inline</code> embeds it for offline use.</p>
+# a print / PDF document
+npx orz-paged   paper.md       # -> paper.paged.html</code></pre>
+          <p>Each writes a single self-contained file. Open it to read, present, or print; click the edit affordance
+          to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
+          jsDelivr; the default <code>--inline</code> embeds it for offline use.</p>
+          <p><a href="./family.html">More about the three document types →</a></p>
+        </div>
+        <!-- PARSER -->
+        <div class="panel p-parser">
+          <h2 style="margin-top:.2em">Render with the parser</h2>
+          <p>Install <a href="https://www.npmjs.com/package/orz-markdown"><code>orz-markdown</code></a> and render
+          Markdown to HTML:</p>
+          <pre><code>import md from 'orz-markdown';
 
-  <h2>3 · Render with the parser (developers)</h2>
-  <pre><code>import md from 'orz-markdown';
 const html = md.render('# Hello {{emoji wave}}');
-// place inside &lt;article class="markdown-body"&gt;…&lt;/article&gt; with a bundled theme</code></pre>
-  <p>See the <a href="./features.html">features</a> and the
-  <a href="https://github.com/wangyu16/orz-markdown">README</a> for the full syntax, themes, and the agent skill.</p>
+// place inside &lt;article class="markdown-body"&gt;…&lt;/article&gt;
+// with one of the bundled themes</code></pre>
+          <p>See the <a href="./features.html">features</a> for the full syntax, and the
+          <a href="https://github.com/wangyu16/orz-markdown">README</a> for themes and the agent skill.</p>
+        </div>
+      </div>
+    </div>
 
-  <h2>Verifying a file someone sent you</h2>
-  <p>These documents are <strong>programs</strong>: opening one runs its embedded code. Before trusting a file
-  from an untrusted source, run it through <a href="./verify.html">the verifier</a>: it hashes the embedded
-  framework against the genuine published packages and scans the content for embedded scripts, entirely in your
-  browser. Treat anything it can’t confirm like a downloaded app.</p>
+    <!-- VERIFY -->
+    <section class="section" style="margin-top:40px">
+      <h2>Verifying a file someone sent you</h2>
+      <p>These documents are <strong>programs</strong>: opening one runs its embedded code. Before trusting a file
+      from an untrusted source, run it through <a href="./verify.html">the verifier</a>. It hashes the embedded
+      framework against the genuine published packages and scans the content for embedded scripts, entirely in your
+      browser. Treat anything it cannot confirm like a downloaded app.</p>
+      <p style="margin-top:14px"><a class="btn ghost" href="./verify.html">Open the verifier →</a></p>
+    </section>
 
-  <p style="margin-top:2em"><a class="btn" href="./editor.html">Open the editor →</a>
-     &nbsp;<a class="btn ghost" href="./verify.html">Verify a file</a></p>
-
-  <footer><a href="./">Home</a> · <a href="./family.html">The family</a> · <a href="https://github.com/wangyu16/orz-markdown">GitHub</a></footer>
-</div></main>
+    <footer><div class="row">
+      <a href="./">Home</a><a href="./family.html">The family</a>
+      <a href="https://github.com/wangyu16/orz-markdown">GitHub</a>
+    </div></footer>
+  </div>
+</main>
 </body>
 </html>

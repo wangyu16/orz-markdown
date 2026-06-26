@@ -3,46 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verify an orz document — orz-markdown</title>
+<title>Verify an orz document · orz-markdown</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
 <style>
-  :root { --bg:#fbfbf9; --fg:#1c1c1f; --muted:#6b6b72; --line:#e4e4dd; --accent:#2e6db5;
-    --ok:#1a7f37; --okbg:#e7f6ec; --warn:#9a6700; --warnbg:#fdf6e3; --bad:#b4232a; --badbg:#fbecec; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,sans-serif; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.7rem; margin: 0 0 .2em; }
-  .sub { color: var(--muted); margin: 0 0 1.5em; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; margin:16px 0; }
-  #drop { border:2px dashed var(--line); border-radius:12px; padding:30px; text-align:center; color:var(--muted);
+  :root { --ok:#1a7f37; --okbg:#e7f6ec; --warn:#9a6700; --warnbg:#fdf6e3; --bad:#b4232a; --badbg:#fbecec; }
+  .sub { color:var(--ink-2); margin:0 0 1.4em; font-size:1.08rem; }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:32px; text-align:center; color:var(--ink-2);
     cursor:pointer; transition:border-color .15s, background .15s; }
-  #drop.over { border-color:var(--accent); background:#f0f6fc; }
+  #drop.over { border-color:var(--brand); background:var(--brand-wash); }
+  #drop strong { color:var(--ink); }
   .row { display:flex; gap:8px; margin-top:14px; }
-  .row input { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
-  button { font:inherit; font-weight:600; padding:10px 16px; border:0; border-radius:8px; background:var(--accent);
-    color:#fff; cursor:pointer; } button:hover{filter:brightness(1.06);} button.ghost{background:#eee;color:#333;}
-  .verdict { font-weight:700; font-size:1.15rem; padding:12px 14px; border-radius:10px; margin-bottom:6px; }
+  .row input { flex:1; padding:11px 13px; border:1px solid var(--line); border-radius:9px; font:inherit; background:var(--surface); }
+  .verify-btn { font:inherit; font-weight:600; padding:11px 17px; border:0; border-radius:9px; background:var(--brand-solid);
+    color:#fff; cursor:pointer; } .verify-btn:hover { background:var(--brand-solid-d); }
+  .verdict { font-weight:700; font-size:1.14rem; padding:13px 15px; border-radius:10px; margin-bottom:6px; }
   .v-ok{background:var(--okbg);color:var(--ok);} .v-warn{background:var(--warnbg);color:var(--warn);} .v-bad{background:var(--badbg);color:var(--bad);}
-  .finding { display:flex; gap:9px; padding:7px 0; border-top:1px solid var(--line); align-items:baseline; }
+  .finding { display:flex; gap:9px; padding:8px 0; border-top:1px solid var(--line); align-items:baseline; }
   .finding .ic { flex:0 0 1.2em; font-weight:700; }
-  .ic-ok{color:var(--ok);} .ic-warn{color:var(--warn);} .ic-bad{color:var(--bad);} .ic-info{color:var(--muted);}
-  .finding .d { font-size:.92rem; }
-  .finding .d small { color:var(--muted); display:block; }
-  code { background:#f1f1ec; padding:1px 5px; border-radius:4px; font-size:.88em; }
-  .note { font-size:.85rem; color:var(--muted); }
-  details { margin-top:10px; } summary { cursor:pointer; color:var(--accent); font-size:.9rem; }
+  .ic-ok{color:var(--ok);} .ic-warn{color:var(--warn);} .ic-bad{color:var(--bad);} .ic-info{color:var(--ink-3);}
+  .finding .d { font-size:.93rem; } .finding .d small { color:var(--ink-2); display:block; }
+  .note { font-size:.86rem; color:var(--ink-2); }
+  details.about { margin-top:14px; } details.about summary { cursor:pointer; color:var(--brand-ink); font-size:.92rem; font-weight:600; }
   .hidden { display:none; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <p style="margin:0 0 10px;display:flex;align-items:center;gap:9px">
-    <a href="./" style="display:flex;align-items:center;gap:8px;font-weight:700;color:inherit;text-decoration:none"><img src="./orz.svg" alt="" style="height:24px"> orz-markdown</a>
-    <span style="margin-left:auto;font-size:.9rem"><a href="./features.html">Features</a> · <a href="./family.html">The family</a> · <a href="./guide.html">Guide</a> · <a href="./editor.html">Editor</a></span>
-  </p>
+<nav class="top"><div class="bar">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html" class="here">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+<main><div class="wrap" style="padding-top:32px">
   <h1>Verify an orz document</h1>
   <p class="sub">Check whether a <code>.md.html</code> / <code>.slides.html</code> / <code>.paged.html</code> file
-  carries the <strong>genuine, unmodified</strong> orz framework — and scan its content for embedded code.
+  carries the <strong>genuine, unmodified</strong> orz framework, and scans its content for embedded code.
   Everything runs in <strong>your browser</strong>; the file is parsed inertly and never executed.</p>
 
   <div class="card">
@@ -52,13 +52,13 @@
     </div>
     <div class="row">
       <input id="url" type="url" placeholder="…or paste a URL (needs CORS; otherwise download &amp; upload)">
-      <button id="go">Verify URL</button>
+      <button id="go" class="verify-btn">Verify URL</button>
     </div>
   </div>
 
   <div id="out" class="card hidden"></div>
 
-  <details>
+  <details class="about">
     <summary>What this can and can't tell you</summary>
     <div class="note" style="margin-top:8px">
       <p><strong>Strong:</strong> it hashes the embedded engine bundle and editor and compares them byte-for-byte to
@@ -71,7 +71,7 @@
       <code>markdown.orz.how</code>. A file always remains code; treat unknown ones like programs.</p>
     </div>
   </details>
-</div>
+</div></main>
 
 <script>
 'use strict';

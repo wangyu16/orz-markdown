@@ -3,75 +3,194 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Features · orz-markdown</title>
-<meta name="description" content="orz-markdown features: {{…}} plugins (mermaid, qr, youtube, smiles, charts, toc, span, emoji), ::: containers, KaTeX math, bundled themes, and copy-as-Markdown.">
+<title>Features: live showcase · orz-markdown</title>
+<meta name="description" content="See orz-markdown rendering live: the {{…}} plugins (QR, Mermaid, charts, SMILES, emoji, spans), ::: containers, KaTeX math, diagrams, ten themes, and copy-as-Markdown.">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
 <link rel="stylesheet" href="./site.css">
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top"><div class="bar">
   <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
   <span class="links">
-    <a href="./features.html">Features</a><a href="./family.html">The family</a><a href="./guide.html">Guide</a>
-    <a href="./verify.html">Verify</a><a class="cta" href="./editor.html">Open editor</a>
+    <a href="./features.html" class="here">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
   </span>
 </div></nav>
 
-<main><div class="wrap">
-  <h1>Features</h1>
-  <p class="lead">orz-markdown is a <a href="https://github.com/markdown-it/markdown-it">markdown-it</a> build
-  with a uniform <code>{{…}}</code> plugin syntax, <code>:::</code> containers, math, diagrams, and themes. It is the
-  engine all three document tools render with.</p>
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <h1>Everything below is real output</h1>
+    <p class="lead" style="max-width:660px">Each example is rendered in your browser by orz-markdown itself,
+    right now. Source on the left, the actual result on the right. Want to play? Drop any of it into
+    <a href="./editor.html">the editor</a>.</p>
+  </div></section>
 
-  <h2>Everything standard, plus extensions</h2>
-  <p>GitHub-flavored Markdown: headings, <strong>bold</strong>/<em>italic</em>, lists, tables (with alignment),
-  blockquotes, fenced code with highlighting, task lists, footnotes, plus <code>==mark==</code>,
-  <code>++ins++</code>, <code>~~del~~</code>, <code>~sub~</code>, <code>^sup^</code>, and image sizing
-  <code>![alt](url =100x80)</code>.</p>
+  <div class="wide">
 
-  <h2>Custom plugins: <code>{{name …}}</code></h2>
-  <p>One uniform syntax. Single-line <code>{{name body}}</code> or multi-line <code>{{name⏎body⏎}}</code>.</p>
-  <table>
-    <tr><th>Plugin</th><th>Example</th><th>Does</th></tr>
-    <tr><td><code>span</code> / <code>sp</code></td><td><code>{{sp[red] text}}</code></td><td>colored / badged inline spans</td></tr>
-    <tr><td><code>emoji</code> / <code>em</code></td><td><code>{{emoji wave}}</code></td><td>Unicode emoji by name</td></tr>
-    <tr><td><code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>an inline QR code (click to enlarge)</td></tr>
-    <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive embed</td></tr>
-    <tr><td><code>mermaid</code> / <code>mm</code></td><td><code>{{mm⏎graph LR⏎A--&gt;B⏎}}</code></td><td>diagrams (mermaid.js)</td></tr>
-    <tr><td><code>smiles</code> / <code>sm</code></td><td><code>{{smiles C1=CC=CC=C1}}</code></td><td>chemical structures</td></tr>
-    <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar/line/pie charts (Chart.js)</td></tr>
-    <tr><td><code>toc</code></td><td><code>{{toc 2,3}}</code></td><td>auto table of contents</td></tr>
-    <tr><td><code>attrs</code></td><td><code># Title{{attrs[#id]}}</code></td><td>add id/class/attributes</td></tr>
-  </table>
+  <!-- PLUGINS -->
+  <section class="section" id="plugins" style="margin-top:26px">
+    <h2>The <code>{{ }}</code> plugins</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">One uniform syntax for rich embeds:
+    <code>{{name args}}</code> inline, or <code>{{name⏎…⏎}}</code> across lines. No HTML required.</p>
+    <div class="demo split" data-demo>
+      <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
+      <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
+      <script type="text/markdown">
+A QR code you can scan: {{qr https://markdown.orz.how}}
 
-  <h2>Containers: <code>::: name … :::</code></h2>
-  <p>Semantic callouts and layout blocks:</p>
-  <pre><code>::: info        ::: success      ::: warning      ::: danger
-::: left 30%    ::: right        ::: center
+Reactions {{emoji tada}} {{emoji rocket}} and a
+{{sp[orange] highlighted}} {{sp[purple] span}}.
+      </script>
+    </div>
+    <details class="reveal"><summary>Full plugin reference</summary><div class="body">
+      <table>
+        <tr><th>Plugin</th><th>Example</th><th>Result</th></tr>
+        <tr><td><code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>inline QR (scannable, click to enlarge)</td></tr>
+        <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed</td></tr>
+        <tr><td><code>mermaid</code> / <code>mm</code></td><td><code>{{mm⏎graph LR⏎A--&gt;B⏎}}</code></td><td>a diagram</td></tr>
+        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie charts</td></tr>
+        <tr><td><code>smiles</code> / <code>sm</code></td><td><code>{{sm C1=CC=CC=C1}}</code></td><td>a chemical structure</td></tr>
+        <tr><td><code>emoji</code> / <code>em</code></td><td><code>{{emoji wave}}</code></td><td>emoji by name</td></tr>
+        <tr><td><code>span</code> / <code>sp</code></td><td><code>{{sp[red] text}}</code></td><td>colored / badged spans</td></tr>
+        <tr><td><code>toc</code></td><td><code>{{toc 2,3}}</code></td><td>a table of contents</td></tr>
+        <tr><td><code>attrs</code></td><td><code># Title{{attrs[#id]}}</code></td><td>ids, classes, attributes</td></tr>
+      </table>
+    </div></details>
+  </section>
 
-:::: cols 1 2        :::: tabs          ::: spoil Click to reveal
-::: col              ::: tab Label      hidden content
-:::                  :::                :::
-::::                 ::::</code></pre>
-  <p>A space after <code>:::</code> is required; nesting uses more colons on the outer block. Any
-  <code>::: ClassName</code> not reserved becomes a <code>&lt;div class="ClassName"&gt;</code>.</p>
+  <!-- CONTAINERS -->
+  <section class="section" id="containers" style="margin-top:30px">
+    <h2>The <code>:::</code> containers</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">Semantic callouts and real layout, from fenced blocks.
+    Nest by adding colons to the outer block.</p>
+    <div class="demo split" data-demo>
+      <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
+      <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
+      <script type="text/markdown">
+::: success
+**Shipped.** All tests green.
+:::
+::: warning
+Double-check the config first.
+:::
 
-  <h2>Math</h2>
-  <p>KaTeX (with <code>mhchem</code> for chemistry): inline <code>$E=mc^2$</code> and display
-  <code>$$\int_0^1 x^2\,dx$$</code>, rendered at parse time.</p>
+:::: cols 1 1
+::: col
+Left column
+:::
+::: col
+Right column
+:::
+::::
+      </script>
+    </div>
+    <details class="reveal"><summary>All container types</summary><div class="body">
+      <p>Callouts: <code>info</code>, <code>success</code>, <code>warning</code>, <code>danger</code>.
+      Layout: <code>left</code> / <code>right</code> / <code>center</code>, <code>cols</code>, <code>tabs</code>,
+      <code>spoil</code> (spoiler). Any other <code>::: ClassName</code> becomes a
+      <code>&lt;div class="ClassName"&gt;</code>, so you can style your own.</p>
+      <pre><code>::: info        ::::  cols 1 2        :::: tabs
+…content…       ::: col              ::: tab One
+:::             …                    …
+                :::                  :::
+                ::::                 ::::</code></pre>
+    </div></details>
+  </section>
 
-  <h2>Themes</h2>
-  <p>Ten ready-made CSS themes (light/dark, academic/neat/playful/beige) that style the parser's full output
-  (containers, tabs, math, diagrams, QR overlays, print). Rendered HTML lives in an <code>.markdown-body</code> wrapper.</p>
+  <!-- MATH -->
+  <section class="section" id="math" style="margin-top:30px">
+    <h2>Math with KaTeX</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">Inline <code>$…$</code> and display <code>$$…$$</code>,
+    rendered at parse time. <code>mhchem</code> is bundled for chemistry.</p>
+    <div class="demo split" data-demo>
+      <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
+      <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
+      <script type="text/markdown">
+The area under a Gaussian is $\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$.
 
-  <h2>Copy as Markdown</h2>
-  <p>With the browser runtime loaded, selecting rendered content and copying it puts <strong>Markdown
-  source</strong> on the clipboard, not HTML. Tables, lists, math, code, and even generated constructs
-  (a copied QR yields <code>{{qr …}}</code>) round-trip back to source.</p>
+$$\frac{\partial u}{\partial t} = \alpha \nabla^2 u$$
 
-  <p style="margin-top:2em"><a class="btn" href="./editor.html">Try it in the editor →</a></p>
+A reaction: $\ce{CO2 + H2O -> H2CO3}$
+      </script>
+    </div>
+  </section>
 
-  <footer><a href="./">Home</a> · <a href="https://github.com/wangyu16/orz-markdown">GitHub</a> · <a href="https://www.npmjs.com/package/orz-markdown">npm</a></footer>
-</div></main>
+  <!-- DIAGRAMS -->
+  <section class="section" id="diagrams" style="margin-top:30px">
+    <h2>Diagrams &amp; charts</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">Flowcharts, data charts, and chemistry, all from
+    plain text. (These libraries load on demand.)</p>
+    <div class="demo split" data-demo>
+      <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
+      <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
+      <script type="text/markdown">
+{{mermaid
+graph LR
+  Write --> Render --> Share
+  Render --> Edit --> Render
+}}
+
+{{chart
+type: bar
+labels: Mon, Tue, Wed
+data: 3, 7, 5
+}}
+      </script>
+    </div>
+  </section>
+
+  <!-- THEMES -->
+  <section class="section" id="themes" style="margin-top:30px">
+    <h2>Ten built-in themes</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">Light and dark, academic to playful. A theme styles the
+    full rendered output, including containers, math, diagrams, and print. Switch instantly in the editor.</p>
+    <div class="grid c3" style="margin-top:4px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="height:64px;background:linear-gradient(135deg,#fff,#f2f2ec)"></div>
+        <div style="padding:13px 16px"><strong>Neat</strong><p style="margin:.2em 0 0">Clean, modern, two variants.</p></div></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="height:64px;background:linear-gradient(135deg,#fbf7ee,#efe6d2)"></div>
+        <div style="padding:13px 16px"><strong>Academic &amp; Beige</strong><p style="margin:.2em 0 0">Serif, paper-like, for reports.</p></div></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="height:64px;background:linear-gradient(135deg,#1f2330,#0d0f18)"></div>
+        <div style="padding:13px 16px"><strong>Dark Elegant</strong><p style="margin:.2em 0 0">Two refined dark themes.</p></div></div>
+    </div>
+    <p style="margin-top:16px"><a class="btn ghost" href="./editor.html">Try every theme in the editor →</a></p>
+  </section>
+
+  <!-- COPY -->
+  <section class="section" id="copy" style="margin-top:30px">
+    <h2>Copy as Markdown</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">With the browser runtime loaded, selecting rendered
+    content and copying puts <strong>Markdown source</strong> on your clipboard, not HTML.</p>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">It round-trips</h3>
+        <p>Tables, lists, math, code, and even generated constructs survive the trip. Copy a rendered QR and you get
+        <code>{{qr …}}</code> back; copy a diagram and you get its <code>{{mermaid …}}</code> source.</p></div>
+      <div class="card"><h3 style="margin-top:0">Why it matters</h3>
+        <p>Your rendered document stays the source of truth. Paste into any editor, chat, or issue and it is clean,
+        portable Markdown again, ready to re-render anywhere.</p></div>
+    </div>
+  </section>
+
+  <section class="section" style="margin-top:40px">
+    <div class="callout">Ready to write? <a href="./editor.html">Open the editor</a>, or
+    <a href="./guide.html">see how to ship a self-contained file</a>.</div>
+    <footer><div class="row">
+      <a href="./">Home</a><a href="./family.html">The family</a>
+      <a href="https://github.com/wangyu16/orz-markdown">GitHub</a>
+      <a href="https://www.npmjs.com/package/orz-markdown">npm</a>
+    </div></footer>
+  </section>
+
+  </div>
+</main>
+
+<script src="./orzmd.browser.js"></script>
+<script src="./demos.js"></script>
 </body>
 </html>
