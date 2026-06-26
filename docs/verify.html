@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify an orz document — orz-markdown</title>
+<style>
+  :root { --bg:#fbfbf9; --fg:#1c1c1f; --muted:#6b6b72; --line:#e4e4dd; --accent:#2e6db5;
+    --ok:#1a7f37; --okbg:#e7f6ec; --warn:#9a6700; --warnbg:#fdf6e3; --bad:#b4232a; --badbg:#fbecec; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.7rem; margin: 0 0 .2em; }
+  .sub { color: var(--muted); margin: 0 0 1.5em; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; margin:16px 0; }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:30px; text-align:center; color:var(--muted);
+    cursor:pointer; transition:border-color .15s, background .15s; }
+  #drop.over { border-color:var(--accent); background:#f0f6fc; }
+  .row { display:flex; gap:8px; margin-top:14px; }
+  .row input { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { font:inherit; font-weight:600; padding:10px 16px; border:0; border-radius:8px; background:var(--accent);
+    color:#fff; cursor:pointer; } button:hover{filter:brightness(1.06);} button.ghost{background:#eee;color:#333;}
+  .verdict { font-weight:700; font-size:1.15rem; padding:12px 14px; border-radius:10px; margin-bottom:6px; }
+  .v-ok{background:var(--okbg);color:var(--ok);} .v-warn{background:var(--warnbg);color:var(--warn);} .v-bad{background:var(--badbg);color:var(--bad);}
+  .finding { display:flex; gap:9px; padding:7px 0; border-top:1px solid var(--line); align-items:baseline; }
+  .finding .ic { flex:0 0 1.2em; font-weight:700; }
+  .ic-ok{color:var(--ok);} .ic-warn{color:var(--warn);} .ic-bad{color:var(--bad);} .ic-info{color:var(--muted);}
+  .finding .d { font-size:.92rem; }
+  .finding .d small { color:var(--muted); display:block; }
+  code { background:#f1f1ec; padding:1px 5px; border-radius:4px; font-size:.88em; }
+  .note { font-size:.85rem; color:var(--muted); }
+  details { margin-top:10px; } summary { cursor:pointer; color:var(--accent); font-size:.9rem; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p style="margin:0 0 4px"><a href="./">← orz-markdown</a></p>
+  <h1>Verify an orz document</h1>
+  <p class="sub">Check whether a <code>.md.html</code> / <code>.slides.html</code> / <code>.paged.html</code> file
+  carries the <strong>genuine, unmodified</strong> orz framework — and scan its content for embedded code.
+  Everything runs in <strong>your browser</strong>; the file is parsed inertly and never executed.</p>
+
+  <div class="card">
+    <div id="drop" tabindex="0">
+      <strong>Drop a file here</strong> or click to choose
+      <input id="file" type="file" accept=".html,text/html" class="hidden">
+    </div>
+    <div class="row">
+      <input id="url" type="url" placeholder="…or paste a URL (needs CORS; otherwise download &amp; upload)">
+      <button id="go">Verify URL</button>
+    </div>
+  </div>
+
+  <div id="out" class="card hidden"></div>
+
+  <details>
+    <summary>What this can and can't tell you</summary>
+    <div class="note" style="margin-top:8px">
+      <p><strong>Strong:</strong> it hashes the embedded engine bundle and editor and compares them byte-for-byte to
+      the canonical packages published on jsDelivr — so a swapped or tampered framework is caught.</p>
+      <p><strong>Heuristic:</strong> it lists every inline script and flags raw <code>&lt;script&gt;</code> /
+      <code>on…=</code> handlers and off-CDN loads in the content (the <code>html:true</code> vector). It can surface
+      red flags but <strong>cannot prove</strong> arbitrary content is benign.</p>
+      <p><strong>Limits:</strong> the framework check needs the package version to be published (else it reports
+      “couldn’t fetch canonical”). And this page is only as trustworthy as the site serving it — you’re trusting
+      <code>markdown.orz.how</code>. A file always remains code; treat unknown ones like programs.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+'use strict';
+// Canonical, hardcoded trust anchor — the published package coordinates per family.
+var FAMILIES = {
+  'orz-mdhtml': { cfg:'__ORZ_MDHTML__', enginePkg:'orz-mdhtml-browser', engineFile:'orzmd.browser.js',       appPkg:'orz-mdhtml', srcId:'orz-src' },
+  'orz-slides': { cfg:'__ORZ_SLIDES__', enginePkg:'orz-slides-browser', engineFile:'orz-slides.browser.js',  appPkg:'orz-slides', srcId:'orz-deck' },
+  'orz-paged':  { cfg:'__ORZ_PAGED__',  enginePkg:'orz-paged-browser',  engineFile:'orz-paged.browser.js',   appPkg:'orz-paged',  srcId:'orz-src' }
+};
+var CDN = 'https://cdn.jsdelivr.net/npm/';
+
+function escapeForScript(s){ return s.replace(/<\/(script)/gi, '<\\/$1'); } // template applies this to inlined JS
+function reverseEscape(s){ return s.replace(/<\\\/(script)/gi, '</$1'); }
+async function sha256(str){
+  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.prototype.map.call(new Uint8Array(buf), function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
+function esc(s){ return String(s).replace(/[&<>]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
+
+function detect(doc){
+  var cfg = doc.querySelector('script[data-orz-asset="config"]');
+  var text = cfg ? cfg.textContent : (doc.documentElement.innerHTML || '');
+  for (var fam in FAMILIES){ if (text.indexOf(FAMILIES[fam].cfg) >= 0) {
+    var m = text.match(/"(?:rendererVersion|version)"\s*:\s*"([^"]+)"/);
+    return { family: fam, def: FAMILIES[fam], version: m ? m[1] : null };
+  }}
+  return null;
+}
+
+async function verify(text){
+  var out = document.getElementById('out');
+  out.classList.remove('hidden');
+  out.innerHTML = '<p class="note">Analyzing…</p>';
+  var findings = [];
+  function add(level, title, detail){ findings.push({ level:level, title:title, detail:detail||'' }); }
+
+  var doc = new DOMParser().parseFromString(text, 'text/html'); // INERT — scripts do not run
+  var info = detect(doc);
+  if (!info){
+    render('bad', 'Not a recognized orz document', [{level:'bad',title:'No orz framework signature found',detail:'This file does not look like an orz .md.html / .slides.html / .paged.html. Be cautious — it could be anything.'}]);
+    return;
+  }
+  add('info', info.family + (info.version ? ' v'+info.version : ''), 'Declared framework family' + (info.version ? ' and version.' : ' (version not declared).'));
+
+  // ---- framework integrity: engine + app ----
+  var engineEl = doc.querySelector('script[data-orz-asset="engine"]');
+  var appEl = doc.querySelector('script[data-orz-asset="app"]');
+  var frameworkOk = true, frameworkUnknown = false;
+
+  async function checkPart(elm, label, pkg, path){
+    if (!elm){ add('warn', label + ': not found', 'Expected an engine/app script — structure is unusual.'); frameworkOk=false; return; }
+    var srcAttr = elm.getAttribute('src');
+    if (srcAttr){
+      var expected = CDN + pkg + '@' + (info.version||'') + '/' + path;
+      if (srcAttr.indexOf(CDN + pkg + '@') === 0) add('ok', label + ': loaded from canonical CDN', srcAttr);
+      else { add('bad', label + ': loaded from a NON-canonical URL', srcAttr); frameworkOk=false; }
+      return;
+    }
+    if (!info.version){ add('warn', label + ': cannot verify (no version declared)', ''); frameworkUnknown=true; return; }
+    var url = CDN + pkg + '@' + info.version + '/' + path;
+    var canon;
+    try { var r = await fetch(url); if (!r.ok) throw 0; canon = await r.text(); }
+    catch(e){ add('warn', label + ': couldn’t fetch the canonical version', 'Tried ' + url + ' — the package/version may not be published yet, or the network blocked it.'); frameworkUnknown=true; return; }
+    var embedded = elm.textContent;
+    var match = (await sha256(embedded)) === (await sha256(escapeForScript(canon))) ||
+                (await sha256(reverseEscape(embedded))) === (await sha256(canon));
+    if (match) add('ok', label + ': genuine and unmodified', 'Byte-identical to ' + pkg + '@' + info.version + '.');
+    else { add('bad', label + ': MODIFIED or not the published release', 'Does not match ' + pkg + '@' + info.version + '. The framework has been tampered with or rebuilt.'); frameworkOk=false; }
+  }
+  await checkPart(engineEl, 'Engine bundle', info.def.enginePkg, info.def.engineFile);
+  await checkPart(appEl, 'Editor (app.js)', info.def.appPkg, 'assets/app.js');
+
+  // ---- inline-script inventory (extra scripts beyond the known framework parts) ----
+  var scripts = Array.prototype.slice.call(doc.querySelectorAll('script'));
+  var known = 0, externalBad = 0, inlineOther = 0;
+  scripts.forEach(function(s){
+    var asset = s.getAttribute('data-orz-asset');
+    var src = s.getAttribute('src');
+    if (src){
+      if (src.indexOf(CDN) === 0 || src.indexOf('https://cdnjs.cloudflare.com/') === 0 || src.indexOf('https://unpkg.com/') === 0) { /* expected CDN */ }
+      else if (src.indexOf('http') === 0) { externalBad++; add('bad', 'Loads a script from an unexpected domain', src); }
+      return;
+    }
+    if (asset) { known++; return; }
+    inlineOther++; // runtime, boot — or injected code
+  });
+  if (inlineOther > 2) add('warn', inlineOther + ' un-tagged inline scripts', 'Expected ~2 (the copy runtime + boot). Extra inline scripts could be injected code — review the source.');
+  else add('info', inlineOther + ' other inline script(s)', 'Expected: the copy runtime + boot loader.');
+
+  // ---- content scan: raw HTML / handlers in the embedded Markdown source ----
+  var srcScript = doc.getElementById(info.def.srcId);
+  var md = srcScript ? srcScript.textContent : '';
+  var contentFlags = [];
+  if (/<script[\s>]/i.test(md)) contentFlags.push('a raw &lt;script&gt; tag');
+  if (/\son\w+\s*=/i.test(md)) contentFlags.push('an inline event handler (on…=)');
+  if (/javascript:/i.test(md)) contentFlags.push('a javascript: URL');
+  if (/<iframe[\s>]/i.test(md)) contentFlags.push('an &lt;iframe&gt;');
+  if (contentFlags.length) add('warn', 'Content contains raw HTML that runs as code', 'Found ' + contentFlags.join(', ') + '. orz-markdown passes raw HTML through, so this executes when opened.');
+  else add('ok', 'Content has no embedded scripts or handlers', 'The Markdown source contains no raw &lt;script&gt;, on…= handlers, javascript: URLs, or iframes.');
+
+  // ---- overall verdict ----
+  var level, title;
+  if (!frameworkOk && !frameworkUnknown){ level='bad'; title='⚠ Framework has been modified — do not trust'; }
+  else if (frameworkUnknown){ level='warn'; title='Framework could not be fully verified'; }
+  else if (contentFlags.length || inlineOther > 2 || externalBad){ level='warn'; title='Genuine framework, but the content carries code — review'; }
+  else { level='ok'; title='✓ Genuine, unmodified framework — no embedded code in content'; }
+  render(level, title, findings);
+}
+
+function render(level, title, findings){
+  var out = document.getElementById('out');
+  var icon = { ok:'✓', warn:'!', bad:'✕', info:'•' };
+  var html = '<div class="verdict v-'+level+'">'+esc(title)+'</div>';
+  findings.forEach(function(f){
+    html += '<div class="finding"><span class="ic ic-'+f.level+'">'+icon[f.level]+'</span><span class="d">'+
+      esc(f.title)+(f.detail?'<small>'+f.detail+'</small>':'')+'</span></div>';
+  });
+  html += '<p class="note" style="margin-top:14px">A genuine framework still runs the document’s own content. This is a strong signal, not a safety guarantee — see “What this can and can’t tell you.”</p>';
+  out.innerHTML = html;
+}
+
+// ---- wiring ----
+var drop = document.getElementById('drop'), file = document.getElementById('file');
+drop.addEventListener('click', function(){ file.click(); });
+drop.addEventListener('keydown', function(e){ if (e.key==='Enter'||e.key===' ') file.click(); });
+['dragover','dragenter'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); }); });
+['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
+drop.addEventListener('drop', function(e){ var f=e.dataTransfer.files[0]; if (f) f.text().then(verify); });
+file.addEventListener('change', function(){ var f=file.files[0]; if (f) f.text().then(verify); });
+document.getElementById('go').addEventListener('click', function(){
+  var u = document.getElementById('url').value.trim(); if (!u) return;
+  var out=document.getElementById('out'); out.classList.remove('hidden'); out.innerHTML='<p class="note">Fetching…</p>';
+  fetch(u).then(function(r){ if(!r.ok) throw 0; return r.text(); }).then(verify)
+    .catch(function(){ out.innerHTML='<div class="verdict v-warn">Couldn’t fetch that URL</div><p class="note">Many hosts block cross-origin reads (CORS). Download the file and drop it above instead.</p>'; });
+});
+</script>
+</body>
+</html>

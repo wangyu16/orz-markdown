@@ -5,3 +5,8 @@ dist/
 .DS_Store
 
 .claude/
+
+# local design notes (not published, not tracked)
+ideas/
+.claude/
+.preview/
