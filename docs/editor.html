@@ -1,69 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-chrome="light" data-view="split">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>orz Markdown editor</title>
-<meta name="description" content="A simple Markdown editor that renders with orz-markdown. Installable, offline-capable, and registers as a .md handler.">
+<meta name="description" content="A simple, elegant Markdown editor that renders with orz-markdown. Installable, offline, registers as a .md handler.">
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#5f9e44">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<!-- KaTeX styling for rendered math (math itself is pre-rendered by orz-markdown) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
-<!-- CodeMirror (editor) -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<!-- orz-markdown content theme for the preview -->
-<link rel="stylesheet" href="./themes/light-neat-1.css">
 <style>
-  :root { --bar:#23262c; --fg:#1c1c1f; --line:#e5e5de; --accent:#2e6db5; }
+  :root {
+    --bar:#fff; --bar-fg:#2a2a2e; --line:#e7e7e0; --btn:#f3f3ed; --btn-fg:#42424a; --btn-hov:#e9e9e1;
+    --accent:#2e6db5; --ed-bg:#fff; --pv-bg:#ecece7; --muted:#8a8a93; --seg:#eeeee8; --shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  html[data-chrome="dark"] {
+    --bar:#1d2026; --bar-fg:#d6dae2; --line:#2c3038; --btn:#2a2e37; --btn-fg:#c2c8d2; --btn-hov:#343a45;
+    --accent:#5b9bf0; --ed-bg:#1a1c21; --pv-bg:#14161a; --muted:#79808c; --seg:#23272f; --shadow:none;
+  }
   * { box-sizing:border-box; }
   html,body { margin:0; height:100%; }
-  body { display:flex; flex-direction:column; font:15px/1.5 system-ui,-apple-system,sans-serif; color:var(--fg); }
-  #bar { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:7px 12px; background:var(--bar); color:#dfe3ea; }
-  #bar .logo img { height:24px; width:auto; display:block; }
-  #bar .name { font-weight:700; margin-right:8px; }
-  #bar .sp { flex:1; }
-  #bar button, #bar select { font:inherit; font-size:13px; color:#e6e8ec; background:#34383f; border:1px solid #454b55;
-    border-radius:7px; padding:6px 11px; cursor:pointer; }
-  #bar button:hover { background:#3f444d; }
-  #bar button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  #bar .file { color:#9aa3b2; font-size:12.5px; margin-left:4px; max-width:30vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #bar .dot { color:#e0a44a; margin-left:2px; opacity:0; } body[data-dirty="1"] #bar .dot { opacity:1; }
+  body { display:flex; flex-direction:column; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--bar-fg); background:var(--pv-bg); }
+
+  /* ---- toolbar ---- */
+  #bar { flex:0 0 auto; display:flex; align-items:center; gap:5px; padding:8px 12px; background:var(--bar);
+    border-bottom:1px solid var(--line); }
+  #bar .logo { display:flex; align-items:center; margin-right:6px; }
+  #bar .logo img { height:25px; width:auto; display:block; }
+  .ico { display:inline-flex; align-items:center; justify-content:center; width:34px; height:32px; border:0;
+    border-radius:9px; background:transparent; color:var(--btn-fg); cursor:pointer; transition:background .12s,color .12s; }
+  .ico:hover { background:var(--btn-hov); }
+  .ico svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .ico.accent { background:var(--accent); color:#fff; } .ico.accent:hover { filter:brightness(1.08); }
+  .sep { width:1px; height:22px; background:var(--line); margin:0 5px; }
+  .seg { display:inline-flex; background:var(--seg); border-radius:9px; padding:2px; gap:2px; }
+  .seg .ico { width:32px; height:28px; border-radius:7px; }
+  .seg .ico.on { background:var(--bar); color:var(--accent); box-shadow:var(--shadow); }
+  .fname { font-size:13px; color:var(--muted); margin-left:8px; max-width:26vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dot { width:7px; height:7px; border-radius:50%; background:#e0a44a; margin-left:6px; opacity:0; transition:opacity .15s; }
+  body[data-dirty="1"] .dot { opacity:1; }
+  .sp { flex:1; }
+  select.theme { font:inherit; font-size:13px; color:var(--btn-fg); background:var(--btn); border:1px solid var(--line);
+    border-radius:9px; padding:6px 9px; cursor:pointer; }
+
+  /* ---- panes ---- */
   #main { flex:1; min-height:0; display:grid; grid-template-columns:1fr 6px 1fr; }
-  #ed { min-width:0; } #ed .CodeMirror { height:100%; font:14px/1.55 ui-monospace,Menlo,Consolas,monospace; }
+  html[data-view="editor"] #main { grid-template-columns:1fr 0 0; }
+  html[data-view="preview"] #main { grid-template-columns:0 0 1fr; }
+  #ed { min-width:0; background:var(--ed-bg); }
+  #ed .CodeMirror { height:100%; font:14px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
   #split { background:var(--line); cursor:col-resize; }
-  #pv { min-width:0; overflow:auto; background:#fff; }
-  #preview { max-width:46em; margin:0 auto; padding:28px 30px 60px; }
-  [data-view="editor"] #main { grid-template-columns:1fr 0 0; }
-  [data-view="preview"] #main { grid-template-columns:0 0 1fr; }
-  #toast { position:fixed; left:50%; bottom:16px; transform:translateX(-50%) translateY(18px); background:#111; color:#fff;
-    padding:8px 15px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s,transform .2s; pointer-events:none; }
-  #toast.show { opacity:.95; transform:translateX(-50%) translateY(0); }
-  @media (max-width:680px){ #main{grid-template-columns:1fr!important;} #split{display:none;} body:not([data-view="preview"]) #pv{display:none;} body[data-view="preview"] #ed{display:none;} }
+  #split:hover { background:var(--accent); }
+  #pv { min-width:0; background:var(--pv-bg); position:relative; }
+  #frame { width:100%; height:100%; border:0; display:block; background:transparent; }
+
+  #toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%) translateY(18px); background:#111; color:#fff;
+    padding:8px 15px; border-radius:9px; font-size:13px; opacity:0; transition:opacity .2s,transform .2s; pointer-events:none; z-index:9; }
+  #toast.show { opacity:.96; transform:translateX(-50%) translateY(0); }
+  @media (max-width:680px){ #main{grid-template-columns:1fr!important;} #split{display:none;}
+    html:not([data-view="preview"]) #pv{display:none;} html[data-view="preview"] #ed{display:none;} .fname{display:none;} }
 </style>
 </head>
-<body data-view="split">
+<body>
   <div id="bar">
     <a class="logo" href="./" title="orz-markdown"><img src="./orz.svg" alt="orz-markdown"></a>
-    <span class="name">Markdown</span>
-    <button id="b-new">New</button>
-    <button id="b-open">Open</button>
-    <button id="b-save" class="primary">Save</button>
-    <button id="b-saveas">Save as…</button>
-    <span class="file" id="fname">untitled.md</span><span class="dot">●</span>
+    <button class="ico" id="b-new" title="New (clear)"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-5M9.5 15.5h5"/></svg></button>
+    <button class="ico" id="b-open" title="Open a .md file"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+    <button class="ico accent" id="b-save" title="Save (Ctrl/Cmd-S)"><svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+    <button class="ico" id="b-saveas" title="Save as…"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg></button>
+    <span class="fname" id="fname">untitled.md</span><span class="dot"></span>
     <span class="sp"></span>
-    <select id="b-view" title="View"><option value="split">Split</option><option value="editor">Editor</option><option value="preview">Preview</option></select>
-    <select id="b-theme" title="Preview theme">
-      <option value="light-neat-1">Neat</option>
-      <option value="light-academic-1">Academic</option>
-      <option value="beige-decent-1">Beige</option>
-      <option value="light-playful-1">Playful</option>
-    </select>
+    <span class="seg" id="seg-view">
+      <button class="ico" data-v="editor" title="Editor only"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+      <button class="ico on" data-v="split" title="Split"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg></button>
+      <button class="ico" data-v="preview" title="Preview only"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </span>
+    <span class="sep"></span>
+    <select class="theme" id="b-theme" title="Preview theme"></select>
+    <button class="ico" id="b-dark" title="Toggle dark mode"><svg viewBox="0 0 24 24" id="i-dark"></svg></button>
   </div>
   <div id="main">
     <div id="ed"><textarea id="ta" spellcheck="false"></textarea></div>
     <div id="split"></div>
-    <div id="pv"><article id="preview" class="markdown-body"></article></div>
+    <div id="pv"><iframe id="frame" title="Preview"></iframe></div>
   </div>
   <div id="toast"></div>
 

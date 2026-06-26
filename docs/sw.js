@@ -1,15 +1,18 @@
 /* orz Markdown editor — service worker. Caches the app shell (renderer, editor,
  * themes) and the CDN editor/maths assets so the app installs and works offline.
  * Mermaid/SMILES are loaded lazily only when used, so they need network. */
-var CACHE = 'orz-md-v1';
+var CACHE = 'orz-md-v2';
+var CM = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/';
 var ASSETS = [
-  './', './editor.html', './editor.js', './orzmd.browser.js', './manifest.webmanifest',
-  './icon.svg', './orz.svg',
-  './themes/common.css', './themes/light-neat-1.css', './themes/light-academic-1.css',
-  './themes/beige-decent-1.css', './themes/light-playful-1.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js',
+  './', './editor.html', './editor.js', './orzmd.browser.js', './manifest.webmanifest', './icon.svg', './orz.svg',
+  './themes/common.css',
+  './themes/light-neat-1.css', './themes/light-neat-2.css',
+  './themes/light-academic-1.css', './themes/light-academic-2.css',
+  './themes/beige-decent-1.css', './themes/beige-decent-2.css',
+  './themes/light-playful-1.css', './themes/light-playful-2.css',
+  './themes/dark-elegant-1.css', './themes/dark-elegant-2.css',
+  CM + 'codemirror.min.css', CM + 'codemirror.min.js', CM + 'mode/markdown/markdown.min.js',
+  CM + 'theme/material-darker.min.css',
   'https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css'
 ];
 
