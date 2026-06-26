@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Guide — orz-markdown</title>
+<title>Guide · orz-markdown</title>
 <meta name="description" content="How to use orz-markdown: the installable editor, generating .md.html / .slides.html / .paged.html with the CLIs, the in-file editor, and verifying files.">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./site.css">
@@ -19,18 +19,18 @@
 
 <main><div class="wrap">
   <h1>Guide</h1>
-  <p class="lead">Three ways to use orz-markdown — pick what fits.</p>
+  <p class="lead">Three ways to use orz-markdown. Pick what fits.</p>
 
   <h2>1 · The editor (no install of anything)</h2>
-  <p>Open <a href="./editor.html">the editor</a> and start typing — it renders live with orz-markdown.
+  <p>Open <a href="./editor.html">the editor</a> and start typing; it renders live with orz-markdown.
   In Chrome or Edge you can <strong>install it</strong> (address-bar install icon, or “Install app”), after which:</p>
   <ul class="compact">
     <li>It opens in its own window and works <strong>offline</strong>.</li>
-    <li>It registers as a <code>.md</code> handler — set it as your default and <strong>double-click any
+    <li>It registers as a <code>.md</code> handler, so set it as your default and <strong>double-click any
       <code>.md</code></strong> to edit it; <kbd>Ctrl/⌘-S</kbd> saves back to the same file.</li>
   </ul>
   <p class="callout">File-association and in-place Save use Chromium-only APIs (Chrome/Edge, desktop). In other
-  browsers the editor still runs — use <em>Open</em> / <em>Save as</em>.</p>
+  browsers the editor still runs; use <em>Open</em> / <em>Save as</em>.</p>
 
   <h2>2 · Generate a self-contained document (CLI)</h2>
   <p>Install a family tool, then turn a Markdown file into one portable <code>.html</code>:</p>
@@ -54,7 +54,7 @@ const html = md.render('# Hello {{emoji wave}}');
   <a href="https://github.com/wangyu16/orz-markdown">README</a> for the full syntax, themes, and the agent skill.</p>
 
   <h2>Verifying a file someone sent you</h2>
-  <p>These documents are <strong>programs</strong> — opening one runs its embedded code. Before trusting a file
+  <p>These documents are <strong>programs</strong>: opening one runs its embedded code. Before trusting a file
   from an untrusted source, run it through <a href="./verify.html">the verifier</a>: it hashes the embedded
   framework against the genuine published packages and scans the content for embedded scripts, entirely in your
   browser. Treat anything it can’t confirm like a downloaded app.</p>

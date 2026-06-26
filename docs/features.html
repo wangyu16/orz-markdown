@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Features — orz-markdown</title>
+<title>Features · orz-markdown</title>
 <meta name="description" content="orz-markdown features: {{…}} plugins (mermaid, qr, youtube, smiles, charts, toc, span, emoji), ::: containers, KaTeX math, bundled themes, and copy-as-Markdown.">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./site.css">
@@ -20,16 +20,16 @@
 <main><div class="wrap">
   <h1>Features</h1>
   <p class="lead">orz-markdown is a <a href="https://github.com/markdown-it/markdown-it">markdown-it</a> build
-  with a uniform <code>{{…}}</code> plugin syntax, <code>:::</code> containers, math, diagrams, and themes —
-  the engine all three document tools render with.</p>
+  with a uniform <code>{{…}}</code> plugin syntax, <code>:::</code> containers, math, diagrams, and themes. It is the
+  engine all three document tools render with.</p>
 
   <h2>Everything standard, plus extensions</h2>
-  <p>GitHub-flavored Markdown — headings, <strong>bold</strong>/<em>italic</em>, lists, tables (with alignment),
-  blockquotes, fenced code with highlighting, task lists, footnotes — plus <code>==mark==</code>,
+  <p>GitHub-flavored Markdown: headings, <strong>bold</strong>/<em>italic</em>, lists, tables (with alignment),
+  blockquotes, fenced code with highlighting, task lists, footnotes, plus <code>==mark==</code>,
   <code>++ins++</code>, <code>~~del~~</code>, <code>~sub~</code>, <code>^sup^</code>, and image sizing
   <code>![alt](url =100x80)</code>.</p>
 
-  <h2>Custom plugins — <code>{{name …}}</code></h2>
+  <h2>Custom plugins: <code>{{name …}}</code></h2>
   <p>One uniform syntax. Single-line <code>{{name body}}</code> or multi-line <code>{{name⏎body⏎}}</code>.</p>
   <table>
     <tr><th>Plugin</th><th>Example</th><th>Does</th></tr>
@@ -44,7 +44,7 @@
     <tr><td><code>attrs</code></td><td><code># Title{{attrs[#id]}}</code></td><td>add id/class/attributes</td></tr>
   </table>
 
-  <h2>Containers — <code>::: name … :::</code></h2>
+  <h2>Containers: <code>::: name … :::</code></h2>
   <p>Semantic callouts and layout blocks:</p>
   <pre><code>::: info        ::: success      ::: warning      ::: danger
 ::: left 30%    ::: right        ::: center
@@ -61,12 +61,12 @@
   <code>$$\int_0^1 x^2\,dx$$</code>, rendered at parse time.</p>
 
   <h2>Themes</h2>
-  <p>Ten ready-made CSS themes — light/dark, academic/neat/playful/beige — that style the parser's full output
+  <p>Ten ready-made CSS themes (light/dark, academic/neat/playful/beige) that style the parser's full output
   (containers, tabs, math, diagrams, QR overlays, print). Rendered HTML lives in an <code>.markdown-body</code> wrapper.</p>
 
   <h2>Copy as Markdown</h2>
   <p>With the browser runtime loaded, selecting rendered content and copying it puts <strong>Markdown
-  source</strong> on the clipboard — not HTML. Tables, lists, math, code, and even generated constructs
+  source</strong> on the clipboard, not HTML. Tables, lists, math, code, and even generated constructs
   (a copied QR yields <code>{{qr …}}</code>) round-trip back to source.</p>
 
   <p style="margin-top:2em"><a class="btn" href="./editor.html">Try it in the editor →</a></p>

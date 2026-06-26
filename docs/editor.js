@@ -21,14 +21,14 @@
   };
   var SUN = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4"/>';
   var MOON = '<path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8z"/>';
-  var WELCOME = '# The orz Markdown editor\n\nType on the left; it renders with **orz-markdown** on the right.\n\n- Open a `.md` file, or install this app and set it as your default `.md` editor\n- **Save** writes back to the same file · works **offline**\n- Switch the **preview theme** and toggle **dark mode** in the toolbar\n\nIt supports the full feature set — math, diagrams, containers, and the `{{…}}` plugins:\n\nInline math $E = mc^2$ and a display equation:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\n\n::: info\nA semantic container. {{sp[green] colored span}} and an emoji {{emoji sparkles}}.\n:::\n\n```js\nconst hello = "world";\n```\n';
+  var WELCOME = '# The orz Markdown editor\n\nType on the left; it renders with **orz-markdown** on the right.\n\n- Open a `.md` file, or install this app and set it as your default `.md` editor\n- **Save** writes back to the same file · works **offline**\n- Switch the **preview theme** and toggle **dark mode** in the toolbar\n\nIt supports the full feature set: math, diagrams, containers, and the `{{…}}` plugins:\n\nInline math $E = mc^2$ and a display equation:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\n\n::: info\nA semantic container. {{sp[green] colored span}} and an emoji {{emoji sparkles}}.\n:::\n\n```js\nconst hello = "world";\n```\n';
 
   var cm, frame, frameReady = false, fileHandle = null, dirty = false, rTimer = null, theme;
   var root = document.documentElement;
   function $(id) { return document.getElementById(id); }
   function toast(m) { var t = $('toast'); t.textContent = m; t.classList.add('show'); setTimeout(function () { t.classList.remove('show'); }, 1800); }
 
-  /* ---- isolated iframe preview ---- */
+  /* isolated iframe preview */
   function shell(th) {
     return '<!doctype html><html><head><meta charset=utf8><base target=_blank>' +
       '<link id=th rel=stylesheet href="./themes/' + th + '.css">' +
@@ -70,9 +70,9 @@
   function schedule() { if (rTimer) clearTimeout(rTimer); rTimer = setTimeout(render, 200); }
 
   function setDirty(d) { dirty = d; document.body.setAttribute('data-dirty', d ? '1' : '0'); }
-  function setName(n) { $('fname').textContent = n; document.title = n + ' — orz Markdown'; }
+  function setName(n) { $('fname').textContent = n; document.title = n + ' · orz Markdown'; }
 
-  /* ---- files (File System Access) ---- */
+  /* files (File System Access) */
   var PICK = { types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'], 'text/plain': ['.md', '.markdown', '.txt'] } }] };
   function loadFile(handle) {
     return handle.getFile().then(function (f) { return f.text().then(function (text) {
@@ -99,12 +99,12 @@
   }
   function newDoc() { if (dirty && !confirm('Discard unsaved changes?')) return; fileHandle = null; cm.setValue(''); cm.clearHistory(); setName('untitled.md'); setDirty(false); render(); }
 
-  /* ---- file association (PWA launch) ---- */
+  /* file association (PWA launch) */
   if ('launchQueue' in window && 'files' in LaunchParams.prototype) {
     window.launchQueue.setConsumer(function (p) { if (p.files && p.files.length) loadFile(p.files[0]); });
   }
 
-  /* ---- theme / chrome / view ---- */
+  /* theme / chrome / view */
   function setTheme(id) { theme = id; try { localStorage.setItem('orz-md:theme', id); } catch (e) {} if (frameReady) { var l = frame.contentDocument.getElementById('th'); if (l) l.href = './themes/' + id + '.css'; } $('b-theme').value = id; }
   function ensureCss(href) { if (document.querySelector('link[href="' + href + '"]')) return; var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l); }
   function setChrome(m) {
@@ -114,7 +114,7 @@
   }
   function setView(v) { root.setAttribute('data-view', v); Array.prototype.forEach.call($('seg-view').children, function (b) { b.classList.toggle('on', b.getAttribute('data-v') === v); }); if (cm) setTimeout(function () { cm.refresh(); }, 30); }
 
-  /* ---- splitter ---- */
+  /* splitter */
   function wireSplit() {
     var s = $('split'), main = $('main'), drag = false;
     s.addEventListener('mousedown', function (e) { drag = true; e.preventDefault(); document.body.style.userSelect = 'none'; });
@@ -122,7 +122,7 @@
     document.addEventListener('mouseup', function () { if (drag) { drag = false; document.body.style.userSelect = ''; if (cm) cm.refresh(); } });
   }
 
-  /* ---- boot ---- */
+  /* boot */
   function init() {
     frame = $('frame');
     $('b-theme').innerHTML = THEMES.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + '</option>'; }).join('');
