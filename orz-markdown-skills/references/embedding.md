@@ -12,6 +12,26 @@ below; this guide is the checklist for when you *don't* use them.
 
 There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
 
+> **Shortcut for iframe hosts — `getPreviewFrameAssets()`.** Most of the
+> JavaScript below is the same everywhere, so it lives in one helper:
+>
+> ```js
+> import { getPreviewFrameAssets } from 'orz-markdown/preview-frame';
+> const pa = getPreviewFrameAssets();
+> ```
+>
+> It returns the pinned CDN URLs (`pa.cdn`), the runtime (`pa.runtimeScript`), and
+> ready-made strings: `pa.headLinks(scheme)` (KaTeX + highlight.js CSS, the hljs
+> link carries `id="orz-hljs"`) for the iframe `<head>`, and `pa.bodyScripts()`
+> (loads the libs + runtime and defines `window.__orzEnhance()`) for the `<body>`.
+> After each render call `window.__orzEnhance()` — it highlights code, runs
+> mermaid, draws SMILES (honoring `window.__orzSmilesTheme`) and charts, and
+> re-inits the runtime (tabs + QR). On theme change swap
+> `doc.getElementById('orz-hljs').href = pa.hljsCss(scheme)`. `__orzEnhance`
+> scopes to `.markdown-body`, so it works whatever id/wrapper you use. The rest of
+> this page is what that helper does under the hood — read it if you hand-roll the
+> wiring or need to understand a failure.
+
 ---
 
 ## 1. CSS

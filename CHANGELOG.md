@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `orz-markdown/preview-frame` export with `getPreviewFrameAssets()` — a one-call
+  helper for host apps that mount rendered output in an `<iframe>` (viewers,
+  editors, slide/page engines). Returns the pinned CDN URLs, the browser runtime,
+  `headLinks(scheme)` / `bodyScripts()` strings, and a `window.__orzEnhance()` that
+  highlights code, draws mermaid/SMILES/charts, and inits tabs + QR — so every host
+  wires the preview identically instead of re-deriving it. See the skill's
+  `references/embedding.md`.
 - `{{chart}}` plugin — declarative bar/line/pie/doughnut charts from a tiny
   line-based config (`type:`, `labels:`, `series: Name = …` / `data: …`,
   optional `title:`). Emits a `<canvas class="orz-chart" data-chart="…">` with

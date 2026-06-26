@@ -46,6 +46,8 @@ Every page that displays parser output needs **all five** of these:
 
 **Use `assets/template.html`** — all CDN links, scripts, and the `.markdown-body` wrapper are pre-wired. Copy it and replace the `<!-- INSERT RENDERED HTML HERE -->` comment.
 
+**Mounting output in an `<iframe>` (viewer / editor / slide or page engine)?** Call `getPreviewFrameAssets()` from `orz-markdown/preview-frame` — it returns the pinned CDN URLs, the runtime, `headLinks(scheme)` / `bodyScripts()` strings, and a `window.__orzEnhance()` that does all of items 3–5 (highlight code, draw mermaid/SMILES/charts, init tabs + QR). One call instead of re-deriving the wiring. See `references/embedding.md`.
+
 CDN URLs (pinned versions):
 | Library | URL |
 |---|---|

@@ -1,7 +1,6 @@
 plan/
 node_modules/
 .vscode/
-dist/
 .DS_Store
 
 .claude/

@@ -6,26 +6,18 @@
 (function () {
   'use strict';
   var THEMES = [
-    ['light-neat-1', 'Neat'], ['light-neat-2', 'Neat 2'], ['light-neat-3', 'Orchard'],
+    ['light-neat-3', 'Orchard'], ['light-neat-1', 'Neat'], ['light-neat-2', 'Neat 2'],
     ['light-academic-1', 'Academic'], ['light-academic-2', 'Academic 2'],
     ['beige-decent-1', 'Beige'], ['beige-decent-2', 'Beige 2'],
     ['light-playful-1', 'Playful'], ['light-playful-2', 'Playful 2'],
     ['dark-elegant-1', 'Dark Elegant'], ['dark-elegant-2', 'Dark Elegant 2']
   ];
-  var KATEX = 'https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css';
+  // Preview-iframe assets (CDN URLs, runtime, highlight/mermaid/smiles/chart wiring)
+  // come from orz-markdown's shared helper, exposed on the bundle as
+  // window.orzmd.previewAssets — one source of truth across all host apps.
   var CM_DARK = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css';
-  var ENH = {
-    mermaid: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
-    smiles: 'https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js',
-    chart: 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js'
-  };
-  var HLJS = {
-    js: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
-    light: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css',
-    dark: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css'
-  };
   function isDarkTheme(t) { return /^dark/.test(t); }
-  function guard(js) { return String(js).replace(/<\/(script)/gi, '<\\/$1'); }
+  function scheme(t) { return isDarkTheme(t) ? 'dark' : 'light'; }
   var SUN = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4"/>';
   var MOON = '<path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8z"/>';
   // Default document (a tour of every feature) lives as a hidden markdown <script>
@@ -46,27 +38,14 @@
      external script, so literal </script> inside the srcdoc string is fine;
      only the embedded runtime is guarded.) */
   function shell(th) {
-    var rt = (window.orzmd && window.orzmd.runtimeScript) ? guard(window.orzmd.runtimeScript) : '';
-    var hljsCss = isDarkTheme(th) ? HLJS.dark : HLJS.light;
+    var pa = window.orzmd && window.orzmd.previewAssets;
     return '<!doctype html><html><head><meta charset=utf8><base target=_blank>' +
       '<link id=th rel=stylesheet href="./themes/' + th + '.css">' +
-      '<link rel=stylesheet href="' + KATEX + '">' +
-      '<link id=hljs rel=stylesheet href="' + hljsCss + '">' +
+      (pa ? pa.headLinks(scheme(th)) : '') +
       '<style>html{height:100%}body{margin:0;min-height:100%}.orz-wrap{max-width:46em;margin:0 auto;padding:32px 34px 72px}img{max-width:100%}.markdown-body canvas[data-smiles],.markdown-body .mermaid svg,.markdown-body canvas.orz-chart{max-width:100%;height:auto}</style>' +
       '</head><body><div class="orz-wrap"><article class="markdown-body" id=c></article></div>' +
-      '<script src="' + HLJS.js + '"></script>' +
-      '<script src="' + ENH.mermaid + '"></script>' +
-      '<script src="' + ENH.smiles + '"></script>' +
-      '<script src="' + ENH.chart + '"></script>' +
-      '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}</script>' +
-      '<script>' + rt + '</script>' +
-      '<script>window.__orzEnhance=function(){var c=document.getElementById("c");if(!c)return;' +
-      'try{if(window.hljs)c.querySelectorAll("pre code:not(.hljs)").forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}' +
-      'try{if(window.mermaid)window.mermaid.run({nodes:c.querySelectorAll(".mermaid:not([data-processed])")})}catch(e){}' +
-      'try{if(window.SmilesDrawer)c.querySelectorAll("canvas[data-smiles]").forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute("data-smiles"),function(t){try{d.draw(t,v,window.__orzSmilesTheme||"light",false)}catch(e){}})})}catch(e){}' +
-      'try{if(window.Chart)c.querySelectorAll("canvas.orz-chart[data-chart]").forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement("div");w.style.cssText="position:relative;width:100%;max-width:440px;margin:.4em auto";v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute("width");v.removeAttribute("height");try{var g=JSON.parse(v.getAttribute("data-chart")||"{}");g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});new window.Chart(v,g)}catch(e){}})}catch(e){}' +
-      'try{if(window.OrzMarkdownRuntime)window.OrzMarkdownRuntime.init(c)}catch(e){}' +
-      '};</script></body></html>';
+      (pa ? pa.bodyScripts() : '') +
+      '</body></html>';
   }
   function buildFrame() {
     frame.srcdoc = shell(theme);
@@ -153,9 +132,9 @@
   function setTheme(id) {
     theme = id; try { localStorage.setItem('orz-md:theme', id); } catch (e) {}
     if (frameReady) {
-      var idoc = frame.contentDocument;
+      var idoc = frame.contentDocument; var pa = window.orzmd && window.orzmd.previewAssets;
       var l = idoc.getElementById('th'); if (l) l.href = './themes/' + id + '.css';
-      var hl = idoc.getElementById('hljs'); if (hl) hl.href = isDarkTheme(id) ? HLJS.dark : HLJS.light;
+      var hl = idoc.getElementById('orz-hljs'); if (hl && pa) hl.href = pa.hljsCss(scheme(id));
       redrawSmiles();
     }
     $('b-theme').value = id;
@@ -214,7 +193,7 @@
   function init() {
     frame = $('frame');
     $('b-theme').innerHTML = THEMES.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + '</option>'; }).join('');
-    theme = (function () { try { return localStorage.getItem('orz-md:theme'); } catch (e) { return null; } })() || 'light-neat-1';
+    theme = (function () { try { return localStorage.getItem('orz-md:theme'); } catch (e) { return null; } })() || 'light-neat-3';
     var chrome = (function () { try { return localStorage.getItem('orz-md:chrome'); } catch (e) { return null; } })() || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     $('b-theme').value = theme;
     cm = window.CodeMirror.fromTextArea($('ta'), { mode: 'markdown', lineNumbers: true, lineWrapping: true });

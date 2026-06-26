@@ -7,6 +7,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./runtime": "./dist/runtime.js",
+    "./preview-frame": "./dist/preview-frame.js",
     "./themes/*": "./themes/*"
   },
   "files": [
