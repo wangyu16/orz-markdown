@@ -24,7 +24,7 @@
   var WELCOME = '# The orz Markdown editor\n\nType on the left; it renders with **orz-markdown** on the right.\n\n- Open a `.md` file, or install this app and set it as your default `.md` editor\n- **Save** writes back to the same file · works **offline**\n- Switch the **preview theme** and toggle **dark mode** in the toolbar\n\nIt supports the full feature set: math, diagrams, containers, and the `{{…}}` plugins:\n\nInline math $E = mc^2$ and a display equation:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\n\n::: info\nA semantic container. {{sp[green] colored span}} and an emoji {{emoji sparkles}}.\n:::\n\n```js\nconst hello = "world";\n```\n';
 
   var cm, frame, frameReady = false, fileHandle = null, dirty = false, rTimer = null, theme;
-  var splitCols = '', sync = true, driver = 'ed';
+  var splitCols = '', sync = true, driver = 'ed', fontScale = 1;
   var root = document.documentElement;
   function $(id) { return document.getElementById(id); }
   function toast(m) { var t = $('toast'); t.textContent = m; t.classList.add('show'); setTimeout(function () { t.classList.remove('show'); }, 1800); }
@@ -45,8 +45,19 @@
       w.addEventListener('scroll', pvToEd, { passive: true });
       w.addEventListener('wheel', function () { driver = 'pv'; }, { passive: true });
       w.addEventListener('mousedown', function () { driver = 'pv'; });
+      applyFont();
       render();
     };
+  }
+  // preview text size: drive the theme's --font-scale (every bundled theme honors it)
+  function applyFont() {
+    if (frameReady && frame.contentDocument && frame.contentDocument.documentElement)
+      frame.contentDocument.documentElement.style.setProperty('--font-scale', String(fontScale));
+  }
+  function setFont(delta) {
+    fontScale = Math.max(0.8, Math.min(1.6, Math.round((fontScale + delta) * 100) / 100));
+    try { localStorage.setItem('orz-md:font', String(fontScale)); } catch (e) {}
+    applyFont();
   }
   function inject(iwin, src, cb) {
     var d = iwin.document; if (d.querySelector('script[data-l="' + src + '"]')) { cb && cb(); return; }
@@ -188,6 +199,10 @@
     var syncPref = (function () { try { return localStorage.getItem('orz-md:sync'); } catch (e) { return null; } })();
     setSync(syncPref !== '0');
     $('b-sync').onclick = function () { setSync(!sync); };
+    var fp = (function () { try { return parseFloat(localStorage.getItem('orz-md:font')); } catch (e) { return NaN; } })();
+    if (fp >= 0.8 && fp <= 1.6) fontScale = fp;
+    $('b-font-dec').onclick = function () { setFont(-0.1); };
+    $('b-font-inc').onclick = function () { setFont(0.1); };
     Array.prototype.forEach.call($('seg-view').children, function (b) { b.onclick = function () { setView(b.getAttribute('data-v')); }; });
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && /^s$/i.test(e.key)) { e.preventDefault(); save(); }
@@ -200,5 +215,28 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(function () {});
+  // service worker + automatic update check: notify (not force) when a new version is ready
+  var swReloading = false;
+  function showUpdate(reg) {
+    var bar = document.getElementById('update-bar'); if (!bar || bar.classList.contains('show')) return;
+    bar.classList.add('show');
+    document.getElementById('update-reload').onclick = function () { swReloading = true; if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING'); };
+    document.getElementById('update-dismiss').onclick = function () { bar.classList.remove('show'); };
+  }
+  if ('serviceWorker' in navigator) {
+    // reload only after the user opts in (the new SW takes control); never on first-visit claim
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (swReloading) location.reload(); });
+    navigator.serviceWorker.register('./sw.js').then(function (reg) {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg);
+      reg.addEventListener('updatefound', function () {
+        var nw = reg.installing; if (!nw) return;
+        nw.addEventListener('statechange', function () {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate(reg);
+        });
+      });
+      reg.update();
+      setInterval(function () { reg.update(); }, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) reg.update(); });
+    }).catch(function () {});
+  }
 })();
