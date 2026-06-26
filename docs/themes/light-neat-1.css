@@ -106,10 +106,10 @@
   /* markdown body container toggles */
   --markdown-body-max-width: 940px;
   --markdown-body-padding: clamp(1.25rem, 3.6vw, 3.2rem);
-  --markdown-body-border: 1px solid var(--border);
-  --markdown-body-radius: var(--radius-lg);
-  --markdown-body-shadow: var(--shadow);
-  --markdown-body-decorations-display: block;
+  --markdown-body-border: none;
+  --markdown-body-radius: 0;
+  --markdown-body-shadow: none;
+  --markdown-body-decorations-display: none;
 }
 
 body.font-serif,
@@ -208,7 +208,7 @@ body {
   max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
-  background: var(--surface);
+  background: transparent;
   border: var(--markdown-body-border);
   border-radius: var(--markdown-body-radius);
   box-shadow: var(--markdown-body-shadow);
