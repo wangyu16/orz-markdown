@@ -1242,3 +1242,6 @@ details.spoil > summary:focus-visible {
     page-break-inside: avoid;
   }
 }
+
+/* code: panel tint shows through (no white highlight.js inner box) */
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }

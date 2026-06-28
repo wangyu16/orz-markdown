@@ -460,3 +460,7 @@ body {
   body { background: #fff; color: #000; padding: 0; }
   .markdown-body { max-width: 100%; padding: 0; border: none; box-shadow: none; }
 }
+
+/* code block — modern soft panel with a quiet left rule */
+.markdown-body pre { background: #f7f8fa; border: 1px solid #e6e8ec; border-left: 3px solid #cbd2dc; border-radius: 8px; padding: 1.1rem 1.25rem; }
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }

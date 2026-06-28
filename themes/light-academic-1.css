@@ -539,3 +539,7 @@ body {
     box-shadow: none;
   }
 }
+
+/* code block — modern soft panel */
+.markdown-body pre { background: #f6f5f1; border: 1px solid #e6e2d8; border-radius: 8px; padding: 1.1rem 1.25rem; }
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }

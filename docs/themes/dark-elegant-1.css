@@ -727,3 +727,6 @@ details.spoil > summary:focus-visible {
     page-break-inside: avoid;
   }
 }
+
+/* code: uniform dark panel (no highlight.js inner box) */
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }

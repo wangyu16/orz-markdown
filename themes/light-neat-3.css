@@ -377,3 +377,7 @@ a:focus-visible, .tabs-bar-btn:focus-visible, details.spoil > summary:focus-visi
   details.spoil, div.mermaid, div.smiles-render { box-shadow: none !important; }
   tr, iframe, video, pre, blockquote { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* code block — light & harmonic (replaces the dark box; code sits on the panel, no white highlight.js inner) */
+.markdown-body pre { background: #f3f6ee; border: 1px solid #e4e9da; box-shadow: var(--shadow-soft); }
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; color: #2b3328; }

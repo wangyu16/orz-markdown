@@ -559,3 +559,6 @@ body {
   }
 
 }
+/* code block — warm paper panel */
+.markdown-body pre { background: #f5f0e6; border: 1px solid #e7ddc9; border-radius: 8px; }
+.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }
