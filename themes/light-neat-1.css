@@ -1245,3 +1245,14 @@ details.spoil > summary:focus-visible {
 
 /* code: panel tint shows through (no white highlight.js inner box) */
 .markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }
+
+
+/* ============ modern decorative refresh ============ */
+/* blockquote — clean card with an accent gradient edge */
+.markdown-body blockquote { position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1rem 1.25rem 1rem 1.5rem; margin: 1.7rem 0; color: var(--text-soft);
+  box-shadow: var(--shadow-soft); overflow: hidden; }
+.markdown-body blockquote::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-warm)); }
+.markdown-body blockquote p:last-child { margin-bottom: 0; }
+.markdown-body blockquote blockquote { background: var(--surface-2); }

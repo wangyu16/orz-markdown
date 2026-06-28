@@ -562,3 +562,23 @@ body {
 /* code block — warm paper panel */
 .markdown-body pre { background: #f5f0e6; border: 1px solid #e7ddc9; border-radius: 8px; }
 .markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }
+
+
+/* ============ modern decorative refresh ============ */
+/* blockquote — warm card with a soft corner quote glyph (replaces the top/bottom rules) */
+.markdown-body blockquote { position: relative; border: none; background: #f3ece0; border-radius: 12px;
+  padding: 1.1rem 1.4rem 1.1rem 1.6rem; margin: 1.9rem 0; font-style: italic; color: #5a4d42;
+  box-shadow: 0 2px 10px rgba(120, 90, 50, 0.06); }
+.markdown-body blockquote::before { content: '“'; position: absolute; left: 0.55rem; top: -0.3rem;
+  font-family: Georgia, serif; font-size: 2.6em; line-height: 1; color: #c8a98a; opacity: 0.55; }
+.markdown-body blockquote p { margin: 0 0 0.6em; } .markdown-body blockquote > :last-child { margin-bottom: 0; }
+.markdown-body blockquote blockquote { background: rgba(255, 255, 255, 0.4); box-shadow: none; }
+.markdown-body blockquote blockquote::before { display: none; }
+/* callouts — rounder, softer */
+.markdown-body .info, .markdown-body .success, .markdown-body .warning, .markdown-body .danger { border-radius: 10px; }
+
+/* spoiler — add a chevron indicator */
+.markdown-body details.spoil > summary { display: flex; align-items: center; gap: 0.55rem; list-style: none; }
+.markdown-body details.spoil > summary::-webkit-details-marker { display: none; }
+.markdown-body details.spoil > summary::before { content: '▸'; color: #b09a78; transition: transform 0.2s; }
+.markdown-body details.spoil[open] > summary::before { transform: rotate(90deg); }

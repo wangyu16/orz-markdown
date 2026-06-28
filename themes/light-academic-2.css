@@ -464,3 +464,23 @@ body {
 /* code block — modern soft panel with a quiet left rule */
 .markdown-body pre { background: #f7f8fa; border: 1px solid #e6e8ec; border-left: 3px solid #cbd2dc; border-radius: 8px; padding: 1.1rem 1.25rem; }
 .markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }
+
+
+/* ============ modern decorative refresh ============ */
+/* blockquote — minimal thin rule, no box */
+.markdown-body blockquote { background: none; border: none; border-left: 2px solid #cdd2d8; border-radius: 0; box-shadow: none;
+  padding: 0.15rem 0 0.15rem 1.3rem; margin: 1.8rem 0; font-style: italic; color: var(--text-muted); }
+.markdown-body blockquote::before { display: none; }
+.markdown-body blockquote p { margin: 0 0 0.6em; } .markdown-body blockquote > :last-child { margin-bottom: 0; }
+/* callouts — soft tinted rounded cards (replaces flat page-bg + border) */
+.markdown-body .info, .markdown-body .success, .markdown-body .warning, .markdown-body .danger { border-radius: 10px; border: 1px solid; }
+.markdown-body .info { background: #eef3f9; border-color: #d3e0ec; }
+.markdown-body .success { background: #eef5ef; border-color: #cfe3d2; }
+.markdown-body .warning { background: #f9f3e2; border-color: #ecddb6; }
+.markdown-body .danger { background: #f8edeb; border-color: #ead0cc; }
+/* spoiler — rounded with a chevron */
+.markdown-body details.spoil { border-radius: 10px; overflow: hidden; }
+.markdown-body details.spoil > summary { display: flex; align-items: center; gap: 0.55rem; list-style: none; }
+.markdown-body details.spoil > summary::-webkit-details-marker { display: none; }
+.markdown-body details.spoil > summary::before { content: '▸'; color: #9aa3ae; transition: transform 0.2s; }
+.markdown-body details.spoil[open] > summary::before { transform: rotate(90deg); }
