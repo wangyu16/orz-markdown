@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-28
+
 ### Added
 
+- New bundled theme **`light-neat-3.css` ("Orchard")** — Bricolage Grotesque
+  headings, a calm green accent, and generous spacing; ships frameless (no card
+  border) on a solid background.
 - New bundled theme **`dark-elegant-3.css` ("Nocturne")** — a VS Code-dark theme:
   Lora serif body, colourful headings (blue/amber/green/red/pink), blue accents, and
   decorative touches (underline bars, ✦ markers, star rules, quote-mark blockquotes,
@@ -25,7 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional `title:`). Emits a `<canvas class="orz-chart" data-chart="…">` with
   the Chart.js config as escaped JSON plus a `data-md` breadcrumb (round-trips
   via copy-as-markdown). The host runtime draws it with Chart.js, the same way
-  smiles canvases are painted. (Not yet published to npm.)
+  smiles canvases are painted.
+
+### Changed
+
+- Theme refresh across the bundled themes: modernised blockquotes, callouts and
+  spoilers (a distinct, contemporary treatment per theme rather than the same
+  flat box); harmonised, varied code blocks; a unified base body font size so the
+  perceived text size stays consistent when switching themes; solid (non-tiling)
+  backgrounds where gradients repeated on long documents; and a modern "Contents"
+  table-of-contents panel for `light-academic-1`.
+- Dark themes (`dark-elegant-1/2/3`) now render Mermaid diagrams and `{{chart}}`
+  canvases on a soft translucent light panel, so their light-default drawing
+  (dark-on-light) stays legible against the dark page background.
 
 ### Fixed
 

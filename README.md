@@ -99,6 +99,13 @@ plus loading and drawing mermaid/smiles/Chart.js yourself), and exactly what
 copy-as-Markdown needs (the runtime, `.markdown-body`, and preserved `data-md`
 breadcrumbs and plugin classes).
 
+If your host mounts the rendered output in an `<iframe>`, the
+`orz-markdown/preview-frame` export gives you a one-call helper —
+`getPreviewFrameAssets()` returns the pinned CDN URLs, the browser runtime,
+`headLinks(scheme)` / `bodyScripts()` strings, and a `window.__orzEnhance()` that
+highlights code and draws Mermaid / SMILES / charts — so every host wires the
+preview identically instead of re-deriving it.
+
 ## Packaging
 
 To rebuild distributable assets locally:
@@ -158,6 +165,7 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 | **QR Code** | `qr` | `{{qr https://example.com}}` | Transforms text inline implicitly into an internally generated SVG QR Code natively. |
 | **Mermaid** | `mm` | `{{mermaid\ngraph LR\nA-->B\n}}` | Compiles logic into a specific preconfigured payload targeted for Mermaid client-side rendering. |
 | **SMILES Chemistry**| `sm` | `{{smiles C1=CC=CC=C1}}` | Embeds SMILES chemical formulas parsed specifically for `smilesDrawer` visualization. |
+| **Chart** | N/A | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` | Declarative bar/line/pie/doughnut charts from a small line-based config (`type`, `labels`, `series: Name = …` or `data: …`, optional `title`). Rendered client-side with Chart.js. |
 | **YAML Objects** | `yml` | `{{yaml\ntitle: Doc\n}}` | Embeds the multiline YAML configuration blindly into an invisible `<script type="application/yaml">` block. |
 | **NYML Parser** | N/A | `{{nyml\nkey: value\n}}` | NYML-specific parser logic. Evaluates and injects the resulting properties as an invisible `<script type="application/json">` block. |
 | **Test** | N/A | `{{test-block}}` | Reserved testing elements for structural plugin resolution constraints. |

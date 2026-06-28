@@ -1,6 +1,6 @@
 ---
 name: orz-markdown
-description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 10 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project. ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
+description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, chart, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, or their aliases mm/qr/yt/sm/sp/em), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 12 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project. ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
 compatibility:
   runtime: "Node.js 20+, ESM"
   package: "orz-markdown"
@@ -8,7 +8,7 @@ compatibility:
 
 # orz-markdown
 
-A deeply customized `markdown-it` instance with 10+ plugins, 9 official plugin bundles, and 10 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
+A deeply customized `markdown-it` instance with 10+ plugins, 9 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
 
 ## Rendering (Node.js / ESM)
 
@@ -77,7 +77,7 @@ The runtime also provides **copy-as-Markdown**: with it loaded, copying a select
 
 ## Themes
 
-Ten bundled themes — each auto-imports `common.css` (structural rules for tables, images, QR overlays, print).
+Twelve bundled themes — each auto-imports `common.css` (structural rules for tables, images, QR overlays, print).
 
 | File | Style | Scheme |
 |---|---|---|
@@ -124,6 +124,7 @@ Escape with backslash: `\{{name}}` renders as literal `{{name}}`.
 | **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe) |
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
 | **smiles** | `sm` | `{{smiles C1=CC=CC=C1}}` (chemical structure) |
+| **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (Chart.js bar/line/pie/doughnut) |
 | **toc** | — | `{{toc}}` or `{{toc 2,3}}` (heading levels) |
 | **attrs** | — | `# Title{{attrs[id="hero"]}}` |
 | **markdown** | `md`, `md-include` | `{{md ./path/to/file.md}}` |
