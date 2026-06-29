@@ -130,6 +130,14 @@ node_modules/orz-markdown/orz-markdown-skills/SKILL.md
 
 with supporting files under `orz-markdown-skills/references/` and `orz-markdown-skills/assets/`. Point your agent tooling at that directory (e.g. copy or symlink it into your agent's skills folder).
 
+Or hand your agent the skill straight from the CDN — no install needed:
+
+```
+https://cdn.jsdelivr.net/npm/orz-markdown/orz-markdown-skills/SKILL.md
+```
+
+See **[markdown.orz.how/agents.html](https://markdown.orz.how/agents.html)** for every install route (Claude Code, Claude.ai upload, or point-at-URL for any agent).
+
 ## Official Plugins Bundled
 
 This project builds upon `markdown-it` and pre-configures a curated selection of official and popular community plugins.

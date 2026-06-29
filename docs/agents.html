@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use orz with an AI agent · orz-markdown</title>
+<meta name="description" content="Each orz tool ships an agent skill (SKILL.md). Point your AI agent at it and describe what you want — it writes the orz-flavoured Markdown. Install routes for Claude Code, Claude.ai, and any agent.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
+</head>
+<body>
+<nav class="top"><div class="bar">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a href="./agents.html" class="here">For agents</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <span class="ext">SKILL.md</span>
+    <h1 style="margin:.3em 0 .15em">Use orz with an AI agent</h1>
+    <p class="lead" style="max-width:720px">Every orz tool ships an <strong>agent skill</strong> — a single
+    <code>SKILL.md</code> that teaches an AI agent the syntax, conventions, and gotchas. Point your agent at it,
+    describe what you want, and let it write the orz-flavoured Markdown.</p>
+  </div></section>
+
+  <div class="wide">
+
+  <section class="section" style="margin-top:8px">
+    <div class="callout"><strong>You don&rsquo;t have to learn the syntax.</strong> The skills exist so an agent
+    can do the precise parts — layout grammar, page templates, plugin syntax — while you stay in plain language:
+    &ldquo;turn these notes into a 10-slide deck,&rdquo; &ldquo;lay this out as a two-column CV,&rdquo; &ldquo;add a
+    QR code linking to the repo.&rdquo; This page is just how to hand your agent the right skill.</div>
+  </section>
+
+  <!-- THE SKILLS -->
+  <section class="section" style="margin-top:34px">
+    <h2>The skills</h2>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">orz-markdown <span class="ext">render</span></h3>
+        <p>The renderer itself: <code>{{…}}</code> plugins (mermaid, charts, KaTeX, QR…), <code>:::</code>
+        containers, themes, and page setup.</p>
+        <p class="more"><a href="https://cdn.jsdelivr.net/npm/orz-markdown/orz-markdown-skills/SKILL.md">SKILL.md</a>
+        · <a href="https://github.com/wangyu16/orz-markdown/tree/main/orz-markdown-skills">GitHub</a></p></div>
+      <div class="card"><h3 style="margin-top:0">orz-mdhtml <span class="ext">.md.html</span></h3>
+        <p>Self-contained, editable HTML documents that read like a webpage and save in place.</p>
+        <p class="more"><a href="https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md">SKILL.md</a>
+        · <a href="https://github.com/wangyu16/orz-mdhtml/tree/main/orz-mdhtml-skills">GitHub</a></p></div>
+      <div class="card"><h3 style="margin-top:0">orz-slides <span class="ext">.slides.html</span></h3>
+        <p>reveal.js decks: layout grammar, structure templates, regions, floats. See also the
+        <a href="./slides.html">layouts reference</a>.</p>
+        <p class="more"><a href="https://cdn.jsdelivr.net/npm/orz-slides/orz-slides-skills/SKILL.md">SKILL.md</a>
+        · <a href="https://github.com/wangyu16/orz-slides/tree/main/orz-slides-skills">GitHub</a></p></div>
+      <div class="card"><h3 style="margin-top:0">orz-paged <span class="ext">.paged.html</span></h3>
+        <p>Paginated print/PDF documents: page templates, headers/footers, CVs, letters, exams.</p>
+        <p class="more"><a href="https://cdn.jsdelivr.net/npm/orz-paged/orz-paged-skills/SKILL.md">SKILL.md</a>
+        · <a href="https://github.com/wangyu16/orz-paged/tree/main/orz-paged-skills">GitHub</a></p></div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section class="section" style="margin-top:34px">
+    <h2>Give your agent the skill</h2>
+
+    <h3 style="margin:14px 0 .2em">Any agent — point it at the URL</h3>
+    <p>The simplest path. Paste the skill&rsquo;s URL into your agent and ask it to follow it:</p>
+<pre>Read https://cdn.jsdelivr.net/npm/orz-slides/orz-slides-skills/SKILL.md
+and use it to turn my notes below into a slide deck.</pre>
+    <p>The URLs are stable (served from the published npm package via jsDelivr) and always track the latest release.</p>
+
+    <h3 style="margin:22px 0 .2em">Claude Code — drop in a skill folder</h3>
+    <p>Copy the skill folder into your skills directory; Claude Code auto-discovers it on the next session.</p>
+<pre># personal (all projects)        or   # this project only
+~/.claude/skills/orz-slides/          .claude/skills/orz-slides/</pre>
+    <p>If you&rsquo;ve installed the package, the folder is already on disk — copy it from there:</p>
+<pre>cp -r node_modules/orz-slides/orz-slides-skills ~/.claude/skills/orz-slides</pre>
+
+    <h3 style="margin:22px 0 .2em">Claude.ai / Desktop — upload a skill</h3>
+    <p>Download the skill folder (from the GitHub links above), zip it, and upload it under
+    <strong>Settings → Capabilities → Skills</strong>. It&rsquo;s then available in your chats.</p>
+  </section>
+
+  <!-- FOOTER -->
+  <section class="section" style="margin-top:40px">
+    <div class="callout amber"><strong>Agents do the syntax; you do the intent.</strong> If you ever want the
+    details yourself, every tool links its own reference — e.g. the
+    <a href="./slides.html">slides layouts &amp; syntax</a> page.</div>
+    <footer><div class="row">
+      <a href="./family.html">The family</a>
+      <a href="./guide.html">Guide</a>
+      <a href="./">Home</a>
+    </div></footer>
+  </section>
+
+  </div>
+</main>
+</body>
+</html>
