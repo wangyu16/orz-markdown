@@ -35,7 +35,27 @@ nav.top .links a:hover { color:var(--ink); background:var(--line-2); text-decora
 nav.top .links a.here { color:var(--brand-ink); font-weight:600; }
 nav.top .links a.cta { color:#fff; background:var(--brand-solid); padding:8px 15px; font-weight:600; }
 nav.top .links a.cta:hover { background:var(--brand-solid-d); color:#fff; }
-@media (max-width:620px){ nav.top .links a:not(.cta){ display:none; } }
+/* Narrow screens: the header adapts instead of hiding its links. The old rule
+   set every non-CTA link to display:none, leaving the menu unreachable on phones.
+   Instead, let the bar grow — brand on top, all links wrap onto their own row(s)
+   below — and stop pinning it (a tall sticky bar would eat a small screen). */
+@media (max-width:760px){
+  nav.top { position:static; }
+  nav.top .bar { flex-wrap:wrap; height:auto; min-height:58px; align-items:center;
+    column-gap:12px; row-gap:7px; padding-top:9px; padding-bottom:9px; }
+  nav.top .links { margin-left:0; flex-basis:100%; flex-wrap:wrap; justify-content:flex-start;
+    gap:6px 4px; }
+}
+@media (max-width:420px){
+  nav.top .brand { font-size:1rem; }
+  nav.top .brand img { height:24px; }
+  nav.top .links { font-size:.9rem; }
+  nav.top .links a { padding:6px 9px; }
+}
+/* Wide tables (template/element references) scroll instead of overflowing the page. */
+@media (max-width:760px){
+  table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+}
 
 /* ---- type ---- */
 main { padding:0 0 90px; }
