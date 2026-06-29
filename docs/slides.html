@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orz-slides — layouts &amp; syntax · orz-markdown</title>
+<meta name="description" content="Reference for orz-slides .slides.html decks: structure templates, the column/row layout grammar, regions, floats, per-slide options, and deck settings. Ask an AI agent with the orz-slides skill for advanced editing.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
+<style>
+  /* layout-showcase diagrams (page-local): a CSS grid that mirrors a slide's regions */
+  .lzrow { display:grid; gap:18px; align-items:start; margin:12px 0 6px; }
+  @media (min-width:720px){ .lzrow { grid-template-columns:minmax(0,260px) 1fr; } }
+  .lzrow pre { margin:0; align-self:start; }
+  .lzbox { display:grid; gap:6px; aspect-ratio:16/9; background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; padding:8px; box-shadow:0 1px 3px rgba(16,24,40,.07); }
+  .lzbox.rel { position:relative; }
+  .lzg { display:grid; gap:6px; min-height:0; min-width:0; }
+  .lzcell { display:flex; align-items:center; justify-content:center; text-align:center; min-height:22px; padding:2px;
+    background:var(--brand-wash); border:1px solid #d8e8cd; border-radius:6px;
+    font:600 .72rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--brand-ink); }
+  .lzfloat { position:absolute; display:flex; align-items:center; justify-content:center; text-align:center;
+    background:#fdf6e3; border:1px solid #efe2bf; border-radius:6px;
+    font:600 .7rem ui-monospace,monospace; color:#7a5d00; }
+</style>
+</head>
+<body>
+<nav class="top"><div class="bar">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a>
+    <a href="./family.html" class="here">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <span class="ext">.slides.html</span>
+    <h1 style="margin:.3em 0 .15em">orz-slides — layouts &amp; syntax</h1>
+    <p class="lead" style="max-width:720px">A reference for the deck format: structure templates, a small
+    column/row layout grammar, regions, floats, and per-slide options. Part of
+    <a href="./family.html#slides">the orz editable-document family</a>.</p>
+  </div></section>
+
+  <div class="wide">
+
+  <!-- AI-FIRST NOTE -->
+  <section class="section" style="margin-top:8px">
+    <div class="callout">
+      <strong>You don't have to learn any of this.</strong> The editor's <strong>layout picker</strong> covers the
+      common cases with one click, and for anything beyond that the fastest path is to <strong>ask an AI agent to
+      build or restructure your deck</strong>. Point it at the bundled <strong>orz-slides agent skill</strong>
+      (<code>orz-slides-skills/SKILL.md</code>) and describe what you want — &ldquo;make this a two-column slide with a
+      figure on the right,&rdquo; &ldquo;turn these notes into a section divider then three bullet slides.&rdquo; This
+      page is the reference the agent (and curious humans) can draw on; skim it, don't memorize it.
+    </div>
+  </section>
+
+  <!-- QUICK WAY -->
+  <section class="section" style="margin-top:34px">
+    <h2>The quick way: the layout picker</h2>
+    <p>In the editor, open the <strong>layout</strong> button (the grid icon) and pick a layout. On a blank slide it
+    drops the skeleton straight in; on a slide that already has content it inserts the new layout and tucks your old
+    content into a comment so you can copy-paste it into place. The picker offers the most common layouts:</p>
+    <div class="grid c3">
+      <div class="card"><h3 style="margin-top:0">Title · Section · Closing</h3><p>Cover, divider, and thank-you
+      slides — large centered or left-aligned type, no regions to fill.</p></div>
+      <div class="card"><h3 style="margin-top:0">Bullets · Outline</h3><p>A titled slide with a list, or an
+      agenda. The everyday content slide.</p></div>
+      <div class="card"><h3 style="margin-top:0">Two columns · Main + side · Three columns · Two rows · Quad</h3>
+      <p>Multi-region layouts. Each region is filled with a <code>&lt;!-- @name --&gt;</code> marker.</p></div>
+    </div>
+    <p style="margin-top:14px">Everything below is what those skeletons expand to — reach for it when you want a
+    custom split, a floating figure, a background colour, or a template variant.</p>
+  </section>
+
+  <!-- DECK SETTINGS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Deck settings</h2>
+    <p>One <code>&lt;!-- deck --&gt;</code> block at the very top sets defaults for the whole deck.</p>
+<pre>&lt;!-- deck
+title: My presentation
+theme: paper            # paper · executive · chalk · sage · neon · poppy · architect …
+ratio: 16:9             # or 4:3
+author: Dr. Yu Wang
+footer: My talk · 2026  # shown on normal slides (not title/closing)
+transition: fade        # reveal.js transition: none · fade · slide · convex …
+--&gt;</pre>
+  </section>
+
+  <!-- STRUCTURE TEMPLATES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Structure templates</h2>
+    <p>Templates are ready-made slides with fixed structure and several visual <strong>variants</strong> (add
+    <code>v=2</code>, <code>v=3</code>, …). The first <code>#</code> heading is the main line, <code>##</code> the
+    subtitle, and any remaining text is the meta line.</p>
+    <table>
+      <tr><th>Template</th><th>Variants</th><th>For</th></tr>
+      <tr><td><code>title</code></td><td>v=1–6</td><td>Cover / title slide</td></tr>
+      <tr><td><code>section</code></td><td>v=1–4</td><td>Section divider</td></tr>
+      <tr><td><code>outline</code></td><td>v=1–3</td><td>Agenda / table of contents (a list)</td></tr>
+      <tr><td><code>closing</code></td><td>v=1–3</td><td>Thank-you / questions</td></tr>
+    </table>
+<pre>&lt;!-- slide template=title v=2 --&gt;
+# Controlled Polymerization
+## RAFT vs ATRP
+**Dr. Yu Wang** · 2026
+
+&lt;!-- slide template=section --&gt;
+# Part II — Methods
+
+&lt;!-- slide template=outline --&gt;
+## Outline
+1. Introduction
+2. Methods
+3. Results</pre>
+  </section>
+
+  <!-- LAYOUT GRAMMAR -->
+  <section class="section" style="margin-top:34px">
+    <h2>Layout presets &amp; regions</h2>
+    <p>A normal slide&rsquo;s first <code>##</code> heading becomes its title. Add a preset to split the body into
+    named <strong>regions</strong>; fill each region with a <code>&lt;!-- @name --&gt;</code> marker. Text before the
+    first marker goes into the primary region.</p>
+    <table>
+      <tr><th>Preset</th><th>Regions</th><th>Default ratio</th></tr>
+      <tr><td><em>(none)</em></td><td>single body</td><td>—</td></tr>
+      <tr><td><code>2col</code></td><td><code>left</code> <code>right</code></td><td>1/1</td></tr>
+      <tr><td><code>3col</code></td><td><code>left</code> <code>mid</code> <code>right</code></td><td>1/1/1</td></tr>
+      <tr><td><code>2row</code></td><td><code>top</code> <code>bottom</code></td><td>1/1</td></tr>
+      <tr><td><code>main-side</code></td><td><code>main</code> <code>side</code></td><td>2/1</td></tr>
+      <tr><td><code>quad</code></td><td><code>tl</code> <code>tr</code> <code>bl</code> <code>br</code></td><td>2×2</td></tr>
+    </table>
+    <p style="margin-top:12px">Add a ratio after the preset, e.g. <code>2col 3/2</code> or <code>main-side 1/2</code>.</p>
+<pre>&lt;!-- slide 2col 3/2 --&gt;
+## Results
+
+&lt;!-- @left --&gt;
+- Accuracy 92%
+- Precision 88%
+
+&lt;!-- @right --&gt;
+{{smiles C(=S)(SC)SC}}</pre>
+  </section>
+
+  <!-- RAW SPLITS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Custom splits (advanced)</h2>
+    <p>For anything the presets don&rsquo;t cover, write the split directly. <code>col</code> and <code>row</code> take a
+    track list (numbers become <code>fr</code> units; <code>auto</code>, <code>%</code>, and <code>px</code> also work)
+    and a <code>{ … }</code> list of regions or nested splits — to any depth.</p>
+<pre>&lt;!-- slide row auto/1 { header; col 1/1 { a; b } } --&gt;
+## Dashboard
+
+&lt;!-- @header --&gt;
+Top banner across the full width.
+
+&lt;!-- @a --&gt;
+Left metric.
+
+&lt;!-- @b --&gt;
+Right metric.</pre>
+    <p style="margin-top:14px"><strong>Floats</strong> place a free box anywhere over the slide (outside the grid):</p>
+<pre>&lt;!-- @float left=58% top=22% w=36% h=44% z=2 --&gt;
+&gt; **Key takeaway:** narrow PDI across all methods.</pre>
+    <p style="margin-top:14px"><strong>Speaker notes</strong> never appear on the slide:</p>
+<pre>&lt;!-- @notes --&gt;
+Remember to mention the control experiment.</pre>
+  </section>
+
+  <!-- WORKED EXAMPLES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Worked examples</h2>
+    <p>Real splits and what they produce. Each box mirrors the slide&rsquo;s region grid; the source beside it is
+    exactly what you write. (Drawn from the deck&rsquo;s own layout test set.)</p>
+
+    <h3 style="margin:18px 0 0">Header band over two columns</h3>
+    <div class="lzrow">
+      <div class="lzbox" style="grid-template-rows:auto 1fr">
+        <div class="lzcell">head</div>
+        <div class="lzg" style="grid-template-columns:1fr 1fr"><div class="lzcell">a</div><div class="lzcell">b</div></div>
+      </div>
+<pre>&lt;!-- slide row auto/1 { head; col 1/1 { a; b } } --&gt;
+## Dashboard
+&lt;!-- @head --&gt;
+Full-width banner.
+&lt;!-- @a --&gt;
+Cell A
+&lt;!-- @b --&gt;
+Cell B</pre>
+    </div>
+
+    <h3 style="margin:24px 0 0">Three columns, the middle one split into two rows</h3>
+    <div class="lzrow">
+      <div class="lzbox" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="lzcell">c1</div>
+        <div class="lzg" style="grid-template-rows:1fr 1fr"><div class="lzcell">c2a</div><div class="lzcell">c2b</div></div>
+        <div class="lzcell">c3</div>
+      </div>
+<pre>&lt;!-- slide col 1/1/1 { c1; row 1/1 { c2a; c2b }; c3 } --&gt;
+## Comparison
+&lt;!-- @c1 --&gt;
+Column one.
+&lt;!-- @c2a --&gt;
+Middle top.
+&lt;!-- @c2b --&gt;
+Middle bottom.
+&lt;!-- @c3 --&gt;
+Column three.</pre>
+    </div>
+
+    <h3 style="margin:24px 0 0">Sidebar + a main column with its own header</h3>
+    <div class="lzrow">
+      <div class="lzbox" style="grid-template-columns:1fr 2fr">
+        <div class="lzcell">side</div>
+        <div class="lzg" style="grid-template-rows:auto 1fr"><div class="lzcell">mainHead</div><div class="lzcell">mainBody</div></div>
+      </div>
+<pre>&lt;!-- slide col 1/2 { side; row auto/1 { mainHead; mainBody } } --&gt;
+## Topic
+&lt;!-- @side --&gt;
+Nav / notes.
+&lt;!-- @mainHead --&gt;
+Main header.
+&lt;!-- @mainBody --&gt;
+Main body fills the rest.</pre>
+    </div>
+
+    <h3 style="margin:24px 0 0">A floating figure over two columns</h3>
+    <div class="lzrow">
+      <div class="lzbox rel" style="grid-template-columns:1fr 1fr">
+        <div class="lzcell">left</div><div class="lzcell">right</div>
+        <div class="lzfloat" style="left:56%;top:20%;width:38%;height:52%">float</div>
+      </div>
+<pre>&lt;!-- slide 2col --&gt;
+## Result
+&lt;!-- @left --&gt;
+Background content.
+&lt;!-- @right --&gt;
+More content.
+&lt;!-- @float left=58% top=22% w=36% h=44% --&gt;
+&gt; **Key takeaway** sits on top of the grid.</pre>
+    </div>
+  </section>
+
+  <!-- PER-SLIDE OPTIONS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Per-slide options</h2>
+    <p>Add these to any <code>&lt;!-- slide … --&gt;</code> marker.</p>
+    <table>
+      <tr><th>Option</th><th>Meaning</th></tr>
+      <tr><td><code>bg=#0b3d2e</code></td><td>Slide background colour or gradient</td></tr>
+      <tr><td><code>t=fade</code></td><td>Transition for this slide</td></tr>
+      <tr><td><code>fit=scroll</code></td><td>Overflow handling: <code>fit</code> (default), <code>scroll</code>, <code>off</code></td></tr>
+      <tr><td><code>step</code></td><td>Reveal the slide&rsquo;s items one click at a time</td></tr>
+      <tr><td><code>class=…</code> / <code>id=…</code></td><td>Custom class or id on the slide</td></tr>
+      <tr><td><code>v=2</code></td><td>Template variant (with <code>template=</code>)</td></tr>
+    </table>
+<pre>&lt;!-- slide 2col bg=#0b3d2e t=fade step --&gt;</pre>
+  </section>
+
+  <!-- FOOTER -->
+  <section class="section" style="margin-top:40px">
+    <div class="callout amber"><strong>Editing and in-place Save need a Chromium-based browser</strong> (Chrome or
+    Edge). Presenting works in any modern browser.</div>
+    <footer><div class="row">
+      <a href="./family.html#slides">← The family</a>
+      <a href="https://github.com/wangyu16/orz-slides">orz-slides on GitHub</a>
+      <a href="./guide.html">Guide</a>
+      <a href="./">Home</a>
+    </div></footer>
+  </section>
+
+  </div>
+</main>
+</body>
+</html>
