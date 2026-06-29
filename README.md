@@ -167,7 +167,7 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 | **Attributes** | N/A | `# Header {{attrs[id="my-id"]}}`| Injects continuous HTML attributes (classes, IDs, config properties) to the immediately preceding element. |
 | **Emoji** | `em` | `{{emoji smile}}` / `{{em tada}}` | Renders the specific text alias directly into the corresponding Unicode emoji natively. |
 | **Table of Content** | N/A | `{{toc}}` or `{{toc 2,3}}` | Autogenerates a Table of Contents based on document headings. Allows specifying bound heading ranges. |
-| **Space** | N/A | `{{space 4}}` | Inserts inline horizontal whitespace entities directly into the text. |
+| **Space** | N/A | `{{space 4}}` | Inserts inline horizontal whitespace — an empty `inline-block` span sized in `rem` (`{{space 4}}` → 4rem wide). |
 | **YouTube** | `yt` | `{{youtube dQw4w9WgXcQ}}` | Embedded block element containing a responsive YouTube video iframe matching the ID. |
 | **Markdown Source**| `md` | `{{md path/to/file.md}}` | Securely embeds the complete content of an external markdown file directly into the parsed structure. |
 | **QR Code** | `qr` | `{{qr https://example.com}}` | Transforms text inline implicitly into an internally generated SVG QR Code natively. |

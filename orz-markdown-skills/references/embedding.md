@@ -166,14 +166,15 @@ when) all of this holds:
 2. **Content is inside `.markdown-body`** (or an element with `data-orz-copy`).
    The handler ignores selections elsewhere and inside inputs/textareas.
 3. **`data-md` breadcrumbs are preserved.** Generated constructs whose source is
-   otherwise lost — `mermaid`, `smiles`, `qrcode`, `youtube`, `toc`, `chart`,
-   `{{sp}}` (and any plugin that adds one) — carry `data-md` with their original
-   directive. The walker emits it verbatim. **Never strip `data-md`** when you
-   post-process HTML.
+   otherwise lost — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart` (and any
+   plugin that adds one) — carry `data-md` with their original directive. The
+   walker emits it verbatim. **Never strip `data-md`** when you post-process HTML.
 4. **Plugin/container classes are preserved.** Constructs without a `data-md`
-   are recovered *by class*: `<span class="red">` → `{{sp[red] …}}`,
+   are recovered *by class/structure*: `<span class="red">` → `{{sp[red] …}}`,
    `<div class="center">` → `::: center … :::`, nested `cols`/`tabs` get the
-   right fence length. If you rewrite/strip these classes, copy loses the source.
+   right fence length, and a `{{toc}}` is recovered as its rendered list of
+   heading links (not the `{{toc}}` directive). If you rewrite/strip these
+   classes, copy loses the source.
 
 Caveat: a container (`::: center`, `:::: cols`, spoiler, tabs) is recovered only
 when the **selection includes the container element**, not just the text inside

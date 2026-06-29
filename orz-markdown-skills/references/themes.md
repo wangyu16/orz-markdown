@@ -99,8 +99,8 @@ Follow this section order in every theme file for consistency:
 12. Semantic containers: `.success`, `.info`, `.warning`, `.danger`
 13. Layout utilities: `.left`, `.right`, `.center`
 14. Spoiler, tabs, and columns: `details.spoil`, `.tabs`, `.cols`
-15. TOC and footnotes: `nav.toc`, `.footnotes`
-16. Plugin output: `.youtube-embed`, `.mermaid`, `.smiles-render`, `.qrcode`, span color/badge classes
+15. TOC and footnotes: `.toc-list`, `.footnotes`
+16. Plugin output: `.youtube-embed`, `.mermaid`, `.smiles-render`, `canvas.orz-chart`, `.qrcode`, span color/badge classes
 17. Decorative pseudo-elements and theme-only flourishes
 18. Responsive rules (`@media`)
 19. Print rules (`@media print`)
@@ -165,12 +165,13 @@ Every theme must have CSS rules for all of the following. See `references/css-cl
 - [ ] `.tabs` `.tabs-bar` `.tabs-bar-btn` `.tabs-bar-btn.active` `.tab` `.tab.active`
 - [ ] `.tabs:not([data-js]) .tab` — no-JS fallback: show all panels
 - [ ] `.cols` `.col`
-- [ ] `nav.toc` `.toc-list` — list reset, link styles
+- [ ] `.toc-list` — list reset, link styles (the parser emits only `<ul class="toc-list">`, no `nav.toc` wrapper)
 - [ ] `span.red` `span.yellow` `span.green` `span.blue`
 - [ ] `span.success` `span.info` `span.warning` `span.danger` — inline badge variant
 - [ ] `div.youtube-embed` `div.youtube-embed iframe` — 16:9 responsive wrapper (structural)
 - [ ] `div.mermaid` `div.mermaid svg`
 - [ ] `div.smiles-render` `canvas[data-smiles]`
+- [ ] `canvas.orz-chart` — width-capped (Chart.js draws into it client-side)
 - [ ] `span.qrcode` — **must have `background: #fff`** (SVG is always black-on-white)
 
 ---

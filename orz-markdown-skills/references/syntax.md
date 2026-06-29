@@ -310,9 +310,11 @@ Uses `node-emoji` for name lookup. The emoji text alias (e.g., `wave`, `smile`) 
 ### space — Inline horizontal whitespace
 
 ```markdown
-{{space 4}}    → &nbsp;&nbsp;&nbsp;&nbsp; (4 non-breaking spaces)
-{{space 1}}    → &nbsp;
+{{space 4}}    → 4rem-wide inline-block spacer
+{{space 1}}    → 1rem-wide inline-block spacer
 ```
+
+The numeric argument is a `rem` width: `{{space 4}}` emits `<span style="display:inline-block;width:4rem"></span>`. Non-positive or non-numeric values render nothing.
 
 ---
 
@@ -381,7 +383,7 @@ Renders `<div class="smiles-render"><canvas data-smiles="...">`. SmilesDrawer.js
 {{toc 1,4}}
 ```
 
-Auto-generates a `<nav class="toc">` from all headings in the document. Optional argument is a comma-separated level range (`min,max`), defaulting to all levels. Must appear after the headings it references in the source (or at the start — the parser makes a pass over the full document).
+Auto-generates a `<ul class="toc-list">` of heading links (each `<li>` indented by depth). Optional argument is a comma-separated level range (`min,max`), defaulting to `1,3`. The placement in the source does not matter — a core rule scans the whole document, so `{{toc}}` works at the top or bottom.
 
 ---
 

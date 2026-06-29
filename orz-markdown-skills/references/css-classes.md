@@ -193,22 +193,29 @@ span.qrcode { background: #fff; padding: 4px; /* or 6px */ vertical-align: middl
 
 Note: `span.success/info/warning/danger` also have `display: inline-flex; align-items: center; line-height: 1; white-space: nowrap` set by `common.css`. Add `padding`, `border-radius`, `font-size`, and colors in the theme.
 
+### Chart
+
+| Class | Element | Description |
+|---|---|---|
+| `canvas.orz-chart` | `<canvas>` | Carries a Chart.js config as HTML-escaped JSON in `data-chart` (and a `data-md` breadcrumb). The host runtime reads `data-chart` and calls Chart.js. Cap its width. |
+
+```css
+canvas.orz-chart { max-width: 100%; height: auto; }
+```
+
 ### Table of Contents
 
 | Class | Element | Description |
 |---|---|---|
-| `.toc-wrapper` | `<div>` | Outer wrapper (for positioning). |
-| `nav.toc` / `.toc-list` | `<nav>` | The `<ul>` tree of heading links. Reset list bullets in TOC context. |
+| `.toc-list` | `<ul>` | The flat `<ul>` of heading links emitted by `{{toc}}`. Each `<li>` carries an inline `padding-left` for its depth. Reset list bullets. This is the **only** class the parser emits for the TOC. |
 
 ```css
-nav.toc, .toc-list {
-  padding: ...;
-  border: 1px solid var(--border);
-}
-nav.toc ul, .toc-list ul { margin: 0; padding-left: 1.1rem; }
-nav.toc li, .toc-list li { list-style: none; margin-bottom: 0.25rem; }
-nav.toc a, .toc-list a { text-decoration: none; color: var(--link); }
+.toc-list { padding: ...; border: 1px solid var(--border); list-style: none; }
+.toc-list li { list-style: none; margin-bottom: 0.25rem; }
+.toc-list a  { text-decoration: none; color: var(--link); }
 ```
+
+> Note: the parser does **not** emit a `<nav class="toc">` wrapper or a `.toc-wrapper`. `{{toc}}` produces a single `<ul class="toc-list">`. If your host wants a wrapper, add it around the rendered TOC yourself.
 
 ### Test elements (development only)
 

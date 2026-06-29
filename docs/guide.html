@@ -72,11 +72,12 @@ npx orz-mdhtml  notes.md       # -> notes.md.html
 # a slide deck
 npx orz-slides  deck.md        # -> deck.slides.html
 
-# a print / PDF document
-npx orz-paged   paper.md       # -> paper.paged.html</code></pre>
+# a print / PDF document   (orz-paged isn't on npm yet — run it from a local checkout)
+node orz-paged/dist/cli.js paper.md    # -> paper.paged.html</code></pre>
           <p>Each writes a single self-contained file. Open it to read, present, or print; click the edit affordance
           to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
-          jsDelivr; the default <code>--inline</code> embeds it for offline use.</p>
+          jsDelivr; the default <code>--inline</code> embeds it for offline use. (<code>--cdn</code> needs the
+          tool published, so use <code>--inline</code> for orz-paged until it ships.)</p>
           <p><a href="./family.html">More about the three document types →</a></p>
         </div>
         <!-- PARSER -->

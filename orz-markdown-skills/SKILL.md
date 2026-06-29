@@ -8,7 +8,7 @@ compatibility:
 
 # orz-markdown
 
-A deeply customized `markdown-it` instance with 10+ plugins, 9 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
+A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
 
 ## Rendering (Node.js / ESM)
 
@@ -38,7 +38,7 @@ const html = md.render(resolved, { markdownBasePath: '/local/base/path' });
 
 Every page that displays parser output needs **all five** of these:
 
-1. **Theme stylesheet** — one of the 10 bundled themes, or `assets/minimal.css`
+1. **Theme stylesheet** — one of the 12 bundled themes, or `assets/minimal.css`
 2. **KaTeX CSS** — `https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css`
 3. **Highlight.js CSS** — match light/dark to the chosen theme
 4. **Three CDN scripts** — Highlight.js, Mermaid.js, SmilesDrawer (loaded in body)
@@ -119,7 +119,7 @@ Escape with backslash: `\{{name}}` renders as literal `{{name}}`.
 |---|---|---|
 | **span** | `sp` | `{{sp[red] colored}}` · `{{sp[success] ✓ Done}}` |
 | **emoji** | `em` | `{{emoji wave}}` · `{{em tada}}` |
-| **space** | — | `{{space 4}}` → 4 × `&nbsp;` |
+| **space** | — | `{{space 4}}` → 4rem-wide inline-block spacer |
 | **qrcode** | `qr` | `{{qr https://example.com}}` (click-to-expand SVG) |
 | **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe) |
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
@@ -178,7 +178,7 @@ Documents may carry stable block IDs on headings: `## Title{{attrs[#blk-abc12345
 |---|---|
 | `references/syntax.md` | Full syntax with examples for every plugin, container, and extended markdown feature |
 | `references/block-ids.md` | Stable block-ID preservation rules — REQUIRED reading before editing documents that use `{{attrs[#blk-...]}}` |
-| `references/themes.md` | Custom theme guide: design tokens, element checklist, 10 design guidelines |
+| `references/themes.md` | Custom theme guide: design tokens, element checklist, 12 design guidelines |
 | `references/css-classes.md` | Every CSS class and HTML element the parser emits — the spec for theme authors |
 | `references/embedding.md` | Host-integration guide for apps that bring their own CSS/shell (slide engines, viewers, editors): the CSS contract + reset gotchas, the JS runtime + diagram drawing, and what copy-as-Markdown needs |
 | `assets/template.html` | Ready-to-use HTML page template with all scripts and CDN links wired up |
