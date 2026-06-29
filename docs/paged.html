@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orz-paged — documents &amp; layout · orz-markdown</title>
+<meta name="description" content="Reference for orz-paged .paged.html print documents: the document settings block, the 12 templates, 7 light themes, the curated document elements (titles with authors/ORCID, abstract, toc, letter and CV parts, exam questions), the dynamic switch (e.g. exam answer keys), and how to customize beyond templates with placement, custom CSS, and page breaks.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
+<style>
+  /* page-local mock of a printed page */
+  .pgrow { display:grid; gap:18px; align-items:start; margin:12px 0 6px; }
+  @media (min-width:760px){ .pgrow { grid-template-columns:1fr minmax(0,230px); } }
+  .pgrow pre { margin:0; align-self:start; }
+  .pgmock { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:18px 16px 26px;
+    box-shadow:0 1px 4px rgba(16,24,40,.10); aspect-ratio:8.5/11; display:flex; flex-direction:column; gap:7px;
+    font:.7rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink); }
+  .pgmock .t { font-weight:700; font-size:.95rem; text-align:center; color:var(--brand-ink); }
+  .pgmock .s { text-align:center; font-style:italic; opacity:.7; }
+  .pgmock .ln { height:6px; border-radius:3px; background:var(--brand-wash); }
+  .pgmock .rule { height:2px; background:var(--brand-ink); opacity:.5; border-radius:2px; margin:2px 0; }
+  .pgmock .ft { margin-top:auto; display:flex; justify-content:space-between; opacity:.55; font-size:.62rem; }
+</style>
+</head>
+<body>
+<nav class="top"><div class="bar">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <span class="links">
+    <a href="./features.html">Features</a>
+    <a href="./family.html" class="here">The family</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a href="./agents.html">For agents</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <span class="ext">.paged.html</span>
+    <span class="ext" style="background:#eee;color:#666">in&nbsp;development</span>
+    <h1 style="margin:.3em 0 .15em">orz-paged — documents &amp; layout</h1>
+    <p class="lead" style="max-width:730px">A reference for the print-document format: the settings block, the
+    templates, the curated document elements, the dynamic switch, and how to go beyond templates. Part of
+    <a href="./family.html#paged">the orz editable-document family</a>.</p>
+  </div></section>
+
+  <div class="wide">
+
+  <!-- AI-FIRST NOTE -->
+  <section class="section" style="margin-top:8px">
+    <div class="callout">
+      <strong>You don't have to learn any of this.</strong> The editor's <strong>template picker</strong> covers the
+      common documents with one click, and for anything beyond that the fastest path is to <strong>ask an AI agent to
+      build or restructure your document</strong>. Point it at the bundled <strong>orz-paged agent skill</strong>
+      (<code>orz-paged-skills/SKILL.md</code>) and describe what you want — &ldquo;a two-page report with a cover and a
+      table of contents,&rdquo; &ldquo;an exam with an answer-key toggle,&rdquo; &ldquo;a modern CV.&rdquo; This page is
+      the reference the agent (and curious humans) can draw on; skim it, don't memorize it.
+    </div>
+  </section>
+
+  <!-- WHAT IT IS -->
+  <section class="section" style="margin-top:34px">
+    <h2>What a <code>.paged.html</code> is</h2>
+    <p>One self-contained HTML file that shows your Markdown as a sequence of <strong>real print pages on light
+    paper</strong> — page size, margins, running headers/footers, page numbers — using
+    <a href="https://pagedjs.org/">paged.js</a>, in any modern browser. Edit it side by side with a live paged preview,
+    save in place, and <strong>export to PDF by printing</strong> (Ctrl/Cmd&#8239;+&#8239;P → Save as PDF): the pages you
+    see are exactly what prints. It mimics ink on paper — <strong>light backgrounds only, no dark mode</strong>, and
+    screen-only constructs (tabs, spoilers, video) are discouraged.</p>
+    <p style="opacity:.75;font-size:.95em">orz-paged is still in development and not yet on npm — run it from a local
+    checkout (<code>node orz-paged/dist/cli.js paper.md</code>) or let the editor and an agent do the work.</p>
+  </section>
+
+  <!-- QUICK WAY -->
+  <section class="section" style="margin-top:34px">
+    <h2>The quick way: the template picker</h2>
+    <p>In the editor, open the <strong>template</strong> button (the document icon) and pick a starter. On a blank
+    document it drops the skeleton straight in; on one that already has content it inserts the template and tucks your
+    old content into a comment. There are twelve starters across six kinds:</p>
+    <div class="grid c3">
+      <div class="card"><h3 style="margin-top:0">Article · Report</h3><p>Academic paper or business/technical report —
+      each in a <strong>title-page</strong> and a <strong>title-section</strong> variant, with abstract / TOC.</p></div>
+      <div class="card"><h3 style="margin-top:0">Exam</h3><p>Cover or inline header, numbered multiple-choice and
+      open questions, and an <strong>answer-key switch</strong> — one source, student copy <em>and</em> key.</p></div>
+      <div class="card"><h3 style="margin-top:0">Letter · Cover letter · CV · Note</h3><p>Formal letter, job cover
+      letter, three CV styles (classic / modern / elegant), and a minimal note.</p></div>
+    </div>
+    <p style="margin-top:14px">Everything below is what those starters are made of — reach for it when you want a
+    custom title block, a dedicated cover page, a tailored variant, or your own styling.</p>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Document settings</h2>
+    <p>One <code>{{nyml kind: document}}</code> block at the top configures the whole document. <strong>Template-first:</strong>
+    most documents set only <code>template:</code> (and maybe <code>theme:</code>); the rest are optional overrides.</p>
+<pre>{{nyml
+kind: document
+template: report-page    # picks the layout + a starter skeleton
+theme: light-neat-1      # the look (font + accent + element styling)
+page_size: Letter        # A3 · A4 · A5 · Letter · Legal · or "210mm 297mm"
+margin_top: 20           # margin_top/bottom/left/right, in mm
+decoration_color: "#2962a4"   # accent (overrides the theme's)
+header_center: Quarterly Report
+footer_left: Confidential
+page_number_position: footer-right   # header/footer-left|center|right · none
+page_number_style: page-n-of-N       # simple · page-n · page-n-of-N · n-of-N · n-slash-N · dash-n-dash · brackets · parentheses
+front_matter: clean      # unnumbered title/abstract/toc pages; body restarts at 1
+dynamic_choices: |       # the dynamic switch (see below)
+  answer-key: hide
+}}</pre>
+    <p>Fonts: serif (<code>system-serif</code>, <code>source-serif-4</code>, <code>lora</code>, <code>crimson-pro</code>,
+    <code>noto-serif</code>) · sans (<code>inter</code>, <code>ibm-plex-sans</code>, <code>roboto</code>,
+    <code>raleway</code>, <code>noto-sans</code>) · mono (<code>courier-prime</code>). Set <code>font_preset</code> only
+    to override the theme's font.</p>
+  </section>
+
+  <!-- TEMPLATES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Templates &amp; themes</h2>
+    <p><strong>A template owns layout</strong> (page size, furniture, which elements appear and where). <strong>A theme
+    owns the look</strong> (font, accent color, element styling) — so the same theme renders the same across every
+    template. <code>article</code>/<code>report</code>/<code>exam</code> each come in a <code>-page</code> (dedicated
+    title/cover page) and a <code>-section</code> (inline title) variant.</p>
+    <table>
+      <tr><th>Template</th><th>For</th></tr>
+      <tr><td><code>article-page</code> / <code>article-section</code></td><td>academic paper — title + abstract + body</td></tr>
+      <tr><td><code>report-page</code> / <code>report-section</code></td><td>business / technical report — title + TOC + header/footer</td></tr>
+      <tr><td><code>exam-page</code> / <code>exam-section</code></td><td>exam — title + numbered questions + answer-key switch</td></tr>
+      <tr><td><code>letter</code> · <code>cover-letter</code></td><td>formal letter · job cover letter</td></tr>
+      <tr><td><code>cv</code> · <code>cv-modern</code> · <code>cv-elegant</code></td><td>three résumé styles (classic / modern / elegant)</td></tr>
+      <tr><td><code>note</code></td><td>clean readable note (A4, minimal furniture)</td></tr>
+    </table>
+    <p style="margin-top:12px">Seven <strong>light themes</strong> (light only by design): <code>light-neat-1/2/3</code>
+    (modern sans), <code>light-academic-1/2</code> (scholarly serif), <code>beige-decent-1/2</code> (warm editorial).
+    The default is <code>light-academic-1</code>. Switch live from the editor's theme menu, or set <code>theme:</code>.</p>
+  </section>
+
+  <!-- ELEMENTS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Document elements</h2>
+    <p>An element is a <code>{{nyml kind: &lt;element&gt;}}</code> block placed where you want it in the body. The
+    curated set:</p>
+    <table>
+      <tr><th>Element</th><th>Key fields</th></tr>
+      <tr><td><code>article-title</code> / <code>report-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>authors</code> (or <code>author</code>), <code>affiliations</code>, <code>notes</code>, <code>date</code>, <code>placement</code></td></tr>
+      <tr><td><code>exam-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>author</code>, <code>duration</code>, <code>total_points</code>, <code>student_fields</code>, <code>instructions</code>, <code>placement</code></td></tr>
+      <tr><td><code>abstract</code></td><td><code>text</code>, <code>keywords</code>, <code>placement</code></td></tr>
+      <tr><td><code>toc</code></td><td><code>title</code>, <code>max_level</code>, <code>placement</code></td></tr>
+      <tr><td><code>letterhead</code> · <code>letter-inside-address</code> · <code>letter-signature</code></td><td><code>organization</code>/<code>address</code>/<code>email</code>/<code>phone</code> · <code>to</code> · <code>from</code>/<code>closing</code></td></tr>
+      <tr><td><code>cv-header</code></td><td><code>full_name</code>, <code>title</code>, <code>contacts</code></td></tr>
+      <tr><td><code>question-mc</code> · <code>question-open</code></td><td><code>n</code>, <code>pts</code>, <code>body</code>, <code>options</code>/<code>space</code>, <code>answer</code></td></tr>
+    </table>
+
+    <h3 style="margin:20px 0 .2em">Authors, affiliations &amp; ORCID</h3>
+    <p>For multi-author papers, use <code>authors</code> (one per line) plus <code>affiliations</code> and
+    <code>notes</code> as <code>key: text</code> lists. Each author line is <code>Name | marks | email | orcid</code> —
+    the fields after the name are auto-detected, so order is flexible and any may be omitted.</p>
+<pre>{{nyml
+kind: article-title
+title: A Practical Comparison of RAFT and ATRP
+authors: |
+  Jane Doe | 1,* | jane.doe@example.edu | 0000-0002-1825-0097
+  John Smith | 2
+affiliations: |
+  1: Department of Chemistry, University of Example
+  2: Institute of Science, Example Lab
+notes: |
+  *: Corresponding author
+placement: page
+}}</pre>
+
+    <h3 style="margin:20px 0 .2em">Exam questions</h3>
+    <p>Put student fields and instructions on the <code>exam-title</code> (first page). In <code>answer</code>, list one
+    correct option — or several for select-all (<code>B, D</code>). The answer key is shown only when the switch is on.</p>
+<pre>{{nyml
+kind: exam-title
+student_fields: |
+  Name | Student ID | Score / 100
+instructions: |
+  - Answer all questions; show your work for full credit.
+}}
+
+{{nyml
+kind: question-mc
+n: 1
+pts: 5 pts
+body: Which of these are vector quantities? (Select all that apply.)
+options: |
+  A. Mass
+  B. Velocity
+  C. Temperature
+  D. Force
+answer: B, D
+}}</pre>
+  </section>
+
+  <!-- BEYOND TEMPLATES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Beyond templates: customizing layout</h2>
+
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">Title on its own page, or inline</h3>
+      <p>Every title element (and <code>abstract</code> / <code>toc</code>) takes <code>placement</code>:
+      <code>page</code> gives a dedicated cover page (a page break follows); <code>section</code> <em>(default)</em>
+      keeps it at the top of the content. That's the only difference between the <code>-page</code> and
+      <code>-section</code> template variants.</p></div>
+
+      <div class="card"><h3 style="margin-top:0">Clean front matter</h3>
+      <p><code>front_matter: clean</code> strips the header/footer/number from every <code>placement: page</code>
+      front-matter page (title, abstract, TOC) and <strong>restarts the page count</strong> so the body begins at 1
+      (the total in &ldquo;… of N&rdquo; counts body pages too).</p></div>
+
+      <div class="card"><h3 style="margin-top:0">Force a page break</h3>
+      <p>Start a fresh page anywhere with an orz-markdown container — no plugin needed:</p>
+<pre>::: page-break
+:::</pre></div>
+
+      <div class="card"><h3 style="margin-top:0">Your own styling — <code>custom_css</code></h3>
+      <p>Add a <code>custom_css: |</code> block to the document settings for bespoke looks; it's applied last, so it
+      overrides the theme, and it can read theme tokens (<code>var(--accent)</code>, <code>var(--surface-2)</code>, …).
+      The <code>cv-modern</code> and <code>cv-elegant</code> templates are built this way — copy one as a starting point.</p></div>
+    </div>
+
+    <h3 style="margin:22px 0 .4em">Dynamic switch — one source, several versions</h3>
+    <p><code>dynamic_choices</code> is a <code>key: value</code> map that drives conditional content. Tag any element
+    with <code>data-show-when="key=value"</code> or <code>data-hide-when="key=value"</code>; non-matching elements are
+    dropped at render time. The headline use is <strong>exam answer keys</strong> — question answers are tagged
+    <code>answer-key=show</code>, so one source prints the student copy (<code>answer-key: hide</code>) <em>and</em> the
+    instructor key (<code>show</code>). Flip it in the source, or live from the editor's <strong>answer key</strong>
+    dropdown. Define your own keys (e.g. <code>audience: student</code>) for any tailored-variant document.</p>
+
+    <div class="callout amber" style="margin-top:6px"><strong>Page-break gotcha:</strong> orz-markdown's
+    <code>:::: cols</code> columns do <em>not</em> survive a page break. For side-by-side content that may span pages,
+    use a borderless <strong>table</strong> (rows flow across pages) or single-line floats — that's how
+    <code>cv-elegant</code>'s two-column &ldquo;ledger&rdquo; entries work.</p>
+  </section>
+
+  <!-- BODY CONTENT -->
+  <section class="section" style="margin-top:34px">
+    <h2>Body content is full orz-markdown</h2>
+    <p>Between the elements, write normal <a href="./features.html">orz-markdown</a> — headings, lists, tables,
+    blockquotes, code, footnotes, math (<code>$E=mc^2$</code> / <code>$$ … $$</code>), Mermaid diagrams,
+    <code>{{smiles}}</code> chemistry, <code>{{chart}}</code>, <code>{{qr}}</code> (a printed QR is genuinely useful),
+    admonitions (<code>::: info</code> / <code>success</code> / <code>warning</code> / <code>danger</code>), and columns.
+    Everything is styled for print. <strong>Avoid</strong> screen-only constructs — tabs, <code>::: spoil</code>, and
+    youtube — they don't print.</p>
+  </section>
+
+  <!-- WORKED EXAMPLES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Worked examples</h2>
+
+    <h3 style="margin:18px 0 0">Academic article — cover page, abstract, math</h3>
+    <div class="pgrow">
+<pre>{{nyml
+kind: document
+template: article-page
+theme: light-academic-1
+front_matter: clean
+}}
+
+{{nyml
+kind: article-title
+title: On Widgets
+subtitle: A Study
+author: Ada Lovelace
+date: March 2026
+placement: page
+}}
+
+{{nyml
+kind: abstract
+text: We show that widgets ...
+keywords: widgets, gadgets
+placement: page
+}}
+
+## Introduction
+Inline math $E = mc^2$, tables, lists, all print.</pre>
+      <div class="pgmock"><div class="t">On Widgets</div><div class="s">A Study</div><div style="text-align:center">Ada Lovelace</div><div class="rule"></div><div style="margin-top:auto" class="ft"><span></span><span></span></div></div>
+    </div>
+
+    <h3 style="margin:24px 0 0">Exam — student copy &amp; instructor key from one source</h3>
+    <div class="pgrow">
+<pre>{{nyml
+kind: document
+template: exam-page
+dynamic_choices: |
+  answer-key: hide      # ← flip to show for the key
+}}
+
+{{nyml
+kind: exam-title
+title: Physics — Exam 1
+student_fields: |
+  Name | Student ID | Score / 100
+}}
+
+{{nyml
+kind: question-mc
+n: 1
+body: SI unit of force?
+options: |
+  A. Joule
+  B. Newton
+answer: B
+}}</pre>
+      <div class="pgmock"><div class="t">Physics — Exam 1</div><div style="font-size:.62rem">Name ___  ID ___  Score __/100</div><div class="rule"></div><div>1. SI unit of force?</div><div class="ln" style="width:60%"></div><div class="ln" style="width:50%"></div><div class="ft"><span>—</span><span>1</span></div></div>
+    </div>
+
+    <h3 style="margin:24px 0 0">A modern CV</h3>
+<pre>{{nyml
+kind: document
+template: cv-modern
+}}
+
+{{nyml
+kind: cv-header
+full_name: Your Name
+title: Job Title / Professional Tagline
+contacts: |
+  you@example.com
+  City, Country
+}}
+
+## Experience
+### Senior Role {{span[cv-date] 2022 – Present}}
+Company Name, City
+- Led a key initiative with a measurable result.
+
+## Skills
+{{span[cv-chip] React}} {{span[cv-chip] TypeScript}} {{span[cv-chip] Design}}</pre>
+
+    <p style="margin-top:16px">For the full vocabulary — every element field, theme, page-number style, and the
+    print-first guidance — read the <strong>agent skill</strong>
+    (<a href="https://github.com/wangyu16/orz-paged/tree/main/orz-paged-skills">orz-paged-skills/SKILL.md</a>) or
+    just ask an agent.</p>
+  </section>
+
+  <!-- FOOTER -->
+  <section class="section" style="margin-top:40px">
+    <div class="callout amber"><strong>Editing and in-place Save need a Chromium-based browser</strong> (Chrome or
+    Edge). Viewing and printing work in any modern browser.</div>
+    <footer><div class="row">
+      <a href="./family.html#paged">← The family</a>
+      <a href="https://github.com/wangyu16/orz-paged">orz-paged on GitHub</a>
+      <a href="./guide.html">Guide</a>
+      <a href="./">Home</a>
+    </div></footer>
+  </section>
+
+  </div>
+</main>
+</body>
+</html>
