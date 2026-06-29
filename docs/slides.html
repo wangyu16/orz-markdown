@@ -262,6 +262,64 @@ More content.
 <pre>&lt;!-- slide 2col bg=#0b3d2e t=fade step --&gt;</pre>
   </section>
 
+  <!-- FOOTERS & OVERFLOW -->
+  <section class="section" style="margin-top:34px">
+    <h2>Footers &amp; overflow</h2>
+    <p><strong>Footers.</strong> The deck&rsquo;s <code>footer:</code> setting shows at the bottom of every normal
+    slide (title, section, and closing slides have none). Override it on one slide with a
+    <code>&lt;!-- @footer --&gt;</code> region:</p>
+<pre>&lt;!-- slide --&gt;
+## A slide with its own footer
+Body content.
+&lt;!-- @footer --&gt;
+Custom footer — this slide only</pre>
+    <p style="margin-top:14px"><strong>Overflow.</strong> By default a slide&rsquo;s content
+    <strong>scales down to fit</strong> so it never spills off the edge. Change that per slide with
+    <code>fit=</code>:</p>
+    <table>
+      <tr><th>Option</th><th>Behaviour</th></tr>
+      <tr><td><code>fit=fit</code></td><td>Default — auto-scale the content down to fit the slide</td></tr>
+      <tr><td><code>fit=scroll</code></td><td>Keep full size; the slide scrolls if it overflows</td></tr>
+      <tr><td><code>fit=off</code></td><td>No scaling, no scroll — content may overflow (you size it yourself)</td></tr>
+    </table>
+  </section>
+
+  <!-- RICH CONTENT -->
+  <section class="section" style="margin-top:34px">
+    <h2>Rich content in any region</h2>
+    <p>Region content is orz-markdown, so the full plugin set works right inside a slide — diagrams, charts,
+    chemistry, QR codes, and math:</p>
+    <table>
+      <tr><th>Write</th><th>Get</th></tr>
+      <tr><td><code>{{mermaid …}}</code></td><td>Mermaid flowcharts &amp; sequence diagrams</td></tr>
+      <tr><td><code>{{chart …}}</code></td><td>Bar / line / pie charts</td></tr>
+      <tr><td><code>{{smiles …}}</code></td><td>Chemical structures (SMILES)</td></tr>
+      <tr><td><code>{{qr …}}</code></td><td>QR codes (click to enlarge)</td></tr>
+      <tr><td><code>$…$</code> · <code>$$…$$</code></td><td>KaTeX math (incl. <code>mhchem</code>)</td></tr>
+      <tr><td><code>{{youtube …}}</code> · <code>{{emoji …}}</code></td><td>Video embeds &amp; emoji</td></tr>
+    </table>
+    <p style="margin-top:12px">On dark themes (chalk, neon) diagrams and charts sit on a soft light panel so
+    they stay legible.</p>
+  </section>
+
+  <!-- PRESENTING -->
+  <section class="section" style="margin-top:34px">
+    <h2>Presenting</h2>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">Speaker view — <span class="kbd">S</span></h3>
+        <p>A second window with the current and next slide, your <code>&lt;!-- @notes --&gt;</code> speaker notes,
+        and a clock.</p></div>
+      <div class="card"><h3 style="margin-top:0">Timer — <span class="kbd">T</span></h3>
+        <p>An on-deck elapsed-time timer to keep pace, toggled right on the deck.</p></div>
+      <div class="card"><h3 style="margin-top:0">Step-reveal &amp; fragments</h3>
+        <p>Add <code>step</code> to a slide marker to reveal its items one click at a time, or mark any element
+        with <code>{{attrs[.fragment]}}</code> for manual fragments.</p></div>
+      <div class="card"><h3 style="margin-top:0">Notes, numbers &amp; ratio</h3>
+        <p><code>&lt;!-- @notes --&gt;</code> never shows on the slide; slide numbers appear while presenting; set
+        <code>ratio: 16:9</code> or <code>4:3</code> in the deck block.</p></div>
+    </div>
+  </section>
+
   <!-- FOOTER -->
   <section class="section" style="margin-top:40px">
     <div class="callout amber"><strong>Editing and in-place Save need a Chromium-based browser</strong> (Chrome or
