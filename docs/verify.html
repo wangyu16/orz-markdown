@@ -48,8 +48,9 @@
   <p class="sub">Check whether a <code>.md.html</code> / <code>.slides.html</code> / <code>.paged.html</code> file
   carries the <strong>genuine, unmodified</strong> orz framework, and scans its content for embedded code.
   Everything runs in <strong>your browser</strong>; the file is parsed inertly and never executed.</p>
-  <p class="sub" style="font-size:.92em;opacity:.8">Note: <code>.paged.html</code> authenticity checks compare against the published
-  <code>orz-paged-browser</code> package — available once orz-paged is released to npm. Until then the content scan still works.</p>
+  <p class="sub" style="font-size:.92em;opacity:.8">Note: authenticity checks compare the embedded engine against the
+  matching published browser package: <code>orz-mdhtml-browser</code>, <code>orz-slides-browser</code>, or
+  <code>orz-paged-browser</code>.</p>
 
   <div class="card">
     <div id="drop" tabindex="0">
