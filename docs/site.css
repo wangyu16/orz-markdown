@@ -101,6 +101,13 @@ p { margin:.7em 0; }
 .card .more { margin-top:auto; padding-top:12px; font-size:.92rem; font-weight:600; }
 .ext { display:inline-block; font:650 .78rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--brand-ink);
   background:var(--brand-wash); padding:3px 9px; border-radius:7px; letter-spacing:.01em; }
+.card-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:auto; padding-top:16px; }
+.card-actions .btn { padding:8px 12px; border-radius:9px; font-size:.92rem; box-shadow:none; }
+.starter-band { padding:0; }
+.starter-band h2 { margin:0 0 .25em; }
+.starter-band .lead { margin-bottom:1em; }
+.starter-card { display:flex; flex-direction:column; gap:8px; min-height:100%; }
+.starter-card .btn { justify-content:center; margin-top:auto; }
 
 /* ---- live demo (source -> rendered output) ---- */
 .demo { border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); background:var(--surface); margin:1.2em 0; }

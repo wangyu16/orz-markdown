@@ -55,7 +55,7 @@ Once the runtime is loaded, selecting rendered content and copying it (Cmd/Ctrl-
 
 It only transforms selections inside an element with class `markdown-body` (wrap your rendered output in one, e.g. `<article class="markdown-body">…</article>`, or mark a container with `data-orz-copy`), and never touches selections inside `<input>`, `<textarea>`, or `contenteditable` regions.
 
-Generated constructs that lose their source after client-side rendering — `mermaid`, `smiles`, `qrcode`, `youtube` — carry a `data-md` attribute that the walker emits verbatim. As a result a copied table of contents yields its heading links (not `{{toc 2,3}}`) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md` attributes** if you post-process the HTML.
+Generated constructs that lose their source after client-side rendering — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart` — carry a `data-md` attribute that the walker emits verbatim. As a result a copied table of contents yields its heading links (not `{{toc 2,3}}`) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md` attributes** if you post-process the HTML.
 
 You can also convert a node programmatically:
 

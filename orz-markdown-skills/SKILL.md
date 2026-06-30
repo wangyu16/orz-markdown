@@ -41,7 +41,7 @@ Every page that displays parser output needs **all five** of these:
 1. **Theme stylesheet** — one of the 12 bundled themes, or `assets/minimal.css`
 2. **KaTeX CSS** — `https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css`
 3. **Highlight.js CSS** — match light/dark to the chosen theme
-4. **Three CDN scripts** — Highlight.js, Mermaid.js, SmilesDrawer (loaded in body)
+4. **Four CDN scripts** — Highlight.js, Mermaid.js, SmilesDrawer, Chart.js (loaded in body)
 5. **Two inline scripts** — tabs initializer and QR code runtime (also in body)
 
 **Use `assets/template.html`** — all CDN links, scripts, and the `.markdown-body` wrapper are pre-wired. Copy it and replace the `<!-- INSERT RENDERED HTML HERE -->` comment.
@@ -56,6 +56,7 @@ CDN URLs (pinned versions):
 | Highlight.js dark CSS | `.../styles/atom-one-dark.min.css` |
 | Mermaid.js | `https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js` |
 | SmilesDrawer | `https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js` |
+| Chart.js | `https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js` |
 
 ### Browser runtime API
 
@@ -71,7 +72,7 @@ document.body.appendChild(script);
 
 The runtime also provides **copy-as-Markdown**: with it loaded, copying a selection inside `.markdown-body` puts Markdown source on the clipboard, not HTML (tables, lists, math, code, etc. are reconstructed). It skips selections inside `<input>`/`<textarea>`/`contenteditable`. Convert a node directly with `window.OrzMarkdownRuntime.elementToMarkdown(node)`.
 
-> **Do not strip `data-md` attributes.** `mermaid`, `smiles`, `qrcode`, and `youtube` output carry a `data-md` breadcrumb so copy recovers their source after client-side rendering (e.g. a copied QR yields `{{qr ...}}`, not its SVG). Preserve these attributes if you post-process the HTML.
+> **Do not strip `data-md` attributes.** `mermaid`, `smiles`, `qrcode`, `youtube`, and `chart` output carry a `data-md` breadcrumb so copy recovers their source after client-side rendering (e.g. a copied QR yields `{{qr ...}}`, not its SVG). Preserve these attributes if you post-process the HTML.
 
 ---
 

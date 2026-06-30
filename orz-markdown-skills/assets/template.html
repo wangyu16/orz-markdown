@@ -64,6 +64,26 @@ if (typeof SmilesDrawer !== 'undefined') {
 }
   </script>
 
+  <!-- Chart.js — renders {{chart}} canvases emitted by the parser. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+if (typeof Chart !== 'undefined') {
+  document.querySelectorAll('canvas.orz-chart[data-chart]').forEach(function (canvas) {
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:100%;max-width:520px;margin:.6em auto';
+    canvas.parentNode.insertBefore(wrap, canvas);
+    wrap.appendChild(canvas);
+    canvas.removeAttribute('width');
+    canvas.removeAttribute('height');
+    try {
+      var config = JSON.parse(canvas.getAttribute('data-chart') || '{}');
+      config.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, config.options || {});
+      new Chart(canvas, config);
+    } catch (e) {}
+  });
+}
+  </script>
+
   <!-- Tabs component — builds the .tabs-bar and activates .tab panels.
        Must run after the DOM is painted so .tabs elements are found.        -->
   <script>
@@ -184,7 +204,7 @@ if (typeof SmilesDrawer !== 'undefined') {
   // ---- copy-as-markdown: DOM -> Markdown walker ---------------------------
   // Converts a selected DOM fragment back to Markdown so that copying rendered
   // content yields source, not HTML. Standard constructs are reconstructed from
-  // their tags; generated constructs (math, mermaid, smiles, qr, youtube) carry
+  // their tags; generated constructs (math, mermaid, smiles, qr, youtube, chart) carry
   // a [data-md] breadcrumb that is emitted verbatim. Written without template
   // literals/backticks because this whole file is a String.raw template.
   var BT = String.fromCharCode(96);

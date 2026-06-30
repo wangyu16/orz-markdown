@@ -117,7 +117,7 @@ export const browserRuntimeScript = String.raw`
   // ---- copy-as-markdown: DOM -> Markdown walker ---------------------------
   // Converts a selected DOM fragment back to Markdown so that copying rendered
   // content yields source, not HTML. Standard constructs are reconstructed from
-  // their tags; generated constructs (math, mermaid, smiles, qr, youtube) carry
+  // their tags; generated constructs (math, mermaid, smiles, qr, youtube, chart) carry
   // a [data-md] breadcrumb that is emitted verbatim. Written without template
   // literals/backticks because this whole file is a String.raw template.
   var BT = String.fromCharCode(96);
