@@ -1,8 +1,16 @@
 # orz-markdown
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21099237.svg)](https://doi.org/10.5281/zenodo.21099237)
+
 A deeply customized markdown-it parser configured with several official plugins and many custom plugins designed to render interactive objects, embedded rich media, and invisible data. Crafted alongside beautifully optimized CSS themes for an excellent out-of-the-box rendering experience. An agent skill is available for using this markdown parser with AI agents. 
 
 Rendered HTML is intended to live inside a `.markdown-body` container and be paired with one of the bundled themes.
+
+## Citation
+
+If you use or cite the orz-markdown website or editable document family, please cite the archived release:
+
+Yu Wang. (2026). orz-markdown: a Markdown family that travels in one file. Zenodo. https://doi.org/10.5281/zenodo.21099237
 
 ## Installation
 
