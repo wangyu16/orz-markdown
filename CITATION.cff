@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use or cite the orz-markdown website or editable document family, please cite the archived release."
+title: "orz-markdown: a Markdown family that travels in one file"
+type: software
+authors:
+  - family-names: Wang
+    given-names: Yu
+abstract: >-
+  orz-markdown is a deeply customized Markdown parser and website for a family
+  of self-contained, editable HTML documents, including mdhtml, slides, and
+  paged documents. The website at markdown.orz.how documents the parser,
+  browser editor, verifier, agent skills, themes, and authentic starter files.
+keywords:
+  - markdown
+  - markdown-it
+  - editable documents
+  - self-contained HTML
+  - browser editor
+  - document verification
+  - agent skills
+license: MIT
+repository-code: "https://github.com/wangyu16/orz-markdown"
+url: "https://markdown.orz.how"
+version: 1.3.1
+date-released: "2026-07-01"
