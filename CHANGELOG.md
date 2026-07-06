@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-06
+
+### Fixed
+
+- **Explicit image sizes (`![alt](url =WxH)`) now render at the requested
+  dimensions.** `markdown-it-imsize` already emitted `width`/`height`
+  *attributes* on the `<img>`, but the shared theme rule in `themes/common.css`
+  set `.markdown-body img { width: auto; height: auto }` unconditionally — and a
+  CSS property overrides an HTML attribute, so sized images collapsed back to
+  their intrinsic size. The `auto` sizing is now scoped to images **without** an
+  explicit dimension (`img:not([width])` / `img:not([height])`), so the
+  responsive default is preserved while `=WxH` wins.
+  - `![](photo.png =200x100)` → 200×100 (still capped to container by
+    `max-width: 100%`).
+  - `![](photo.png =200x)` / `![](photo.png =x100)` → constrains only the given
+    axis; the other stays proportional.
+  - `![](photo.png)` (no size) → unchanged: intrinsic size, responsive.
+  - **For downstream docs / custom CSS:** mirror the
+    `img:not([width])` / `img:not([height])` pattern rather than a blanket
+    `.markdown-body img { height: auto }`, which would re-break explicit sizes.
+
+## [1.3.1] - 2026-07-05
+
+### Added
+
+- Zenodo DOI + citation metadata (`CITATION`/citation note) for the
+  orz-markdown editable-document family, and website starter pages/docs
+  (paged reference, slides layouts & syntax, "For agents" / skill install
+  routes). Standalone site and editor chrome only — no change to the library
+  API or rendered Markdown output.
+
+### Changed
+
+- Standalone website header is now adaptive on narrow screens; editor gains a
+  GitHub link and a `© orz-markdown` footer linking to markdown.orz.how.
+
 ## [1.3.0] - 2026-06-28
 
 ### Added
