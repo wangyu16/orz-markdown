@@ -10,11 +10,18 @@
 
 .markdown-body img {
   display: block;
-  width: auto;
   max-width: 100%;
   max-height: 100%;
-  height: auto;
   object-fit: contain;
+}
+/* Responsive by default, but explicit dimensions from `![](img =200x100)`
+   (markdown-it-imsize → width/height attributes) must win: only auto-size
+   images that DON'T carry an explicit width/height. */
+.markdown-body img:not([width]) {
+  width: auto;
+}
+.markdown-body img:not([height]) {
+  height: auto;
 }
 
 .markdown-body p > img {
