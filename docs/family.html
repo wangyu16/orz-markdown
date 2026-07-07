@@ -67,7 +67,7 @@
       <div class="card"><h3 style="margin-top:0">Edit in place</h3><p>A built-in editor with live preview. Save writes back to the same file (in Chromium browsers).</p></div>
       <div class="card"><h3 style="margin-top:0">Copy as Markdown</h3><p>Select rendered content, copy, and get clean Markdown source back, ready to reuse anywhere.</p></div>
       <div class="card"><h3 style="margin-top:0">Self-updating, opt-in</h3><p>When a newer framework ships, the editor offers a one-click update from the canonical packages.</p></div>
-      <div class="card"><h3 style="margin-top:0">Offline or CDN</h3><p><code>--inline</code> embeds the engine and theme for offline use; <code>--cdn</code> makes a smaller file.</p></div>
+      <div class="card"><h3 style="margin-top:0">Inline or CDN</h3><p><code>--inline</code> embeds the engine (and, for slides/paged, themes); <code>--cdn</code> makes a smaller file.</p></div>
       <div class="card"><h3 style="margin-top:0">Verifiable</h3><p>The embedded framework hashes against the published packages, so tampering is detectable.</p></div>
     </div>
   </section>
@@ -141,7 +141,6 @@ A continuous, themed document.
     <div class="grid c2" style="align-items:center;gap:34px">
       <div>
         <span class="ext">.paged.html</span>
-        <span class="ext" style="background:#eee;color:#666">in&nbsp;development</span>
         <h2 style="margin:.4em 0 .2em">orz-paged</h2>
         <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A paginated print document.</p>
         <p>Markdown laid out as pages with <a href="https://pagedjs.org/">paged.js</a>: A4 or Letter, margins,
