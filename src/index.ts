@@ -174,3 +174,8 @@ md.renderer.rules['plugin_inline'] = (
 
 export default md;
 export { md };
+
+// Document metadata (license, author, …) for the self-contained formats. The
+// one implementation shared by orz-mdhtml / orz-slides / orz-paged.
+export * from './doc-meta.js';
+export * from './nyml-blocks.js';

@@ -16,4 +16,6 @@ export { prepareSources } from './prepare-sources.js';
 declare const md: MarkdownIt;
 export default md;
 export { md };
+export * from './doc-meta.js';
+export * from './nyml-blocks.js';
 //# sourceMappingURL=index.d.ts.map

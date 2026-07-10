@@ -1,6 +1,6 @@
 {
   "name": "orz-markdown",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Customized markdown-it parser with official and custom plugins",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,8 @@
     ".": "./dist/index.js",
     "./runtime": "./dist/runtime.js",
     "./preview-frame": "./dist/preview-frame.js",
-    "./themes/*": "./themes/*"
+    "./themes/*": "./themes/*",
+    "./doc-meta": "./dist/doc-meta.js"
   },
   "files": [
     "dist",
