@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Limited the website editor service worker to its explicit offline app-shell
+  assets so it can no longer retain stale pages or editable-file starters.
+- Versioned the official starter links to bypass entries left by the previous
+  root-scoped cache and ensure newly created files use current framework releases.
+
 ## [1.4.1] - 2026-07-11
 
 ### Security
