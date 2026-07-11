@@ -13,9 +13,9 @@
  *
  * Two channels, one precedence rule:
  *
- *   1. **In the source** — a `{{nyml kind: meta … }}` block. Travels with the
- *      markdown, survives every round-trip, and a lone author can type it. nyml
- *      blocks are non-visible, so nothing leaks into the reader's view.
+ *   1. **In the source** — a `{{nyml kind: meta … }}` block that a lone author
+ *      can type. The builder consumes and removes it, then emits the normalized
+ *      metadata into the generated document's `<head>`.
  *   2. **Injected by a host** — the `metadata` build option.
  *
  * The **host wins, field by field**: a platform that knows the license

@@ -134,8 +134,8 @@ async function verify(text){
     var srcAttr = elm.getAttribute('src');
     if (srcAttr){
       var expected = CDN + pkg + '@' + (info.version||'') + '/' + path;
-      if (srcAttr.indexOf(CDN + pkg + '@') === 0) add('ok', label + ': loaded from canonical CDN', srcAttr);
-      else { add('bad', label + ': loaded from a NON-canonical URL', srcAttr); frameworkOk=false; }
+      if (info.version && srcAttr === expected) add('ok', label + ': canonical package and version', srcAttr);
+      else { add('bad', label + ': URL does not match the declared framework', 'Expected ' + expected + '; found ' + srcAttr); frameworkOk=false; }
       return;
     }
     if (!info.version){ add('warn', label + ': cannot verify (no version declared)', ''); frameworkUnknown=true; return; }
@@ -158,12 +158,16 @@ async function verify(text){
   scripts.forEach(function(s){
     var asset = s.getAttribute('data-orz-asset');
     var src = s.getAttribute('src');
+    var type = (s.getAttribute('type') || '').toLowerCase();
     if (src){
       if (src.indexOf(CDN) === 0 || src.indexOf('https://cdnjs.cloudflare.com/') === 0 || src.indexOf('https://unpkg.com/') === 0) { /* expected CDN */ }
       else if (src.indexOf('http') === 0) { externalBad++; add('bad', 'Loads a script from an unexpected domain', src); }
       return;
     }
-    if (asset) { known++; return; }
+    var inert = type === 'text/markdown' || type === 'text/orz-slides' ||
+      type === 'application/json' || type === 'application/yaml' ||
+      type === 'application/orz-meta+json';
+    if (asset || s.id === info.def.srcId || s.id === 'orz-meta' || inert) { known++; return; }
     inlineOther++; // runtime, boot — or injected code
   });
   if (inlineOther > 2) add('warn', inlineOther + ' un-tagged inline scripts', 'Expected ~2 (the copy runtime + boot). Extra inline scripts could be injected code — review the source.');

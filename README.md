@@ -71,6 +71,37 @@ You can also convert a node programmatically:
 const markdown = window.OrzMarkdownRuntime.elementToMarkdown(someElement);
 ```
 
+## Portable Document Metadata
+
+The editable document builders share one metadata model from
+`orz-markdown/doc-meta`. An mdhtml or paged source can declare metadata in a
+leading block that is consumed during generation:
+
+```markdown
+{{nyml
+kind: meta
+title: Field Notes
+author: Your Name
+description: Notes from the field course
+license: CC-BY-4.0
+license_name: Creative Commons Attribution 4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+source: https://example.org/field-notes
+date: 2026-07-10
+keywords: notes, fieldwork, markdown
+}}
+```
+
+The generated file stores normalized metadata in standard `<head>` tags and an
+`#orz-meta` JSON island. Those records survive in-browser edits and framework
+updates. Host applications can instead pass a `DocMeta` object to the family
+builders; host values win field by field. Slides seed `title` and `author` from
+their native deck config and accept the same programmatic override.
+
+```javascript
+import { extractDocMeta, parseDocMetaIsland } from 'orz-markdown/doc-meta';
+```
+
 ## Themes
 
 We provide multiple ready-to-use CSS themes for rendering the output! You do not need to style the custom plugins from scratch.

@@ -110,6 +110,27 @@ const html = md.render('# Hello {{emoji wave}}');
       </div>
     </div>
 
+    <section class="section" style="margin-top:40px">
+      <h2>Portable authorship and license metadata</h2>
+      <p>When generating <code>.md.html</code> or <code>.paged.html</code> from a source file, add a leading
+      <code>{{nyml kind: meta}}</code> block for the title, author, license, canonical source, date,
+      description, and keywords. For slides, the deck config's <code>title:</code> and <code>author:</code>
+      seed the same metadata. The builders write standard HTML head tags and a machine-readable
+      <code>#orz-meta</code> record that remains in the portable file after browser edits.</p>
+      <pre><code>{{nyml
+kind: meta
+title: Field Notes
+author: Your Name
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+source: https://example.org/field-notes
+date: 2026-07-11
+}}</code></pre>
+      <p>The metadata block is consumed during generation, so update the original source and regenerate when
+      those details change. Host applications can inject authoritative metadata programmatically; host values
+      take precedence field by field.</p>
+    </section>
+
     <!-- VERIFY -->
     <section class="section" style="margin-top:40px">
       <h2>Verifying a file someone sent you</h2>

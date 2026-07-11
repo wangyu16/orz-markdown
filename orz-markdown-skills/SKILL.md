@@ -74,6 +74,21 @@ The runtime also provides **copy-as-Markdown**: with it loaded, copying a select
 
 > **Do not strip `data-md` attributes.** `mermaid`, `smiles`, `qrcode`, `youtube`, and `chart` output carry a `data-md` breadcrumb so copy recovers their source after client-side rendering (e.g. a copied QR yields `{{qr ...}}`, not its SVG). Preserve these attributes if you post-process the HTML.
 
+### Portable document metadata
+
+The self-contained family shares `DocMeta` from `orz-markdown/doc-meta`:
+`title`, `author`, `description`, `license` (`spdx`, `name`, `url`), `source`,
+`date`, and `keywords`. In mdhtml and paged source, authors may provide a
+`{{nyml kind: meta ...}}` block. The builder consumes that block and emits
+standard `<head>` metadata plus a machine-readable `#orz-meta` JSON island;
+those emitted records survive later in-browser saves and framework updates.
+Host-injected metadata wins field by field. Slides use deck `title:` and
+`author:` as their source metadata and accept the same host override.
+
+Use `extractDocMeta`, `mergeDocMeta`, `renderDocMetaHead`,
+`renderDocMetaIsland`, and `parseDocMetaIsland` from
+`orz-markdown/doc-meta`; do not create a second metadata grammar in a host app.
+
 ---
 
 ## Themes

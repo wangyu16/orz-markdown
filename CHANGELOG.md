@@ -5,7 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.1] - 2026-07-11
+
+### Security
+
+- Updated `markdown-it` to `^14.3.0` (and its fixed `linkify-it ^5.0.2`
+  dependency) to address quadratic-complexity denial-of-service advisories in
+  smartquotes and automatic link scanning. Updated the build/test toolchain to
+  fixed `esbuild`, `happy-dom`, and `vitest` releases.
+
+## [1.4.0] - 2026-07-10
+
+### Added
+
+- A shared document-metadata API for the editable orz family:
+  `extractDocMeta`, `mergeDocMeta`, `renderDocMetaHead`,
+  `renderDocMetaIsland`, and `parseDocMetaIsland`, available from
+  `orz-markdown/doc-meta` and the main export. It normalizes author, license,
+  canonical source, publication date, description, and keywords into standard
+  `<head>` tags plus a machine-readable `#orz-meta` JSON island.
+- A shared `{{nyml}}` block scanner, hoisted from orz-paged so mdhtml, slides,
+  and paged use one grammar for document metadata.
 
 ## [1.3.2] - 2026-07-06
 
