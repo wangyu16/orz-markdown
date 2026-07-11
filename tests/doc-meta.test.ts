@@ -155,6 +155,17 @@ describe('the JSON island', () => {
     expect(island).toContain('<\\/script>');
   });
 
+  it('carries a uid-only meta and round-trips it (durable document identity)', () => {
+    // A host may set ONLY a uid (no title/license) to pin a document's identity.
+    // isEmpty must treat that as non-empty so the island is emitted, and the uid
+    // must survive the parse — that is what lets a downloaded-then-re-uploaded
+    // file be recognized as the same document.
+    const meta = { uid: 'doc-abc123' };
+    const island = renderDocMetaIsland(meta);
+    expect(island).toContain('id="orz-meta"');
+    expect(parseDocMetaIsland(`<head>${island}</head>`)).toEqual(meta);
+  });
+
   it('survives the save round-trip that every tool performs', () => {
     // Each tool's serializeDoc() clones documentElement and overwrites ONLY the
     // source island's text. This models that: everything else must come through

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-11
+
+### Added
+
+- **`DocMeta.uid`** — an optional, stable, opaque document identifier a host can
+  embed in the `#orz-meta` JSON island. Because `serializeDoc()` never rewrites
+  that island, the `uid` survives in-file edits and travels with the file, so a
+  host (e.g. Alembic) can recognize a downloaded-then-re-uploaded document as the
+  SAME document and keep its permalink durable — regardless of filename or
+  contents. Purely additive: `isEmpty` now treats a uid-only meta as non-empty so
+  the island is still emitted; standalone files and hosts that don't set it are
+  unaffected.
+
 ## [1.5.0] - 2026-07-11
 
 ### Added

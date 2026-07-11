@@ -56,6 +56,15 @@ export interface DocMeta {
     /** ISO date of publication. */
     date?: string;
     keywords?: string[];
+    /**
+     * A stable, opaque document identifier assigned by a host (e.g. Alembic's
+     * permalink id). It rides in the JSON island, which `serializeDoc()` never
+     * rewrites — so it survives in-file edits and travels with the file. A host
+     * uses it to recognize a downloaded-then-re-uploaded document as the SAME
+     * document (durable permalink) regardless of its filename or contents. Purely
+     * additive: standalone files and hosts that don't set it are unaffected.
+     */
+    uid?: string;
 }
 /**
  * Read the FIRST `kind: meta` nyml block out of a source and remove it.

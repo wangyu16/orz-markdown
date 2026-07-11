@@ -49,6 +49,7 @@ function isEmpty(meta) {
         !meta.description &&
         !meta.source &&
         !meta.date &&
+        !meta.uid &&
         !meta.license?.spdx &&
         !meta.license?.name &&
         !meta.license?.url &&
