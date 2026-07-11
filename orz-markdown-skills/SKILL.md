@@ -32,6 +32,13 @@ const resolved = await prepareSources(markdownSource);
 const html = md.render(resolved, { markdownBasePath: '/local/base/path' });
 ```
 
+`prepareSources(src, opts?)` (≥ 1.5.0) accepts options for safe server-side use:
+`allowedHosts` (only resolve includes from these hosts — an SSRF guard when the
+source is host-authored), `fetcher` (inject the transport; defaults to global
+`fetch`), and `maxDepth` (recursion for nested includes, default 3). Nested
+includes resolve with an ancestor-chain cycle guard. No options preserves the
+prior behavior.
+
 ---
 
 ## HTML Page Requirements

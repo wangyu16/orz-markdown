@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-11
+
+### Added
+
+- `prepareSources(src, opts?)` — the async URL-include pre-pass (`{{markdown
+  https://…}}` / `{{md-include https://…}}`) — gained options for safe
+  host-embedded use: `allowedHosts` (resolve includes only from an allowlist —
+  an SSRF guard when resolving host-authored content server-side), an injectable
+  `fetcher` (control transport/auth; defaults to the global `fetch`), and
+  `maxDepth` (recursion for includes-of-includes, default 3). Includes now
+  resolve recursively with an ancestor-chain cycle guard, and the directive is
+  replaced by index-splice so fetched markdown containing `$&`/`$1` is not
+  corrupted. Fully backward compatible — no options means the prior behavior
+  (global `fetch`, any host, single pass).
+
 ### Fixed
 
 - Limited the website editor service worker to its explicit offline app-shell
