@@ -31,6 +31,7 @@ import './plugins/nyml.js';
 export { register } from './registry.js';
 export type { PluginDefinition } from './registry.js';
 export { prepareSources } from './prepare-sources.js';
+export type { PrepareSourcesOptions } from './prepare-sources.js';
 
 const md = new MarkdownIt({
   // allow raw HTML tags in source text. disabling this (the default) causes

@@ -13,6 +13,7 @@ import './plugins/nyml.js';
 export { register } from './registry.js';
 export type { PluginDefinition } from './registry.js';
 export { prepareSources } from './prepare-sources.js';
+export type { PrepareSourcesOptions } from './prepare-sources.js';
 declare const md: MarkdownIt;
 export default md;
 export { md };
