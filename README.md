@@ -6,6 +6,13 @@ A deeply customized markdown-it parser configured with several official plugins 
 
 Rendered HTML is intended to live inside a `.markdown-body` container and be paired with one of the bundled themes.
 
+## Showcase
+
+![orz-mdhtml showcase: a rendered Markdown document opens its built-in editor, updates the preview live, and switches themes](docs/media/orz-mdhtml-demo.gif)
+
+The same portable file is both the rendered document and its Markdown editor. See the full
+[orz-markdown family](https://markdown.orz.how/family.html).
+
 ## Citation
 
 If you use or cite the orz-markdown website or editable document family, please cite the archived release:
