@@ -130,6 +130,13 @@ p { margin:.7em 0; }
 .demo.split .out { background:var(--surface); }
 @media (max-width:760px){ .demo .out{ border-left:0; border-top:1px solid var(--line); } }
 
+/* ---- feature showcase media ---- */
+.feature-showcase { margin:1.4em 0 0; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--surface); box-shadow:var(--shadow); }
+.feature-showcase img { display:block; width:100%; height:auto; background:#09101b; }
+.feature-showcase figcaption { padding:12px 16px 14px; border-top:1px solid var(--line); color:var(--ink-3);
+  font-size:.9rem; line-height:1.55; }
+
 /* ---- rendered orz-markdown output (curated, on-brand, no full theme) ---- */
 .render { font-size:.96rem; }
 .render > :first-child { margin-top:0; } .render > :last-child { margin-bottom:0; }
