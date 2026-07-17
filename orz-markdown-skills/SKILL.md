@@ -83,7 +83,7 @@ The runtime also provides **copy-as-Markdown**: with it loaded, copying a select
 
 ### Portable document metadata
 
-The self-contained family shares `DocMeta` from `orz-markdown/doc-meta`:
+The single-file, self-editing family shares `DocMeta` from `orz-markdown/doc-meta`:
 `title`, `author`, `description`, `license` (`spdx`, `name`, `url`), `source`,
 `date`, and `keywords`. In mdhtml and paged source, authors may provide a
 `{{nyml kind: meta ...}}` block. The builder consumes that block and emits

@@ -1,7 +1,7 @@
 {
   "name": "orz-markdown",
-  "version": "1.6.0",
-  "description": "Customized markdown-it parser with official and custom plugins",
+  "version": "1.6.3",
+  "description": "Markdown renderer and single-file, self-editing HTML document family with math, diagrams, themes, and source-aware copy.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -20,6 +20,9 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:starters": "tsx scripts/check-site-starters.ts",
+    "check:site": "npm run check:starters && tsx scripts/check-site-discovery.ts",
+    "visibility:baseline": "tsx scripts/visibility-baseline.ts",
     "render": "tsx scripts/render.ts",
     "prepublishOnly": "npm run build && npm run test"
   },
@@ -41,7 +44,7 @@
     "type": "git",
     "url": "git+https://github.com/wangyu16/orz-markdown.git"
   },
-  "homepage": "https://github.com/wangyu16/orz-markdown#readme",
+  "homepage": "https://markdown.orz.how/",
   "bugs": "https://github.com/wangyu16/orz-markdown/issues",
   "dependencies": {
     "@traptitech/markdown-it-katex": "^3.6.0",

@@ -1,0 +1,36 @@
+# orz-markdown
+
+> orz-markdown is a Markdown renderer and a family of single-file, self-editing
+> HTML tools. A `.md.html` document reads like a webpage, a `.slides.html` file
+> presents as a reveal.js deck, and a `.paged.html` file lays Markdown out as
+> printable pages. Every format keeps editable Markdown source inside the file.
+
+## Start here
+
+- [Homepage](https://markdown.orz.how/): product overview and live editor
+- [The editable document family](https://markdown.orz.how/family.html): choose mdhtml, slides, or paged
+- [Feature showcase](https://markdown.orz.how/features.html): math, diagrams, themes, rich formatting, and copy as Markdown
+- [Guide](https://markdown.orz.how/guide.html): browser, CLI, and parser workflows
+- [Live editor](https://markdown.orz.how/editor.html): try orz-markdown without installing anything
+
+## Product references
+
+- [orz-slides layouts and syntax](https://markdown.orz.how/slides.html)
+- [orz-paged documents and layout](https://markdown.orz.how/paged.html)
+- [Document verifier](https://markdown.orz.how/verify.html)
+
+## Agent skills
+
+- [Using orz with AI agents](https://markdown.orz.how/agents.html)
+- [orz-markdown SKILL.md](https://cdn.jsdelivr.net/npm/orz-markdown/orz-markdown-skills/SKILL.md)
+- [orz-mdhtml SKILL.md](https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md)
+- [orz-slides SKILL.md](https://cdn.jsdelivr.net/npm/orz-slides/orz-slides-skills/SKILL.md)
+- [orz-paged SKILL.md](https://cdn.jsdelivr.net/npm/orz-paged/orz-paged-skills/SKILL.md)
+
+## Source and packages
+
+- [orz-markdown on GitHub](https://github.com/wangyu16/orz-markdown)
+- [orz-mdhtml on GitHub](https://github.com/wangyu16/orz-mdhtml)
+- [orz-slides on GitHub](https://github.com/wangyu16/orz-slides)
+- [orz-paged on GitHub](https://github.com/wangyu16/orz-paged)
+- [orz-markdown on npm](https://www.npmjs.com/package/orz-markdown)
