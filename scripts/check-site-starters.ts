@@ -4,9 +4,9 @@ const docsDir = new URL('../docs/', import.meta.url);
 const startersDir = new URL('../docs/starters/', import.meta.url);
 
 const starters = [
-  { file: 'new-mdhtml.md.html', version: '0.9.2' },
-  { file: 'new-slides.slides.html', version: '0.8.4' },
-  { file: 'new-paged.paged.html', version: '0.7.2' },
+  { file: 'new-mdhtml.md.html', version: '0.9.3' },
+  { file: 'new-slides.slides.html', version: '0.8.5' },
+  { file: 'new-paged.paged.html', version: '0.7.3' },
 ] as const;
 
 const failures: string[] = [];
