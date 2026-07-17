@@ -33,7 +33,7 @@ for (const starter of starters) {
   }
 
   const linkPattern = new RegExp(
-    `starters/${starter.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?v=([^"'#&]+)`,
+    `starters/${starter.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?v=(\\d+\\.\\d+\\.\\d+)`,
     'g',
   );
   let linkCount = 0;
