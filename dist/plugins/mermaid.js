@@ -1,22 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const registry_js_1 = require("../registry.js");
-function escapeHtml(str) {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-// Encode a value for a double-quoted HTML attribute, preserving newlines (as
-// &#10;) so multi-line source survives in `data-md`.
-function escapeAttr(str) {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '&#10;');
-}
+const html_js_1 = require("../html.js");
 (0, registry_js_1.register)({
     type: 'block',
     aliases: ['mermaid', 'mm'],
@@ -25,7 +10,7 @@ function escapeAttr(str) {
         // `data-md` lets copy-as-markdown recover the source after client-side
         // mermaid rendering replaces the div contents with an <svg>.
         const directive = `{{mermaid\n${content}\n}}`;
-        return `<div class="mermaid" data-md="${escapeAttr(directive)}">${escapeHtml(content)}</div>\n`;
+        return `<div class="mermaid" data-md="${(0, html_js_1.escapeAttr)(directive)}">${(0, html_js_1.escapeHtml)(content)}</div>\n`;
     },
 });
 //# sourceMappingURL=mermaid.js.map

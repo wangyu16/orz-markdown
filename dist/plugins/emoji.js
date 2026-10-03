@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const nodeEmoji = __importStar(require("node-emoji"));
 const registry_js_1 = require("../registry.js");
+const html_js_1 = require("../html.js");
 (0, registry_js_1.register)({
     type: 'inline',
     aliases: ['emoji', 'em'],
@@ -43,9 +44,11 @@ const registry_js_1 = require("../registry.js");
         const result = nodeEmoji.get(name);
         // node-emoji returns undefined for unknown names; fall back to original text
         if (!result) {
-            return `{{emoji ${name}}}`;
+            return `{{emoji ${(0, html_js_1.escapeHtml)(name)}}}`;
         }
-        return result;
+        // data-md: copy restores the directive, so a heading keeps its id
+        // (`## {{emoji rocket}} Quick start` slugs without the emoji: round 16, L4).
+        return `<span data-md="${(0, html_js_1.escapeAttr)(`{{emoji ${name}}}`)}">${result}</span>`;
     },
 });
 //# sourceMappingURL=emoji.js.map

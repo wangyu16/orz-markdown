@@ -1,45 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const registry_js_1 = require("../registry.js");
-/*
- * {{chart …}} — declarative chart blocks.
- *
- * The plugin parses a tiny, line-based config into a Chart.js-style config
- * object and emits a single <canvas class="orz-chart"> carrying that config as
- * HTML-escaped JSON in `data-chart`. It does NOT draw anything: the host's
- * client runtime is expected to read `data-chart` and call Chart.js, exactly
- * like smiles canvases are painted by smiles-drawer. A `data-md` breadcrumb
- * carries the original {{chart …}} source so copy-as-markdown can recover it.
- *
- * Syntax (one directive per line, `key: value`):
- *
- *   type: bar            # bar | line | pie | doughnut | ... (default: bar)
- *   title: My Chart      # optional chart title
- *   labels: Q1, Q2, Q3   # comma-separated x-axis / slice labels
- *   series: Revenue = 10, 14, 9, 17   # a named dataset (repeatable)
- *   series: Cost = 6, 7, 8, 9
- *
- * Single-series shorthand (no name needed):
- *
- *   type: pie
- *   labels: A, B, C
- *   data: 30, 50, 20
- *
- * Unknown keys are ignored. Numbers parse with parseFloat; non-numeric values
- * become null (a gap). On any parse failure the plugin degrades gracefully and
- * emits an empty canvas carrying an `data-chart-error` attribute rather than
- * throwing.
- */
-// Encode a value for a double-quoted HTML attribute, preserving newlines (as
-// &#10;) so multi-line source survives in `data-md`.
-function escapeAttr(str) {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '&#10;');
-}
+const html_js_1 = require("../html.js");
 function parseNumberList(value) {
     return value
         .split(',')
@@ -121,7 +83,7 @@ function parseChart(body) {
         // `data-md` lets copy-as-markdown recover the source after the client
         // runtime paints the <canvas> (which has no recoverable text content).
         const directive = `{{chart\n${source}\n}}`;
-        const md = escapeAttr(directive);
+        const md = (0, html_js_1.escapeAttr)(directive);
         let config;
         try {
             config = parseChart(source);
@@ -130,7 +92,7 @@ function parseChart(body) {
             // Degrade gracefully: emit an empty, erroring canvas rather than throwing.
             return `<canvas class="orz-chart" data-chart-error="parse error" data-md="${md}" width="600" height="400"></canvas>\n`;
         }
-        const json = escapeAttr(JSON.stringify(config));
+        const json = (0, html_js_1.escapeAttr)(JSON.stringify(config));
         return `<canvas class="orz-chart" data-chart="${json}" data-md="${md}" width="600" height="400"></canvas>\n`;
     },
 });

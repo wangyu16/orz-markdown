@@ -147,4 +147,10 @@ suite('copy-as-markdown walker', () => {
     expect(copyOf('# T\n\nPara **x**.\n\n- a\n- b'))
       .toBe('# T\n\nPara **x**.\n\n- a\n- b');
   });
+
+  it('cols keeps its ratios and left keeps its width', () => {
+    expect(copyOf(':::: cols 1 2\n::: col\nA\n:::\n::: col\nB\n:::\n::::'))
+      .toBe(':::: cols 1 2\n::: col\nA\n:::\n\n::: col\nB\n:::\n::::');
+    expect(copyOf('::: left 40%\nSide\n:::')).toBe('::: left 40%\nSide\n:::');
+  });
 });

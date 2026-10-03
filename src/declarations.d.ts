@@ -1,9 +1,3 @@
-declare module 'markdown-it-imsize' {
-  import type { PluginSimple } from 'markdown-it';
-  const imsizePlugin: PluginSimple;
-  export default imsizePlugin;
-}
-
 declare module 'markdown-it-mark' {
   import type { PluginSimple } from 'markdown-it';
   const markPlugin: PluginSimple;
@@ -37,4 +31,10 @@ declare module 'markdown-it-task-lists' {
   }
   const taskListsPlugin: PluginWithOptions<TaskListsOptions>;
   export default taskListsPlugin;
+}
+
+declare module 'markdown-it-cjk-breaks' {
+  import type { PluginSimple } from 'markdown-it';
+  const cjkBreaks: PluginSimple;
+  export default cjkBreaks;
 }

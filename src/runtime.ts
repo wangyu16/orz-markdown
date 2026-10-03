@@ -1,4 +1,5 @@
-export const browserRuntimeScript = String.raw`
+/** The runtime up to and including `bindGlobalHandlers()` (copy, QR Escape/click). */
+const RUNTIME_HEAD = String.raw`
 (function (global) {
   var expandedQr = null;
   var expandedSourceQr = null;
@@ -117,11 +118,27 @@ export const browserRuntimeScript = String.raw`
   // ---- copy-as-markdown: DOM -> Markdown walker ---------------------------
   // Converts a selected DOM fragment back to Markdown so that copying rendered
   // content yields source, not HTML. Standard constructs are reconstructed from
-  // their tags; generated constructs (math, mermaid, smiles, qr, youtube, chart) carry
-  // a [data-md] breadcrumb that is emitted verbatim. Written without template
-  // literals/backticks because this whole file is a String.raw template.
+  // their tags; generated constructs (math, mermaid, smiles, qr, youtube, chart,
+  // toc, footnote refs) carry a [data-md] breadcrumb that is emitted verbatim,
+  // and containers whose arguments the class alone cannot carry (cols ratios,
+  // left width, spoil labels, custom ::: names) carry [data-orz-container].
+  // The contract is the round trip: rendering the copied Markdown gives back
+  // the same HTML (CLAIMS.md C.1-C.17). Written without template literals or
+  // backticks because this whole file is a String.raw template.
   var BT = String.fromCharCode(96);
-  var FENCE = BT + BT + BT;
+  // Only ASCII whitespace collapses: U+3000 (CJK indentation) and nbsp are content.
+  var RT_WS = /[ \t\n\r\f]+/g;
+  // Cell context: hard breaks become <br> (pipes are escaped per cell).
+  var rt_inTable = false;
+  // A heading is one line: a hard break inside it must stay <br>.
+  var rt_inHeading = false;
+  // Code blocks are swapped for placeholders until the end, so whitespace
+  // cleanup can never touch them (blank lines and trailing spaces are content).
+  var rt_protected = [];
+  // "$ ~ ^" from text are emitted as marks and resolved per block at the end:
+  // whether one needs escaping depends on the rest of the block (a lone "$5"
+  // is prose; "$5 ... 6$" would pair into math), not on its own text node.
+  var MARK_DOLLAR = '\uFDD0', MARK_TILDE = '\uFDD2', MARK_CARET = '\uFDD3';
 
   function rt_repeat(s, n) {
     var out = '';
@@ -129,71 +146,368 @@ export const browserRuntimeScript = String.raw`
     return out;
   }
 
+  function rt_trim(s) { return s.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, ''); }
+
   function rt_attr(node, name) {
     return node && node.getAttribute ? node.getAttribute(name) : null;
   }
 
-  function rt_isBlockElement(node) {
-    if (!node || node.nodeType !== 1) return false;
-    if (rt_attr(node, 'data-md') != null) return true;
-    var tag = node.tagName.toLowerCase();
-    if (/^(p|div|section|article|figure|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|hr|details)$/.test(tag)) return true;
-    if (node.classList && (node.classList.contains('katex-display') || node.classList.contains('mermaid'))) return true;
-    return false;
+  function rt_tag(node) {
+    return node && node.nodeType === 1 ? node.tagName.toLowerCase() : '';
   }
 
+  function rt_hasClass(node, cls) {
+    return !!(node && node.nodeType === 1 && node.classList && node.classList.contains(cls));
+  }
+
+  function rt_isBlockElement(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (rt_attr(node, 'data-md') != null && rt_tag(node) !== 'span' && rt_tag(node) !== 'sup') return true;
+    if (/^(p|div|section|article|figure|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|hr|details|iframe|video|audio|script|style)$/.test(rt_tag(node))) return true;
+    return rt_hasClass(node, 'katex-display') || rt_hasClass(node, 'katex-block') || rt_hasClass(node, 'mermaid');
+  }
+
+  // ---- escaping ---------------------------------------------------------------
+  // Minimal, context-aware: escape only what would otherwise parse as syntax, so
+  // ordinary prose ("snake_case", "5 * 3", "$5") copies without backslashes.
+  function rt_isWordChar(ch) {
+    return !!ch && /[0-9A-Za-z\u00AA-\uFFFF]/.test(ch) &&
+      !/[\u00A1-\u00BF\u00D7\u00F7\u2000-\u2BFF\u3000-\u303F\uD800-\uDFFF\uFE30-\uFE4F\uFF00-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFF65]/.test(ch);
+  }
+
+  function rt_escText(s) {
+    // Private-use characters the walker uses as sentinels: write them as entities.
+    s = s.replace(/[\uFDD0-\uFDD3]/g, function (c) { return '&#x' + c.charCodeAt(0).toString(16).toUpperCase() + ';'; });
+    var out = s.replace(/\\(?=[!-\/:-@\[-\x60{-~]|$)/g, '\\\\');
+    out = out.replace(/[\x60\[\]]/g, '\\$&');
+    out = out.replace(/\*/g, function (m, i, str) {
+      var a = str.charAt(i - 1), b = str.charAt(i + 1);
+      return (a === ' ' && b === ' ') ? m : '\\*';
+    });
+    out = out.replace(/_/g, function (m, i, str) {
+      return (rt_isWordChar(str.charAt(i - 1)) && rt_isWordChar(str.charAt(i + 1))) ? m : '\\_';
+    });
+    out = out.replace(/<(?=[A-Za-z\/!?])/g, '\\<');
+    out = out.replace(/\{\{/g, '\\{{');
+    out = out.replace(/\$/g, MARK_DOLLAR).replace(/~/g, MARK_TILDE).replace(/\^/g, MARK_CARET);
+    out = out.replace(/={2,}|\+{2,}/g, function (m) { return m.replace(/[=+]/g, '\\$&'); });
+    out = out.replace(/&(?=#?[0-9A-Za-z]+;)(?!#xFDD[0-3];)/g, '\\&');
+    // Straight quotes and (c)/(r)/(tm)/+- survive rendering only when the author
+    // escaped them; unescaped, the typographer would turn them into “ ” © ® ™ ±.
+    out = out.replace(/["']/g, '\\$&');
+    out = out.replace(/\((?=(c|r|tm|p)\))/gi, '\\(').replace(/\+-/g, '\\+-');
+    out = out.replace(/-{2,}|\.{2,}/g, function (m) { return m.replace(/[-.]/g, '\\$&'); });
+    return out;
+  }
+
+  // Resolve the deferred marks of one block of output. Linear: a mark needs
+  // escaping when some "$" before it can open while it can close, or it can open
+  // while some "$" after it can close (prefix/suffix flags, not a pair search).
+  function rt_resolveMarks(chunk) {
+    var pos = [];
+    for (var i = 0; i < chunk.length; i++) {
+      var c = chunk.charAt(i);
+      if (c === '$' || c === MARK_DOLLAR) pos.push(i);
+    }
+    function blank(ch) { return !ch || /[ \t\n]/.test(ch); }
+    function canOpen(i) { return !blank(chunk.charAt(i + 1)); }
+    function canClose(i) { return !blank(chunk.charAt(i - 1)) && !/[0-9]/.test(chunk.charAt(i + 1)); }
+    var escape = {};
+    var openBefore = false;
+    for (var a = 0; a < pos.length; a++) {
+      if (chunk.charAt(pos[a]) === MARK_DOLLAR && openBefore && canClose(pos[a])) escape[pos[a]] = true;
+      if (canOpen(pos[a])) openBefore = true;
+    }
+    var closeAfter = false;
+    for (var b = pos.length - 1; b >= 0; b--) {
+      if (chunk.charAt(pos[b]) === MARK_DOLLAR && closeAfter && canOpen(pos[b])) escape[pos[b]] = true;
+      if (canClose(pos[b])) closeAfter = true;
+    }
+    var tildes = (chunk.match(/[~\uFDD2]/g) || []).length;
+    var carets = (chunk.match(/[\^\uFDD3]/g) || []).length;
+    var out = [];
+    for (var k = 0; k < chunk.length; k++) {
+      var ch = chunk.charAt(k);
+      // "$$" opening a line is a display-math fence whatever follows.
+      if (ch === MARK_DOLLAR && (k === 0 || chunk.charAt(k - 1) === '\n') && /[$\uFDD0]/.test(chunk.charAt(k + 1))) escape[k] = true;
+      if (ch === MARK_DOLLAR) out.push(escape[k] ? '\\$' : '$');
+      else if (ch === MARK_TILDE) out.push(tildes > 1 ? '\\~' : '~');
+      else if (ch === MARK_CARET) out.push(carets > 1 ? '\\^' : '^');
+      else out.push(ch);
+    }
+    return out.join('');
+  }
+
+  // Table cells: markdown-it removes one backslash before EVERY "\\|" when it
+  // splits a row (no parity), so every pipe in a cell gets exactly one more.
+  function rt_escPipes(s) {
+    return s.replace(/\|/g, '\\|');
+  }
+
+  // A line that would start a block construct gets its marker escaped. Applied
+  // to every line of a paragraph-like block (lines exist only after hard breaks).
+  function rt_escLineStarts(s) {
+    return s.split('\n').map(function (line) {
+      return line
+        .replace(/^(#{1,6})(?=[ \t]|$)/, '\\$1')
+        .replace(/^>/, '\\>')
+        .replace(/^([-+])(?=[ \t]|$)/, '\\$1')
+        .replace(/^(\d{1,9})([.)])(?=[ \t]|$)/, '$1\\$2')
+        .replace(/^\*(?=[ \t]|$)/, '\\*')
+        // Setext underlines / thematic breaks: escape every mark, or the
+        // typographer turns the unescaped rest ("--") into a dash.
+        .replace(/^([=\- \t]+)$/, function (m) { return /^(=+|-[ \t]*-[- \t]*)[ \t]*$/.test(m) ? m.replace(/[=-]/g, '\\$&') : m; })
+        .replace(/^:::/, '\\:::')
+        // "a | b" + hard break + "-|-" would re-parse as a table header.
+        .replace(/^([ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*)$/, function (m) { return m.replace(/\|/g, '\\|'); });
+    }).join('\n');
+  }
+
+  function rt_code(text) {
+    var runs = text.match(/\x60+/g) || [];
+    var longest = 0;
+    for (var i = 0; i < runs.length; i++) if (runs[i].length > longest) longest = runs[i].length;
+    var fence = rt_repeat(BT, longest + 1);
+    var pad = (/^\x60|\x60$/.test(text) || (/^ .* $/.test(text) && /[^ ]/.test(text))) ? ' ' : '';
+    return fence + pad + text + pad + fence;
+  }
+
+  function rt_url(u) {
+    u = u || '';
+    var depth = 0, balanced = true;
+    for (var i = 0; i < u.length; i++) {
+      if (u.charAt(i) === '(') depth++;
+      else if (u.charAt(i) === ')') { depth--; if (depth < 0) balanced = false; }
+    }
+    if (depth !== 0) balanced = false;
+    // "&name;" in a destination is decoded as an entity: keep "&" literal.
+    u = u.replace(/&/g, '\\&');
+    if (!u || /[ \t<>]/.test(u) || !balanced) return '<' + u.replace(/[<>]/g, function (c) { return encodeURIComponent(c); }) + '>';
+    return u;
+  }
+
+  function rt_title(t) {
+    return t ? ' "' + t.replace(/["\\]/g, '\\$&') + '"' : '';
+  }
+
+  // ---- inline -----------------------------------------------------------------
   function rt_katex(node, display) {
     var ann = node.querySelector ? node.querySelector('annotation[encoding="application/x-tex"]') : null;
-    var tex = (ann ? ann.textContent : node.textContent) || '';
-    tex = tex.replace(/^\s+|\s+$/g, '');
+    // The copy's per-block marks are noncharacters: one inside TeX is replaced,
+    // or the mark resolver would turn it into "$" (round 19, L1).
+    var tex = rt_trim((ann ? ann.textContent : node.textContent) || '').replace(/[\uFDD0-\uFDD3]/g, '\uFFFD');
     if (display) return '$$\n' + tex + '\n$$';
     return '$' + tex + '$';
   }
 
   function rt_img(node) {
-    var alt = rt_attr(node, 'alt') || '';
-    var src = rt_attr(node, 'src') || '';
-    var title = rt_attr(node, 'title');
-    return '![' + alt + '](' + src + (title ? ' "' + title + '"' : '') + ')';
+    var w = rt_attr(node, 'width'), h = rt_attr(node, 'height');
+    var size = (w || h) ? ' =' + (w || '') + 'x' + (h || '') : '';
+    var alt = rt_escText(rt_attr(node, 'alt') || '');
+    return '![' + alt + '](' + rt_url(rt_attr(node, 'src') || '') + rt_title(rt_attr(node, 'title')) + size + ')';
+  }
+
+  function rt_link(node) {
+    var href = rt_attr(node, 'href') || '';
+    var text = node.textContent || '';
+    var hasElements = !!(node.querySelector && node.querySelector('*'));
+    // A bare autolink copies as the bare URL (linkify recognizes it again).
+    // Autolinks only: an absolute URL whose visible text is the URL itself.
+    // A relative link ("CHANGELOG.md", "#intro") whose text equals its href is a
+    // normal link — bare, it would be re-linked as a host or not at all.
+    var autolink = !hasElements && !rt_attr(node, 'title') && /^(https?|ftp|mailto):/i.test(href) &&
+      (text === href || 'http://' + text === href || 'mailto:' + text === href);
+    if (autolink) {
+      // Bare only when linkify would find exactly this URL again: not ending in
+      // punctuation it drops, and followed by nothing it would absorb.
+      // Before it: nothing, whitespace, or a character that is not escaped and
+      // does not glue onto it ("text<https://…>", "\\[www.x]" are not re-linked).
+      // After it: whitespace, ASCII punctuation linkify stops at, or CJK
+      // punctuation that ends a URL — not CJK letters, which since round 9 stay
+      // in a URL path, and not "]" (escaped as "\\]") or an opening full-width
+      // bracket (kept in a path when closed): round 11, H2.
+      var prev = rt_prevChar(node), next = rt_nextChar(node);
+      var after = node.nextSibling;
+      var scheme = /^(https?|ftp):\/\//i.test(text);
+      // Before it: nothing, whitespace or "(" — or CJK before a scheme URL
+      // (linkify's inline rule accepts it; a fuzzy host or mailto it would not).
+      var okPrev = !prev || /[ \t\n(]/.test(prev) ||
+        (scheme && prev.charCodeAt(0) > 0x7f && !/[\uFF08\u3010\u300C\u300E\u3008\u300A\u3014]/.test(prev));
+      // After it: the end of the block or whitespace, or CJK punctuation that
+      // ends a URL — never a hard break (the copy would end in "\\"), an
+      // element, ASCII punctuation, CJK letters, or an opening full-width
+      // bracket (round 12, H1).
+      var okNext = next ? (/[ \t\n]/.test(next) ||
+        (/[\u3000-\u303F\uFF01-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFF65]/.test(next) && !/[\u3005-\u3007\u3021-\u3029\u3031-\u3035\u303B\u303C\uFF08\u3010\u300C\u300E\u3008\u300A\u3014\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/.test(next)))
+        : !after;
+      // Its own end: a character linkify keeps (not "*", "_", ")", …).
+      var okEnd = /[A-Za-z0-9\/]$/.test(text) || rt_isCjkChar(text.charAt(text.length - 1));
+      if (okEnd && okPrev && okNext) return text;
+      // Keep the visible text: "www.x.com" stays "www.x.com".
+      if (text === href) return '<' + href + '>';
+      // A colon in the local part would make "<a:b@x>" a URI with scheme "a"
+      // (round 13, M1); then fall through to [text](href).
+      if ('mailto:' + text === href && text.indexOf(':') < 0) return '<' + text + '>';
+    }
+    // A readable destination ("/路径", not "/%E8%B7%AF%E5%BE%84") when it encodes
+    // back to exactly the same href (round 14, L4).
+    var dest = href;
+    // Not when decoding exposes "%" (markdown-it keeps "%XX" as is, so "%2541"
+    // would come back as "%41"), "\\" (an escape), a control character or a
+    // delimiter (round 15, H1).
+    // Only the path, query and fragment: a decoded host would be re-encoded as
+    // punycode, and a mailto: address is left as written (round 16, L1).
+    var authority = /^[a-z][a-z0-9+.-]*:\/\/[^\/?#]*/i.exec(href);
+    if (authority && !/^mailto:/i.test(href)) {
+      var tail = href.slice(authority[0].length);
+      try { var dec = decodeURI(tail); if (dec !== tail && encodeURI(dec) === tail && !/[\s<>()%\\\x00-\x1f\x7f-\x9f\u00ad\u034f\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ue000-\uf8ff\ufdd0-\ufdef\ufeff\ufff9-\uffff]|\udb40[\udc00-\udc7f]/.test(dec)) dest = authority[0] + dec; } catch (e) { /* keep href */ }
+    }
+    // A "$" in the label is always escaped when the destination holds one: the
+    // math rule reads past a link label's end, so "$5](…$" became math (round 21, B-L2).
+    var label = rt_inlineChildren(node);
+    if (href.indexOf('$') >= 0) label = label.replace(/\uFDD0/g, '\\$');
+    return '[' + label + '](' + rt_url(dest) + rt_title(rt_attr(node, 'title')) + ')';
+  }
+
+  // Inline HTML Markdown cannot express; copied as HTML so it survives.
+  var RT_INLINE_HTML = /^(kbd|abbr|u|small|cite|q|dfn|var|samp|time|ruby|rt|rp|bdi|bdo|wbr)$/;
+  // Never visible as text: a nyml/yaml data island, CSS, templates.
+  var RT_INVISIBLE = /^(script|style|template|noscript|head|meta|link)$/;
+  // Raw media an author embedded (a Bilibili iframe, a video): kept as HTML.
+  var RT_RAW_MEDIA = /^(iframe|video|audio|picture|object|embed|svg)$/;
+
+  function rt_escAttr(v) {
+    return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/\n/g, '&#10;');
+  }
+  // The element's own tags around its walked (escaped) children: emitting
+  // outerHTML would let a "\\" or "*" inside it act as Markdown on re-render.
+  function rt_htmlWrap(node) {
+    var tag = rt_tag(node);
+    var open = '<' + tag;
+    var attrs = node.attributes || [];
+    for (var i = 0; i < attrs.length; i++) open += ' ' + attrs[i].name + '="' + rt_escAttr(attrs[i].value) + '"';
+    open += '>';
+    if (tag === 'wbr') return open;
+    return open + rt_inlineChildren(node) + '</' + tag + '>';
+  }
+
+  function rt_isCjkChar(ch) {
+    return /[\u1100-\u11FF\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/.test(ch || '');
+  }
+  // First/last character of the text around an inline element (DOM siblings).
+  function rt_prevChar(node) {
+    var p = node.previousSibling;
+    var t = p ? (p.nodeType === 3 ? p.nodeValue : p.textContent) || '' : '';
+    return t ? t.charAt(t.length - 1) : '';
+  }
+  function rt_nextChar(node) {
+    var n = node.nextSibling;
+    var t = n ? (n.nodeType === 3 ? n.nodeValue : n.textContent) || '' : '';
+    return t ? t.charAt(0) : '';
+  }
+  function rt_isPunct(ch) { return /[!-\/:-@\[-\x60{-~\u2000-\u206F\u3000-\u303F\uFF00-\uFF0F\uFF1A-\uFF20]/.test(ch || ''); }
+  function rt_isSpace(ch) { return !ch || /[ \t\n\r\f\u00A0\u3000]/.test(ch); }
+
+  // Wrap inline content in a Markdown delimiter, or in HTML when the delimiter
+  // would not re-parse: CommonMark flanking fails when punctuation inside meets
+  // a letter outside ("**“y”**z"), when the content is padded with spaces, or
+  // when the previous sibling ends in the same delimiter ("**a****b**").
+  function rt_wrap(node, delim, tag) {
+    var inner = rt_inlineChildren(node);
+    // Decide on what will be emitted (a link inside starts with "["), and per
+    // side: CJK relaxes only the side where a CJK character touches the run.
+    var first = inner.charAt(0), last = inner.charAt(inner.length - 1);
+    var before = rt_prevChar(node), after = rt_nextChar(node);
+    var prev = node.previousSibling;
+    var openCjk = rt_isCjkChar(before) || rt_isCjkChar(first);
+    var closeCjk = rt_isCjkChar(after) || rt_isCjkChar(last);
+    var bad = !inner || rt_isSpace(first) || rt_isSpace(last) ||
+      (!openCjk && rt_isPunct(first) && before && !rt_isSpace(before) && !rt_isPunct(before)) ||
+      (!closeCjk && rt_isPunct(last) && after && !rt_isSpace(after) && !rt_isPunct(after)) ||
+      (prev && prev.nodeType === 1 && /^(strong|b|em|i|del|s|ins|mark)$/.test(rt_tag(prev))) ||
+      // The same emphasis directly at either edge ("<em><em>a</em>b</em>")
+      // would emit an ambiguous run ("**a*b*").
+      rt_sameEdge(node);
+    if (bad) { var t = rt_tag(node) || tag; return '<' + t + '>' + inner + '</' + t + '>'; }
+    return delim + inner + delim;
+  }
+
+  function rt_sameEdge(node) {
+    var t = rt_tag(node);
+    var group = /^(em|i)$/.test(t) ? /^(em|i)$/ : /^(strong|b)$/.test(t) ? /^(strong|b)$/ : /^(del|s)$/.test(t) ? /^(del|s)$/ : new RegExp('^' + t + '$');
+    var a = node.firstChild, z = node.lastChild;
+    return !!((a && a.nodeType === 1 && group.test(rt_tag(a))) || (z && z.nodeType === 1 && group.test(rt_tag(z))));
+  }
+
+  // Attributes Markdown cannot produce (style, title on a span…) keep the HTML.
+  function rt_hasForeignAttrs(node) {
+    var attrs = node.attributes || [];
+    for (var i = 0; i < attrs.length; i++) if (attrs[i].name !== 'class') return true;
+    return false;
   }
 
   function rt_inlineChildren(node) {
     var out = '';
     var kids = node.childNodes;
     for (var i = 0; i < kids.length; i++) out += rt_inlineNode(kids[i]);
-    return out;
+    // Text after a hard break starts a new source line: drop its indentation.
+    return out.replace(/\\\n[ \t]+/g, '\\\n');
   }
 
   function rt_inlineNode(node) {
-    if (node.nodeType === 3) return node.nodeValue.replace(/\s+/g, ' ');
+    if (node.nodeType === 3) {
+      var tx = rt_escText(node.nodeValue.replace(RT_WS, ' '));
+      // "Wow!" right before a link would turn the link into an image.
+      if (/!$/.test(tx) && rt_tag(node.nextSibling) === 'a') tx = tx.slice(0, -1) + '\\!';
+      // "^" right before a link would turn it into an inline footnote (^[…]).
+      // Text that only looks like a URL ("https://orz.how_", which linkify
+      // rejected) must not become one when escapes split it: "\\:" keeps the
+      // colon and stops linkify (round 12, L4).
+      if (tx.indexOf('://') >= 0) tx = tx.replace(/:\/\//g, '\\://');
+      // (Text carets are marks here, resolved per block later.)
+      if (tx.charAt(tx.length - 1) === MARK_CARET && rt_tag(node.nextSibling) === 'a') tx = tx.slice(0, -1) + '\\^';
+      return tx;
+    }
     if (node.nodeType !== 1) return '';
     var dm = rt_attr(node, 'data-md');
     if (dm != null) return dm;
-    if (node.classList && node.classList.contains('katex')) return rt_katex(node, false);
-    var tag = node.tagName.toLowerCase();
+    if (rt_hasClass(node, 'katex-error')) return '$' + (node.textContent || '').replace(/[\uFDD0-\uFDD3]/g, '\uFFFD') + '$';
+    if (rt_hasClass(node, 'katex')) return rt_katex(node, false);
+    if (rt_hasClass(node, 'footnote-backref')) return '';
+    var tag = rt_tag(node);
+    if (RT_INVISIBLE.test(tag)) return '';
+    if (RT_RAW_MEDIA.test(tag)) return node.outerHTML;
+    if (RT_INLINE_HTML.test(tag)) return rt_htmlWrap(node);
     switch (tag) {
-      case 'strong': case 'b': return '**' + rt_inlineChildren(node) + '**';
-      case 'em': case 'i': return '*' + rt_inlineChildren(node) + '*';
-      case 'code': return BT + (node.textContent || '') + BT;
-      case 'a':
-        var href = rt_attr(node, 'href') || '';
-        var title = rt_attr(node, 'title');
-        return '[' + rt_inlineChildren(node) + '](' + href + (title ? ' "' + title + '"' : '') + ')';
-      case 'del': case 's': return '~~' + rt_inlineChildren(node) + '~~';
-      case 'ins': return '++' + rt_inlineChildren(node) + '++';
-      case 'mark': return '==' + rt_inlineChildren(node) + '==';
-      case 'sub': return '~' + rt_inlineChildren(node) + '~';
-      case 'sup': return '^' + rt_inlineChildren(node) + '^';
-      case 'br': return '  \n';
+      case 'strong': case 'b': return rt_wrap(node, '**', 'strong');
+      case 'em': case 'i': return rt_wrap(node, '*', 'em');
+      case 'code': return rt_code(node.textContent || '');
+      case 'a': return rt_link(node);
+      case 'del': case 's': return rt_wrap(node, '~~', 'del');
+      case 'ins': return rt_wrap(node, '++', 'ins');
+      case 'mark': return rt_wrap(node, '==', 'mark');
+      // Sub/sup content cannot contain a bare space: escape it.
+      // Sub/sup bodies are plain text (a link in them comes from linkify and
+      // re-forms from the text; link syntax there would stay literal: round 13, L1).
+      case 'sub': return '~' + rt_escText((node.textContent || '').replace(RT_WS, ' ')).replace(/ /g, '\\ ') + '~';
+      case 'sup': return '^' + rt_escText((node.textContent || '').replace(RT_WS, ' ')).replace(/ /g, '\\ ') + '^';
+      case 'br': return rt_inTable || rt_inHeading ? '<br>' : '\\\n';
       case 'img': return rt_img(node);
       case 'input': return '';
       case 'span':
-        var spCls = (rt_attr(node, 'class') || '').trim();
-        return spCls ? '{{sp[' + spCls + '] ' + rt_inlineChildren(node) + '}}' : rt_inlineChildren(node);
+        if (rt_hasForeignAttrs(node)) return rt_htmlWrap(node);
+        var spCls = rt_trim(rt_attr(node, 'class') || '');
+        if (!spCls) return rt_inlineChildren(node);
+        var spInner = rt_inlineChildren(node);
+        // "]" in the class or "}}" in the text cannot be written as {{sp[…] …}}.
+        if (/\]/.test(spCls) || /\}\}/.test(spInner)) return rt_htmlWrap(node);
+        // A body ending in "}" closes with " }}" (round 18, M1).
+        return '{{sp[' + spCls + '] ' + spInner + (/\}$/.test(spInner) ? ' }}' : '}}');
       default: return rt_inlineChildren(node);
     }
   }
 
+  // ---- tables -----------------------------------------------------------------
   function rt_align(cell) {
     var style = (rt_attr(cell, 'style') || '').toLowerCase();
     if (style.indexOf('center') !== -1) return 'center';
@@ -209,30 +523,53 @@ export const browserRuntimeScript = String.raw`
     return '---';
   }
 
-  function rt_tableRows(headRow, bodyRows) {
-    var rows = [];
-    var header = [];
-    var aligns = [];
-    if (headRow) {
-      var hc = headRow.children;
-      for (var i = 0; i < hc.length; i++) { header.push(rt_inlineChildren(hc[i]).trim()); aligns.push(rt_align(hc[i])); }
+  function rt_cell(cell) {
+    rt_inTable = true;
+    try { return rt_escPipes(rt_trim(rt_inlineChildren(cell))); } finally { rt_inTable = false; }
+  }
+
+  function rt_tableRows(headRow, bodyRows, width) {
+    // Cells carry data-orz-col when cloned from a partial selection: place them
+    // in their real column so a value never shifts under another header.
+    function place(row) {
+      var out = [], kids = row ? row.children : [];
+      for (var i = 0; i < kids.length; i++) {
+        var col = rt_attr(kids[i], 'data-orz-col');
+        out[col != null ? +col : out.length] = kids[i];
+      }
+      return out;
     }
-    rows.push('| ' + header.join(' | ') + ' |');
+    var head = place(headRow);
+    var body = [];
+    for (var r0 = 0; r0 < bodyRows.length; r0++) body.push(place(bodyRows[r0]));
+    var w = width || head.length;
+    for (var r1 = 0; r1 < body.length; r1++) w = Math.max(w, body[r1].length);
+    var header = [], aligns = [];
+    for (var i = 0; i < w; i++) { header.push(head[i] ? rt_cell(head[i]) : ''); aligns.push(head[i] ? rt_align(head[i]) : (body[0] && body[0][i] ? rt_align(body[0][i]) : '')); }
+    var rows = ['| ' + header.join(' | ') + ' |'];
     var seps = [];
-    for (var s = 0; s < header.length; s++) seps.push(rt_sep(aligns[s]));
+    for (var s = 0; s < w; s++) seps.push(rt_sep(aligns[s]));
     rows.push('| ' + seps.join(' | ') + ' |');
-    for (var r = 0; r < bodyRows.length; r++) {
+    for (var r = 0; r < body.length; r++) {
       var cells = [];
-      var tds = bodyRows[r].children;
-      for (var c = 0; c < tds.length; c++) cells.push(rt_inlineChildren(tds[c]).trim());
+      for (var c = 0; c < w; c++) cells.push(body[r][c] ? rt_cell(body[r][c]) : '');
       rows.push('| ' + cells.join(' | ') + ' |');
     }
     return rows.join('\n');
   }
 
   function rt_table(tbl) {
-    var headRow = tbl.querySelector ? tbl.querySelector('thead tr') : null;
-    var bodyRows = tbl.querySelectorAll ? tbl.querySelectorAll('tbody tr') : [];
+    // Direct children, not querySelector: the latter is O(document) per table
+    // in Chrome, which made copying table-heavy documents quadratic.
+    var headRow = null, bodyRows = [];
+    for (var sec = tbl.firstElementChild; sec; sec = sec.nextElementSibling) {
+      var st = rt_tag(sec);
+      for (var tr = st === 'tr' ? sec : sec.firstElementChild; tr; tr = st === 'tr' ? null : tr.nextElementSibling) {
+        if (rt_tag(tr) !== 'tr') continue;
+        if (st === 'thead' && !headRow) headRow = tr;
+        else bodyRows.push(tr);
+      }
+    }
     return rt_tableRows(headRow, bodyRows);
   }
 
@@ -243,68 +580,170 @@ export const browserRuntimeScript = String.raw`
     var bodyRows = [];
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i];
-      var tag = p.tagName.toLowerCase();
-      if (tag === 'thead') { var tr = p.querySelector ? p.querySelector('tr') : null; if (tr && !headRow) headRow = tr; }
-      else if (tag === 'tbody') { var trs = p.querySelectorAll ? p.querySelectorAll('tr') : []; for (var j = 0; j < trs.length; j++) bodyRows.push(trs[j]); }
-      else if (tag === 'tr') { if (!headRow) headRow = p; else bodyRows.push(p); }
+      var tag = rt_tag(p);
+      var rows = tag === 'tr' ? [p] : (p.querySelectorAll ? p.querySelectorAll('tr') : []);
+      for (var j = 0; j < rows.length; j++) {
+        var row = rows[j];
+        var annotated = rt_attr(row, 'data-orz-body') != null;
+        // A selected body row stays a body row (the header cell stays empty);
+        // unannotated bare rows keep the old rule: the first one heads.
+        var isHead = !annotated && (tag === 'thead' || (tag === 'tr' && !headRow && !rt_anyAnnotated(parts)));
+        if (isHead && !headRow) headRow = row;
+        else bodyRows.push(row);
+      }
     }
     return rt_tableRows(headRow, bodyRows);
   }
 
+  function rt_anyAnnotated(parts) {
+    for (var i = 0; i < parts.length; i++) {
+      if (rt_attr(parts[i], 'data-orz-body') != null || rt_attr(parts[i], 'data-orz-col') != null) return true;
+      if (parts[i].querySelector && parts[i].querySelector('[data-orz-col]')) return true;
+    }
+    return false;
+  }
+
+  // ---- code blocks ------------------------------------------------------------
   function rt_codeBlock(pre) {
     var code = pre.querySelector ? (pre.querySelector('code') || pre) : pre;
     var lang = '';
-    var cls = rt_attr(code, 'class') || '';
-    var m = cls.match(/language-([A-Za-z0-9_+#-]+)/);
+    // Only markdown-it's own class (first, "language-<info>") names the fence;
+    // highlight.js appends "hljs language-<guess>" to unlabeled blocks.
+    var m = (rt_attr(code, 'class') || '').match(/^language-(\S+)/);
     if (m) lang = m[1];
-    var text = (code.textContent || '').replace(/\n$/, '');
-    return FENCE + lang + '\n' + text + '\n' + FENCE;
+    var original = code.textContent || '';
+    var text = original.replace(/\n$/, '');
+    // The fence must be longer than any backtick fence inside the code.
+    var longest = 2;
+    var inner = text.match(/^ {0,3}\x60{3,}/gm) || [];
+    for (var i = 0; i < inner.length; i++) longest = Math.max(longest, inner[i].replace(/ /g, '').length);
+    var fence = rt_repeat(BT, longest + 1);
+    rt_protected.push(fence + lang + '\n' + (original ? text + '\n' : '') + fence);
+    return '\uFDD1' + (rt_protected.length - 1) + '\uFDD1';
   }
 
-  function rt_list(node, ordered, depth) {
-    var items = [];
-    var idx = 1;
+  // ---- lists ------------------------------------------------------------------
+  function rt_isLooseItem(li) {
+    var kids = li.childNodes;
+    // KaTeX renders display math as <p class="katex-block">: not a paragraph
+    // of the item, so a tight list holding display math stays tight.
+    for (var i = 0; i < kids.length; i++) {
+      if (rt_tag(kids[i]) === 'p' && !rt_hasClass(kids[i], 'katex-block')) return true;
+    }
+    return false;
+  }
+
+  function rt_taskPrefix(li) {
+    var first = li.firstElementChild;
+    if (first && rt_tag(first) === 'p') first = first.firstElementChild;
+    if (!first || rt_tag(first) !== 'input' || rt_attr(first, 'type') !== 'checkbox') return '';
+    return (first.checked || rt_attr(first, 'checked') != null) ? '[x] ' : '[ ] ';
+  }
+
+  function rt_list(node, ordered, alt) {
+    var start = ordered ? parseInt(rt_attr(node, 'start') || '1', 10) : 1;
+    if (isNaN(start)) start = 1;
+    var lis = [], loose = false;
     var kids = node.childNodes;
     for (var i = 0; i < kids.length; i++) {
-      var li = kids[i];
-      if (li.nodeType !== 1 || li.tagName.toLowerCase() !== 'li') continue;
-      items.push(rt_listItem(li, ordered, idx, depth));
-      idx++;
+      if (rt_tag(kids[i]) !== 'li') continue;
+      lis.push(kids[i]);
+      if (rt_isLooseItem(kids[i])) loose = true;
     }
-    return items.join('\n');
+    // A list without paragraphs renders the same tight or loose, so when an item
+    // must keep a quote, table or list apart from the block after it (one
+    // newline would merge them), and no item holds bare inline text (which a
+    // loose list would wrap in <p>), copy it loose (round 12, M1).
+    if (!loose) {
+      var bare = false, needs = false;
+      for (var b = 0; b < lis.length; b++) {
+        var prevBlock = '';
+        for (var c = lis[b].firstChild; c; c = c.nextSibling) {
+          var ct = rt_tag(c);
+          if (c.nodeType === 3) { if (rt_trim(c.nodeValue || '')) bare = true; continue; }
+          if (!rt_isBlockElement(c) && ct !== 'ul' && ct !== 'ol') { bare = true; continue; }
+          if (/^(blockquote|table|ul|ol)$/.test(prevBlock)) needs = true;
+          prevBlock = ct;
+        }
+      }
+      if (needs && !bare) loose = true;
+    }
+    var items = [];
+    // "alt": a list directly after a list of the same kind switches its marker
+    // ("-"→"*", "."→")"), otherwise the two would merge into one list.
+    for (var j = 0; j < lis.length; j++) items.push(rt_listItem(lis[j], ordered ? (start + j) + (alt ? ') ' : '. ') : (alt ? '* ' : '- '), loose));
+    return items.join(loose ? '\n\n' : '\n');
   }
 
-  function rt_listItem(li, ordered, idx, depth) {
-    var indent = rt_repeat('  ', depth);
-    var marker = ordered ? (idx + '. ') : '- ';
-    var task = '';
-    var cb = li.querySelector ? li.querySelector('input[type="checkbox"]') : null;
-    if (cb) task = (cb.checked || rt_attr(cb, 'checked') != null) ? '[x] ' : '[ ] ';
-    var inlineParts = '';
-    var nested = '';
-    var kids = li.childNodes;
-    for (var i = 0; i < kids.length; i++) {
-      var c = kids[i];
-      if (c.nodeType === 1 && /^(ul|ol)$/.test(c.tagName.toLowerCase())) {
-        nested += '\n' + rt_list(c, c.tagName.toLowerCase() === 'ol', depth + 1);
-      } else {
-        inlineParts += rt_inlineNode(c);
-      }
+  // One item: its blocks in order, continuation lines indented under the marker.
+  function rt_listItem(li, marker, loose) {
+    var blocks = [];
+    var inline = '';
+    function flush() {
+      var t = rt_trim(inline);
+      if (t) blocks.push(rt_escLineStarts(t));
+      inline = '';
     }
-    inlineParts = inlineParts.replace(/\s+/g, ' ').trim();
-    return indent + marker + task + inlineParts + nested;
+    var kids = li.childNodes;
+    var prevList = '', prevAlt = false;
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      var tag = rt_tag(k);
+      if ((tag === 'ul' || tag === 'ol') && rt_attr(k, 'data-md') == null) {
+        flush();
+        // A list right after a list of the same kind in one item switches its
+        // marker, or the two would merge (round 11, M2).
+        var alt = prevList === tag ? !prevAlt : false;
+        blocks.push(rt_list(k, tag === 'ol', alt));
+        prevList = tag; prevAlt = alt;
+        continue;
+      }
+      if (k.nodeType === 1 || rt_trim(k.nodeValue || '')) prevList = '';
+      if (rt_isBlockElement(k)) {
+        flush();
+        var b = rt_blockNode(k);
+        if (rt_trim(b)) blocks.push(b);
+        continue;
+      }
+      inline += rt_inlineNode(k);
+    }
+    flush();
+    // In a tight item a quote followed by another block ends with an empty ">"
+    // line, so the next block is not read as a lazy continuation of the quote.
+    if (!loose) for (var q = 0; q < blocks.length - 1; q++) if (/^>/.test(blocks[q])) blocks[q] += '\n>';
+    var body = blocks.join(loose ? '\n\n' : '\n');
+    var pad = rt_repeat(' ', marker.length);
+    var lines = body.split('\n');
+    for (var l = 1; l < lines.length; l++) if (lines[l]) lines[l] = pad + lines[l];
+    return marker + rt_taskPrefix(li) + lines.join('\n');
   }
 
   function rt_blockquote(node) {
-    var inner = rt_blockChildren(node);
-    var lines = inner.split('\n');
+    var lines = rt_blockChildren(node).split('\n');
     var out = [];
     for (var i = 0; i < lines.length; i++) out.push(lines[i] ? '> ' + lines[i] : '>');
     return out.join('\n');
   }
 
+  // ---- footnotes --------------------------------------------------------------
+  // Definitions carry their label (data-footnote-label); inline footnotes have
+  // none and are restored from the reference's data-md instead.
+  function rt_footnoteDefs(section) {
+    var items = section.querySelectorAll ? section.querySelectorAll('li.footnote-item') : [];
+    var defs = [];
+    for (var i = 0; i < items.length; i++) {
+      var label = rt_attr(items[i], 'data-footnote-label');
+      if (label == null) continue;
+      var lines = rt_blockChildren(items[i]).split('\n');
+      for (var l = 1; l < lines.length; l++) if (lines[l]) lines[l] = '    ' + lines[l];
+      defs.push('[^' + label + ']: ' + lines.join('\n'));
+    }
+    return defs.join('\n\n');
+  }
+
   function rt_blockChildren(node) {
     var parts = [];
+    var prevList = null;
     var kids = node.childNodes;
     var i = 0;
     while (i < kids.length) {
@@ -312,59 +751,106 @@ export const browserRuntimeScript = String.raw`
       // A selection can contain bare <li> elements (when the user selects a
       // list's contents rather than the <ul>/<ol> wrapper). Group a run of them
       // into a bullet list instead of emitting each as a separate block.
-      if (k.nodeType === 1 && k.tagName.toLowerCase() === 'li') {
+      if (rt_tag(k) === 'li') {
         var lis = [];
         while (i < kids.length) {
           var kk = kids[i];
-          if (kk.nodeType === 1 && kk.tagName.toLowerCase() === 'li') { lis.push(kk); i++; }
-          else if (kk.nodeType === 3 && !(kk.nodeValue || '').trim()) { i++; }
+          if (rt_tag(kk) === 'li') { lis.push(kk); i++; }
+          else if (kk.nodeType === 3 && !rt_trim(kk.nodeValue || '')) { i++; }
           else break;
         }
         var items = [];
-        for (var j = 0; j < lis.length; j++) items.push(rt_listItem(lis[j], false, j + 1, 0));
+        for (var j = 0; j < lis.length; j++) items.push(rt_listItem(lis[j], '- ', false));
         parts.push(items.join('\n'));
         continue;
       }
       // Bare table-internal nodes (selection inside a table that lost its
       // <table> wrapper) — reconstruct a Markdown table.
-      if (k.nodeType === 1 && /^(thead|tbody|tr)$/.test(k.tagName.toLowerCase())) {
+      if (/^(thead|tbody|tr)$/.test(rt_tag(k))) {
         var trows = [];
         while (i < kids.length) {
           var tk = kids[i];
-          if (tk.nodeType === 1 && /^(thead|tbody|tr)$/.test(tk.tagName.toLowerCase())) { trows.push(tk); i++; }
-          else if (tk.nodeType === 3 && !(tk.nodeValue || '').trim()) { i++; }
+          if (/^(thead|tbody|tr)$/.test(rt_tag(tk))) { trows.push(tk); i++; }
+          else if (tk.nodeType === 3 && !rt_trim(tk.nodeValue || '')) { i++; }
           else break;
         }
         parts.push(rt_tableFromParts(trows));
         continue;
       }
-      var s = rt_blockNode(k);
-      if (s && s.replace(/\s/g, '') !== '') parts.push(s.replace(/\s+$/, ''));
+      var kt = rt_tag(k);
+      var s;
+      // A list carrying data-md (a {{toc}}) copies as its directive, not as a
+      // list continuing the previous one (round 16, M1).
+      var dm = rt_attr(k, 'data-md') != null;
+      if ((kt === 'ul' || kt === 'ol') && !dm && prevList && prevList.tag === kt) {
+        s = rt_list(k, kt === 'ol', !prevList.alt);
+        prevList = { tag: kt, alt: !prevList.alt };
+      } else {
+        s = rt_blockNode(k);
+        if ((kt === 'ul' || kt === 'ol') && !dm) prevList = { tag: kt, alt: false };
+        else if (dm) prevList = null;
+        else if (s && rt_trim(s) !== '') prevList = null;
+      }
+      if (s && rt_trim(s) !== '') parts.push(s.replace(/[ \t\n\r\f]+$/, ''));
       i++;
     }
     return parts.join('\n\n');
   }
 
+  // A block with no visible content (an empty clone a selection boundary left
+  // behind) is dropped; images, rules and generated constructs are content.
+  function rt_isEmptyClone(node) {
+    if (rt_flat(node.textContent || '')) return false;
+    // An authored empty code block is content too (indistinguishable from a
+    // boundary clone, which rt_trimRange already prevents).
+    if (/^(hr|img|pre)$/.test(rt_tag(node)) || rt_attr(node, 'data-md') != null) return false;
+    return !(node.querySelector && node.querySelector('img, hr, svg, canvas, iframe, video, audio, [data-md], input'));
+  }
+
+  // ---- containers -------------------------------------------------------------
   var rt_containerNames = ['info', 'success', 'warning', 'danger', 'left', 'right', 'center', 'cols', 'col', 'tabs', 'tab'];
-  // A markdown-it-container div.name (or details.spoil) -> its ::: name
-  // directive name, or null if the node is not a container.
+  // A container element -> its ::: directive (name plus arguments), or null.
+  // Renders since 2.0.0 carry data-orz-container whenever the class alone would
+  // lose information; older renders fall back to class/style detection.
   function rt_containerName(node) {
     if (node.nodeType !== 1 || !node.classList) return null;
-    var tag = node.tagName.toLowerCase();
+    var tag = rt_tag(node);
+    var info = rt_attr(node, 'data-orz-container');
+    if (info && tag === 'div') return info;
     if (tag === 'details' && node.classList.contains('spoil')) {
+      var labelled = null; // its OWN summary, not a nested spoiler's
+      for (var sc = node.firstElementChild; sc; sc = sc.nextElementSibling) if (rt_tag(sc) === 'summary') { if (rt_attr(sc, 'data-orz-container')) labelled = sc; break; }
+      if (labelled) return rt_attr(labelled, 'data-orz-container');
       var sum = node.querySelector ? node.querySelector('summary') : null;
-      var title = sum ? (sum.textContent || '').trim() : '';
-      return title ? 'spoil ' + title : 'spoil';
+      var title = sum ? rt_trim(sum.textContent || '') : '';
+      return title && title !== 'Show/hide' ? 'spoil ' + title : 'spoil';
     }
     if (tag !== 'div') return null;
     for (var i = 0; i < rt_containerNames.length; i++) {
       var n = rt_containerNames[i];
       if (node.classList.contains(n)) {
         if (n === 'tab') { var lbl = rt_attr(node, 'data-label'); return lbl ? 'tab ' + lbl : 'tab'; }
+        if (n === 'cols') { var ratio = rt_colsRatio(node); return ratio ? 'cols ' + ratio : 'cols'; }
+        if (n === 'left') { var lw = rt_styleValue(node, 'max-width'); return lw ? 'left ' + lw : 'left'; }
         return n;
       }
     }
     return null;
+  }
+  // One declaration's value from an element's inline style ('' if absent).
+  function rt_styleValue(node, prop) {
+    var decls = (rt_attr(node, 'style') || '').split(';');
+    for (var i = 0; i < decls.length; i++) {
+      var c = decls[i].indexOf(':');
+      if (c !== -1 && rt_trim(decls[i].slice(0, c)).toLowerCase() === prop) return rt_trim(decls[i].slice(c + 1));
+    }
+    return '';
+  }
+  // "::: cols 1 2" renders grid-template-columns: 1fr 2fr; recover "1 2".
+  function rt_colsRatio(node) {
+    var v = rt_styleValue(node, 'grid-template-columns');
+    if (!v) return '';
+    return v.split(/\s+/).map(function (p) { return /^\d+(\.\d+)?fr$/.test(p) ? p.slice(0, -2) : p; }).join(' ');
   }
   // Emit a ::: name ... ::: block, using a fence longer than any inner fence so
   // nested containers (cols > col, tabs > tab) re-parse correctly.
@@ -373,78 +859,117 @@ export const browserRuntimeScript = String.raw`
     var kids = node.childNodes;
     for (var i = 0; i < kids.length; i++) {
       var k = kids[i];
-      if (k.nodeType === 1) {
-        var ktag = k.tagName.toLowerCase();
-        if (ktag === 'summary') continue; // spoil title, captured in the name
-        if (k.classList && k.classList.contains('tabs-bar')) continue; // JS-injected tab buttons
-      }
+      if (rt_tag(k) === 'summary') continue; // spoil title, captured in the name
+      if (rt_hasClass(k, 'tabs-bar')) continue; // JS-injected tab buttons
       var m = rt_blockNode(k);
-      if (m && m.trim()) parts.push(m.trim());
+      if (m && rt_trim(m)) parts.push(rt_trim(m));
     }
     var inner = parts.join('\n\n');
     var maxFence = 2;
-    var lines = inner.split('\n');
+    // Count fences inside code placeholders too: a ":::" line in a code example
+    // would otherwise close the container on re-render.
+    var lines = inner.replace(/\uFDD1(\d+)\uFDD1/g, function (m, n) { return rt_protected[+n] || ''; }).split('\n');
     for (var j = 0; j < lines.length; j++) {
-      var mm = lines[j].match(/^(:{3,})/);
+      var mm = lines[j].match(/^[ \t>]*(:{3,})/);
       if (mm && mm[1].length > maxFence) maxFence = mm[1].length;
     }
     var fence = rt_repeat(':', Math.max(3, maxFence + 1));
     return fence + ' ' + name + '\n' + inner + '\n' + fence;
   }
 
+  // ---- blocks -----------------------------------------------------------------
   function rt_blockNode(node) {
     if (node.nodeType === 3) {
       var t = node.nodeValue;
-      return (t && t.trim()) ? t.replace(/\s+/g, ' ').trim() : '';
+      return (t && rt_trim(t)) ? rt_escText(rt_trim(t.replace(RT_WS, ' '))) : '';
     }
     if (node.nodeType !== 1) return '';
     var dm = rt_attr(node, 'data-md');
-    if (dm != null) return dm;
-    if (node.classList) {
-      // Display math: the katex-display span OR its katex-block <p> wrapper.
-      // Without this the wrapper is walked as a paragraph and the inner katex is
-      // emitted as inline math instead of a block equation.
-      if (node.classList.contains('katex-display') || node.classList.contains('katex-block')) {
-        var k = node.querySelector ? node.querySelector('.katex') : null;
-        return rt_katex(k || node, true);
-      }
-      if (node.classList.contains('mermaid')) return '{{mermaid\n' + (node.textContent || '').trim() + '\n}}';
+    if (dm != null) {
+      // A multi-line directive's body is data (block scalars, diagram text):
+      // protect it like code so whitespace cleanup cannot touch blank lines.
+      if (dm.indexOf('\n') < 0) return dm;
+      rt_protected.push(dm);
+      return '\uFDD1' + (rt_protected.length - 1) + '\uFDD1';
     }
-    var tag = node.tagName.toLowerCase();
+    // An authored container wins over runtime class names it may share
+    // ("::: footnotes", "::: mermaid").
+    var info = rt_tag(node) === 'div' ? rt_attr(node, 'data-orz-container') : null;
+    if (info) return rt_containerMd(node, info);
+    // Display math: the katex-display span OR its katex-block <p> wrapper.
+    if (rt_hasClass(node, 'katex-display') || rt_hasClass(node, 'katex-block')) {
+      var k = node.querySelector ? node.querySelector('.katex') : null;
+      return rt_katex(k || node, true);
+    }
+    if (rt_hasClass(node, 'mermaid')) return '{{mermaid\n' + rt_trim(node.textContent || '') + '\n}}';
+    if (rt_hasClass(node, 'footnotes-sep')) return '';
+    if (rt_hasClass(node, 'footnotes')) return rt_footnoteDefs(node);
+    var tag = rt_tag(node);
+    if (RT_INVISIBLE.test(tag)) return '';
+    if (RT_RAW_MEDIA.test(tag)) return node.outerHTML;
     var hm = tag.match(/^h([1-6])$/);
-    if (hm) return rt_repeat('#', parseInt(hm[1], 10)) + ' ' + rt_inlineChildren(node).trim();
+    if (hm) {
+      rt_inHeading = true;
+      var htext;
+      try { htext = rt_trim(rt_inlineChildren(node)); } finally { rt_inHeading = false; }
+      return rt_repeat('#', parseInt(hm[1], 10)) + ' ' + htext.replace(/(^|[ \t])(#+)$/, '$1\\$2');
+    }
     switch (tag) {
-      case 'p': return rt_inlineChildren(node).trim();
-      case 'ul': return rt_list(node, false, 0);
-      case 'ol': return rt_list(node, true, 0);
+      case 'p': return rt_escLineStarts(rt_trim(rt_inlineChildren(node)));
+      case 'ul': return rt_list(node, false);
+      case 'ol': return rt_list(node, true);
       case 'pre': return rt_codeBlock(node);
       case 'blockquote': return rt_blockquote(node);
       case 'table': return rt_table(node);
-      case 'hr': return '---';
-      case 'li': return rt_inlineChildren(node).trim();
+      case 'hr': return '___'; // "- ---" or "* ***" would itself be a thematic break
+      case 'li': return rt_listItem(node, '- ', false);
       case 'figure': case 'div': case 'section': case 'article': case 'details': case 'summary':
         var cn = rt_containerName(node);
+        if (!cn && tag === 'details') return node.outerHTML; // raw HTML <details>, not ::: spoil
         if (cn) return rt_containerMd(node, cn);
         return rt_blockChildren(node);
-      default: return rt_inlineNode(node).trim();
+      default: return rt_trim(rt_inlineNode(node));
     }
   }
 
   function elementToMarkdown(root) {
     if (!root) return '';
+    rt_inTable = false;
+    rt_protected = [];
     var hasBlock = false;
     var kids = root.childNodes || [];
     for (var i = 0; i < kids.length; i++) {
       if (rt_isBlockElement(kids[i])) { hasBlock = true; break; }
     }
     var out = hasBlock ? rt_blockChildren(root) : rt_inlineChildren(root);
-    return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+    out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, '');
+    out = out.split(/\n{2,}/).map(rt_resolveMarks).join('\n\n');
+    // Restore code blocks, re-applying the indentation / quote prefix of the
+    // placeholder's line to every line of the code (blank lines keep only ">").
+    var saved = rt_protected;
+    rt_protected = [];
+    // The prefix may hold quote markers, list markers ("- ", "1. ", "[ ] ") and a
+    // footnote label: continuation lines keep the ">"s and turn every marker
+    // into indentation of its width (a footnote label into four spaces).
+    return out.replace(/^((?:[ \t]*(?:>|[-+*](?=[ \t])|\d{1,9}[.)](?=[ \t])|\[[ xX]\](?=[ \t])|\[\^[^\]\n]+\]:))*[ \t]*)\uFDD1(\d+)\uFDD1/gm, function (m, prefix, n) {
+      var cont = prefix
+        // markdown-it-footnote strips up to 5 columns from a definition's
+        // continuation lines whatever the label (measured for [^a]: and
+        // [^note]:), so code keeps its relative indent and the closing fence
+        // stays within reach.
+        .replace(/\[\^[^\]\n]+\]:[ \t]*/g, '     ')
+        .replace(/(?:[-+*]|\d{1,9}[.)]|\[[ xX]\])(?=[ \t])/g, function (mk) { return rt_repeat(' ', mk.length); });
+      var bare = cont.replace(/[ \t]+$/, '');
+      return saved[+n].split('\n').map(function (line, i) {
+        return i === 0 ? prefix + line : (line ? cont + line : bare);
+      }).join('\n');
+    });
   }
 
   function rt_isEditable(node) {
     while (node) {
       if (node.nodeType === 1) {
-        var tag = node.tagName.toLowerCase();
+        var tag = rt_tag(node);
         if (tag === 'input' || tag === 'textarea') return true;
         if (node.isContentEditable) return true;
       }
@@ -457,12 +982,13 @@ export const browserRuntimeScript = String.raw`
     return node.nodeType === 1 && node.classList &&
       (node.classList.contains('markdown-body') || rt_attr(node, 'data-orz-copy') != null);
   }
-  function rt_withinCopyRoot(node) {
+  // The nearest copy root containing node, or null.
+  function rt_copyRootOf(node) {
     while (node) {
-      if (rt_isCopyRoot(node)) return true;
+      if (rt_isCopyRoot(node)) return node;
       node = node.parentNode;
     }
-    return false;
+    return null;
   }
 
   // When a selection sits entirely within one table/blockquote/pre — or inside a
@@ -475,17 +1001,226 @@ export const browserRuntimeScript = String.raw`
     var container = null;
     while (node && !rt_isCopyRoot(node)) {
       if (node.nodeType === 1) {
-        var tag = node.tagName.toLowerCase();
+        var tag = rt_tag(node);
         if (tag === 'table' || tag === 'blockquote' || tag === 'pre') return node;
         // A selection inside a display equation copies the whole block equation;
         // a partial KaTeX fragment is not valid Markdown.
-        if (node.classList &&
-            (node.classList.contains('katex-block') || node.classList.contains('katex-display'))) return node;
+        if (rt_hasClass(node, 'katex-block') || rt_hasClass(node, 'katex-display')) return node;
         if (rt_containerName(node)) container = node;
       }
       node = node.parentNode;
     }
     return container;
+  }
+
+  // An element copy cannot split: inline math, generated constructs.
+  function rt_atomicAncestor(node, root) {
+    var found = null;
+    while (node && node !== root) {
+      if (node.nodeType === 1 && (rt_hasClass(node, 'katex') || rt_hasClass(node, 'katex-error') || rt_attr(node, 'data-md') != null)) found = node; // guarded math is atomic too (round 20, B-M3)
+      node = node.parentNode;
+    }
+    return found;
+  }
+
+  function rt_closest(node, re, root) {
+    while (node && node !== root) {
+      if (re.test(rt_tag(node))) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  // Visible text of a range / node, whitespace-normalised for comparison.
+  function rt_flat(s) { return (s || '').replace(/[ \t\n\r\f]+/g, ''); }
+
+  // Ordered lists cut by the range start must number their first copied item
+  // with its real number. Bare items (the range lies inside one list) get a
+  // shell of that list; lists cloned along the start path get "start".
+  function rt_fixListStarts(range, frag, commonEl) {
+    var doc = global.document;
+    // Walk the start path below commonEl; its clones are the first children
+    // down the fragment. Every ordered list cut by the start gets its number.
+    var path = [];
+    for (var n = range.startContainer; n && n !== commonEl; n = n.parentNode) path.unshift(n);
+    var clone = frag.firstChild;
+    while (clone && rt_isBlankNode(clone)) clone = clone.nextSibling;
+    for (var k = 0; k < path.length && clone; k++) {
+      var orig = path[k];
+      if (rt_tag(orig) !== rt_tag(clone)) break;
+      if (rt_tag(orig) === 'ol') {
+        var it = rt_itemOf(orig, range.startContainer, range.startOffset);
+        if (it) clone.setAttribute('start', String(rt_itemNumber(orig, it)));
+      }
+      clone = clone.firstChild;
+      while (clone && rt_isBlankNode(clone)) clone = clone.nextSibling;
+    }
+    // The range lies inside one list: bare items get a shell of that list.
+    if (rt_tag(commonEl) === 'ul' || rt_tag(commonEl) === 'ol') {
+      var shell = commonEl.cloneNode(false);
+      if (rt_tag(commonEl) === 'ol') {
+        var item = rt_itemOf(commonEl, range.startContainer, range.startOffset);
+        if (item) shell.setAttribute('start', String(rt_itemNumber(commonEl, item)));
+      }
+      shell.appendChild(frag);
+      var holder = doc.createDocumentFragment();
+      holder.appendChild(shell);
+      return holder;
+    }
+    return frag;
+  }
+
+  // The <li> child of a list that contains node (or the item at a boundary offset).
+  function rt_itemOf(list, node, offset) {
+    if (node === list) {
+      var at = list.childNodes[offset] || null;
+      while (at && rt_tag(at) !== 'li') at = at.nextSibling;
+      return at;
+    }
+    while (node && node.parentNode !== list) node = node.parentNode;
+    return node && rt_tag(node) === 'li' ? node : null;
+  }
+  // The number an ordered list's item carries (start + preceding items).
+  function rt_itemNumber(list, item) {
+    var n = parseInt(rt_attr(list, 'start') || '1', 10);
+    if (isNaN(n)) n = 1;
+    for (var c = list.firstElementChild; c && c !== item; c = c.nextElementSibling) if (rt_tag(c) === 'li') n++;
+    return n;
+  }
+
+  function rt_isBlankNode(n) {
+    return n.nodeType === 8 || (n.nodeType === 3 && !rt_trim(n.nodeValue || ''));
+  }
+  // Chrome ends a triple-click (and a drag past a block's end) at offset 0 of
+  // the NEXT block, a drag from the end of a line starts at the end of the
+  // PREVIOUS block, and both may land inside content that is not visible (a
+  // hidden tab panel, a closed spoiler's answer, a data island). The range is
+  // therefore narrowed to its first and last VISIBLE selected content — a text
+  // node with selected non-whitespace, or a media element — so nothing the user
+  // could not see is copied, and the common ancestor is the element the user
+  // actually selected in (a code line stays inside its <pre>).
+  var RT_MEDIA_LEAF = /^(img|svg|canvas|iframe|video|audio|hr|input)$/;
+  var rt_hasLayout = null;
+  function rt_visible(node, root) {
+    if (rt_hasLayout === null) {
+      var b = global.document && global.document.body;
+      rt_hasLayout = !!(b && b.getClientRects && b.getClientRects().length);
+    }
+    var el = node.nodeType === 3 ? node.parentNode : node;
+    for (var a = el; a && a !== root; a = a.parentNode) {
+      if (a.nodeType !== 1) continue;
+      if (RT_INVISIBLE.test(rt_tag(a))) return false;
+      // Content of a closed <details> (everything but its summary) is hidden.
+      var up = a.parentNode;
+      if (up && rt_tag(up) === 'details' && !up.hasAttribute('open') && rt_tag(a) !== 'summary') return false;
+    }
+    if (!rt_hasLayout) return true; // no layout engine (tests): trust structure
+    if (!(el.getClientRects && el.getClientRects().length)) return false;
+    var cs = global.getComputedStyle ? global.getComputedStyle(el) : null;
+    return !cs || cs.visibility !== 'hidden';
+  }
+  function rt_trimRange(range, root) {
+    var scope = range.commonAncestorContainer;
+    if (scope.nodeType === 3) scope = scope.parentNode;
+    var doc = global.document;
+    // Walk only from the start boundary to the end boundary (linear in the
+    // selection, not the document; Range.intersectsNode per node is O(index)).
+    var startNode = range.startContainer.nodeType === 3 ? range.startContainer
+      : (range.startContainer.childNodes[range.startOffset] || rt_nextInTree(range.startContainer, scope));
+    var endNode = range.endContainer.nodeType === 3 ? range.endContainer
+      : (range.endOffset > 0 ? rt_deepestLast(range.endContainer.childNodes[range.endOffset - 1]) : rt_prevInTree(range.endContainer, scope));
+    if (!startNode || !endNode) return;
+    var walker = doc.createTreeWalker(scope, 5 /* SHOW_ELEMENT | SHOW_TEXT */, null);
+    walker.currentNode = startNode;
+    var first = null, last = null, firstOff = 0, lastOff = 0;
+    for (var n = startNode; n; n = (n === endNode ? null : walker.nextNode())) {
+      if (n.nodeType === 1 && !RT_MEDIA_LEAF.test(rt_tag(n))) continue;
+      if (!rt_visible(n, root)) continue;
+      if (n.nodeType === 3) {
+        var from = n === range.startContainer ? range.startOffset : 0;
+        var to = n === range.endContainer ? range.endOffset : n.nodeValue.length;
+        var piece = n.nodeValue.slice(from, to);
+        if (!rt_trim(piece)) continue;
+        if (!first) { first = n; firstOff = from + piece.search(/[^ \t\n\r\f]/); }
+        last = n; lastOff = from + piece.replace(/[ \t\n\r\f]+$/, '').length;
+      } else {
+        if (!first) { first = n; firstOff = -1; }
+        last = n; lastOff = -1;
+      }
+    }
+    if (!first) return;
+    var orig = range.cloneRange();
+    if (firstOff < 0) range.setStartBefore(first); else range.setStart(first, firstOff);
+    if (lastOff < 0) range.setEndAfter(last); else range.setEnd(last, lastOff);
+    // Inside code, whitespace is content: if the narrowed range lies in one
+    // code element that the original ends were in too, keep the user's exact
+    // boundaries (the first line's indentation). A selection that began before
+    // the code (dragged in from the paragraph above) starts at the code's own
+    // start, so its first line keeps its indentation too.
+    // A selection that starts inside code and runs on out of it keeps its exact
+    // start: inside code the leading spaces are the line's indentation (round 11, H3).
+    // A selection that took a block element itself (its boundaries, not only
+    // its text: select-all, a drag from before it, a range around it) copies
+    // that whole block — a code block fenced, a heading with its "#", a list
+    // item with its marker (round 18, M4). A text-only selection inside code
+    // still copies verbatim.
+    function coveredWhole(node) {
+      var r = global.document.createRange();
+      r.selectNode(node);
+      return orig.compareBoundaryPoints(0 /* START_TO_START */, r) <= 0 && orig.compareBoundaryPoints(2 /* END_TO_END */, r) >= 0;
+    }
+    var whole = null;
+    for (var wb = range.commonAncestorContainer; wb && wb !== root; wb = wb.parentNode) {
+      if (wb.nodeType === 1 && rt_isBlockElement(wb) && coveredWhole(wb)) whole = wb;
+    }
+    if (whole) { range.setStartBefore(whole); range.setEndAfter(whole); return; }
+    var codeStart = rt_closest(first.nodeType === 3 ? first.parentNode : first, /^(pre|code)$/, root);
+    if (codeStart && codeStart.contains(orig.startContainer)) range.setStart(orig.startContainer, orig.startOffset);
+    var codeAfter = rt_closest(range.commonAncestorContainer, /^(pre|code)$/, root);
+    if (codeAfter) {
+      if (codeAfter.contains(orig.startContainer)) range.setStart(orig.startContainer, orig.startOffset);
+      else range.setStart(codeAfter, 0);
+      if (codeAfter.contains(orig.endContainer)) range.setEnd(orig.endContainer, orig.endOffset);
+      return;
+    }
+    // Widen back out through inline wrappers the original selection covered
+    // whole (selecting all of a cell keeps its <strong>/<a>/<code>).
+    function covered(node) {
+      var r = global.document.createRange();
+      r.selectNode(node);
+      return orig.compareBoundaryPoints(0 /* START_TO_START */, r) <= 0 && orig.compareBoundaryPoints(2 /* END_TO_END */, r) >= 0;
+    }
+    function inlineWrapper(n) { return n && n.nodeType === 1 && n !== root && !rt_isBlockElement(n); }
+    if (firstOff <= 0) {
+      var a = first;
+      while (inlineWrapper(a.parentNode) && rt_firstContent(a.parentNode) === a && covered(a.parentNode)) a = a.parentNode;
+      if (a !== first) range.setStartBefore(a);
+    }
+    if (lastOff < 0 || (last.nodeType === 3 && lastOff === rt_trim(last.nodeValue).length + last.nodeValue.search(/[^ \t\n\r\f]|$/))) {
+      var z = last;
+      while (inlineWrapper(z.parentNode) && rt_lastContent(z.parentNode) === z && covered(z.parentNode)) z = z.parentNode;
+      if (z !== last) range.setEndAfter(z);
+    }
+  }
+  function rt_deepestLast(node) {
+    while (node && node.lastChild) node = node.lastChild;
+    return node;
+  }
+  function rt_nextInTree(node, scope) {
+    for (var n = node; n && n !== scope; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
+    return null;
+  }
+  function rt_prevInTree(node, scope) {
+    for (var n = node; n && n !== scope; n = n.parentNode) if (n.previousSibling) return rt_deepestLast(n.previousSibling);
+    return null;
+  }
+  function rt_firstContent(el) {
+    for (var c = el.firstChild; c; c = c.nextSibling) if (!rt_isBlankNode(c)) return c;
+    return null;
+  }
+  function rt_lastContent(el) {
+    for (var c = el.lastChild; c; c = c.previousSibling) if (!rt_isBlankNode(c)) return c;
+    return null;
   }
 
   function onCopy(event) {
@@ -494,22 +1229,126 @@ export const browserRuntimeScript = String.raw`
       : (global.document.getSelection ? global.document.getSelection() : null);
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     if (rt_isEditable(sel.anchorNode) || rt_isEditable(sel.focusNode)) return;
-    if (!rt_withinCopyRoot(sel.anchorNode) && !rt_withinCopyRoot(sel.focusNode)) return;
-
     var md;
-    var range0 = sel.getRangeAt(0);
-    var common = range0.commonAncestorContainer;
-    var promoted = rt_promotableBlock(common.nodeType === 1 ? common : common.parentNode);
-    if (promoted && sel.rangeCount === 1) {
+    var range = sel.getRangeAt(0).cloneRange();
+    // Both ends must sit in the same copy root; a selection reaching into page
+    // chrome keeps the browser's own copy rather than converting the chrome.
+    // But a triple-click on the root's last block ends just past the root (at
+    // the start of the footer): if only whitespace lies between the root's end
+    // and the range's end, the range is clamped to the root first.
+    var root = rt_copyRootOf(range.startContainer);
+    if (!root) return;
+    // Copy roots can nest (a host's data-orz-copy around a .markdown-body): use
+    // the nearest root holding BOTH ends. Treating an end in a nested root as
+    // "outside" clamped the range to the outer root's end and copied text the
+    // user never selected (round 14, H2).
+    while (!root.contains(range.endContainer) && root.parentNode) {
+      var up = rt_copyRootOf(root.parentNode);
+      if (!up) break;
+      root = up;
+    }
+    if (!root.contains(range.endContainer)) {
+      var gap = global.document.createRange();
+      gap.setStart(root, root.childNodes.length);
+      try { gap.setEnd(range.endContainer, range.endOffset); } catch (e) { return; }
+      if (rt_trim(gap.toString())) return;
+      range.setEnd(root, root.childNodes.length);
+    }
+    rt_trimRange(range, root);
+    // Grow the range over atomic elements it cuts into.
+    var sa = rt_atomicAncestor(range.startContainer, root);
+    if (sa) range.setStartBefore(sa);
+    var ea = rt_atomicAncestor(range.endContainer, root);
+    if (ea) range.setEndAfter(ea);
+
+    var common = range.commonAncestorContainer;
+    var commonEl = common.nodeType === 1 ? common : common.parentNode;
+    var codeEl = rt_closest(commonEl, /^(code|pre)$/, root);
+    var promoted = codeEl ? null : rt_promotableBlock(commonEl);
+    var whole = false;
+    if (promoted) {
+      var full = global.document.createRange();
+      full.selectNodeContents(promoted);
+      whole = rt_flat(range.toString()) === rt_flat(full.toString());
+    }
+    if (codeEl && sel.rangeCount === 1) {
+      // Inside one code span/block — part of it or all of it: the text exactly
+      // as shown. A command copied from a code block pastes as the command.
+      md = range.toString();
+    } else if (promoted && whole && sel.rangeCount === 1) {
       var pwrap = global.document.createElement('div');
       pwrap.appendChild(promoted.cloneNode(true));
       md = elementToMarkdown(pwrap);
     } else {
+      // Partial table rows keep their columns: tag every cell of the tables the
+      // selection touches with its column (and body rows as body) on the live
+      // DOM for the clone, then remove the tags.
+      var tagged = [];
+      // Only tables cut by a boundary need column tags (whole tables inside the
+      // range are cloned whole); found by walking up from the two ends.
+      var tables = [];
+      var ts = rt_closest(range.startContainer, /^table$/, root), te = rt_closest(range.endContainer, /^table$/, root);
+      if (ts) tables.push(ts);
+      if (te && te !== ts) tables.push(te);
+      for (var t = 0; t < tables.length; t++) {
+        var rows = [];
+        for (var sct = tables[t].firstElementChild; sct; sct = sct.nextElementSibling)
+          for (var trr = rt_tag(sct) === 'tr' ? sct : sct.firstElementChild; trr; trr = rt_tag(sct) === 'tr' ? null : trr.nextElementSibling)
+            if (rt_tag(trr) === 'tr') rows.push(trr);
+        for (var r = 0; r < rows.length; r++) {
+          if (rt_tag(rows[r].parentNode) !== 'thead') { rows[r].setAttribute('data-orz-body', ''); tagged.push([rows[r], 'data-orz-body']); }
+          for (var ci = 0; ci < rows[r].children.length; ci++) {
+            rows[r].children[ci].setAttribute('data-orz-col', String(ci));
+            tagged.push([rows[r].children[ci], 'data-orz-col']);
+          }
+        }
+      }
       var container = global.document.createElement('div');
-      for (var i = 0; i < sel.rangeCount; i++) container.appendChild(sel.getRangeAt(i).cloneContents());
+      try {
+        for (var i = 0; i < sel.rangeCount; i++) {
+          var rg = i === 0 ? range : sel.getRangeAt(i).cloneRange();
+          if (i > 0) {
+            // Extra ranges (Firefox Ctrl-select, cell selection) obey the same
+            // copy-root rule and are separated as blocks.
+            if (rt_copyRootOf(rg.startContainer) !== root || rt_copyRootOf(rg.endContainer) !== root) continue;
+            rt_trimRange(rg, root);
+          }
+          var frag = rg.cloneContents();
+          // Boundary leftovers: an empty clone at either end of the fragment.
+          while (frag.firstChild && (rt_isBlankNode(frag.firstChild) || (rt_isBlockElement(frag.firstChild) && rt_isEmptyClone(frag.firstChild)))) frag.removeChild(frag.firstChild);
+          while (frag.lastChild && (rt_isBlankNode(frag.lastChild) || (rt_isBlockElement(frag.lastChild) && rt_isEmptyClone(frag.lastChild)))) frag.removeChild(frag.lastChild);
+          if (i === 0) frag = rt_fixListStarts(rg, frag, commonEl);
+          // Cells of one row: keep them a table row, not run-together text.
+          var rowEl = rt_closest(rg.commonAncestorContainer.nodeType === 1 ? rg.commonAncestorContainer : rg.commonAncestorContainer.parentNode, /^tr$/, root);
+          if (rowEl && rt_closest(rg.commonAncestorContainer.nodeType === 1 ? rg.commonAncestorContainer : rg.commonAncestorContainer.parentNode, /^t[dh]$/, root) === null) {
+            var tbl = global.document.createElement('table');
+            var tb = global.document.createElement('tbody');
+            var tr = rowEl.cloneNode(false);
+            tr.appendChild(frag);
+            tb.appendChild(tr);
+            tbl.appendChild(tb);
+            var holder = global.document.createDocumentFragment();
+            holder.appendChild(tbl);
+            frag = holder;
+          }
+          if (sel.rangeCount > 1) {
+            // Each range is its own block (joined by a blank line, not glued).
+            var part = global.document.createElement('div');
+            part.appendChild(frag);
+            frag = part;
+          }
+          container.appendChild(frag);
+        }
+      } finally {
+        for (var u = 0; u < tagged.length; u++) tagged[u][0].removeAttribute(tagged[u][1]);
+      }
       md = elementToMarkdown(container);
     }
     if (!md) return;
+    // An include neutralized by prepareSources ("{{" + U+2060) copies as the
+    // directive the reader sees.
+    // A selection may start at the second brace, so strip after any "{".
+    md = md.replace(/\{\u2060/g, '{');
     var cd = event.clipboardData || global.clipboardData;
     if (cd && cd.setData) {
       cd.setData('text/plain', md);
@@ -518,22 +1357,37 @@ export const browserRuntimeScript = String.raw`
   }
 
   function bindGlobalHandlers() {
-    if (!global.document || global.__orzMarkdownRuntimeBound) return;
-    global.__orzMarkdownRuntimeBound = true;
-
-    global.document.addEventListener('click', function (event) {
-      if (expandedQr && !expandedQr.contains(event.target)) {
-        collapseQr();
-      }
-    });
-
-    global.document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') {
-        collapseQr();
-      }
-    });
-
-    // Copy rendered selections as Markdown source.
+    // No "already bound" flag: document.open() (used by hosts that rewrite a
+    // preview, and by Playwright's setContent) keeps the same Document and
+    // window but drops every listener, so any flag would leave the new content
+    // without copy/Escape/QR handling. Instead the handlers live on the
+    // window, and every run removes the previous run's handlers and adds its
+    // own, so the live handlers always belong to the closure that owns the
+    // current QR/copy state, and re-running never duplicates them.
+    var doc = global.document;
+    if (!doc) return;
+    var old = global.__orzMarkdownRuntimeHandlers;
+    var handlers = {
+      click: function (event) {
+        if (expandedQr && !expandedQr.contains(event.target)) collapseQr();
+      },
+      keydown: function (event) {
+        if (event.key === 'Escape') collapseQr();
+      },
+      // Copy rendered selections as Markdown source.
+      copy: onCopy
+    };
+    if (old) {
+      doc.removeEventListener('click', old.click);
+      doc.removeEventListener('keydown', old.keydown);
+      doc.removeEventListener('copy', old.copy);
+    }
+    global.__orzMarkdownRuntimeHandlers = handlers;
+    doc.addEventListener('click', handlers.click);
+    doc.addEventListener('keydown', handlers.keydown);
+    // Spelled exactly so: orz-poster (FA-25, up to orz-markdown 1.6) checks for
+    // this line when it strips the auto-init; getBrowserRuntimeScript with
+    // autoInit false replaces that surgery (drift ledger D-43).
     global.document.addEventListener('copy', onCopy);
   }
 
@@ -546,7 +1400,10 @@ export const browserRuntimeScript = String.raw`
   });
 
   bindGlobalHandlers();
+`;
 
+/** Wires the interactive half — QR expansion, tab bars — once the DOM is ready. */
+const RUNTIME_AUTO_INIT = String.raw`
   if (global.document) {
     if (global.document.readyState === 'loading') {
       global.document.addEventListener('DOMContentLoaded', function () {
@@ -556,9 +1413,24 @@ export const browserRuntimeScript = String.raw`
       init(global.document);
     }
   }
-})(typeof globalThis !== 'undefined' ? globalThis : window);
 `;
 
-export function getBrowserRuntimeScript(): string {
-  return browserRuntimeScript;
+const RUNTIME_TAIL = String.raw`})(typeof globalThis !== 'undefined' ? globalThis : window);
+`;
+
+export const browserRuntimeScript = RUNTIME_HEAD + RUNTIME_AUTO_INIT + RUNTIME_TAIL;
+
+export interface BrowserRuntimeOptions {
+  /**
+   * Run `init(document)` when the DOM is ready: QR codes expand on click and
+   * tab bars are built. Default `true`. With `false` only the global handlers
+   * are installed — copy-as-Markdown works, nothing is rewired — for outputs
+   * that flatten tabs and QR on purpose (orz-poster's print master). A host can
+   * still call `OrzMarkdownRuntime.init(root)` itself.
+   */
+  autoInit?: boolean;
+}
+
+export function getBrowserRuntimeScript(options: BrowserRuntimeOptions = {}): string {
+  return options.autoInit === false ? RUNTIME_HEAD + RUNTIME_TAIL : browserRuntimeScript;
 }

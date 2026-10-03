@@ -30,6 +30,7 @@
  */
 
 import { scanNymlBlocks } from './nyml-blocks.js';
+import { escapeAttr, jsonForScript } from './html.js';
 
 /** The `kind:` value that marks a metadata block. */
 export const DOC_META_KIND = 'meta';
@@ -89,10 +90,11 @@ function isEmpty(meta: DocMeta): boolean {
   );
 }
 
-/** Split `a, b , c` into `['a','b','c']`, dropping blanks. */
+/** Split `a, b；c、d` into `['a','b','c','d']`, dropping blanks. Chinese
+ *  separators `，` `、` `；` count like `,` and `;` (CLAIMS M.3). */
 function splitList(value: string): string[] {
   return value
-    .split(',')
+    .split(/[,;\n\uFF0C\u3001\uFF1B]/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -109,7 +111,10 @@ function splitList(value: string): string[] {
  * with the block spliced out. Any other nyml block is left untouched.
  */
 export function extractDocMeta(source: string): { meta: DocMeta; body: string } {
-  const block = scanNymlBlocks(source).find((b) => b.kind === DOC_META_KIND);
+  // The FIRST meta block supplies the values; every meta block is removed, so
+  // extracting again from the body finds nothing (idempotent across saves).
+  const metaBlocks = scanNymlBlocks(source).filter((b) => b.kind === DOC_META_KIND);
+  const block = metaBlocks[0];
   if (!block) return { meta: {}, body: source };
 
   const f = block.fields;
@@ -131,34 +136,79 @@ export function extractDocMeta(source: string): { meta: DocMeta; body: string } 
 
   // Splice the block out, then collapse the blank lines it leaves behind so a
   // leading meta block does not push the document down by two lines.
-  const body = (source.slice(0, block.start) + source.slice(block.end)).replace(/^\s*\n+/, '');
+  // Removing a block can expose a neighbour that was glued to it
+  // (`{{nyml…}}{{nyml…}}`, or with spaces between) as a block of its own, so
+  // extraction must also remove those to be idempotent (round 11, M1). They can
+  // only appear where a block was cut out: look there, parsing only the small
+  // block found at the cut (a full re-parse per pass was quadratic: round 14, H1).
+  const parts: string[] = [];
+  let from = 0;
+  for (const b of metaBlocks) {
+    parts.push(source.slice(from, b.start));
+    from = b.end;
+    // Glued followers: blanks, then `{{nyml…}}` on the same run.
+    // The follower is parsed with its line's container prefix (`> `), so a
+    // multi-line follower inside a quote parses as the renderer sees it, and
+    // its closer is searched after `[args]` (round 15, L1).
+    // Line start found by walking back over this line only (`\n` or `\r`: a
+    // CR-only source has no `\n`, and `lastIndexOf('\n')` made every prefix the
+    // whole source — round 16, H1). The prefix keeps its real container
+    // markers (`10. `, `- `, `> `), so the follower parses where it stands (L2).
+    let lineStart = b.start;
+    while (lineStart > 0 && source[lineStart - 1] !== '\n' && source[lineStart - 1] !== '\r') lineStart--;
+    const prefix = source.slice(lineStart, b.start);
+    for (;;) {
+      let p = from;
+      while (source[p] === ' ' || source[p] === '\t') p++;
+      if (!source.startsWith('{{nyml', p)) break;
+      let bodyFrom = p + 6;
+      if (source[bodyFrom] === '[') {
+        // Args never cross the line (round 18, H2: an unbounded search per block was quadratic).
+        let br = bodyFrom + 1;
+        while (br < source.length && source[br] !== ']' && source[br] !== '\n' && source[br] !== '\r') br++;
+        if (source[br] !== ']') break;
+        bodyFrom = br + 1;
+      }
+      const close = source.indexOf('}}', bodyFrom);
+      if (close < 0) break;
+      const next = scanNymlBlocks(prefix + source.slice(p, close + 2));
+      if (next.length !== 1 || next[0].kind !== DOC_META_KIND || next[0].start !== prefix.length) break;
+      from = close + 2;
+    }
+  }
+  parts.push(source.slice(from));
+  const body = parts.join('').replace(/^\s*(?:\r\n?|\n)+/, '');
   return { meta, body };
+}
+
+/** A host value counts as "set" only if it carries information. */
+function isSet(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function setFields<T extends object>(obj: T | undefined): Partial<T> {
+  if (!obj) return {};
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => isSet(v))) as Partial<T>;
 }
 
 /**
  * Merge source-declared metadata with host-injected metadata. The HOST wins,
- * field by field; unset host fields fall through to the source.
+ * field by field; host fields that are unset — `undefined`, `null`, an empty or
+ * blank string, an empty array — fall through to the source, so a host that
+ * fills a form with blanks never erases what the author wrote.
  */
 export function mergeDocMeta(fromSource: DocMeta, fromHost?: DocMeta): DocMeta {
   if (!fromHost) return fromSource;
-  const license: DocLicense = {
-    ...(fromSource.license ?? {}),
-    ...(fromHost.license ?? {}),
-  };
-  const merged: DocMeta = {
-    ...fromSource,
-    ...Object.fromEntries(Object.entries(fromHost).filter(([, v]) => v !== undefined)),
-  };
+  const { license: hostLicense, ...hostRest } = fromHost;
+  const license: DocLicense = { ...setFields(fromSource.license), ...setFields(hostLicense) };
+  const merged: DocMeta = { ...fromSource, ...setFields(hostRest) };
+  // Assign in place (keeps the island's key order stable); drop an empty one.
   if (license.spdx || license.name || license.url) merged.license = license;
+  else delete merged.license;
   return merged;
-}
-
-function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 /**
@@ -197,21 +247,43 @@ export function renderDocMetaHead(meta: DocMeta): string {
  */
 export function renderDocMetaIsland(meta: DocMeta): string {
   if (isEmpty(meta)) return '';
-  const json = JSON.stringify(meta, null, 2).replace(/<\/script>/gi, '<\\/script>');
-  return `<script type="${DOC_META_ISLAND_TYPE}" id="${DOC_META_ISLAND_ID}">\n${json}\n</script>`;
+  return `<script type="${DOC_META_ISLAND_TYPE}" id="${DOC_META_ISLAND_ID}">\n${jsonForScript(meta, 2)}\n</script>`;
 }
 
-/** Read the island back out of a built document (host-side helper). */
+/**
+ * Read the island back out of a built document (host-side helper).
+ *
+ * Only the document head is searched: carriers write the island there, and the
+ * body holds author content, where a raw-HTML `<script id="orz-meta">` must not
+ * pass for the document's metadata (a spoofed `uid`). The `id` must be the
+ * attribute itself, not a suffix of another (`data-id="orz-meta"`).
+ */
 export function parseDocMetaIsland(html: string): DocMeta | null {
-  const re = new RegExp(
-    `<script[^>]*id="${DOC_META_ISLAND_ID}"[^>]*>([\\s\\S]*?)</script>`,
-    'i',
-  );
-  const m = re.exec(html);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1]) as DocMeta;
-  } catch {
-    return null;
+  const headEnd = html.search(/<\/head\s*>|<body[\s>]/i);
+  // Without a head, only an island the document STARTS with counts (a fragment
+  // that is just the island); one after other content is body content (round 19, L2).
+  const head = headEnd < 0 ? html : html.slice(0, headEnd);
+  // Tag by tag with indexOf: a backtracking pattern from every "<script" to the
+  // end of the head was quadratic (also 1.6.3; round 19, H2).
+  const lower = head.toLowerCase();
+  // Each character is looked at once: the next '<script' is searched from the
+  // end of this tag (round 20, B-H1: from the next character was quadratic).
+  for (let at = lower.indexOf('<script'), end = 0; at >= 0; at = lower.indexOf('<script', Math.max(at + 7, end))) {
+    end = head.indexOf('>', at);
+    if (end < 0) return null;
+    const attrs = head.slice(at + 7, end);
+    if (!/\s/.test(attrs.charAt(0) || ' ')) continue;
+    const hasType = new RegExp(`\\stype="${DOC_META_ISLAND_TYPE.replace(/[+.]/g, '\\$&')}"`, 'i').test(attrs);
+    const hasId = new RegExp(`\\sid="${DOC_META_ISLAND_ID}"`, 'i').test(attrs);
+    if (!hasType || !hasId) continue;
+    if (headEnd < 0 && head.slice(0, at).replace(/<!doctype[^>]*>/i, '').trim() !== '') return null;
+    const close = lower.indexOf('</script', end);
+    if (close < 0) return null;
+    try {
+      return JSON.parse(head.slice(end + 1, close)) as DocMeta;
+    } catch {
+      return null;
+    }
   }
+  return null;
 }

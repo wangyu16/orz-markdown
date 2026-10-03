@@ -10,7 +10,7 @@
    - .size-xs | .size-sm | .size-lg | .size-xl
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Source+Sans+3:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400;1,7..72,600&family=Source+Sans+3:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 @import './common.css';
 
 :root {
@@ -47,30 +47,41 @@
   --code-text: #36433d;
   --inline-code: #8b4d1a;
 
-  --success-bg: rgba(95, 173, 120, 0.1);
-  --success-border: #b8dabf;
-  --success-text: #2e7a45;
+  /* Callout / badge families: -mark is the vivid tab colour, -text the AA label ink */
+  --success-bg: rgba(27, 150, 80, 0.12);
+  --success-border: #a9d9b9;
+  --success-mark: #2c9a57;
+  --success-text: #137738;
 
-  --note-bg: rgba(137, 153, 213, 0.1);
-  --note-border: #ccd3f3;
-  --note-text: #52639e;
+  --note-bg: rgba(98, 104, 214, 0.11);
+  --note-border: #c5c8f1;
+  --note-mark: #6a6fd6;
+  --note-text: #4a4fb0;
 
-  --info-bg: rgba(69, 150, 191, 0.1);
-  --info-border: #b8d8ea;
-  --info-text: #1e668d;
+  --info-bg: rgba(20, 120, 200, 0.11);
+  --info-border: #a9cdea;
+  --info-mark: #2a8bd0;
+  --info-text: #036bab;
 
-  --warning-bg: rgba(228, 177, 72, 0.13);
-  --warning-border: #ecd39c;
-  --warning-text: #916516;
+  --warning-bg: rgba(240, 176, 20, 0.16);
+  --warning-border: #ebcd85;
+  --warning-mark: #e0a419;
+  --warning-text: #7f5500;
 
-  --danger-bg: rgba(211, 105, 105, 0.11);
-  --danger-border: #e9b8b8;
-  --danger-text: #994545;
+  --danger-bg: rgba(214, 60, 60, 0.11);
+  --danger-border: #ebb3b1;
+  --danger-mark: #d9524e;
+  --danger-text: #b83c3b;
 
-  --span-red: #b34a4a;
-  --span-yellow: #8f6711;
-  --span-green: #2f7c49;
-  --span-blue: #21698a;
+  /* coloured spans: OKLCH chroma >= 0.13, >= 5:1 on the page */
+  --span-red: #b83c3b;
+  --span-yellow: #5f4100;
+  --span-yellow-bg: rgba(255, 204, 41, 0.42);
+  --span-green: #137738;
+  --span-blue: #036bab;
+
+  /* callout slips: warm paper with a 6% wash of the type colour */
+  --paper: #fffdf8;
 
   --font-heading: 'Epilogue', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Literata', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
@@ -101,10 +112,13 @@
   --radius: 14px;
   --radius-lg: 22px;
   --shadow: 0 16px 32px rgba(166, 155, 137, 0.16), 0 4px 12px rgba(166, 155, 137, 0.1);
-  --shadow-soft: 0 10px 22px rgba(190, 181, 166, 0.14), 0 2px 8px rgba(190, 181, 166, 0.08);
+  --shadow-soft: none;
   --transition: 180ms ease;
 
-  --markdown-body-max-width: 920px;
+  /* ~70 characters of Literata per line, plus the article's own padding */
+  --markdown-body-max-width: calc(38.5rem + 2 * var(--markdown-body-padding));
+  /* .measure-wide: ~90 characters per line */
+  --orz-measure-wide: calc(49.5rem + 2 * var(--markdown-body-padding));
   --markdown-body-padding: clamp(1.25rem, 3.4vw, 3rem);
   --markdown-body-border: none;
   --markdown-body-radius: 0;
@@ -156,7 +170,7 @@ body.size-xl,
   --font-scale: 1.16;
 }
 
-*, *::before, *::after {
+html, body, :where(.markdown-body), :where(.markdown-body) *, :where(.markdown-body) *::before, :where(.markdown-body) *::after {
   box-sizing: border-box;
 }
 
@@ -174,6 +188,10 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15)),
     linear-gradient(90deg, transparent 0, transparent 27px, rgba(22, 122, 114, 0.03) 27px, transparent 28px),
     linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
+}
+
+:where(.markdown-body) {
+  /* Typography lives on the article, not the page: a host page's own UI keeps its fonts and colours (M.14). */
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--fs-100);
@@ -205,9 +223,7 @@ body {
 }
 
 .markdown-body {
-  display: flow-root;
   position: relative;
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
   background: transparent;
@@ -242,7 +258,7 @@ body {
   margin-top: 0;
 }
 
-h1, h2, h3, h4, h5, h6 {
+:where(.markdown-body) h1, :where(.markdown-body) h2, :where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
   clear: both;
   position: relative;
   margin: 2.15em 0 0.72em;
@@ -251,79 +267,84 @@ h1, h2, h3, h4, h5, h6 {
   line-height: var(--lh-tight);
   font-weight: 700;
   letter-spacing: -0.03em;
+  text-wrap: balance;
   scroll-margin-top: 4rem;
 }
 
-h1:first-child,
-h2:first-child,
-h3:first-child {
+:where(.markdown-body) h1:first-child,
+:where(.markdown-body) h2:first-child,
+:where(.markdown-body) h3:first-child {
   margin-top: 0;
 }
 
-h1 {
-  padding: 0.3em 0 0.48em;
-  font-size: clamp(2rem, 4.2vw, 3rem);
-  border-bottom: 2px solid var(--border-strong);
+:where(.markdown-body) h1 {
+  padding: 0 0 0.45em;
+  font-size: clamp(2rem, 4.2vw, 2.85rem);
+  border-bottom: 1px solid var(--border-strong);
 }
 
-h1::before {
+/* the teal ink bar above the title: Neat 2's signature */
+:where(.markdown-body) h1::before {
   content: '';
   display: block;
-  width: 3rem;
-  height: 3px;
-  background: var(--accent);
-  margin-bottom: 0.5rem;
-  border-radius: 999px;
-}
-
-h1::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 6rem;
+  width: 2.75rem;
   height: 4px;
+  margin-bottom: 0.42em;
+  border-radius: 2px;
   background: var(--accent);
 }
 
-h2 {
+:where(.markdown-body) h2 {
   font-size: clamp(1.5rem, 3vw, 2.05rem);
-  padding-bottom: 0.3em;
-  border-bottom: 2px solid var(--border-strong);
+  margin-top: 2.3em;
 }
 
-h2::before {
+:where(.markdown-body) h2::before {
   display: none;
 }
 
-h3 {
-  display: block;
+/* h3 as a paper tag: a pointed label with a punched hole, drawn behind the text */
+:where(.markdown-body) h3 {
   width: fit-content;
+  max-width: 100%;
+  padding: 0.16em 0.62em 0.2em 1.05em;
   font-size: var(--fs-400);
-  padding: 0.18em 0.7rem 0.28em;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  color: var(--accent-ink);
+  letter-spacing: -0.02em;
+  isolation: isolate;
 }
 
-h4 {
+:where(.markdown-body) h3::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 0 5px 5px 0;
+  background:
+    radial-gradient(circle at 0.62em 50%, var(--bg) 0 0.12em, transparent 0.13em),
+    rgba(22, 122, 114, 0.1);
+  clip-path: polygon(0.42em 0, 100% 0, 100% 100%, 0.42em 100%, 0 50%);
+}
+
+:where(.markdown-body) h4 {
   font-size: var(--fs-300);
   color: #274542;
+  letter-spacing: -0.015em;
 }
 
-h5 {
+:where(.markdown-body) h5 {
   font-size: var(--fs-200);
   color: #4b625f;
 }
 
-h6 {
-  font-size: var(--fs-100);
+:where(.markdown-body) h6 {
+  font-size: var(--fs-75);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--text-soft);
 }
 
-.header-anchor {
+:where(.markdown-body) .header-anchor {
   float: left;
   margin-left: -1.25em;
   padding-right: 0.3em;
@@ -333,45 +354,49 @@ h6 {
   transition: opacity var(--transition), color var(--transition);
 }
 
-h1:hover .header-anchor,
-h2:hover .header-anchor,
-h3:hover .header-anchor,
-h4:hover .header-anchor,
-h5:hover .header-anchor,
-h6:hover .header-anchor {
+:where(.markdown-body) h1:hover .header-anchor,
+:where(.markdown-body) h2:hover .header-anchor,
+:where(.markdown-body) h3:hover .header-anchor,
+:where(.markdown-body) h4:hover .header-anchor,
+:where(.markdown-body) h5:hover .header-anchor,
+:where(.markdown-body) h6:hover .header-anchor {
   opacity: 0.7;
 }
 
-.header-anchor:hover {
+:where(.markdown-body) .header-anchor:hover {
   color: var(--accent-ink);
 }
 
-p,
-ul,
-ol,
-blockquote,
-pre,
-table,
-.toc-wrapper,
-details.spoil,
-.tabs,
-.cols,
-.youtube-embed,
-.mermaid,
-.smiles-render {
+:where(.markdown-body) p,
+:where(.markdown-body) ul,
+:where(.markdown-body) ol,
+:where(.markdown-body) blockquote,
+:where(.markdown-body) pre,
+:where(.markdown-body) table,
+:where(.markdown-body) .toc-wrapper,
+:where(.markdown-body) details.spoil,
+:where(.markdown-body) .tabs,
+:where(.markdown-body) .cols,
+:where(.markdown-body) .youtube-embed,
+:where(.markdown-body) .mermaid,
+:where(.markdown-body) .smiles-render {
   margin: 0 0 var(--space-5);
 }
 
-p:last-child,
-ul:last-child,
-ol:last-child,
-blockquote:last-child,
-pre:last-child,
-table:last-child {
+:where(.markdown-body) p {
+  text-wrap: pretty;
+}
+
+:where(.markdown-body) p:last-child,
+:where(.markdown-body) ul:last-child,
+:where(.markdown-body) ol:last-child,
+:where(.markdown-body) blockquote:last-child,
+:where(.markdown-body) pre:last-child,
+:where(.markdown-body) table:last-child {
   margin-bottom: 0;
 }
 
-a {
+:where(.markdown-body) a {
   color: var(--link);
   text-decoration-thickness: 1.4px;
   text-decoration-style: solid;
@@ -380,144 +405,147 @@ a {
   transition: color var(--transition), text-decoration-color var(--transition);
 }
 
-a:hover {
+:where(.markdown-body) a:hover {
   color: var(--link-hover);
   text-decoration-color: rgba(10, 77, 96, 0.55);
 }
 
-a:visited {
+:where(.markdown-body) a:visited {
   color: var(--link-visited);
 }
 
-strong {
+:where(.markdown-body) strong {
   color: var(--heading);
   font-weight: 700;
 }
 
-em {
+:where(.markdown-body) em {
   color: #4f5953;
 }
 
-s,
-del {
+:where(.markdown-body) s,
+:where(.markdown-body) del {
   color: var(--text-muted);
   text-decoration-color: rgba(153, 69, 69, 0.3);
 }
 
-mark {
+:where(.markdown-body) mark {
   padding: 0.08em 0.3em;
-  color: #68460d;
-  background: rgba(228, 177, 72, 0.22);
+  color: #123f3b;
+  background: rgba(47, 159, 150, 0.2);
   border-radius: 0.25rem;
 }
 
-ins {
+:where(.markdown-body) ins {
   color: var(--accent-ink);
   text-decoration: underline dotted rgba(22, 122, 114, 0.7) 2px;
   text-underline-offset: 0.16em;
 }
 
-sub,
-sup {
+:where(.markdown-body) sub,
+:where(.markdown-body) sup {
   font-size: 0.72em;
   color: var(--text-soft);
 }
 
-code {
+:where(.markdown-body) code {
   font-family: var(--font-code);
   font-size: 0.9em;
   color: var(--inline-code);
   background: var(--code-bg);
   border: 1px solid var(--code-border);
-  border-radius: 7px;
-  padding: 0.16em 0.42em;
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-pre {
+:where(.markdown-body) pre {
   position: relative;
-  overflow-x: auto;
-  padding: 2rem 1.25rem 1.18rem;
-  background: linear-gradient(180deg, var(--code-bg) 0%, var(--code-bg-2) 100%);
+  padding: 1.05rem 1.25rem;
+  background: var(--code-bg);
   border: 1px solid var(--code-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-soft);
+  border-radius: 8px;
 }
 
-pre::before {
-  content: '';
-  position: absolute;
-  left: 1rem;
-  top: 0.75rem;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 999px;
-  background: #f0c060;
-  box-shadow: 1rem 0 0 #90c878, 2rem 0 0 #80b4e0;
+:where(.markdown-body) pre,
+:where(.markdown-body) kbd,
+:where(.markdown-body) samp {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-pre code {
+:where(.markdown-body) pre code {
   display: block;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--code-text);
-  font-size: var(--fs-75);
-  line-height: 1.72;
+  font-size: 0.875em;
+  line-height: 1.7;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-blockquote {
+:where(.markdown-body) blockquote {
   position: relative;
-  padding: 1.15rem 1.25rem 1.15rem 1.55rem;
-  color: #49534f;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-soft);
+  margin-left: 1.5rem;
+  margin-right: 1.5rem;
+  padding: 0;
+  color: #47514c;
+  font-style: italic;
 }
 
-blockquote::before {
-  content: '❝';
+/* a teal quote mark hung in the left margin, clear of the text */
+:where(.markdown-body) blockquote::before {
+  content: '\201C';
   position: absolute;
-  left: 0.7rem;
-  top: 0.35rem;
-  color: rgba(22, 122, 114, 0.26);
-  font-size: 2rem;
-  line-height: 1;
+  left: -1.45rem;
+  top: -0.02em;
+  color: var(--accent);
+  font: 700 2.1em/1 var(--font-heading);
+  font-style: normal;
+  opacity: 0.7;
+  pointer-events: none;
 }
 
-blockquote blockquote {
+:where(.markdown-body) blockquote blockquote::before {
+  content: none;
+}
+
+:where(.markdown-body) blockquote blockquote {
   margin-top: var(--space-4);
-  background: #fff;
+  margin-right: 0;
 }
 
-blockquote > *:last-child {
+:where(.markdown-body) blockquote > *:last-child {
   margin-bottom: 0;
 }
 
-ul,
-ol {
+:where(.markdown-body) ul,
+:where(.markdown-body) ol {
   padding-left: 1.45rem;
 }
 
-li {
+:where(.markdown-body) li {
   margin-bottom: 0.45rem;
 }
 
-li > ul,
-li > ol {
+:where(.markdown-body) li > ul,
+:where(.markdown-body) li > ol {
   margin-top: 0.42rem;
   margin-bottom: 0;
 }
 
-ul {
+:where(.markdown-body) ul {
   list-style: none;
 }
 
-ul > li {
+:where(.markdown-body) ul > li {
   position: relative;
 }
 
-ul > li::before {
+:where(.markdown-body) ul > li::before {
   content: '';
   position: absolute;
   left: -1.05rem;
@@ -528,21 +556,20 @@ ul > li::before {
   transform: rotate(45deg);
 }
 
-ol {
+:where(.markdown-body) ol {
   list-style: decimal;
 }
 
-.task-list-item {
-  list-style: none;
+:where(.markdown-body) .task-list-item {
   padding-left: 0;
 }
 
-.task-list-item::before {
+:where(.markdown-body) .task-list-item::before {
   display: none;
 }
 
-.task-list-item-checkbox,
-.task-list-item input[type='checkbox'] {
+:where(.markdown-body) .task-list-item-checkbox,
+:where(.markdown-body) .task-list-item input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -555,14 +582,14 @@ ol {
   background: #fff;
 }
 
-.task-list-item-checkbox:checked,
-.task-list-item input[type='checkbox']:checked {
+:where(.markdown-body) .task-list-item-checkbox:checked,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.task-list-item-checkbox:checked::after,
-.task-list-item input[type='checkbox']:checked::after {
+:where(.markdown-body) .task-list-item-checkbox:checked::after,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked::after {
   content: '';
   position: absolute;
   left: 0.28rem;
@@ -574,22 +601,16 @@ ol {
   transform: rotate(45deg);
 }
 
-.markdown-body > table,
-.markdown-body td table {
-  width: max-content;
-  max-width: 100%;
-}
-
-table {
+:where(.markdown-body) table {
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
 
-thead th {
+:where(.markdown-body) thead th {
   padding: 0.8rem 1rem;
   background: var(--surface-3);
   border-bottom: 1px solid var(--border-strong);
@@ -598,88 +619,84 @@ thead th {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  text-align: left;
   white-space: nowrap;
 }
 
-tbody td {
+:where(.markdown-body) tbody td {
   padding: 0.86rem 1rem;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
 
-tbody tr:nth-child(even) td {
+:where(.markdown-body) tbody tr:nth-child(even) td {
   background: rgba(0, 0, 0, 0.015);
 }
 
-tbody tr:last-child td {
+:where(.markdown-body) tbody tr:last-child td {
   border-bottom: 0;
 }
 
-hr {
-  height: 1px;
+:where(.markdown-body) hr {
+  height: 2px;
   margin: var(--space-6) 0;
   border: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 12px, rgba(22, 122, 114, 0.28) 12px 24px, transparent 24px 36px);
+  /* a ruled-notebook dash in teal ink */
+  background: repeating-linear-gradient(90deg, rgba(22, 122, 114, 0.4) 0 10px, transparent 10px 18px);
 }
 
-img {
+:where(.markdown-body) img {
   margin: 0 auto;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
 }
 
-p > img {
-  display: inline;
+:where(.markdown-body) p > img {
   margin: 0;
   border-radius: 10px;
 }
 
-.footnote-ref {
+:where(.markdown-body) .footnote-ref {
   font-size: 0.85em;
 }
 
-.footnote-ref a,
-.footnote-backref {
+:where(.markdown-body) .footnote-ref a,
+:where(.markdown-body) .footnote-backref {
   color: var(--accent-ink);
   text-decoration: none;
 }
 
-.footnotes-sep {
+:where(.markdown-body) .footnotes-sep {
   margin: var(--space-6) 0 var(--space-4);
 }
 
-.footnotes {
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--border-strong);
+:where(.markdown-body) .footnotes {
+  padding-top: var(--space-2);
   color: var(--text-soft);
   font-size: var(--fs-75);
 }
 
-.footnotes ol {
+:where(.markdown-body) .footnotes ol {
   margin-bottom: 0;
 }
 
-.footnotes li {
+:where(.markdown-body) .footnotes li {
   margin-bottom: 0.65rem;
 }
 
-.katex {
+:where(.markdown-body) .katex {
   color: #23322f;
   font-size: 1.05em;
 }
 
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+:where(.markdown-body) .katex-display {
   padding: 0.85rem 1rem;
   background: #fbfaf7;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
 }
 
-.katex-error {
+:where(.markdown-body) .katex-error {
   display: inline-block;
   padding: 0.2em 0.46em;
   color: var(--danger-text);
@@ -690,116 +707,126 @@ p > img {
   font-size: var(--fs-75);
 }
 
-div.success,
-div.note,
-div.info,
-div.warning,
-div.danger {
+/* Callouts: paper slips. A small coloured tab sits astride the top edge; its
+   end shape tells the types apart without colour (info pill, note square,
+   success arrow, warning double point, danger swallowtail). Text stays ink. */
+:where(.markdown-body) div.success,
+:where(.markdown-body) div.note,
+:where(.markdown-body) div.info,
+:where(.markdown-body) div.warning,
+:where(.markdown-body) div.danger {
+  --slip-mark: var(--info-mark);
+  --slip-paper: #f2f6f6;
+  --slip-ink: var(--info-text);
+  --slip-line: var(--info-border);
+  --slip-tab: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   position: relative;
+  margin-top: calc(var(--space-5) + 0.4rem);
   margin-bottom: var(--space-5);
-  padding: 1rem 1.1rem;
-  border: 1px solid;
-  border-radius: 14px;
-  box-shadow: var(--shadow-soft);
+  padding: 1.1rem 1.2rem 1rem;
+  color: var(--text);
+  background: var(--slip-paper);
+  border: 1px solid var(--slip-line);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(120, 104, 76, 0.06), 0 8px 18px -12px rgba(120, 104, 76, 0.28);
 }
 
-div.success::before,
-div.note::before,
-div.info::before,
-div.warning::before,
-div.danger::before {
+:where(.markdown-body) div.success::before,
+:where(.markdown-body) div.note::before,
+:where(.markdown-body) div.info::before,
+:where(.markdown-body) div.warning::before,
+:where(.markdown-body) div.danger::before {
   content: '';
   position: absolute;
-  top: 0.72rem;
-  right: 0.72rem;
-  width: 0.95rem;
-  height: 0.95rem;
-  border: 1px solid currentColor;
-  opacity: 0.35;
+  top: -0.36rem;
+  left: 1.2rem;
+  width: 1.9rem;
+  height: 0.72rem;
+  background: var(--slip-mark);
+  clip-path: var(--slip-tab);
+  pointer-events: none;
 }
 
-div.success {
-  color: var(--success-text);
-  background: var(--success-bg);
-  border-color: var(--success-border);
+:where(.markdown-body) div.info::before {
+  border-radius: 999px;
 }
 
-div.note {
-  color: var(--note-text);
-  background: var(--note-bg);
-  border-color: var(--note-border);
+:where(.markdown-body) div.note {
+  --slip-mark: var(--note-mark);
+  --slip-paper: #f6f4f6;
+  --slip-ink: var(--note-text);
+  --slip-line: var(--note-border);
 }
 
-div.info {
-  color: var(--info-text);
-  background: var(--info-bg);
-  border-color: var(--info-border);
+:where(.markdown-body) div.success {
+  --slip-mark: var(--success-mark);
+  --slip-paper: #f2f7ee;
+  --slip-ink: var(--success-text);
+  --slip-line: var(--success-border);
+  --slip-tab: polygon(0 0, 72% 0, 100% 50%, 72% 100%, 0 100%);
 }
 
-div.warning {
-  color: var(--warning-text);
-  background: var(--warning-bg);
-  border-color: var(--warning-border);
+:where(.markdown-body) div.warning {
+  --slip-mark: var(--warning-mark);
+  --slip-paper: #fdf8eb;
+  --slip-ink: var(--warning-text);
+  --slip-line: var(--warning-border);
+  --slip-tab: polygon(22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%, 0 50%);
 }
 
-div.danger {
-  color: var(--danger-text);
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
+:where(.markdown-body) div.danger {
+  --slip-mark: var(--danger-mark);
+  --slip-paper: #fdf3ee;
+  --slip-ink: var(--danger-text);
+  --slip-line: var(--danger-border);
+  --slip-tab: polygon(0 0, 100% 0, 76% 50%, 100% 100%, 0 100%);
 }
 
-div.success > :not(code):not(pre),
-div.note > :not(code):not(pre),
-div.info > :not(code):not(pre),
-div.warning > :not(code):not(pre),
-div.danger > :not(code):not(pre) {
-  color: inherit;
+:where(.markdown-body) div.success > p:first-child > strong:first-child,
+:where(.markdown-body) div.note > p:first-child > strong:first-child,
+:where(.markdown-body) div.info > p:first-child > strong:first-child,
+:where(.markdown-body) div.warning > p:first-child > strong:first-child,
+:where(.markdown-body) div.danger > p:first-child > strong:first-child {
+  color: var(--slip-ink);
+  font-family: var(--font-heading);
+  font-size: 0.94em;
+  letter-spacing: 0.01em;
 }
 
-div.success > *:last-child,
-div.note > *:last-child,
-div.info > *:last-child,
-div.warning > *:last-child,
-div.danger > *:last-child {
+:where(.markdown-body) div.success > *:last-child,
+:where(.markdown-body) div.note > *:last-child,
+:where(.markdown-body) div.info > *:last-child,
+:where(.markdown-body) div.warning > *:last-child,
+:where(.markdown-body) div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left {
-  float: left;
-  max-width: min(44%, 22rem);
+:where(.markdown-body) .left {
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
-.right {
-  text-align: right;
+:where(.markdown-body) .right {
   margin: 0 0 var(--space-5);
 }
 
-.center {
-  margin: 0 auto var(--space-5);
-  text-align: center;
-  max-width: min(100%, 42rem);
-}
-
-details.spoil {
+:where(.markdown-body) details.spoil {
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface-2);
   box-shadow: var(--shadow-soft);
 }
 
-details.spoil > summary {
+:where(.markdown-body) details.spoil > summary {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.95rem 1.05rem;
-  cursor: pointer;
   list-style: none;
   user-select: none;
   color: var(--heading);
@@ -807,168 +834,153 @@ details.spoil > summary {
   background: rgba(22, 122, 114, 0.06);
 }
 
-details.spoil > summary::-webkit-details-marker {
+:where(.markdown-body) details.spoil > summary::-webkit-details-marker {
   display: none;
 }
 
-details.spoil > summary::before {
-  content: '▣';
-  color: var(--accent);
-  font-size: 0.95rem;
+:where(.markdown-body) details.spoil > summary::before {
+  content: '+';
+  width: 1em;
+  font-size: 1.15em;
+  line-height: 1;
+  color: var(--accent-ink);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  text-align: center;
 }
 
-details.spoil[open] > summary {
-  border-bottom: 1px dashed var(--border-strong);
+:where(.markdown-body) details.spoil[open] > summary::before {
+  content: '\2212';
 }
 
-details.spoil > :not(summary) {
+:where(.markdown-body) details.spoil[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+:where(.markdown-body) details.spoil > :not(summary) {
   padding: 1rem 1.05rem 1.1rem;
 }
 
-.tabs {
+:where(.markdown-body) .tabs {
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
 
-.tabs-bar {
-  display: flex;
+:where(.markdown-body) .tabs-bar {
   gap: 0;
-  overflow-x: auto;
   background: var(--surface-3);
   border-bottom: 1px solid var(--border);
-  scrollbar-width: none;
 }
 
-.tabs-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.tabs-bar-btn {
+:where(.markdown-body) .tabs-bar-btn {
   border: 0;
   border-right: 1px solid var(--border);
   padding: 0.72rem 1rem;
   background: transparent;
   color: var(--text-soft);
   font: 700 var(--fs-75)/1.2 var(--font-heading);
-  cursor: pointer;
-  white-space: nowrap;
   transition: color var(--transition), background var(--transition);
 }
 
-.tabs-bar-btn:last-child {
+:where(.markdown-body) .tabs-bar-btn:last-child {
   border-right: 0;
 }
 
-.tabs-bar-btn:hover {
+:where(.markdown-body) .tabs-bar-btn:hover {
   color: var(--heading);
   background: rgba(255, 255, 255, 0.45);
 }
 
-.tabs-bar-btn.active {
+:where(.markdown-body) .tabs-bar-btn.active {
   color: #fff;
   background: var(--accent);
 }
 
-.tab {
-  display: none;
+:where(.markdown-body) .tab {
   padding: 1.08rem 1.12rem 1.22rem;
 }
 
-.tab.active {
-  display: block;
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab {
+  border-top: 1px solid var(--border);
 }
 
-.tabs:not([data-js]) .tab {
-  display: block;
-}
-
-.tabs:not([data-js]) .tab + .tab {
-  border-top: 1px dashed var(--border-strong);
-}
-
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+:where(.markdown-body) .cols {
   gap: 1rem;
-  align-items: start;
 }
 
-.col {
-  min-width: 0;
+:where(.markdown-body) .col {
   padding: 1rem 1.02rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
 }
 
-.col > *:last-child {
+:where(.markdown-body) .col > *:last-child {
   margin-bottom: 0;
 }
 
-.toc-wrapper {
+:where(.markdown-body) .toc-wrapper {
   position: relative;
 }
 
-nav.toc,
-.toc-list {
+:where(.markdown-body) nav.toc,
+:where(.markdown-body) .toc-list {
   padding: 1rem 1.12rem;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
 }
 
-nav.toc ul,
-.toc-list ul {
+:where(.markdown-body) nav.toc ul,
+:where(.markdown-body) .toc-list ul {
   margin: 0;
   padding-left: 1.05rem;
 }
 
-nav.toc li,
-.toc-list li {
+:where(.markdown-body) nav.toc li,
+:where(.markdown-body) .toc-list li {
   margin-bottom: 0.28rem;
 }
 
-nav.toc li::before,
-.toc-list li::before {
+:where(.markdown-body) nav.toc li::before,
+:where(.markdown-body) .toc-list li::before {
   display: none;
 }
 
-nav.toc a,
-.toc-list a {
+:where(.markdown-body) nav.toc a,
+:where(.markdown-body) .toc-list a {
   color: var(--text-soft);
   text-decoration: none;
 }
 
-nav.toc a:hover,
-.toc-list a:hover {
+:where(.markdown-body) nav.toc a:hover,
+:where(.markdown-body) .toc-list a:hover {
   color: var(--accent-ink);
 }
 
-span.red {
+:where(.markdown-body) span.red {
   color: var(--span-red);
 }
 
-span.yellow {
-  color: var(--span-yellow);
-}
+:where(.markdown-body) span.yellow { color: #976d01; } /* text colour only, like the other spans: the most saturated gold at AA on this page */
 
-span.green {
+:where(.markdown-body) span.green {
   color: var(--span-green);
 }
 
-span.blue {
+:where(.markdown-body) span.blue {
   color: var(--span-blue);
 }
 
-span.success,
-span.info,
-span.warning,
-span.danger {
+:where(.markdown-body) span.success,
+:where(.markdown-body) span.info,
+:where(.markdown-body) span.warning,
+:where(.markdown-body) span.danger {
   padding: 0.18em 0.58em;
   border: 1px solid;
   border-radius: 7px;
@@ -979,42 +991,42 @@ span.danger {
   vertical-align: middle;
 }
 
-span.success {
-  background: rgba(95, 173, 120, 0.13);
+:where(.markdown-body) span.success {
+  background: var(--success-bg);
   color: var(--success-text);
   border-color: var(--success-border);
 }
 
-span.info {
-  background: rgba(69, 150, 191, 0.12);
+:where(.markdown-body) span.info {
+  background: var(--info-bg);
   color: var(--info-text);
   border-color: var(--info-border);
 }
 
-span.warning {
-  background: rgba(228, 177, 72, 0.15);
+:where(.markdown-body) span.warning {
+  background: var(--warning-bg);
   color: var(--warning-text);
   border-color: var(--warning-border);
 }
 
-span.danger {
-  background: rgba(211, 105, 105, 0.14);
+:where(.markdown-body) span.danger {
+  background: var(--danger-bg);
   color: var(--danger-text);
   border-color: var(--danger-border);
 }
 
-div.test-block {
+:where(.markdown-body) div.test-block {
   padding: 0.85rem 1rem;
   margin-bottom: var(--space-5);
   background: rgba(22, 122, 114, 0.08);
   border: 1px dashed rgba(22, 122, 114, 0.3);
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--accent-ink);
   font-family: var(--font-code);
   font-size: var(--fs-75);
 }
 
-span.test-inline {
+:where(.markdown-body) span.test-inline {
   display: inline-block;
   padding: 0.12em 0.38em;
   border-radius: 6px;
@@ -1025,51 +1037,32 @@ span.test-inline {
   font-size: 0.88em;
 }
 
-div.youtube-embed {
-  position: relative;
-  overflow: hidden;
-  height: 0;
-  padding-bottom: 56.25%;
+:where(.markdown-body) div.youtube-embed {
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 8px;
   background: #ece7dd;
   box-shadow: var(--shadow-soft);
 }
 
-div.youtube-embed iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-div.mermaid {
+:where(.markdown-body) div.mermaid {
   padding: 1.2rem;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface-2);
-  overflow-x: auto;
-  text-align: center;
   box-shadow: var(--shadow-soft);
 }
 
-div.mermaid svg {
-  max-width: 100%;
-  height: auto;
-}
-
-div.smiles-render {
+:where(.markdown-body) div.smiles-render {
   box-shadow: none;
 }
 
-div.smiles-render canvas,
-canvas[data-smiles] {
+:where(.markdown-body) div.smiles-render canvas,
+:where(.markdown-body) canvas[data-smiles] {
   border-radius: 0;
   box-shadow: none;
 }
 
-span.qrcode {
+:where(.markdown-body) span.qrcode {
   padding: 6px;
   vertical-align: middle;
   background: #fff;
@@ -1080,16 +1073,16 @@ span.qrcode {
 /* --------------------------------------------------------------------------
    Focus indicators
    -------------------------------------------------------------------------- */
-a:focus-visible,
-.tabs-bar-btn:focus-visible,
-details.spoil > summary:focus-visible {
+:where(.markdown-body) a:focus-visible,
+:where(.markdown-body) .tabs-bar-btn:focus-visible,
+:where(.markdown-body) details.spoil > summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
   text-decoration: none;
 }
-.task-list-item-checkbox:focus-visible,
-.task-list-item input[type='checkbox']:focus-visible {
+:where(.markdown-body) .task-list-item-checkbox:focus-visible,
+:where(.markdown-body) .task-list-item input[type='checkbox']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1104,17 +1097,11 @@ details.spoil > summary:focus-visible {
     box-shadow: 0 10px 22px rgba(166, 155, 137, 0.14), 0 3px 8px rgba(166, 155, 137, 0.08);
   }
 
-  .left {
-    float: none;
-    max-width: 100%;
+  :where(.markdown-body) .left {
     margin: 0 0 var(--space-4);
   }
 
-  .cols {
-    grid-template-columns: 1fr;
-  }
-
-  .header-anchor {
+  :where(.markdown-body) .header-anchor {
     margin-left: -1.05em;
   }
 }
@@ -1127,7 +1114,6 @@ details.spoil > summary:focus-visible {
   }
 
   .markdown-body {
-    max-width: 100%;
     padding: 0;
     border: 0;
     box-shadow: none;
@@ -1135,52 +1121,41 @@ details.spoil > summary:focus-visible {
 
   .markdown-body::before,
   .markdown-body::after,
-  .header-anchor,
-  .tabs-bar,
-  div.youtube-embed {
+  :where(.markdown-body) .header-anchor {
     display: none !important;
   }
 
-  a {
+  :where(.markdown-body) a {
     color: #0b57d0;
     text-decoration-color: currentColor;
   }
 
-  pre,
-  code,
-  blockquote,
-  .success,
-  .note,
-  .info,
-  .warning,
-  .danger,
-  nav.toc,
-  .toc-list,
-  .col,
-  details.spoil,
-  div.mermaid,
-  div.smiles-render {
+  :where(.markdown-body) pre,
+  :where(.markdown-body) code,
+  :where(.markdown-body) blockquote,
+  :where(.markdown-body) .success,
+  :where(.markdown-body) .note,
+  :where(.markdown-body) .info,
+  :where(.markdown-body) .warning,
+  :where(.markdown-body) .danger,
+  :where(.markdown-body) nav.toc,
+  :where(.markdown-body) .toc-list,
+  :where(.markdown-body) .col,
+  :where(.markdown-body) details.spoil,
+  :where(.markdown-body) div.mermaid,
+  :where(.markdown-body) div.smiles-render {
     background: #fff !important;
     color: #111 !important;
     border-color: #d0d0d0 !important;
     box-shadow: none !important;
   }
 
-  span.success,
-  span.info,
-  span.warning,
-  span.danger {
+  :where(.markdown-body) span.success,
+  :where(.markdown-body) span.info,
+  :where(.markdown-body) span.warning,
+  :where(.markdown-body) span.danger {
     border-color: #bdbdbd !important;
     color: #111 !important;
-  }
-
-  tr,
-  iframe,
-  video,
-  pre,
-  blockquote {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 }
 

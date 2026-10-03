@@ -1,32 +1,26 @@
 /* Builds docs/orzmd.browser.js — the browser bundle of the LOCAL orz-markdown
- * parser used by the markdown.orz.how editor. esbuild + the same fs/path/imsize
- * shims the family uses (filesystem-only features degrade gracefully in the
- * browser). Run: `node build/web-bundle.mjs` (after `npm run build`).
- * esbuild + path-browserify are installed with --no-save (dev-only). */
+ * parser used by the markdown.orz.how editor. Since 2.0.0 orz-markdown has no
+ * static Node dependencies (no fs/path/process, no markdown-it-imsize), so it
+ * bundles for the browser as-is: no shims, no aliases. Also refreshes
+ * docs/themes from themes/ so the site never serves stale theme CSS.
+ * Run: `npm run build:web` (after `npm run build`). */
 import { build } from 'esbuild';
+import { copyFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 
-const stubImsize = {
-  name: 'stub-imsize',
-  setup(b) {
-    b.onResolve({ filter: /(^|[\\/])imsize$/ }, (a) =>
-      a.importer.includes('markdown-it-imsize') ? { path: join(HERE, 'shims', 'imsize.cjs') } : undefined);
-  }
-};
-
 await build({
   entryPoints: [join(HERE, 'web-entry.js')],
   bundle: true, format: 'iife', platform: 'browser', target: ['es2020'],
   outfile: join(ROOT, 'docs', 'orzmd.browser.js'),
   minify: true, sourcemap: false,
-  plugins: [stubImsize],
-  alias: { fs: join(HERE, 'shims', 'fs.cjs'), path: 'path-browserify' },
-  inject: [join(HERE, 'shims', 'process.js')],
-  define: { 'process.env.NODE_ENV': '"production"' },
   logLevel: 'info'
 });
-console.log('Built docs/orzmd.browser.js from the local orz-markdown.');
+
+for (const file of readdirSync(join(ROOT, 'themes'))) {
+  if (file.endsWith('.css')) copyFileSync(join(ROOT, 'themes', file), join(ROOT, 'docs', 'themes', file));
+}
+console.log('Built docs/orzmd.browser.js and synced docs/themes from the local orz-markdown.');

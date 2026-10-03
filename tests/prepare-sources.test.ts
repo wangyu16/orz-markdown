@@ -12,10 +12,11 @@ function mapFetcher(map: Record<string, string>) {
 }
 
 describe("prepareSources", () => {
+  // Fetched text is block content: a directive mid-paragraph splits it there.
   it("inlines a URL include (both directive aliases)", async () => {
     const { fetcher } = mapFetcher({ "https://h/a.md": "AAA" });
-    expect(await prepareSources("x {{markdown https://h/a.md}} y", { fetcher })).toBe("x AAA y");
-    expect(await prepareSources("x {{md-include https://h/a.md}} y", { fetcher })).toBe("x AAA y");
+    expect(await prepareSources("x {{markdown https://h/a.md}} y", { fetcher })).toBe("x\n\nAAA\n\ny");
+    expect(await prepareSources("x {{md-include https://h/a.md}} y", { fetcher })).toBe("x\n\nAAA\n\ny");
   });
 
   it("leaves the directive in place when the fetch returns null (never throws)", async () => {
@@ -38,10 +39,10 @@ describe("prepareSources", () => {
       "https://h/b.md": "B[{{md-include https://h/c.md}}]",
       "https://h/c.md": "C",
     });
-    expect(await prepareSources("{{md-include https://h/a.md}}", { fetcher })).toBe("A[B[C]]");
+    expect(await prepareSources("{{md-include https://h/a.md}}", { fetcher })).toBe("A[\n\nB[\n\nC\n\n]\n\n]");
     // maxDepth caps recursion: depth 1 inlines a.md but leaves b.md's directive.
     expect(await prepareSources("{{md-include https://h/a.md}}", { fetcher, maxDepth: 1 })).toBe(
-      "A[B[{{md-include https://h/c.md}}]]",
+      "A[\n\nB[{{md-include https://h/c.md}}]\n\n]",
     );
   });
 
@@ -51,14 +52,14 @@ describe("prepareSources", () => {
       "https://h/b.md": "B{{md-include https://h/a.md}}", // back-reference → cycle
     });
     // a → b → (a is an ancestor) drop. No infinite loop.
-    expect(await prepareSources("{{md-include https://h/a.md}}", { fetcher })).toBe("AB");
+    expect(await prepareSources("{{md-include https://h/a.md}}", { fetcher })).toBe("A\n\nB");
   });
 
   it("allows the same URL in sibling positions (not a cycle)", async () => {
     const { fetcher } = mapFetcher({ "https://h/a.md": "A" });
     expect(
       await prepareSources("{{md-include https://h/a.md}} and {{md-include https://h/a.md}}", { fetcher }),
-    ).toBe("A and A");
+    ).toBe("A\n\nand\n\nA");
   });
 
   it("allowedHosts restricts which URLs are fetched (SSRF guard)", async () => {
@@ -68,9 +69,14 @@ describe("prepareSources", () => {
     });
     const src = "{{md-include https://ok.example/a.md}} {{md-include http://169.254.169.254/latest/meta-data}}";
     const out = await prepareSources(src, { fetcher, allowedHosts: ["ok.example"] });
-    expect(out).toBe("OK {{md-include http://169.254.169.254/latest/meta-data}}");
+    // On one line, splicing the first would leave the refused one at a line
+    // start, where it renders as nothing: both stay as written (final check, F2).
+    expect(out).toBe(src);
     // The disallowed host is never even fetched.
     expect(calls).toEqual(["https://ok.example/a.md"]);
+    const lines = "{{md-include https://ok.example/a.md}}\n\n{{md-include http://169.254.169.254/latest/meta-data}}";
+    expect(await prepareSources(lines, { fetcher, allowedHosts: ["ok.example"] })).toBe("OK\n\n{{md-include http://169.254.169.254/latest/meta-data}}");
+    expect(calls).toEqual(["https://ok.example/a.md", "https://ok.example/a.md"]);
   });
 
   it("is a no-op with no directives", async () => {

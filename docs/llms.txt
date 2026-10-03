@@ -7,7 +7,7 @@
 
 ## Start here
 
-- [Homepage](https://markdown.orz.how/): product overview and live editor
+- [Homepage](https://markdown.orz.how/): product overview and live demo
 - [The editable document family](https://markdown.orz.how/family.html): choose mdhtml, slides, or paged
 - [Feature showcase](https://markdown.orz.how/features.html): math, diagrams, themes, rich formatting, and copy as Markdown
 - [Guide](https://markdown.orz.how/guide.html): browser, CLI, and parser workflows
@@ -34,3 +34,6 @@
 - [orz-slides on GitHub](https://github.com/wangyu16/orz-slides)
 - [orz-paged on GitHub](https://github.com/wangyu16/orz-paged)
 - [orz-markdown on npm](https://www.npmjs.com/package/orz-markdown)
+- [orz-mdhtml on npm](https://www.npmjs.com/package/orz-mdhtml)
+- [orz-slides on npm](https://www.npmjs.com/package/orz-slides)
+- [orz-paged on npm](https://www.npmjs.com/package/orz-paged)

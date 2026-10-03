@@ -24,15 +24,29 @@
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
 export type ColorScheme = 'light' | 'dark';
+/**
+ * Exact versions of the view-time content libraries. Pinned (no `@11`-style
+ * ranges) so a document renders the same tomorrow as today, and so an upgrade
+ * is a deliberate orz-markdown release that every carrier absorbs by rebuilding.
+ * KaTeX follows the KaTeX orz-markdown renders with — its CSS must match the
+ * HTML it styles.
+ */
+export declare const PREVIEW_LIB_VERSIONS: {
+    readonly katex: "0.16.47";
+    readonly highlightjs: "11.9.0";
+    readonly mermaid: "11.17.2";
+    readonly smilesDrawer: "1.0.10";
+    readonly chartjs: "4.5.1";
+};
 /** Pinned CDN URLs for the preview-iframe assets (one source of truth). */
 export declare const PREVIEW_CDN: {
-    readonly katexCss: "https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css";
+    readonly katexCss: "https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css";
     readonly hljsJs: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js";
     readonly hljsLightCss: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css";
     readonly hljsDarkCss: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
-    readonly mermaidJs: "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+    readonly mermaidJs: "https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js";
     readonly smilesJs: "https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js";
-    readonly chartJs: "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+    readonly chartJs: "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js";
 };
 export interface PreviewFrameAssets {
     /** Pinned CDN URLs. */

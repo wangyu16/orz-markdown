@@ -5,7 +5,17 @@ describe('Phase 9 — QR Code plugin', () => {
   it('renders SVG for URL', () => {
     const html = md.render('{{qr https://example.com}}');
     expect(html).toContain('<svg');
-    expect(html).toContain('class="qrcode"');
+    expect(html).toContain('class="qrcode qrcode--standalone"');
+  });
+
+  it('marks a code alone in its paragraph as standalone (full size), one in a sentence as inline (text size)', () => {
+    expect(md.render('{{qr https://example.com}}')).toContain('class="qrcode qrcode--standalone"');
+    expect(md.render('  {{qr a}}  \n')).toContain('qrcode--standalone');
+    const inline = md.render('Scan {{qr https://example.com}} here');
+    expect(inline).toContain('class="qrcode"');
+    expect(inline).not.toContain('qrcode--standalone');
+    expect(md.render('{{qr a}} {{qr b}}')).not.toContain('qrcode--standalone');
+    expect(md.render('- Scan {{qr a}} now\n- {{qr b}}')).toMatch(/Scan <span class="qrcode"[\s\S]*<span class="qrcode qrcode--standalone"/);
   });
 
   it('renders with full name {{qrcode}}', () => {

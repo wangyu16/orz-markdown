@@ -1,179 +1,34 @@
 /* ==========================================================================
-   Minimal Functional Stylesheet — orz-markdown
-   Based on common.css structural rules + stripped-down theme styles.
+   Minimal theme — orz-markdown  (the STARTER for a new theme)
 
-   This file provides all necessary layout and visual distinction to render
-   every parser feature correctly. It contains NO decorative styles:
-   no gradients, no shadows, no custom fonts, no fancy borders or ornaments.
+   The smallest complete theme: common.css supplies all structure and
+   behavior; this file adds a plain, neutral decoration layer for every element
+   the parser emits — no custom fonts, gradients, shadows or ornaments.
 
-   Use one of the bundled theme stylesheets for a polished visual experience.
+   To make a new theme, copy this file and restyle it. Keep the
+   @import first, keep the :root tokens, restyle every section, and never
+   re-declare what common.css owns (floats, grids, tab switching, overflow,
+   embed sizing, print pagination). The contract and checklist live in
+   references/themes.md.
+
+   common.css must sit next to this file (it does in assets/ and in the
+   package's themes/), or point the @import at
+   https://cdn.jsdelivr.net/npm/orz-markdown/themes/common.css
    ========================================================================== */
 
-/* --------------------------------------------------------------------------
-   Shared structural rules (from common.css) — required for correct behavior
-   -------------------------------------------------------------------------- */
+@import './common.css';
 
-.markdown-body table {
-  width: max-content;
-  max-width: 100%;
-  display: block;
-  overflow-x: auto;
-}
-
-.markdown-body img {
-  display: block;
-  width: auto;
-  max-width: 100%;
-  max-height: 100%;
-  height: auto;
-  object-fit: contain;
-}
-
-.markdown-body p > img {
-  display: inline;
-  margin: 0;
-}
-
-.markdown-body span.success,
-.markdown-body span.info,
-.markdown-body span.warning,
-.markdown-body span.danger {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.markdown-body div.smiles-render {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 1.5rem 0;
-  min-height: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.markdown-body div.smiles-render canvas,
-.markdown-body canvas[data-smiles] {
-  display: block;
-  max-width: min(100%, 16rem);
-  height: auto;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* QR code inline widget */
-.markdown-body span.qrcode {
-  display: inline-block;
-  position: relative;
-  padding: 4px;
-  line-height: 0;
-  cursor: zoom-in;
-  background: #fff; /* keep white so QR SVG is readable on any background */
-}
-
-.markdown-body .qrcode__icon {
-  position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
-  width: 1rem;
-  height: 1rem;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  font-size: 0.7rem;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.16s ease;
-  pointer-events: none;
-}
-
-.markdown-body span.qrcode:hover .qrcode__icon,
-.markdown-body span.qrcode:focus-visible .qrcode__icon,
-.markdown-body span.qrcode.is-expanded .qrcode__icon {
-  opacity: 1;
-}
-
-.markdown-body span.qrcode.is-expanded {
-  visibility: hidden;
-}
-
-/* QR code expanded overlay */
-.qrcode-overlay {
-  position: fixed !important;
-  top: 50%;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  transform: translate(-50%, -50%);
-  z-index: 10001;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  width: min(90vmin, 36rem) !important;
-  height: min(90vmin, 36rem) !important;
-  aspect-ratio: 1 / 1;
-  max-width: calc(100vw - 2rem) !important;
-  max-height: calc(100vh - 2rem) !important;
-  padding: 1.5rem !important;
-  background: rgba(10, 16, 24, 0.86) !important;
-  border-radius: 1rem !important;
-  cursor: zoom-out;
-}
-
-.markdown-body span.qrcode svg,
-.qrcode-overlay svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.qrcode-overlay svg {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100%;
-  max-height: 100%;
-  flex: 0 1 auto;
-  object-fit: contain;
-}
-
-.qrcode-overlay .qrcode__icon {
-  opacity: 1;
-}
-
-/* Print rules */
-@media print {
-  table {
-    display: table !important;
-    width: auto !important;
-    max-width: 100% !important;
-  }
-
-  thead { display: table-header-group; }
-  tfoot { display: table-footer-group; }
-
-  tr, img, svg, canvas, iframe, video, pre, blockquote,
-  .smiles-render, .qrcode {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .youtube-embed { display: none !important; }
-  .qrcode__icon  { display: none !important; }
+:root {
+  color-scheme: light;
+  --markdown-body-max-width: calc(36rem + 4rem);  /* ≈70ch + the 2rem padding each side */
+  --orz-measure-wide: calc(46rem + 4rem);         /* ≈90ch, with class="markdown-body measure-wide" */
 }
 
 /* --------------------------------------------------------------------------
    Base reset & page layout
    -------------------------------------------------------------------------- */
 
-*, *::before, *::after { box-sizing: border-box; }
+html, body, :where(.markdown-body), :where(.markdown-body) *, :where(.markdown-body) *::before, :where(.markdown-body) *::after { box-sizing: border-box; }
 
 html {
   font-size: 1rem;
@@ -183,11 +38,15 @@ html {
 body {
   margin: 0;
   padding: 1.5rem 1rem;
+  background: #f4f4f4;
+}
+
+:where(.markdown-body) {
+  /* Typography lives on the article, not the page: a host page's own UI keeps its fonts and colours (M.14). */
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 1rem;
   line-height: 1.7;
   color: #222;
-  background: #f4f4f4;
 }
 
 /* --------------------------------------------------------------------------
@@ -195,8 +54,6 @@ body {
    -------------------------------------------------------------------------- */
 
 .markdown-body {
-  display: flow-root;
-  max-width: 860px;
   margin: 0 auto;
   padding: 2rem;
   background: #fff;
@@ -209,7 +66,7 @@ body {
    Headings
    -------------------------------------------------------------------------- */
 
-h1, h2, h3, h4, h5, h6 {
+:where(.markdown-body) h1, :where(.markdown-body) h2, :where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
   clear: both;
   margin: 2em 0 0.6em;
   font-weight: 700;
@@ -217,115 +74,100 @@ h1, h2, h3, h4, h5, h6 {
   scroll-margin-top: 4rem;
 }
 
-h1:first-child, h2:first-child { margin-top: 0; }
+:where(.markdown-body) h1:first-child, :where(.markdown-body) h2:first-child { margin-top: 0; }
 
-h1 { font-size: 2rem;    text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 0.4em; }
-h2 { font-size: 1.6rem;  border-bottom: 1px solid #ccc; padding-bottom: 0.2em; }
-h3 { font-size: 1.3rem; }
-h4 { font-size: 1.1rem; }
-h5 { font-size: 1rem; }
-h6 { font-size: 0.9rem;  color: #555; }
-
-/* Heading permalink anchor — hidden until hover */
-.header-anchor {
-  float: left;
-  margin-left: -1.2em;
-  padding-right: 0.3em;
-  text-decoration: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-h1:hover .header-anchor,
-h2:hover .header-anchor,
-h3:hover .header-anchor,
-h4:hover .header-anchor,
-h5:hover .header-anchor,
-h6:hover .header-anchor { opacity: 0.5; }
+:where(.markdown-body) h1 { font-size: 2rem;    text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 0.4em; }
+:where(.markdown-body) h2 { font-size: 1.6rem;  border-bottom: 1px solid #ccc; padding-bottom: 0.2em; }
+:where(.markdown-body) h3 { font-size: 1.3rem; }
+:where(.markdown-body) h4 { font-size: 1.1rem; }
+:where(.markdown-body) h5 { font-size: 1rem; }
+:where(.markdown-body) h6 { font-size: 0.9rem;  color: #555; }
 
 /* --------------------------------------------------------------------------
    Block spacing
    -------------------------------------------------------------------------- */
 
-p, ul, ol, blockquote, pre, table,
-.toc-wrapper, details.spoil, .tabs, .cols, .youtube-embed, .mermaid, .smiles-render {
+:where(.markdown-body) p, :where(.markdown-body) ul, :where(.markdown-body) ol, :where(.markdown-body) blockquote, :where(.markdown-body) pre, :where(.markdown-body) table, :where(.markdown-body) .toc-list, :where(.markdown-body) details.spoil, :where(.markdown-body) .tabs, :where(.markdown-body) .cols, :where(.markdown-body) .youtube-embed, :where(.markdown-body) .mermaid, :where(.markdown-body) .smiles-render {
   margin: 0 0 1.5rem;
 }
 
-p:last-child,
-ul:last-child,
-ol:last-child,
-blockquote:last-child,
-pre:last-child,
-table:last-child { margin-bottom: 0; }
+:where(.markdown-body) p:last-child,
+:where(.markdown-body) ul:last-child,
+:where(.markdown-body) ol:last-child,
+:where(.markdown-body) blockquote:last-child,
+:where(.markdown-body) pre:last-child,
+:where(.markdown-body) table:last-child { margin-bottom: 0; }
 
 /* --------------------------------------------------------------------------
    Inline text elements
    -------------------------------------------------------------------------- */
 
-a { color: #0060cc; text-underline-offset: 0.15em; }
-a:visited { color: #5050aa; }
-strong { font-weight: 700; }
-s, del { color: #888; text-decoration: line-through; }
-mark { background: #ffe284; padding: 0.05em 0.2em; }
-ins { text-decoration: underline; color: #167857; }
-sub, sup { font-size: 0.72em; }
+:where(.markdown-body) a { color: #0060cc; text-underline-offset: 0.15em; }
+:where(.markdown-body) a:visited { color: #5050aa; }
+:where(.markdown-body) strong { font-weight: 700; }
+:where(.markdown-body) s, :where(.markdown-body) del { color: #6b6b6b; text-decoration: line-through; }
+:where(.markdown-body) mark { background: #ffe284; padding: 0.05em 0.2em; }
+:where(.markdown-body) ins { text-decoration: underline; color: #167857; }
+:where(.markdown-body) sub, :where(.markdown-body) sup { font-size: 0.72em; }
 
 /* --------------------------------------------------------------------------
    Code
    -------------------------------------------------------------------------- */
 
-code {
+:where(.markdown-body) code {
   font-family: monospace;
   font-size: 0.9em;
   background: #f5f5f5;
   border: 1px solid #ddd;
   border-radius: 3px;
   padding: 0.1em 0.35em;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-pre {
-  overflow-x: auto;
+:where(.markdown-body) pre {
   padding: 1rem;
   background: #f5f5f5;
   border: 1px solid #ddd;
 }
 
-pre code {
+:where(.markdown-body) pre code {
   display: block;
   padding: 0;
   border: 0;
   background: transparent;
   font-size: 0.875rem;
   line-height: 1.65;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 /* --------------------------------------------------------------------------
    Blockquote
    -------------------------------------------------------------------------- */
 
-blockquote {
+:where(.markdown-body) blockquote {
   padding: 0.75rem 1rem;
   border-left: 4px solid #ccc;
   color: #555;
   background: #f9f9f9;
 }
 
-blockquote blockquote { background: #efefef; margin-top: 0.75rem; }
-blockquote > *:last-child { margin-bottom: 0; }
+:where(.markdown-body) blockquote blockquote { background: #efefef; margin-top: 0.75rem; }
+:where(.markdown-body) blockquote > *:last-child { margin-bottom: 0; }
 
 /* --------------------------------------------------------------------------
    Lists
    -------------------------------------------------------------------------- */
 
-ul, ol { padding-left: 1.5rem; }
-li { margin-bottom: 0.3rem; }
-li > ul, li > ol { margin-top: 0.3rem; margin-bottom: 0; }
+:where(.markdown-body) ul, :where(.markdown-body) ol { padding-left: 1.5rem; }
+:where(.markdown-body) li { margin-bottom: 0.3rem; }
+:where(.markdown-body) li > ul, :where(.markdown-body) li > ol { margin-top: 0.3rem; margin-bottom: 0; }
 
 /* Task lists */
-.task-list-item { list-style: none; padding-left: 0; }
-.task-list-item-checkbox,
-.task-list-item input[type='checkbox'] {
+:where(.markdown-body) .task-list-item { padding-left: 0; }
+:where(.markdown-body) .task-list-item-checkbox,
+:where(.markdown-body) .task-list-item input[type='checkbox'] {
   margin-right: 0.5rem;
   vertical-align: -0.1em;
 }
@@ -334,28 +176,27 @@ li > ul, li > ol { margin-top: 0.3rem; margin-bottom: 0; }
    Table
    -------------------------------------------------------------------------- */
 
-table { border-collapse: collapse; }
+:where(.markdown-body) table { border-collapse: collapse; }
 
-th, td {
+:where(.markdown-body) th, :where(.markdown-body) td {
   padding: 0.55rem 0.9rem;
   border: 1px solid #ccc;
-  text-align: left;
   vertical-align: top;
 }
 
-thead th {
+:where(.markdown-body) thead th {
   background: #f0f0f0;
   font-weight: 700;
   white-space: nowrap;
 }
 
-tbody tr:nth-child(even) td { background: #fafafa; }
+:where(.markdown-body) tbody tr:nth-child(even) td { background: #fafafa; }
 
 /* --------------------------------------------------------------------------
    Horizontal rule
    -------------------------------------------------------------------------- */
 
-hr {
+:where(.markdown-body) hr {
   height: 1px;
   margin: 2rem 0;
   border: 0;
@@ -366,38 +207,36 @@ hr {
    Image
    -------------------------------------------------------------------------- */
 
-img { margin: 0 auto; }
+:where(.markdown-body) img { margin: 0 auto; }
 
 /* --------------------------------------------------------------------------
    Footnotes
    -------------------------------------------------------------------------- */
 
-.footnote-ref { font-size: 0.85em; }
-.footnote-ref a, .footnote-backref { color: #0060cc; text-decoration: none; }
-.footnotes-sep { margin: 2rem 0 1rem; }
-.footnotes {
+:where(.markdown-body) .footnote-ref { font-size: 0.85em; }
+:where(.markdown-body) .footnote-ref a, :where(.markdown-body) .footnote-backref { color: #0060cc; text-decoration: none; }
+:where(.markdown-body) .footnotes-sep { margin: 2rem 0 1rem; }
+:where(.markdown-body) .footnotes {
   font-size: 0.875rem;
   color: #555;
   border-top: 1px solid #ddd;
   padding-top: 1rem;
 }
-.footnotes ol { margin-bottom: 0; }
+:where(.markdown-body) .footnotes ol { margin-bottom: 0; }
 
 /* --------------------------------------------------------------------------
    KaTeX math
    -------------------------------------------------------------------------- */
 
-.katex { font-size: 1.06em; }
+:where(.markdown-body) .katex { font-size: 1.06em; }
 
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+:where(.markdown-body) .katex-display {
   padding: 0.75rem 1rem;
   background: #f9f9f9;
   border: 1px solid #ddd;
 }
 
-.katex-error {
+:where(.markdown-body) .katex-error {
   color: #c0392b;
   font-family: monospace;
   font-size: 0.875rem;
@@ -407,174 +246,140 @@ img { margin: 0 auto; }
    Semantic containers — success / info / warning / danger
    -------------------------------------------------------------------------- */
 
-div.success, div.info, div.warning, div.danger {
+:where(.markdown-body) div.success, :where(.markdown-body) div.info, :where(.markdown-body) div.warning, :where(.markdown-body) div.danger {
   margin-bottom: 1.5rem;
   padding: 0.875rem 1rem;
   border: 1px solid;
 }
 
-div.success > *:last-child,
-div.info    > *:last-child,
-div.warning > *:last-child,
-div.danger  > *:last-child { margin-bottom: 0; }
-
-div.success { background: #efffed; border-color: #5ab85a; color: #1a5e2a; }
-div.info    { background: #e8f4fd; border-color: #5a9fd4; color: #1a4a70; }
-div.warning { background: #fff8e1; border-color: #e0a820; color: #7a5c00; }
-div.danger  { background: #fff0f0; border-color: #d45a5a; color: #7a1a1a; }
+:where(.markdown-body) div.success { background: #efffed; border-color: #5ab85a; color: #1a5e2a; }
+:where(.markdown-body) div.info    { background: #e8f4fd; border-color: #5a9fd4; color: #1a4a70; }
+:where(.markdown-body) div.warning { background: #fff8e1; border-color: #e0a820; color: #7a5c00; }
+:where(.markdown-body) div.danger  { background: #fff0f0; border-color: #d45a5a; color: #7a1a1a; }
 
 /* First strong/bold in a callout adopts the callout's text color */
-div.success > p:first-child > strong:first-child { color: #1a5e2a; }
-div.info    > p:first-child > strong:first-child { color: #1a4a70; }
-div.warning > p:first-child > strong:first-child { color: #7a5c00; }
-div.danger  > p:first-child > strong:first-child { color: #7a1a1a; }
+:where(.markdown-body) div.success > p:first-child > strong:first-child { color: #1a5e2a; }
+:where(.markdown-body) div.info    > p:first-child > strong:first-child { color: #1a4a70; }
+:where(.markdown-body) div.warning > p:first-child > strong:first-child { color: #7a5c00; }
+:where(.markdown-body) div.danger  > p:first-child > strong:first-child { color: #7a1a1a; }
 
 /* --------------------------------------------------------------------------
    Layout containers — left / right / center
    -------------------------------------------------------------------------- */
 
-.left {
-  float: left;
-  max-width: min(44%, 22rem);
+:where(.markdown-body) .left {
+  /* float, width cap and margins come from common.css */
   padding: 0.75rem;
   border: 1px solid #ddd;
-  margin: 0 1.5rem 1rem 0;
   background: #fafafa;
 }
 
-.right { text-align: right; margin-bottom: 1rem; }
-
-.center {
-  text-align: center;
-  margin: 0 auto 1.5rem;
-  max-width: min(100%, 42rem);
-}
+:where(.markdown-body) .right { margin-bottom: 1rem; }
 
 /* --------------------------------------------------------------------------
    Spoiler (details/summary)
    -------------------------------------------------------------------------- */
 
-details.spoil {
+:where(.markdown-body) details.spoil {
   border: 1px solid #ccc;
   overflow: hidden;
   margin-bottom: 1.5rem;
 }
 
-details.spoil > summary {
+:where(.markdown-body) details.spoil > summary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  cursor: pointer;
   list-style: none;
   user-select: none;
   font-weight: 600;
   background: #f5f5f5;
 }
 
-details.spoil > summary::-webkit-details-marker { display: none; }
+:where(.markdown-body) details.spoil > summary::-webkit-details-marker { display: none; }
 
-details.spoil > summary::before { content: '+'; font-weight: 700; }
-details.spoil[open] > summary::before { content: '–'; }
-details.spoil[open] > summary { border-bottom: 1px solid #ddd; }
-details.spoil > :not(summary) { padding: 0.75rem 1rem 1rem; }
+:where(.markdown-body) details.spoil > summary::before { content: '+'; font-weight: 700; }
+:where(.markdown-body) details.spoil[open] > summary::before { content: '–'; }
+:where(.markdown-body) details.spoil[open] > summary { border-bottom: 1px solid #ddd; }
+:where(.markdown-body) details.spoil > :not(summary) { padding: 0.75rem 1rem 1rem; }
 
 /* --------------------------------------------------------------------------
    Tabs
    -------------------------------------------------------------------------- */
 
-.tabs {
+:where(.markdown-body) .tabs {
   border: 1px solid #ccc;
   overflow: hidden;
   margin-bottom: 1.5rem;
 }
 
-.tabs-bar {
-  display: flex;
+:where(.markdown-body) .tabs-bar {
   gap: 0.2rem;
   padding: 0.35rem;
-  overflow-x: auto;
   border-bottom: 1px solid #ccc;
   background: #f5f5f5;
-  scrollbar-width: none;
 }
 
-.tabs-bar::-webkit-scrollbar { display: none; }
-
-.tabs-bar-btn {
+:where(.markdown-body) .tabs-bar-btn {
   border: 1px solid transparent;
   padding: 0.4rem 0.75rem;
   background: transparent;
-  cursor: pointer;
-  white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 600;
 }
 
-.tabs-bar-btn:hover { background: #e5e5e5; }
-.tabs-bar-btn.active { background: #fff; border-color: #ccc; }
+:where(.markdown-body) .tabs-bar-btn:hover { background: #e5e5e5; }
+:where(.markdown-body) .tabs-bar-btn.active { background: #fff; border-color: #ccc; }
 
-/* Panel visibility — controlled by JS */
-.tab { display: none; padding: 1rem; }
-.tab.active { display: block; }
+/* Panel visibility and the no-JS fallback come from common.css */
+:where(.markdown-body) .tab { padding: 1rem; }
 
-/* Fallback when JS has not run: show all panels */
-.tabs:not([data-js]) .tab { display: block; }
-.tabs:not([data-js]) .tab + .tab { border-top: 1px solid #ddd; }
+/* No-JS fallback (every panel shown): a separator between panels */
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab { border-top: 1px solid #ddd; }
 
 /* --------------------------------------------------------------------------
    Columns grid
    -------------------------------------------------------------------------- */
 
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+:where(.markdown-body) .cols {
   gap: 1rem;
-  align-items: start;
 }
 
-.col {
-  min-width: 0;
+:where(.markdown-body) .col {
   padding: 0.875rem 1rem;
   border: 1px solid #ddd;
   background: #fafafa;
 }
 
-.col > *:last-child { margin-bottom: 0; }
-
 /* --------------------------------------------------------------------------
    Table of contents
    -------------------------------------------------------------------------- */
 
-.toc-wrapper { position: relative; }
-
-nav.toc,
-.toc-list {
+:where(.markdown-body) .toc-list {
   padding: 0.875rem 1.1rem;
   border: 1px solid #ddd;
   background: #fafafa;
 }
 
-nav.toc ul, .toc-list ul { margin: 0; padding-left: 1.1rem; }
-nav.toc li, .toc-list li { margin-bottom: 0.2rem; list-style: none; }
-nav.toc li::before, .toc-list li::before { display: none; }
-nav.toc a, .toc-list a { text-decoration: none; color: #0060cc; }
-nav.toc a:hover, .toc-list a:hover { text-decoration: underline; }
+:where(.markdown-body) .toc-list li { margin-bottom: 0.2rem; }
+:where(.markdown-body) .toc-list a { text-decoration: none; color: #0060cc; }
+:where(.markdown-body) .toc-list a:hover { text-decoration: underline; }
 
 /* --------------------------------------------------------------------------
    Span colour classes
    -------------------------------------------------------------------------- */
 
-span.red    { color: #c0392b; }
-span.yellow { color: #9a7615; }
-span.green  { color: #218763; }
-span.blue   { color: #1d6db0; }
+:where(.markdown-body) span.red    { color: #c0392b; }
+:where(.markdown-body) span.yellow { color: #8f6c00; }
+:where(.markdown-body) span.green  { color: #1e7d5b; }
+:where(.markdown-body) span.blue   { color: #1d6db0; }
 
 /* Inline badge variants */
-span.success,
-span.info,
-span.warning,
-span.danger {
+:where(.markdown-body) span.success,
+:where(.markdown-body) span.info,
+:where(.markdown-body) span.warning,
+:where(.markdown-body) span.danger {
   padding: 0.1em 0.5em;
   border: 1px solid;
   border-radius: 999px;
@@ -583,58 +388,51 @@ span.danger {
   vertical-align: middle;
 }
 
-span.success { background: #efffed; color: #1a5e2a; border-color: #5ab85a; }
-span.info    { background: #e8f4fd; color: #1a4a70; border-color: #5a9fd4; }
-span.warning { background: #fff8e1; color: #7a5c00; border-color: #e0a820; }
-span.danger  { background: #fff0f0; color: #7a1a1a; border-color: #d45a5a; }
+:where(.markdown-body) span.success { background: #efffed; color: #1a5e2a; border-color: #5ab85a; }
+:where(.markdown-body) span.info    { background: #e8f4fd; color: #1a4a70; border-color: #5a9fd4; }
+:where(.markdown-body) span.warning { background: #fff8e1; color: #7a5c00; border-color: #e0a820; }
+:where(.markdown-body) span.danger  { background: #fff0f0; color: #7a1a1a; border-color: #d45a5a; }
 
 /* --------------------------------------------------------------------------
-   YouTube embed — 16:9 responsive wrapper (structural, not decorative)
+   YouTube embed — decoration only (common.css makes the 16:9 frame)
    -------------------------------------------------------------------------- */
 
-div.youtube-embed {
-  position: relative;
-  overflow: hidden;
-  height: 0;
-  padding-bottom: 56.25%; /* 16:9 ratio */
+:where(.markdown-body) div.youtube-embed {
   background: #e8e8e8;
 }
 
-div.youtube-embed iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
+/* --------------------------------------------------------------------------
+   QR code — the SVG has no quiet zone: a white plate around it (common.css
+   supplies the padding, the inline/standalone sizes and the expand overlay)
+   -------------------------------------------------------------------------- */
+
+:where(.markdown-body) span.qrcode {
+  background: #fff;
 }
 
 /* --------------------------------------------------------------------------
    Mermaid diagram container
    -------------------------------------------------------------------------- */
 
-div.mermaid {
-  overflow-x: auto;
-  text-align: center;
+:where(.markdown-body) div.mermaid {
   padding: 1rem;
   border: 1px solid #ddd;
   background: #fafafa;
 }
 
-div.mermaid svg { max-width: 100%; height: auto; }
-
 /* --------------------------------------------------------------------------
    Focus indicators
    -------------------------------------------------------------------------- */
 
-a:focus-visible,
-.tabs-bar-btn:focus-visible,
-details.spoil > summary:focus-visible {
+:where(.markdown-body) a:focus-visible,
+:where(.markdown-body) .tabs-bar-btn:focus-visible,
+:where(.markdown-body) details.spoil > summary:focus-visible {
   outline: 2px solid #0060cc;
   outline-offset: 2px;
 }
 
-.task-list-item-checkbox:focus-visible,
-.task-list-item input[type='checkbox']:focus-visible {
+:where(.markdown-body) .task-list-item-checkbox:focus-visible,
+:where(.markdown-body) .task-list-item input[type='checkbox']:focus-visible {
   outline: 2px solid #0060cc;
   outline-offset: 2px;
 }
@@ -643,16 +441,12 @@ details.spoil > summary:focus-visible {
    Responsive
    -------------------------------------------------------------------------- */
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .markdown-body { padding: 1rem; }
-  .left { float: none; max-width: 100%; margin: 0 0 1rem; }
-  .cols { grid-template-columns: 1fr; }
 }
 
 @media print {
   body { padding: 0; background: #fff; }
-  .markdown-body { max-width: 100%; padding: 0; border: 0; }
-  a { color: #0b57d0; }
-  .header-anchor { display: none !important; }
-  div.youtube-embed { display: none !important; }
+  .markdown-body { padding: 0; border: 0; }
+  :where(.markdown-body) a { color: #0b57d0; }
 }

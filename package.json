@@ -1,6 +1,6 @@
 {
   "name": "orz-markdown",
-  "version": "1.6.3",
+  "version": "2.0.0",
   "description": "Markdown renderer and single-file, self-editing HTML document family with math, diagrams, themes, and source-aware copy.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,10 @@
     "./runtime": "./dist/runtime.js",
     "./preview-frame": "./dist/preview-frame.js",
     "./themes/*": "./themes/*",
-    "./doc-meta": "./dist/doc-meta.js"
+    "./doc-meta": "./dist/doc-meta.js",
+    "./version": "./dist/version.js",
+    "./carrier": "./dist/carrier.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -17,6 +20,7 @@
     "orz-markdown-skills"
   ],
   "scripts": {
+    "prebuild": "tsx scripts/sync-version.ts && tsx scripts/build-skill-template.ts",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,7 +28,9 @@
     "check:site": "npm run check:starters && tsx scripts/check-site-discovery.ts",
     "visibility:baseline": "tsx scripts/visibility-baseline.ts",
     "render": "tsx scripts/render.ts",
-    "prepublishOnly": "npm run build && npm run test"
+    "render:minimal": "tsx scripts/render-minimal.ts",
+    "prepublishOnly": "npm run build && npm run test",
+    "build:web": "node build/web-bundle.mjs"
   },
   "keywords": [
     "markdown",
@@ -36,7 +42,9 @@
     "smiles",
     "qrcode",
     "toc",
-    "footnote"
+    "footnote",
+    "cjk",
+    "copy-as-markdown"
   ],
   "author": "Yu Wang <yuwang@orz.how>",
   "license": "MIT",
@@ -48,12 +56,12 @@
   "bugs": "https://github.com/wangyu16/orz-markdown/issues",
   "dependencies": {
     "@traptitech/markdown-it-katex": "^3.6.0",
-    "katex": "^0.16.35",
-    "markdown-it": "^14.3.0",
+    "katex": "0.16.47",
+    "markdown-it": "^14.3.2",
     "markdown-it-anchor": "^9.2.0",
+    "markdown-it-cjk-breaks": "^2.0.1",
     "markdown-it-container": "^4.0.0",
     "markdown-it-footnote": "^4.0.0",
-    "markdown-it-imsize": "^2.0.1",
     "markdown-it-ins": "^4.0.0",
     "markdown-it-mark": "^4.0.0",
     "markdown-it-sub": "^2.0.0",
@@ -71,9 +79,13 @@
     "@types/qrcode-svg": "^1.1.5",
     "esbuild": "^0.28.1",
     "happy-dom": "^20.10.6",
-    "path-browserify": "^1.0.1",
+    "playwright-core": "^1.62.1",
+    "postcss": "^8.5.28",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=20.16"
   }
 }

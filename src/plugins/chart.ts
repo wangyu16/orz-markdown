@@ -1,4 +1,5 @@
 import { register } from '../registry.js';
+import { escapeAttr } from '../html.js';
 
 /*
  * {{chart …}} — declarative chart blocks.
@@ -29,17 +30,6 @@ import { register } from '../registry.js';
  * emits an empty canvas carrying an `data-chart-error` attribute rather than
  * throwing.
  */
-
-// Encode a value for a double-quoted HTML attribute, preserving newlines (as
-// &#10;) so multi-line source survives in `data-md`.
-function escapeAttr(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '&#10;');
-}
 
 interface ChartConfig {
   type: string;

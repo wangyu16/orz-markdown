@@ -25,18 +25,34 @@
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PREVIEW_CDN = void 0;
+exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
 const runtime_js_1 = require("./runtime.js");
+const version_js_1 = require("./version.js");
+/**
+ * Exact versions of the view-time content libraries. Pinned (no `@11`-style
+ * ranges) so a document renders the same tomorrow as today, and so an upgrade
+ * is a deliberate orz-markdown release that every carrier absorbs by rebuilding.
+ * KaTeX follows the KaTeX orz-markdown renders with — its CSS must match the
+ * HTML it styles.
+ */
+exports.PREVIEW_LIB_VERSIONS = {
+    katex: version_js_1.KATEX_VERSION,
+    highlightjs: '11.9.0',
+    mermaid: '11.17.2',
+    smilesDrawer: '1.0.10',
+    chartjs: '4.5.1',
+};
+const V = exports.PREVIEW_LIB_VERSIONS;
 /** Pinned CDN URLs for the preview-iframe assets (one source of truth). */
 exports.PREVIEW_CDN = {
-    katexCss: 'https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css',
-    hljsJs: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
-    hljsLightCss: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css',
-    hljsDarkCss: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css',
-    mermaidJs: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
-    smilesJs: 'https://unpkg.com/smiles-drawer@1.0.10/dist/smiles-drawer.min.js',
-    chartJs: 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js',
+    katexCss: `https://cdn.jsdelivr.net/npm/katex@${V.katex}/dist/katex.min.css`,
+    hljsJs: `https://cdnjs.cloudflare.com/ajax/libs/highlight.js/${V.highlightjs}/highlight.min.js`,
+    hljsLightCss: `https://cdnjs.cloudflare.com/ajax/libs/highlight.js/${V.highlightjs}/styles/github.min.css`,
+    hljsDarkCss: `https://cdnjs.cloudflare.com/ajax/libs/highlight.js/${V.highlightjs}/styles/atom-one-dark.min.css`,
+    mermaidJs: `https://cdn.jsdelivr.net/npm/mermaid@${V.mermaid}/dist/mermaid.min.js`,
+    smilesJs: `https://unpkg.com/smiles-drawer@${V.smilesDrawer}/dist/smiles-drawer.min.js`,
+    chartJs: `https://cdn.jsdelivr.net/npm/chart.js@${V.chartjs}/dist/chart.umd.min.js`,
 };
 /** Guard inline <script> content against premature `</script>` termination. */
 function guard(js) {
@@ -46,12 +62,13 @@ function guard(js) {
  * id/wrapper the host gives the rendered region. Idempotent: highlight/tabs/QR
  * skip already-processed nodes, SMILES/chart track a JS flag. SMILES honors
  * window.__orzSmilesTheme ('dark' → light bonds); reset its flag and re-run to
- * redraw after a theme switch. */
+ * redraw after a theme switch. A chart whose datasets are all unnamed
+ * (`data: …` shorthand) hides its legend instead of showing "undefined". */
 const ENHANCE_BODY = "var R='.markdown-body ';" +
     "try{if(window.hljs)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}" +
     "try{if(window.mermaid)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
     "try{if(window.SmilesDrawer)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
-    "try{if(window.Chart)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});new window.Chart(v,g)}catch(e){}})}catch(e){}" +
+    "try{if(window.Chart)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
     "try{if(window.OrzMarkdownRuntime)window.OrzMarkdownRuntime.init(document)}catch(e){}";
 /**
  * Everything a host app needs to wire the orz-markdown preview iframe the way the

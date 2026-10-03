@@ -108,11 +108,16 @@ npx orz-paged paper.md       # -> paper.paged.html</code></pre>
           <h2 style="margin-top:.2em">Render with the parser</h2>
           <p>Install <a href="https://www.npmjs.com/package/orz-markdown"><code>orz-markdown</code></a> and render
           Markdown to HTML:</p>
-          <pre><code>import md from 'orz-markdown';
+          <pre><code>import { md } from 'orz-markdown';
 
 const html = md.render('# Hello {{emoji wave}}');
 // place inside &lt;article class="markdown-body"&gt;…&lt;/article&gt;
 // with one of the bundled themes</code></pre>
+          <p>The parser emits raw HTML as written, so sanitize untrusted input. File includes
+          (<code>{{md ./file}}</code>) stay off unless you pass <code>markdownBasePath</code> or
+          <code>readFile</code> in the render env (confine them with <code>markdownIncludeRoot</code>). URL includes
+          are resolved beforehand with <code>prepareSources()</code>; outside a browser it fetches only from the
+          <code>allowedHosts</code> you name (or through your own <code>fetcher</code>).</p>
           <p>See the <a href="./features.html">features</a> for the full syntax, and the
           <a href="https://github.com/wangyu16/orz-markdown">README</a> for themes and the agent skill.</p>
         </div>
@@ -137,7 +142,7 @@ date: 2026-07-11
 }}</code></pre>
       <p>The metadata block is consumed during generation, so update the original source and regenerate when
       those details change. Host applications can inject authoritative metadata programmatically; host values
-      take precedence field by field.</p>
+      take precedence field by field (blank host values are ignored).</p>
     </section>
 
     <!-- VERIFY -->

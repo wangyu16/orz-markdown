@@ -1,22 +1,5 @@
 import { register } from '../registry.js';
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-// Encode a value for a double-quoted HTML attribute, preserving newlines (as
-// &#10;) so multi-line source survives in `data-md`.
-function escapeAttr(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '&#10;');
-}
+import { escapeAttr, escapeHtml } from '../html.js';
 
 register({
   type: 'block',

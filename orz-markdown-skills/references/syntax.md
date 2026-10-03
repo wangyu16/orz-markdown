@@ -6,7 +6,7 @@ Complete syntax reference for all features. Covers standard markdown, official p
 
 ## Standard Markdown (CommonMark)
 
-```markdown
+````markdown
 # H1  ## H2  ### H3  #### H4  ##### H5  ###### H6
 
 **bold**    *italic*    ***bold italic***
@@ -14,7 +14,8 @@ Complete syntax reference for all features. Covers standard markdown, official p
 [link text](https://url.com)
 [link with title](https://url.com "Title")
 ![alt text](image.png)
-![alt text](image.png =400x200)    ← image sizing (markdown-it-imsize)
+![alt text](image.png =400x200)    ← image sizing: width/height attributes
+![alt text](image.png =400x)       ← either side may be omitted (=x200 too)
 
 > blockquote
 > > nested blockquote
@@ -31,18 +32,26 @@ Complete syntax reference for all features. Covers standard markdown, official p
 ```language
 fenced code block
 ```
-```
+
+| Left | Center | Right |    ← GFM table; the second row sets alignment
+|:-----|:------:|------:|
+| a    |   b    |     c |
+
+https://example.com  www.example.com   ← bare URLs become links (linkify)
+````
+
+`typographer` is on: `--` → –, `---` → —, `...` → …, `(c)` → ©, `"quotes"` → “quotes”. Write code spans for literal text.
 
 ---
 
 ## Extended Syntax (Official Plugins)
 
-### Highlighting, Insert, Delete — `markdown-it-mark`, `markdown-it-ins`
+### Highlight, insert, strikethrough — `markdown-it-mark`, `markdown-it-ins`, markdown-it core
 
 ```markdown
 ==highlighted text==        → <mark>
 ++inserted text++           → <ins>
-~~deleted text~~            → <s> (also ~~strikethrough~~)
+~~deleted text~~            → <s>
 ```
 
 ### Sub / Superscript — `markdown-it-sub`, `markdown-it-sup`
@@ -66,10 +75,13 @@ Renders `<li class="task-list-item">` with `<input type="checkbox" class="task-l
 
 ```markdown
 Here is a footnote reference[^1] and another[^note].
+An inline footnote^[Its text is written in place.] needs no definition.
 
 [^1]: First footnote text.
 [^note]: Named footnote text.
 ```
+
+All notes, inline and defined, share one numbered list at the end of the document.
 
 ### KaTeX Math — `@traptitech/markdown-it-katex`
 
@@ -86,17 +98,19 @@ $\ce{H2O}$
 $\ce{Fe^{2+} + 2e- -> Fe}$
 ```
 
-Requires KaTeX CSS in the page head: `https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css`
+Requires KaTeX CSS in the page head: `https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css`
+
+Macro definitions (`\def`, `\newcommand`, `\let`, …) are not supported in math, and a formula over 10,000 characters is not typeset: either renders as its source text. Write the expanded TeX instead. Per document, math past 1,000,000 characters of TeX, 100,000 characters inside `\ce{…}`/`\pu{…}`, or 64 MB of rendered KaTeX also renders as its source ("too much math in one document").
 
 ### Heading Anchors — `markdown-it-anchor`
 
-Every heading automatically gets an `id` attribute and a `<a class="header-anchor">` permalink prepended inside it. No special syntax — it's automatic.
+Every heading automatically gets an `id` attribute (and `tabindex="-1"`, so in-page links can focus it). No permalink element is rendered. No special syntax — it's automatic.
 
 ---
 
 ## Containers — `::: name ... :::`
 
-All containers use fenced colon syntax: `::: name` — **the space between `:::` and the name is required** (`:::name` without a space does not parse). Nesting is supported: the outer container must use more fence-colons than the inner (e.g. `::::` outer, `:::` inner).
+All containers use fenced colon syntax: `::: name` — write a space between `:::` and the name (conventional; `:::name` also parses). Nesting is supported: the outer container must use more fence-colons than the inner (e.g. `::::` outer, `:::` inner).
 
 ### Semantic callouts
 
@@ -118,7 +132,7 @@ All containers use fenced colon syntax: `::: name` — **the space between `:::`
 :::
 ```
 
-Renders `<div class="success|info|warning|danger">`. In themes, the first `**bold**` in the first paragraph is styled with the callout's accent color.
+Renders `<div class="success|info|warning|danger">`. In most themes, the first `**bold**` in the first paragraph is styled with the callout's accent color.
 
 ### Layout containers
 
@@ -129,19 +143,22 @@ Floats left. Text following in the source wraps on the right side.
 
 ::: left 30%
 Optional width argument sets both max-width and width.
-Accepts any CSS length: %, px, em, rem, vw.
+A number with a CSS unit: px, em, rem, %, ch, ex, vw, vh, vmin, vmax, pt, pc, cm, mm, in.
 :::
 
 ::: right
-Floats right.
+Right-aligns its content (text, images, tables) — e.g. a signature or date line.
 :::
 
 ::: center
-Centers horizontally (max 42rem).
+Centers its content in a column capped at 42rem.
 :::
 ```
 
-Width argument is only supported on `left`. `right` and `center` have no argument.
+Width argument is only supported on `left`; anything that is not a number with a unit (`calc(…)`, `var(…)`) is ignored and the default cap applies. `right` and `center` have no argument.
+`left` is the only floating container; `right` and `center` align. Alignment
+works in every theme, including themes that justify body text. On screens
+narrower than 640px a `left` box stops floating and takes the full width.
 
 ### Spoiler (collapsible)
 
@@ -157,7 +174,7 @@ The text after `::: spoil` becomes the `<summary>` label. Renders `<details clas
 
 ### Tabs
 
-```markdown
+````markdown
 :::: tabs
 ::: tab JavaScript
 ```js
@@ -170,7 +187,7 @@ print("Hello")
 ```
 :::
 ::::
-```
+````
 
 Outer fence uses four colons `::::`. Inner tab panes use three `:::`. The text after `::: tab` is the button label (set as `data-label` attribute). JavaScript initializes the tab bar — without JS all panels fall back to block display.
 
@@ -190,8 +207,11 @@ Equal-width column two.
 Without arguments, all `col` children share equal width. Pass space-separated values to set column widths:
 
 - **Plain numbers** → become `fr` units: `:::: cols 1 2` → `grid-template-columns: 1fr 2fr`
-- **CSS lengths** → pass through as-is: `:::: cols 30% 70%` → `grid-template-columns: 30% 70%`
-- Both forms can be mixed: `:::: cols 1fr 200px 2fr`
+- **CSS track sizes** → pass through as-is: lengths (`30%`, `200px`, `1fr`), `auto`, `min-content`, `max-content`, `minmax(10rem, 1fr)`, `repeat(3, 1fr)`
+- Forms can be mixed: `:::: cols 1fr 200px 2fr`
+- Anything else (`calc(…)`, `var(…)`) makes the whole argument list ignored: equal auto-fit columns, as with no argument.
+
+Below 640px every `cols` grid stacks into one column.
 
 ```markdown
 :::: cols 1 2 1
@@ -258,10 +278,15 @@ Use your own CSS to style arbitrary containers.
 
 ## Custom Plugins — `{{name[args] body}}`
 
-The unified plugin dispatch syntax. Both block and inline forms are supported.
+The unified plugin dispatch syntax. Each plugin is **one** type:
 
-**Inline:** `{{name[args] body}}`
-**Block (multi-line):**
+- **Block** — `youtube`, `mermaid`, `smiles`, `chart`, `toc`, `markdown`/`md`/`md-include`, `yaml`/`yml`, `nyml`. The directive must start a line; text after its closing `}}` becomes a new paragraph. Mid-sentence it renders as literal text.
+- **Inline** — `span`/`sp`, `emoji`/`em`, `space`, `qr`/`qrcode`, `attrs`. Usable anywhere in a line.
+
+Either type may be written on one line or across lines:
+
+**One line:** `{{name[args] body}}`
+**Multi-line:**
 ```
 {{name[args]
 body content
@@ -290,7 +315,7 @@ spanning lines
 {{span[my-custom-class] any class name works}}
 ```
 
-The first argument (inside `[...]`) is used verbatim as the `class` attribute on a `<span>`. Built-in color classes: `red`, `yellow`, `green`, `blue`. Built-in badge classes: `success`, `info`, `warning`, `danger`. Any custom class name works — style it yourself in your theme.
+The argument (inside `[...]`) is used verbatim as the `class` attribute on a `<span>`, so several space-separated classes work (`{{sp[red success] …}}`). The body is inline Markdown (`**bold**`, `` `code` ``, math). Built-in color classes: `red`, `yellow`, `green`, `blue`. Built-in badge classes: `success`, `info`, `warning`, `danger`. Any custom class name works in your own documents — style it yourself; text fetched through a URL include may use only these eight.
 
 ---
 
@@ -298,12 +323,12 @@ The first argument (inside `[...]`) is used verbatim as the `class` attribute on
 
 ```markdown
 {{emoji wave}}       → 👋
-{{em smile}}         → 😊
+{{em smile}}         → 😄
 {{emoji tada}}       → 🎉
 {{em rocket}}        → 🚀
 ```
 
-Uses `node-emoji` for name lookup. The emoji text alias (e.g., `wave`, `smile`) is resolved to the Unicode character at render time — no client-side library needed.
+Uses `node-emoji` for name lookup. The emoji text alias (e.g., `wave`, `smile`) is resolved to the Unicode character at render time — no client-side library needed. An unknown name renders as its directive text (`{{emoji nosuchname}}`).
 
 ---
 
@@ -314,7 +339,7 @@ Uses `node-emoji` for name lookup. The emoji text alias (e.g., `wave`, `smile`) 
 {{space 1}}    → 1rem-wide inline-block spacer
 ```
 
-The numeric argument is a `rem` width: `{{space 4}}` emits `<span style="display:inline-block;width:4rem"></span>`. Non-positive or non-numeric values render nothing.
+The numeric argument is a `rem` width: `{{space 4}}` emits `<span style="display:inline-block;width:4rem"></span>`. Decimals work (`{{space 1.5}}`); widths are capped at 100rem. Non-positive or non-numeric values render nothing.
 
 ---
 
@@ -325,7 +350,7 @@ The numeric argument is a `rem` width: `{{space 4}}` emits `<span style="display
 {{qrcode mailto:hello@example.com}}
 ```
 
-Renders an inline SVG QR code inside `<span class="qrcode">`. The inline version is small; clicking it expands to a fullscreen overlay (requires the QR runtime script in the page). Requires a white background on the span — themes must set `background: #fff` on `.qrcode` so the SVG is readable on dark backgrounds.
+Renders an SVG QR code inside `<span class="qrcode">`. A code inside a sentence is drawn at text size, so its line keeps the paragraph's spacing; a code alone in its paragraph (`class="qrcode qrcode--standalone"`) is drawn full size for scanning; print draws both large enough to scan. Clicking expands to a fullscreen overlay (requires the QR runtime script in the page). The SVG is black modules on a white rect with no quiet zone — themes set `background: #fff` on `span.qrcode` (common.css adds the padding: 4px standalone, 0.12em inside a sentence) so it scans on dark backgrounds. Content too long for a QR code, or any code past 8 MB of QR SVG in one document, renders as its `{{qr …}}` text.
 
 ---
 
@@ -336,7 +361,7 @@ Renders an inline SVG QR code inside `<span class="qrcode">`. The inline version
 {{yt https://youtu.be/dQw4w9WgXcQ}}
 ```
 
-Accepts a bare video ID or a full YouTube URL. Renders a `<div class="youtube-embed">` with a 16:9 padding-bottom responsive iframe wrapper. Iframes are never shown in print.
+Accepts a bare video ID (optionally `ID?t=42`) or a full YouTube URL; a `t=`/`start=` time (`90`, `1m30s`) becomes the embed's start. A body that is not a video id (a playlist URL) renders as its directive text. Renders a `<div class="youtube-embed">` around the iframe; common.css makes it a responsive 16:9 box. Embeds are hidden in print.
 
 ---
 
@@ -375,6 +400,28 @@ Renders `<div class="smiles-render"><canvas data-smiles="...">`. SmilesDrawer.js
 
 ---
 
+### chart — Chart (client-side rendered)
+
+```markdown
+{{chart
+type: line
+title: Quarterly results
+labels: Q1, Q2, Q3, Q4
+series: Revenue = 10, 14, 9, 17
+series: Cost = 6, 7, 8, 9
+}}
+
+{{chart
+type: pie
+labels: A, B, C
+data: 30, 50, 20
+}}
+```
+
+One `key: value` per line. `type` is any Chart.js type (`bar`, `line`, `pie`, `doughnut`, `radar`, …; default `bar`); `title` is optional; `labels` are comma-separated. `data: …` is a single unnamed series (its legend is hidden); `series: Name = …` adds a named series and may repeat. A value that is not a number becomes a gap; unknown keys are ignored. Renders `<canvas class="orz-chart" data-chart="…">` with the Chart.js config as JSON; Chart.js draws it client-side (`window.__orzEnhance()`), so `chart.umd.min.js` must be in the page.
+
+---
+
 ### toc — Table of contents
 
 ```markdown
@@ -383,20 +430,20 @@ Renders `<div class="smiles-render"><canvas data-smiles="...">`. SmilesDrawer.js
 {{toc 1,4}}
 ```
 
-Auto-generates a `<ul class="toc-list">` of heading links (each `<li>` indented by depth). Optional argument is a comma-separated level range (`min,max`), defaulting to `1,3`. The placement in the source does not matter — a core rule scans the whole document, so `{{toc}}` works at the top or bottom.
+Auto-generates a `<ul class="toc-list">` of heading links (each `<li>` indented by depth). Optional argument is a comma-separated level range `min,max` — both bounds required (`{{toc 2}}` falls back to the default `1,3`). The placement in the source does not matter — a core rule scans the whole document, so `{{toc}}` works at the top or bottom, and headings from file includes are listed. Past 20,000 entries or ~8 MB of TOC output in one document, further TOCs render empty.
 
 ---
 
 ### attrs — Inject HTML attributes
 
 ```markdown
-# My Section {{attrs[id="hero"]}}
-# Another {{attrs[class="featured" data-x="y"]}}
+# My Section {{attrs[#hero]}}
+# Another {{attrs[class="featured lead" data-x="y"]}}
 
-A paragraph. {{attrs[style="color:red"]}}
+A paragraph. {{attrs[.note hidden]}}
 ```
 
-Injects any HTML attributes onto the immediately preceding token (heading, paragraph, etc.). Accepts any valid HTML attribute syntax inside `[...]`.
+Sets attributes on the block whose text contains the marker (heading, paragraph, table cell, …). Forms: `#id`, `.class`, `key="value"`, bare `key` (empty value). A later value for the same key replaces an earlier one — `{{attrs[.a .b]}}` gives `class="b"`; write `class="a b"` for two classes. No effect inside a tight list item (its paragraph renders no tag).
 
 ---
 
@@ -407,7 +454,11 @@ Injects any HTML attributes onto the immediately preceding token (heading, parag
 {{markdown ../shared/footer.md}}
 ```
 
-Reads and inlines the content of a local markdown file at render time. Path is resolved relative to `markdownBasePath` (passed as the second argument to `md.render(source, { markdownBasePath })`). For remote URL includes, pre-process with `prepareSources()` first.
+Aliases `markdown`, `md`, `md-include`; a block directive. File access is **opt-in**: the include resolves only when the render env sets `markdownBasePath` (Node reads the file, path relative to it; Node ≥ 20.16) or `readFile(absPath) => string | null` — `md.render(source, { markdownBasePath, markdownIncludeRoot })`. With neither it renders nothing. `markdownIncludeRoot` refuses paths that resolve outside that directory (compared by real path, so a symlink cannot escape it). One level only: a directive inside an included file renders nothing. At most 5,000,000 included characters per render; past that, includes render nothing.
+
+The file is spliced in at parse time, so it is part of the one document: its footnotes join the single footnote list, its headings get unique ids and appear in `{{toc}}`.
+
+For URL includes (`{{md https://…}}`), run `prepareSources()` first — outside a browser it needs `allowedHosts` or a `fetcher` (see SKILL.md).
 
 ---
 
@@ -422,7 +473,7 @@ created: 2025-01-01
 }}
 ```
 
-Emits `<script type="application/yaml">` with the raw YAML text. Invisible to the user. Accessible via JavaScript: `document.querySelector('script[type="application/yaml"]').textContent`.
+Emits `<script type="application/yaml">` with the raw YAML text. Invisible to the user. Read it back with `unescapeScriptText` from `orz-markdown/carrier`: `unescapeScriptText(document.querySelector('script[type="application/yaml"]').textContent)` — every `<script`/`</script` in the body is escaped reversibly so it cannot end the island.
 
 ---
 
@@ -435,7 +486,21 @@ count: 42
 items:
   - alpha
   - beta
+notes: |
+  line one
+  line two
 }}
 ```
 
-Parsed using the NYML key-value syntax and emitted as `<script type="application/json">`. Invisible to the user. Accessible via: `JSON.parse(document.querySelector('script[type="application/json"]').textContent)`.
+Emitted as `<script type="application/json" id="nyml-data">` (later blocks: `nyml-data-2`, `nyml-data-3`, …). Invisible to the user. NYML is not YAML — the JSON root is a **list of single-key entries**, every value a **string**; indented lines under a key become a list of raw strings (a `- ` is kept), and `key: |` takes the indented lines as one multi-line string. The example gives:
+
+```json
+[
+  { "title": "My Document" },
+  { "count": "42" },
+  { "items": ["- alpha", "- beta"] },
+  { "notes": "line one\nline two\n" }
+]
+```
+
+Read it with `JSON.parse(document.getElementById('nyml-data').textContent)`. If the body cannot be parsed, the island holds `{"error":"Failed to parse NYML"}`.

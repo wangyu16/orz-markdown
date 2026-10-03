@@ -12,6 +12,15 @@ below; this guide is the checklist for when you *don't* use them.
 
 There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
 
+> **Bundling and versions (≥ 2.0.0).** orz-markdown bundles for the browser
+> with no `fs`/`path`/`process` shims — delete any you carried. Read the
+> version you embed from `orz-markdown/version` (`VERSION`, `KATEX_VERSION`)
+> instead of `package.json`, and take CDN URLs from `PREVIEW_CDN` rather than
+> copying them, so a rebuild picks up every pinned-version change. If your app
+> writes Markdown into a `<script>` source island, use `escapeScriptText` /
+> `unescapeScriptText` from `orz-markdown/carrier` (reversible, and covers
+> `<script` as well as `</script`); for JSON islands use `jsonForScript`.
+
 > **Shortcut for iframe hosts — `getPreviewFrameAssets()`.** Most of the
 > JavaScript below is the same everywhere, so it lives in one helper:
 >
@@ -88,12 +97,12 @@ look broken. Minimum set (see `css-classes.md` for the exact selectors):
 |---|---|
 | Admonitions | `div.info`, `div.success`, `div.warning`, `div.danger` |
 | Spans — colour | `span.red`, `span.green`, `span.blue`, `span.yellow` (colour only) |
-| Spans — badge | `span.success/info/warning/danger` — **need** `display:inline-flex; align-items:center; line-height:1; white-space:nowrap` + padding/radius (normally in `common.css`) |
+| Spans — badge | `span.success/info/warning/danger` — **need** `display:inline-flex; align-items:center; line-height:1; white-space:nowrap` (from `common.css`) plus padding, radius and colours (the theme's) |
 | Columns | `.cols` (CSS grid), `.col` |
 | Tabs | `.tabs`, `.tabs-bar`, `.tabs-bar-btn`(`.active`), `.tab`; **`.tabs:not([data-js]) .tab { display:block }`** (no-JS fallback) and `.tabs[data-js] .tab{display:none}` / `.tab.active{display:block}` |
 | Spoiler | `details.spoil`, `summary` |
-| Alignment | `div.left`, `div.center`, `div.right` (`text-align`) |
-| QR | `span.qrcode` — **must** have `background:#fff; padding` (the SVG is black-on-transparent) |
+| Alignment | `div.left` (float left + a width cap; unfloat below 640px), `div.center` / `div.right` (`text-align`, reaching justified paragraphs inside) |
+| QR | `span.qrcode` — **must** have `background:#fff` and padding (the SVG has no quiet zone). Size it: a code alone in its paragraph carries `qrcode--standalone` (common.css: 6rem SVG, 4px padding); one inside a sentence is text size (1.3em SVG, 0.12em padding, `vertical-align:-0.3em`) and expands on tap; print 2cm / 3cm. |
 | YouTube | `.youtube-embed` — the iframe has **no width/height**; make it a 16:9 responsive box or it defaults to 300×150 |
 | Math | `.katex`, `.katex-display` (load `katex.min.css`) |
 | Diagrams/chem | `.mermaid svg`, `.smiles-render canvas` / `canvas[data-smiles]` |
@@ -128,9 +137,12 @@ s.textContent = getBrowserRuntimeScript();
 document.body.appendChild(s);
 ```
 
-It auto-runs `OrzMarkdownRuntime.init(document)` **once** on `DOMContentLoaded`
-and wires the global copy handler. It exposes
-`OrzMarkdownRuntime.{ init, initTabs, initQrCodes, elementToMarkdown }`.
+It auto-runs `OrzMarkdownRuntime.init(document)` **once** — on `DOMContentLoaded`,
+or at once if the document is already parsed — and wires the global copy
+handler. It exposes
+`OrzMarkdownRuntime.{ init, initTabs, initQrCodes, collapseQr, elementToMarkdown }`.
+`getBrowserRuntimeScript({ autoInit: false })` skips the auto-`init` (copy still
+works; tabs and QR stay as rendered) — for print masters such as orz-poster.
 
 **If you render content dynamically** (after load, or re-render — e.g. an editor
 or a slide engine), the one-time `init` won't see it. Call
@@ -167,18 +179,22 @@ when) all of this holds:
    The handler ignores selections elsewhere and inside inputs/textareas.
 3. **`data-md` breadcrumbs are preserved.** Generated constructs whose source is
    otherwise lost — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart` (and any
-   plugin that adds one) — carry `data-md` with their original directive. The
-   walker emits it verbatim. **Never strip `data-md`** when you post-process HTML.
-4. **Plugin/container classes are preserved.** Constructs without a `data-md`
-   are recovered *by class/structure*: `<span class="red">` → `{{sp[red] …}}`,
-   `<div class="center">` → `::: center … :::`, nested `cols`/`tabs` get the
-   right fence length, and a `{{toc}}` is recovered as its rendered list of
-   heading links (not the `{{toc}}` directive). If you rewrite/strip these
-   classes, copy loses the source.
+   plugin that adds one) — carry `data-md` with their original directive, and
+   so do `emoji`, `toc` (`{{toc 2,3}}`, not its list of links), `yaml`, `nyml`
+   and footnote references (`[^note]` / `^[…]`). The walker emits it verbatim.
+   **Never strip `data-md`** when you post-process HTML.
+4. **Plugin/container classes and their breadcrumbs are preserved.**
+   Constructs without a `data-md` are recovered *by class/structure*:
+   `<span class="red">` → `{{sp[red] …}}`, `<div class="center">` →
+   `::: center … :::`, nested `cols`/`tabs` get the right fence length. What
+   the class alone cannot say rides in `data-orz-container` (cols ratios, the
+   `left` width, the spoil label on its `<summary>`, a custom `::: name`'s
+   arguments) and `data-footnote-label` (a named footnote definition). If you
+   rewrite/strip these classes or attributes, copy loses the source.
 
-Caveat: a container (`::: center`, `:::: cols`, spoiler, tabs) is recovered only
-when the **selection includes the container element**, not just the text inside
-it — select the whole block/region, not the inner words.
+A container (`::: center`, `:::: cols`, spoiler, tabs) is recovered when the
+selection covers all of its text (or the element itself); a selection of only
+some of the words inside copies just those words, without the container.
 
 Convert a node directly: `OrzMarkdownRuntime.elementToMarkdown(node)`.
 
@@ -193,4 +209,4 @@ Convert a node directly: `OrzMarkdownRuntime.elementToMarkdown(node)`.
 - [ ] Graphics are width-capped (and size-fitted in fixed layouts) (§1d).
 - [ ] Runtime loaded; `init` re-run on dynamically rendered content; tab `data-js="1"` aligned (§2a).
 - [ ] mermaid / smiles-drawer / Chart.js loaded and drawn; KaTeX CSS loaded (§2b).
-- [ ] `data-md` and plugin/container classes preserved end-to-end for copy (§3).
+- [ ] `data-md`, `data-orz-container`, `data-footnote-label` and plugin/container classes preserved end-to-end for copy (§3).

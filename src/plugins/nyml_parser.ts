@@ -27,13 +27,12 @@ class ParseError extends Error {
  * @returns {number}
  */
 function leadingSpaces(s: string): number {
+  // Tabs expand to the next multiple of 4, matching the metadata scanner.
   let count = 0;
   for (const ch of s) {
-    if (ch === " ") {
-      count++;
-    } else {
-      break;
-    }
+    if (ch === " ") count++;
+    else if (ch === "\t") count += 4 - (count % 4);
+    else break;
   }
   return count;
 }
@@ -58,7 +57,7 @@ function parseKeyValue(stripped: string): [string | null, string | null] {
     }
     const key = stripped.slice(1, end);
     const rest = stripped.slice(end + 1).trimStart();
-    if (!rest.startsWith(":")) {
+    if (!rest.startsWith(":") && !rest.startsWith("\uFF1A")) {
       // No colon after quoted key - treat as plain string
       return [null, null];
     }
@@ -67,7 +66,10 @@ function parseKeyValue(stripped: string): [string | null, string | null] {
   }
 
   // Regular key:value
-  const idx = stripped.indexOf(":");
+  // The first `:` or full-width `：` separates key and value.
+  const ascii = stripped.indexOf(":");
+  const wide = stripped.indexOf("\uFF1A");
+  const idx = ascii === -1 ? wide : wide === -1 ? ascii : Math.min(ascii, wide);
   if (idx === -1) {
     return [null, null];
   }
@@ -113,16 +115,19 @@ function collectMultiline(lines: string[], startIdx: number, baseIndent: number)
   const nonblank = rawLines.filter((r) => r.trim() !== "");
   let minIndent = 0;
   if (nonblank.length > 0) {
-    minIndent = Math.min(...nonblank.map((r) => leadingSpaces(r)));
+    // A loop: Math.min(...lines) overflows the stack on large values.
+    minIndent = Infinity;
+    for (const r of nonblank) minIndent = Math.min(minIndent, leadingSpaces(r));
   }
 
-  // Apply dedent
+  // Apply dedent by columns (a tab counts to the next multiple of 4).
   const pieces: string[] = [];
   for (const r of rawLines) {
     if (r.trim() === "") {
       pieces.push("");
     } else {
-      pieces.push(r.slice(minIndent));
+      const lead = r.match(/^[ \t]*/)?.[0] ?? "";
+      pieces.push(" ".repeat(Math.max(0, leadingSpaces(lead) - minIndent)) + r.slice(lead.length));
     }
   }
 

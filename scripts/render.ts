@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { md } from '../src/index.js';
 import { browserRuntimeScript } from '../src/runtime.js';
+import { KATEX_VERSION } from '../src/version.js';
 
 const ROOT = process.cwd();  // run from project root
 const INPUT  = path.join(ROOT, 'tests', 'example.md');
@@ -370,7 +371,7 @@ const html = `<!DOCTYPE html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <!-- KaTeX CSS (CDN) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@${KATEX_VERSION}/dist/katex.min.css">
 
   <!-- Highlight.js — theme-dependent syntax highlighting -->
   <link id="hljs-dark" rel="stylesheet" media="all" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">

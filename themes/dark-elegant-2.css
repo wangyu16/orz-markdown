@@ -33,7 +33,7 @@
   --text: #deebf2;
   --text-soft: #a3bac7;
   --text-muted: #6f8796;
-  --heading: #f5fbff;
+  --heading: #ecf2f6;
 
   --accent: #e07c4a;
   --accent-2: #f09d70;
@@ -57,11 +57,11 @@
   /* semantics */
   --success-bg: rgba(26, 83, 64, 0.24);
   --success-border: rgba(100, 212, 156, 0.46);
-  --success-text: #7de4ad;
+  --success-text: #68e099; /* oklch(0.82 0.15 155) */
 
   --info-bg: rgba(24, 76, 114, 0.24);
-  --info-border: rgba(92, 193, 255, 0.42);
-  --info-text: #8bdcff;
+  --info-border: rgba(102, 194, 251, 0.42);
+  --info-text: #66c2fb;   /* oklch(0.78 0.12 238) */
 
   --note-bg: rgba(50, 63, 126, 0.24);
   --note-border: rgba(150, 164, 255, 0.4);
@@ -69,24 +69,27 @@
 
   --warning-bg: rgba(109, 72, 22, 0.28);
   --warning-border: rgba(255, 198, 94, 0.44);
-  --warning-text: #ffd279;
+  --warning-text: #fcc653; /* oklch(0.86 0.14 82) */
 
   --danger-bg: rgba(117, 39, 48, 0.26);
   --danger-border: rgba(255, 123, 135, 0.44);
-  --danger-text: #ff9ca6;
+  --danger-text: #fb8087;  /* oklch(0.74 0.15 18) */
 
-  --span-red: #ff8f9a;
-  --span-yellow: #ffd779;
-  --span-green: #7de4ad;
-  --span-blue: #8bdcff;
+  /* plainly red / yellow / green / blue: OKLCH C ≥ 0.12, ≥ 7.7:1 on the page */
+  --span-red: #fb8087;    /* oklch(0.74 0.15 18) */
+  --span-yellow: #fed252; /* oklch(0.88 0.15 90) */
+  --span-green: #6be49c;  /* oklch(0.83 0.15 155) */
+  --span-blue: #6cc0fd;   /* oklch(0.78 0.12 242) */
+
+  --callout-panel: #0b141c;
 
   /* typography */
   --font-heading: 'Sora', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Vollkorn', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   --font-code: 'Fira Code', 'JetBrains Mono', monospace;
   --base-size: 1rem;
-  --line-height: 1.78;
-  --font-scale: 1;
+  --line-height: 1.8;
+  --font-scale: 1.0625; /* Vollkorn's small x-height reads best at 17px on dark */
   --lh-copy: var(--line-height);
   --lh-tight: 1.22;
 
@@ -116,7 +119,8 @@
   --transition: 180ms ease;
 
   /* markdown body container toggles */
-  --markdown-body-max-width: 920px;
+  --markdown-body-max-width: 700px; /* ≈70ch of Vollkorn at 17px */
+  --orz-measure-wide: 54.5rem;      /* ≈90ch with .measure-wide */
   --markdown-body-padding: clamp(1.5rem, 4vw, 3.5rem);
   --markdown-body-border: none;
   --markdown-body-radius: 0;
@@ -173,7 +177,7 @@ body.size-xl,
 /* --------------------------------------------------------------------------
    Reset + base
    -------------------------------------------------------------------------- */
-*, *::before, *::after {
+html, body, :where(.markdown-body), :where(.markdown-body) *, :where(.markdown-body) *::before, :where(.markdown-body) *::after {
   box-sizing: border-box;
 }
 
@@ -188,6 +192,10 @@ body {
   min-height: 100vh;
   padding: clamp(1.25rem, 3vw, 2.5rem);
   background: var(--bg);
+}
+
+:where(.markdown-body) {
+  /* Typography lives on the article, not the page: a host page's own UI keeps its fonts and colours (M.14). */
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--fs-100);
@@ -226,7 +234,6 @@ body {
    -------------------------------------------------------------------------- */
 .markdown-body {
   position: relative;
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
   background: transparent;
@@ -271,7 +278,7 @@ body {
 /* --------------------------------------------------------------------------
    Headings + anchors
    -------------------------------------------------------------------------- */
-h1, h2, h3, h4, h5, h6 {
+:where(.markdown-body) h1, :where(.markdown-body) h2, :where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
   clear: both;
   position: relative;
   margin: 2.2em 0 0.7em;
@@ -281,76 +288,76 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   letter-spacing: -0.03em;
   scroll-margin-top: 4rem;
+  text-wrap: balance;
 }
 
-h1:first-child,
-h2:first-child,
-h3:first-child {
+:where(.markdown-body) h1:first-child,
+:where(.markdown-body) h2:first-child,
+:where(.markdown-body) h3:first-child {
   margin-top: 0;
 }
 
-h1 {
-  display: block;
-  width: fit-content;
+:where(.markdown-body) h1 {
+  /* Title presence without a box: a large, tight Sora title over a hairline that
+     starts with a short solid copper segment. */
   margin-bottom: 0.8em;
-  padding: 0.35em 1.1rem 0.5em;
-  font-size: clamp(2rem, 4.5vw, 3.15rem);
-  background: rgba(224, 124, 74, 0.08);
-  border: 1px solid rgba(122, 165, 185, 0.18);
-  border-radius: 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding-bottom: 0.42em;
+  font-size: clamp(2.1rem, 4.4vw, 2.8rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left bottom / 3.25rem 3px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) left bottom 1px / 100% 1px no-repeat;
 }
 
-h1::after {
-  content: '';
-  position: absolute;
-  left: 1.1rem;
-  right: 1.1rem;
-  bottom: 0.18rem;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent);
-  border-radius: 999px;
-}
-
-h2 {
-  font-size: clamp(1.55rem, 3vw, 2.15rem);
+:where(.markdown-body) h2 {
+  font-size: clamp(1.45rem, 2.6vw, 1.8rem);
   padding-bottom: 0.32em;
   border-bottom: 1px solid var(--border-strong);
 }
 
-h3 {
-  font-size: var(--fs-400);
-  padding-left: 0;
-}
-
-h3::before {
-  content: '◆';
-  display: inline-block;
-  font-size: 0.45em;
-  margin-right: 0.55em;
-  vertical-align: 0.2em;
-  color: var(--accent);
-  opacity: 0.85;
-}
-
-h4 {
+:where(.markdown-body) h3 {
   font-size: var(--fs-300);
-  color: #d8f7ff;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-h5 {
+/* h3: a small copper lozenge leads the heading, centred on the first line's x-height */
+:where(.markdown-body) h3::before {
+  content: '';
+  display: inline-block;
+  width: 0.36em;
+  height: 0.36em;
+  margin: 0 0.6em 0 0.08em;
+  vertical-align: 0.18em;
+  transform: rotate(45deg);
+  background: var(--accent);
+}
+
+:where(.markdown-body) h4 {
   font-size: var(--fs-200);
-  color: #bfdce6;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #dbe7ee;
 }
 
-h6 {
+:where(.markdown-body) h5 {
   font-size: var(--fs-100);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #bccfda;
+}
+
+:where(.markdown-body) h6 {
+  font-size: var(--fs-75);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--text-soft);
 }
 
-.header-anchor {
+:where(.markdown-body) .header-anchor {
   float: left;
   margin-left: -1.3em;
   padding-right: 0.35em;
@@ -361,99 +368,102 @@ h6 {
   transition: opacity var(--transition), transform var(--transition), color var(--transition);
 }
 
-h1:hover .header-anchor,
-h2:hover .header-anchor,
-h3:hover .header-anchor,
-h4:hover .header-anchor,
-h5:hover .header-anchor,
-h6:hover .header-anchor {
+:where(.markdown-body) h1:hover .header-anchor,
+:where(.markdown-body) h2:hover .header-anchor,
+:where(.markdown-body) h3:hover .header-anchor,
+:where(.markdown-body) h4:hover .header-anchor,
+:where(.markdown-body) h5:hover .header-anchor,
+:where(.markdown-body) h6:hover .header-anchor {
   opacity: 0.7;
   transform: translateX(0);
 }
 
-.header-anchor:hover {
+:where(.markdown-body) .header-anchor:hover {
   color: var(--accent-2);
 }
 
 /* --------------------------------------------------------------------------
    Copy blocks
    -------------------------------------------------------------------------- */
-p,
-ul,
-ol,
-blockquote,
-pre,
-table,
-.toc-wrapper,
-details.spoil,
-.tabs,
-.cols,
-.youtube-embed,
-.mermaid,
-.smiles-render {
+:where(.markdown-body) p,
+:where(.markdown-body) ul,
+:where(.markdown-body) ol,
+:where(.markdown-body) blockquote,
+:where(.markdown-body) pre,
+:where(.markdown-body) table,
+:where(.markdown-body) .toc-wrapper,
+:where(.markdown-body) details.spoil,
+:where(.markdown-body) .tabs,
+:where(.markdown-body) .cols,
+:where(.markdown-body) .youtube-embed,
+:where(.markdown-body) .mermaid,
+:where(.markdown-body) .smiles-render {
   margin: 0 0 var(--space-5);
 }
 
-p:last-child,
-ul:last-child,
-ol:last-child,
-blockquote:last-child,
-pre:last-child,
-table:last-child {
+:where(.markdown-body) p {
+  text-wrap: pretty;
+}
+
+:where(.markdown-body) p:last-child,
+:where(.markdown-body) ul:last-child,
+:where(.markdown-body) ol:last-child,
+:where(.markdown-body) blockquote:last-child,
+:where(.markdown-body) pre:last-child,
+:where(.markdown-body) table:last-child {
   margin-bottom: 0;
 }
 
 /* --------------------------------------------------------------------------
    Links + inline text elements
    -------------------------------------------------------------------------- */
-a {
+:where(.markdown-body) a {
   color: var(--link);
   text-decoration-thickness: 1.5px;
-  text-decoration-color: rgba(143, 223, 247, 0.32);
+  text-decoration-color: rgba(224, 170, 138, 0.38);
   text-underline-offset: 0.18em;
-  transition: color var(--transition), text-decoration-color var(--transition), text-shadow var(--transition);
+  transition: color var(--transition), text-decoration-color var(--transition);
 }
 
- a:hover {
+ :where(.markdown-body) a:hover {
   color: var(--link-hover);
-  text-decoration-color: rgba(195, 242, 255, 0.72);
-  text-shadow: 0 0 18px rgba(224, 124, 74, 0.18);
+  text-decoration-color: rgba(245, 205, 176, 0.72);
 }
 
- a:visited {
+ :where(.markdown-body) a:visited {
   color: var(--link-visited);
 }
 
-strong {
+:where(.markdown-body) strong {
   color: var(--heading);
   font-weight: 700;
 }
 
-em {
+:where(.markdown-body) em {
   color: #d7eef4;
 }
 
-s,
-del {
+:where(.markdown-body) s,
+:where(.markdown-body) del {
   color: var(--text-muted);
   text-decoration-color: rgba(255, 149, 149, 0.42);
 }
 
-mark {
-  padding: 0.08em 0.3em;
-  background: linear-gradient(180deg, rgba(241, 183, 106, 0.28), rgba(241, 183, 106, 0.18));
-  color: #fff0cf;
-  border-radius: 999px;
+:where(.markdown-body) mark {
+  padding: 0.06em 0.22em;
+  background-color: rgba(241, 183, 106, 0.2);
+  color: #fbe7c6;
+  border-radius: 3px;
 }
 
-ins {
+:where(.markdown-body) ins {
   color: var(--accent-2);
   text-decoration: underline wavy rgba(224, 124, 74, 0.72) 1.5px;
   text-underline-offset: 0.18em;
 }
 
-sub,
-sup {
+:where(.markdown-body) sub,
+:where(.markdown-body) sup {
   font-size: 0.72em;
   color: var(--text-soft);
 }
@@ -461,37 +471,33 @@ sup {
 /* --------------------------------------------------------------------------
    Code
    -------------------------------------------------------------------------- */
-code {
+:where(.markdown-body) code,
+:where(.markdown-body) kbd,
+:where(.markdown-body) samp,
+:where(.markdown-body) pre {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+:where(.markdown-body) code {
   font-family: var(--font-code);
-  font-size: 0.9em;
+  font-size: 0.86em;
   color: var(--inline-code);
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--code-border);
-  border-radius: 10px;
+  border-radius: 6px;
   padding: 0.18em 0.46em;
 }
 
-pre {
+:where(.markdown-body) pre {
   position: relative;
-  overflow-x: auto;
   padding: 1.25rem 1.35rem;
-  background: linear-gradient(180deg, var(--code-bg) 0%, var(--code-bg-elevated) 100%);
+  background: var(--code-bg);
   border: 1px solid var(--code-border);
-  border-radius: 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow-soft);
+  border-radius: 12px;
 }
 
-pre::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent), rgba(255, 255, 255, 0));
-  opacity: 0.45;
-}
-
-pre code {
+:where(.markdown-body) pre code {
   display: block;
   padding: 0;
   border: 0;
@@ -504,32 +510,32 @@ pre code {
 /* --------------------------------------------------------------------------
    Blockquote
    -------------------------------------------------------------------------- */
-blockquote {
+:where(.markdown-body) blockquote {
   position: relative;
-  padding: 1.15rem 1.35rem 1.15rem 1.65rem;
+  padding: 1.1rem 1.35rem 1.1rem 3rem;
   color: #c6d8e2;
   background: rgba(224, 124, 74, 0.05);
   border: 1px solid rgba(224, 124, 74, 0.16);
-  border-radius: 20px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
 }
 
-blockquote::before {
+:where(.markdown-body) blockquote::before {
   content: '“';
   position: absolute;
-  left: 0.75rem;
-  top: 0.15rem;
-  font-family: Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
-  font-size: 2.8rem;
+  /* Sits in the 3rem left gutter, aligned with the first line — never over the text. */
+  left: 1rem;
+  top: 0.95rem;
+  font-family: var(--font-body);
+  font-size: 2.4rem;
   line-height: 1;
-  color: rgba(224, 124, 74, 0.42);
+  color: rgba(224, 124, 74, 0.5);
 }
 
-blockquote > *:last-child {
+:where(.markdown-body) blockquote > *:last-child {
   margin-bottom: 0;
 }
 
-blockquote blockquote {
+:where(.markdown-body) blockquote blockquote {
   margin-top: var(--space-4);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -537,30 +543,30 @@ blockquote blockquote {
 /* --------------------------------------------------------------------------
    Lists + task lists
    -------------------------------------------------------------------------- */
-ul,
-ol {
+:where(.markdown-body) ul,
+:where(.markdown-body) ol {
   padding-left: 1.45rem;
 }
 
-li {
+:where(.markdown-body) li {
   margin-bottom: 0.45rem;
 }
 
-li > ul,
-li > ol {
+:where(.markdown-body) li > ul,
+:where(.markdown-body) li > ol {
   margin-top: 0.45rem;
   margin-bottom: 0;
 }
 
-ul {
+:where(.markdown-body) ul {
   list-style: none;
 }
 
-ul > li {
+:where(.markdown-body) ul > li {
   position: relative;
 }
 
-ul > li::before {
+:where(.markdown-body) ul > li::before {
   content: '';
   position: absolute;
   left: -1.05rem;
@@ -568,25 +574,24 @@ ul > li::before {
   width: 0.42rem;
   height: 0.42rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--accent-warm), var(--accent));
-  box-shadow: 0 0 8px rgba(224, 124, 74, 0.18);
+  background: var(--accent);
+  opacity: 0.85;
 }
 
-ol {
+:where(.markdown-body) ol {
   list-style: decimal;
 }
 
-.task-list-item {
-  list-style: none;
+:where(.markdown-body) .task-list-item {
   padding-left: 0;
 }
 
-.task-list-item::before {
+:where(.markdown-body) .task-list-item::before {
   display: none;
 }
 
-.task-list-item-checkbox,
-.task-list-item input[type='checkbox'] {
+:where(.markdown-body) .task-list-item-checkbox,
+:where(.markdown-body) .task-list-item input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -600,14 +605,14 @@ ol {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.task-list-item-checkbox:checked,
-.task-list-item input[type='checkbox']:checked {
-  background: linear-gradient(180deg, var(--accent), #41a9a7);
+:where(.markdown-body) .task-list-item-checkbox:checked,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked {
+  background: var(--accent);
   border-color: var(--accent-2);
 }
 
-.task-list-item-checkbox:checked::after,
-.task-list-item input[type='checkbox']:checked::after {
+:where(.markdown-body) .task-list-item-checkbox:checked::after,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked::after {
   content: '';
   position: absolute;
   left: 0.29rem;
@@ -622,24 +627,16 @@ ol {
 /* --------------------------------------------------------------------------
    Tables
    -------------------------------------------------------------------------- */
-.markdown-body > table,
-.markdown-body td table {
-  width: max-content;
-  max-width: 100%;
-}
 
-table {
-  display: block;
-  overflow-x: auto;
+:where(.markdown-body) table {
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.015);
-  box-shadow: var(--shadow-soft);
 }
 
-thead th {
+:where(.markdown-body) thead th {
   padding: 0.82rem 1rem;
   border-bottom: 1px solid var(--border-strong);
   background: rgba(224, 124, 74, 0.06);
@@ -648,48 +645,47 @@ thead th {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  text-align: left;
   white-space: nowrap;
 }
 
-tbody td {
+:where(.markdown-body) tbody td {
   padding: 0.88rem 1rem;
   border-bottom: 1px solid var(--border-soft);
   color: var(--text);
   vertical-align: top;
 }
 
-tbody tr:nth-child(even) td {
+:where(.markdown-body) tbody tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.018);
 }
 
-tbody tr:hover td {
+:where(.markdown-body) tbody tr:hover td {
   background: rgba(224, 124, 74, 0.06);
 }
 
-tbody tr:last-child td {
+:where(.markdown-body) tbody tr:last-child td {
   border-bottom: 0;
 }
 
 /* --------------------------------------------------------------------------
    Rule + media
    -------------------------------------------------------------------------- */
-hr {
+:where(.markdown-body) hr {
+  /* copper fading into violet: the theme's two accents on one hairline */
   height: 1px;
   margin: var(--space-6) 0;
   border: 0;
-  background: linear-gradient(90deg, transparent, rgba(224, 124, 74, 0.45), rgba(176, 141, 207, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent) 25%, var(--accent-warm) 75%, transparent);
 }
 
-img {
+:where(.markdown-body) img {
   margin: 0 auto;
   border: 1px solid rgba(143, 223, 247, 0.14);
   border-radius: 18px;
   box-shadow: var(--shadow-soft);
 }
 
-p > img {
-  display: inline;
+:where(.markdown-body) p > img {
   margin: 0;
   border-radius: 10px;
 }
@@ -697,53 +693,53 @@ p > img {
 /* --------------------------------------------------------------------------
    Footnotes
    -------------------------------------------------------------------------- */
-.footnote-ref {
+:where(.markdown-body) .footnote-ref {
   font-size: 0.85em;
 }
 
-.footnote-ref a,
-.footnote-backref {
+:where(.markdown-body) .footnote-ref a,
+:where(.markdown-body) .footnote-backref {
   color: var(--accent-2);
   text-decoration: none;
 }
 
-.footnotes-sep {
-  margin: var(--space-6) 0 var(--space-4);
+/* the footnotes carry their own top rule; the separator hr would double it */
+:where(.markdown-body) hr.footnotes-sep {
+  display: none;
 }
 
-.footnotes {
+:where(.markdown-body) .footnotes {
+  margin-top: var(--space-6);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border-soft);
   color: var(--text-soft);
   font-size: var(--fs-75);
 }
 
-.footnotes ol {
+:where(.markdown-body) .footnotes ol {
   margin-bottom: 0;
 }
 
-.footnotes li {
+:where(.markdown-body) .footnotes li {
   margin-bottom: 0.7rem;
 }
 
 /* --------------------------------------------------------------------------
    KaTeX
    -------------------------------------------------------------------------- */
-.katex {
+:where(.markdown-body) .katex {
   color: #f5fbff;
   font-size: 1.08em;
 }
 
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+:where(.markdown-body) .katex-display {
   padding: 0.85rem 1rem;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-soft);
   border-radius: 18px;
 }
 
-.katex-error {
+:where(.markdown-body) .katex-error {
   display: inline-block;
   padding: 0.2em 0.5em;
   color: var(--danger-text);
@@ -757,159 +753,81 @@ p > img {
 /* --------------------------------------------------------------------------
    Semantic containers
    -------------------------------------------------------------------------- */
-div.success,
-div.note,
-div.info,
-div.warning,
-div.danger {
+:where(.markdown-body) div:is(.success, .note, .info, .warning, .danger) {
+  /* A near-black panel capped by a solid band in the type colour; a small shape on
+     the first line repeats it (info ●, success ✓, warning ▲, danger ×, note ■).
+     Text stays body ink; an author's bold lead-in label takes the type colour. */
+  --cl: var(--info-text);
+  --cl-line: var(--info-border);
+  --mark: 0.78em;
+  --mark-top: calc(1.25rem + 4px + (var(--lh-copy) * 1em - var(--mark)) / 2);
   position: relative;
   overflow: hidden;
   isolation: isolate;
   margin-bottom: var(--space-5);
-  padding: 1rem 1.1rem 1rem 1.25rem;
-  border: 1px solid;
-  border-radius: 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), var(--shadow-soft);
+  padding: calc(1.25rem + 4px) 1.35rem 1.2rem 2.85rem;
+  background: var(--callout-panel);
+  border: 1px solid var(--cl-line);
+  border-radius: 12px;
 }
+:where(.markdown-body) div.success { --cl: var(--success-text); --cl-line: var(--success-border); }
+:where(.markdown-body) div.note    { --cl: var(--note-text);    --cl-line: var(--note-border); }
+:where(.markdown-body) div.warning { --cl: var(--warning-text); --cl-line: var(--warning-border); }
+:where(.markdown-body) div.danger  { --cl: var(--danger-text);  --cl-line: var(--danger-border); }
 
-div.success::before,
-div.note::before,
-div.info::before,
-div.warning::before,
-div.danger::before {
+/* the band */
+:where(.markdown-body) div:is(.success, .note, .info, .warning, .danger)::before {
   content: '';
   position: absolute;
-  left: 1.15rem;
-  right: 3.75rem;
   top: 0;
-  height: 2px;
-  border-radius: 0 0 999px 999px;
-  opacity: 0.75;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--cl);
   pointer-events: none;
-  z-index: 0;
 }
-
-div.success::after,
-div.note::after,
-div.info::after,
-div.warning::after,
-div.danger::after {
+/* the shape */
+:where(.markdown-body) div:is(.success, .note, .info, .warning, .danger)::after {
   content: '';
   position: absolute;
-  top: 0.82rem;
-  right: 0.88rem;
-  width: 1rem;
-  height: 1rem;
-  border-top: 1.5px solid currentColor;
-  border-right: 1.5px solid currentColor;
-  opacity: 0.38;
+  left: 1.2rem;
+  top: var(--mark-top);
+  width: var(--mark);
+  height: var(--mark);
+  background: var(--cl);
   pointer-events: none;
-  z-index: 0;
 }
-
-div.success > *,
-div.note > *,
-div.info > *,
-div.warning > *,
-div.danger > * {
-  position: relative;
-  z-index: 1;
-}
-
-div.success {
+:where(.markdown-body) div.info::after { border-radius: 50%; }
+:where(.markdown-body) div.note::after { border-radius: 2px; transform: scale(0.85); }
+:where(.markdown-body) div.warning::after { clip-path: polygon(50% 4%, 100% 92%, 0 92%); }
+:where(.markdown-body) div.danger::after {
   background:
-    linear-gradient(180deg, rgba(125, 228, 173, 0.08), rgba(125, 228, 173, 0) 26%),
-    linear-gradient(135deg, rgba(8, 24, 20, 0.96), rgba(14, 38, 30, 0.9));
-  border-color: var(--success-border);
+    linear-gradient(45deg, transparent calc(50% - 0.11em), var(--cl) 0 calc(50% + 0.11em), transparent 0),
+    linear-gradient(-45deg, transparent calc(50% - 0.11em), var(--cl) 0 calc(50% + 0.11em), transparent 0);
+}
+:where(.markdown-body) div.success::after {
+  left: calc(1.2rem + 0.24em);
+  top: calc(var(--mark-top) - 0.04em);
+  width: 0.3em;
+  height: 0.62em;
+  background: none;
+  border: solid var(--cl);
+  border-width: 0 0.17em 0.17em 0;
+  transform: rotate(45deg);
 }
 
-div.success::before {
-  background: linear-gradient(90deg, rgba(156, 241, 195, 0.88), rgba(156, 241, 195, 0) 72%);
+:where(.markdown-body) div:is(.success, .note, .info, .warning, .danger) > p:first-child > :is(strong, b):first-child {
+  color: var(--cl);
 }
 
-div.note {
-  background:
-    linear-gradient(180deg, rgba(184, 196, 255, 0.08), rgba(184, 196, 255, 0) 26%),
-    linear-gradient(135deg, rgba(11, 18, 35, 0.96), rgba(20, 30, 60, 0.9));
-  border-color: var(--note-border);
-}
-
-div.note::before {
-  background: linear-gradient(90deg, rgba(216, 224, 255, 0.9), rgba(216, 224, 255, 0) 72%);
-}
-
-div.info {
-  background:
-    linear-gradient(180deg, rgba(139, 220, 255, 0.08), rgba(139, 220, 255, 0) 26%),
-    linear-gradient(135deg, rgba(7, 22, 33, 0.96), rgba(12, 39, 57, 0.9));
-  border-color: var(--info-border);
-}
-
-div.info::before {
-  background: linear-gradient(90deg, rgba(181, 238, 255, 0.9), rgba(181, 238, 255, 0) 72%);
-}
-
-div.warning {
-  background:
-    linear-gradient(180deg, rgba(255, 210, 121, 0.08), rgba(255, 210, 121, 0) 26%),
-    linear-gradient(135deg, rgba(28, 21, 10, 0.96), rgba(47, 34, 12, 0.9));
-  border-color: var(--warning-border);
-}
-
-div.warning::before {
-  background: linear-gradient(90deg, rgba(255, 227, 159, 0.92), rgba(255, 227, 159, 0) 72%);
-}
-
-div.danger {
-  background:
-    linear-gradient(180deg, rgba(255, 156, 166, 0.08), rgba(255, 156, 166, 0) 26%),
-    linear-gradient(135deg, rgba(31, 12, 17, 0.96), rgba(53, 18, 25, 0.9));
-  border-color: var(--danger-border);
-}
-
-div.danger::before {
-  background: linear-gradient(90deg, rgba(255, 190, 196, 0.9), rgba(255, 190, 196, 0) 72%);
-}
-
-div.success > p:first-child > strong:first-child,
-div.success > p:first-child > b:first-child {
-  color: var(--success-text);
-}
-
-div.note > p:first-child > strong:first-child,
-div.note > p:first-child > b:first-child {
-  color: var(--note-text);
-}
-
-div.info > p:first-child > strong:first-child,
-div.info > p:first-child > b:first-child {
-  color: var(--info-text);
-}
-
-div.warning > p:first-child > strong:first-child,
-div.warning > p:first-child > b:first-child {
-  color: var(--warning-text);
-}
-
-div.danger > p:first-child > strong:first-child,
-div.danger > p:first-child > b:first-child {
-  color: var(--danger-text);
-}
-
-div.success > *:last-child,
-div.note > *:last-child,
-div.info > *:last-child,
-div.warning > *:last-child,
-div.danger > *:last-child {
+:where(.markdown-body) div:is(.success, .note, .info, .warning, .danger) > *:last-child {
   margin-bottom: 0;
 }
 
 /* --------------------------------------------------------------------------
    Layout containers
    -------------------------------------------------------------------------- */
-.left {
-  float: left;
-  max-width: min(44%, 22rem);
+:where(.markdown-body) .left {
   padding: 0.85rem 0.95rem;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--border-soft);
@@ -917,33 +835,25 @@ div.danger > *:last-child {
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
-.right {
-  text-align: right;
+:where(.markdown-body) .right {
   margin: 0 0 var(--space-4);
-}
-
-.center {
-  margin: 0 auto var(--space-5);
-  text-align: center;
-  max-width: min(100%, 42rem);
 }
 
 /* --------------------------------------------------------------------------
    Spoiler
    -------------------------------------------------------------------------- */
-details.spoil {
+:where(.markdown-body) details.spoil {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  background: rgba(255, 255, 255, 0.02);
 }
 
-details.spoil > summary {
+:where(.markdown-body) details.spoil > summary {
   display: flex;
   align-items: center;
   gap: 0.7rem;
   padding: 0.95rem 1.1rem;
-  cursor: pointer;
   list-style: none;
   user-select: none;
   color: var(--heading);
@@ -952,11 +862,11 @@ details.spoil > summary {
   transition: background var(--transition), color var(--transition);
 }
 
-details.spoil > summary::-webkit-details-marker {
+:where(.markdown-body) details.spoil > summary::-webkit-details-marker {
   display: none;
 }
 
-details.spoil > summary::before {
+:where(.markdown-body) details.spoil > summary::before {
   content: '▸';
   display: inline-grid;
   place-items: center;
@@ -968,98 +878,75 @@ details.spoil > summary::before {
   transition: transform var(--transition), background var(--transition);
 }
 
-details.spoil[open] > summary::before {
+:where(.markdown-body) details.spoil[open] > summary::before {
   transform: rotate(90deg);
 }
 
-details.spoil > summary:hover {
+:where(.markdown-body) details.spoil > summary:hover {
   background: rgba(224, 124, 74, 0.08);
 }
 
-details.spoil[open] > summary {
+:where(.markdown-body) details.spoil[open] > summary {
   border-bottom: 1px solid var(--border-soft);
 }
 
-details.spoil > :not(summary) {
+:where(.markdown-body) details.spoil > :not(summary) {
   padding: 1rem 1.1rem 1.1rem;
 }
 
 /* --------------------------------------------------------------------------
    Tabs
    -------------------------------------------------------------------------- */
-.tabs {
+:where(.markdown-body) .tabs {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.02);
 }
 
-.tabs-bar {
-  display: flex;
+:where(.markdown-body) .tabs-bar {
   gap: 0.35rem;
   padding: 0.5rem;
-  overflow-x: auto;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid var(--border-soft);
-  scrollbar-width: none;
 }
 
-.tabs-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.tabs-bar-btn {
+:where(.markdown-body) .tabs-bar-btn {
   border: 0;
   border-radius: 999px;
   padding: 0.58rem 0.95rem;
   background: transparent;
   color: var(--text-soft);
   font: 600 var(--fs-75)/1.2 var(--font-heading);
-  cursor: pointer;
-  white-space: nowrap;
   transition: background var(--transition), color var(--transition), box-shadow var(--transition);
 }
 
-.tabs-bar-btn:hover {
+:where(.markdown-body) .tabs-bar-btn:hover {
   color: var(--heading);
   background: rgba(255, 255, 255, 0.045);
 }
 
-.tabs-bar-btn.active {
-  color: #041116;
-  background: linear-gradient(135deg, var(--accent-2), var(--accent));
-  box-shadow: 0 8px 20px rgba(224, 124, 74, 0.28);
+:where(.markdown-body) .tabs-bar-btn.active {
+  color: #1a0d06;
+  background: var(--accent-2);
 }
 
-.tab {
-  display: none;
+:where(.markdown-body) .tab {
   padding: 1.15rem 1.2rem 1.25rem;
 }
 
-.tab.active {
-  display: block;
-}
-
-.tabs:not([data-js]) .tab {
-  display: block;
-}
-
-.tabs:not([data-js]) .tab + .tab {
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab {
   border-top: 1px solid var(--border-soft);
 }
 
 /* --------------------------------------------------------------------------
    Columns
    -------------------------------------------------------------------------- */
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+:where(.markdown-body) .cols {
   gap: 1rem;
-  align-items: start;
 }
 
-.col {
-  min-width: 0;
+:where(.markdown-body) .col {
   height: 100%;
   padding: 1rem 1.05rem;
   background: rgba(255, 255, 255, 0.025);
@@ -1067,75 +954,75 @@ details.spoil > :not(summary) {
   border-radius: 18px;
 }
 
-.col > *:last-child {
+:where(.markdown-body) .col > *:last-child {
   margin-bottom: 0;
 }
 
 /* --------------------------------------------------------------------------
    TOC
    -------------------------------------------------------------------------- */
-.toc-wrapper {
+:where(.markdown-body) .toc-wrapper {
   position: relative;
 }
 
-nav.toc,
-.toc-list {
+:where(.markdown-body) nav.toc,
+:where(.markdown-body) .toc-list {
   padding: 1rem 1.15rem;
   background: rgba(224, 124, 74, 0.045);
   border: 1px solid var(--border);
   border-radius: 20px;
 }
 
-nav.toc ul,
-.toc-list ul {
+:where(.markdown-body) nav.toc ul,
+:where(.markdown-body) .toc-list ul {
   margin: 0;
   padding-left: 1.1rem;
 }
 
-nav.toc li,
-.toc-list li {
+:where(.markdown-body) nav.toc li,
+:where(.markdown-body) .toc-list li {
   margin-bottom: 0.28rem;
 }
 
-nav.toc li::before,
-.toc-list li::before {
+:where(.markdown-body) nav.toc li::before,
+:where(.markdown-body) .toc-list li::before {
   display: none;
 }
 
-nav.toc a,
-.toc-list a {
+:where(.markdown-body) nav.toc a,
+:where(.markdown-body) .toc-list a {
   color: var(--text-soft);
   text-decoration: none;
 }
 
-nav.toc a:hover,
-.toc-list a:hover {
+:where(.markdown-body) nav.toc a:hover,
+:where(.markdown-body) .toc-list a:hover {
   color: var(--accent-2);
 }
 
 /* --------------------------------------------------------------------------
    Span colour + badge helpers
    -------------------------------------------------------------------------- */
-span.red {
+:where(.markdown-body) span.red {
   color: var(--span-red);
 }
 
-span.yellow {
+:where(.markdown-body) span.yellow {
   color: var(--span-yellow);
 }
 
-span.green {
+:where(.markdown-body) span.green {
   color: var(--span-green);
 }
 
-span.blue {
+:where(.markdown-body) span.blue {
   color: var(--span-blue);
 }
 
-span.success,
-span.info,
-span.warning,
-span.danger {
+:where(.markdown-body) span.success,
+:where(.markdown-body) span.info,
+:where(.markdown-body) span.warning,
+:where(.markdown-body) span.danger {
   position: relative;
   gap: 0;
   padding: 0.2em 0.62em;
@@ -1147,32 +1034,32 @@ span.danger {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-span.success::before,
-span.info::before,
-span.warning::before,
-span.danger::before {
+:where(.markdown-body) span.success::before,
+:where(.markdown-body) span.info::before,
+:where(.markdown-body) span.warning::before,
+:where(.markdown-body) span.danger::before {
   content: none;
 }
 
-span.success {
+:where(.markdown-body) span.success {
   background: rgba(125, 228, 173, 0.12);
   color: var(--success-text);
   border-color: var(--success-border);
 }
 
-span.info {
+:where(.markdown-body) span.info {
   background: rgba(139, 220, 255, 0.12);
   color: var(--info-text);
   border-color: var(--info-border);
 }
 
-span.warning {
+:where(.markdown-body) span.warning {
   background: rgba(255, 210, 121, 0.12);
   color: var(--warning-text);
   border-color: var(--warning-border);
 }
 
-span.danger {
+:where(.markdown-body) span.danger {
   background: rgba(255, 156, 166, 0.12);
   color: var(--danger-text);
   border-color: var(--danger-border);
@@ -1181,7 +1068,7 @@ span.danger {
 /* --------------------------------------------------------------------------
    Custom plugin outputs
    -------------------------------------------------------------------------- */
-div.test-block {
+:where(.markdown-body) div.test-block {
   padding: 0.85rem 1rem;
   margin-bottom: var(--space-5);
   background: rgba(224, 124, 74, 0.06);
@@ -1192,7 +1079,7 @@ div.test-block {
   font-size: var(--fs-75);
 }
 
-span.test-inline {
+:where(.markdown-body) span.test-inline {
   display: inline-block;
   padding: 0.12em 0.4em;
   border-radius: 8px;
@@ -1203,49 +1090,27 @@ span.test-inline {
   font-size: 0.88em;
 }
 
-div.youtube-embed {
-  position: relative;
-  overflow: hidden;
-  height: 0;
-  padding-bottom: 56.25%;
+:where(.markdown-body) div.youtube-embed {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: #05090c;
   box-shadow: var(--shadow-soft);
 }
 
-div.youtube-embed iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-div.mermaid {
+:where(.markdown-body) div.mermaid {
   padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.02);
-  overflow-x: auto;
-  text-align: center;
 }
 
-div.mermaid svg {
-  max-width: 100%;
-  height: auto;
-}
-
-div.smiles-render {
-}
-
-div.smiles-render canvas,
-canvas[data-smiles] {
+:where(.markdown-body) div.smiles-render canvas,
+:where(.markdown-body) canvas[data-smiles] {
   border-radius: 0;
   box-shadow: none;
 }
 
-span.qrcode {
+:where(.markdown-body) span.qrcode {
   padding: 6px;
   vertical-align: middle;
   background: #ffffff;
@@ -1256,16 +1121,16 @@ span.qrcode {
 /* --------------------------------------------------------------------------
    Focus indicators
    -------------------------------------------------------------------------- */
-a:focus-visible,
-.tabs-bar-btn:focus-visible,
-details.spoil > summary:focus-visible {
+:where(.markdown-body) a:focus-visible,
+:where(.markdown-body) .tabs-bar-btn:focus-visible,
+:where(.markdown-body) details.spoil > summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
   text-decoration: none;
 }
-.task-list-item-checkbox:focus-visible,
-.task-list-item input[type='checkbox']:focus-visible {
+:where(.markdown-body) .task-list-item-checkbox:focus-visible,
+:where(.markdown-body) .task-list-item input[type='checkbox']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1283,17 +1148,11 @@ details.spoil > summary:focus-visible {
     border-radius: 20px;
   }
 
-  .left {
-    float: none;
-    max-width: 100%;
+  :where(.markdown-body) .left {
     margin: 0 0 var(--space-4);
   }
 
-  .cols {
-    grid-template-columns: 1fr;
-  }
-
-  .header-anchor {
+  :where(.markdown-body) .header-anchor {
     margin-left: -1.05em;
   }
 }
@@ -1313,7 +1172,6 @@ details.spoil > summary:focus-visible {
   }
 
   .markdown-body {
-    max-width: 100%;
     padding: 0;
     background: #ffffff;
     color: #111111;
@@ -1323,52 +1181,41 @@ details.spoil > summary:focus-visible {
 
   .markdown-body::before,
   .markdown-body::after,
-  .header-anchor,
-  .tabs-bar,
-  div.youtube-embed {
+  :where(.markdown-body) .header-anchor {
     display: none !important;
   }
 
-  a {
+  :where(.markdown-body) a {
     color: #0b57d0;
     text-decoration-color: currentColor;
   }
 
-  pre,
-  code,
-  blockquote,
-  .success,
-  .note,
-  .info,
-  .warning,
-  .danger,
-  nav.toc,
-  .toc-list,
-  .col,
-  details.spoil,
-  div.mermaid,
-  div.smiles-render {
+  :where(.markdown-body) pre,
+  :where(.markdown-body) code,
+  :where(.markdown-body) blockquote,
+  :where(.markdown-body) .success,
+  :where(.markdown-body) .note,
+  :where(.markdown-body) .info,
+  :where(.markdown-body) .warning,
+  :where(.markdown-body) .danger,
+  :where(.markdown-body) nav.toc,
+  :where(.markdown-body) .toc-list,
+  :where(.markdown-body) .col,
+  :where(.markdown-body) details.spoil,
+  :where(.markdown-body) div.mermaid,
+  :where(.markdown-body) div.smiles-render {
     background: #ffffff !important;
     color: #111111 !important;
     border-color: #cfcfcf !important;
     box-shadow: none !important;
   }
 
-  span.success,
-  span.info,
-  span.warning,
-  span.danger {
+  :where(.markdown-body) span.success,
+  :where(.markdown-body) span.info,
+  :where(.markdown-body) span.warning,
+  :where(.markdown-body) span.danger {
     border-color: #bdbdbd !important;
     color: #111111 !important;
-  }
-
-  tr,
-  iframe,
-  video,
-  pre,
-  blockquote {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 }
 
@@ -1379,6 +1226,5 @@ details.spoil > summary:focus-visible {
 /* ---- mermaid & charts: light panel for legibility on the dark background ---- */
 .markdown-body div.mermaid { background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
-.markdown-body div.mermaid svg { max-width: 100%; height: auto; }
 .markdown-body canvas.orz-chart { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); max-width: 100%; height: auto; }
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }

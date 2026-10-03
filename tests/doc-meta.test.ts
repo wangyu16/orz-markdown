@@ -152,7 +152,17 @@ describe('the JSON island', () => {
   it('cannot break out of the script element', () => {
     const island = renderDocMetaIsland({ description: 'a</script><script>evil()' });
     expect(island).not.toContain('</script><script>evil()');
-    expect(island).toContain('<\\/script>');
+    expect(island).toContain('\\u003c/script>');
+    expect(parseDocMetaIsland(island)?.description).toBe('a</script><script>evil()');
+  });
+
+  it('survives <!-- followed by <script (double-escaped script state)', () => {
+    const description = 'x <!-- <script> y';
+    const island = renderDocMetaIsland({ description, uid: 'doc-1' });
+    // No raw "<" may remain inside the JSON body.
+    const body = island.slice(island.indexOf('>') + 1, island.lastIndexOf('</script>'));
+    expect(body).not.toContain('<');
+    expect(parseDocMetaIsland(island)).toEqual({ description, uid: 'doc-1' });
   });
 
   it('carries a uid-only meta and round-trips it (durable document identity)', () => {

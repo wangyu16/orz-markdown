@@ -1,9 +1,15 @@
 # orz-markdown themes
 
 Twelve ready-to-use CSS themes for the parser's output. All rendered HTML lives
-inside `<article class="markdown-body">`, so every theme is scoped to that class.
-Each theme `@import`s the shared `common.css` (structural rules for tables,
-images, KaTeX blocks, QR overlays, tabs/columns, and print), so you only ever
+inside `<article class="markdown-body">`, so every theme rule is scoped to that
+class (or to the page roots — `:root`, `html`, `body`, `::selection`,
+scrollbars — and the QR overlay), and a theme never restyles the host
+page's own UI — see [references/themes.md](../orz-markdown-skills/references/themes.md).
+Each theme `@import`s the shared `common.css` (the structure layer: container
+floats and alignment, the cols grid, tab switching, scrolling for wide
+tables/code/math, sizing of embeds, diagrams, charts and QR codes, the family's
+640px breakpoint, and print; tune it with the `--orz-*` tokens at the top of
+`common.css`), so you only ever
 import a **single** theme file.
 
 ```js
@@ -18,18 +24,18 @@ import 'orz-markdown/themes/light-academic-1.css';
 
 | File | Style | Scheme |
 |---|---|---|
-| `light-neat-1.css` | Figtree · clean modern sans | Light |
-| `light-neat-2.css` | Light neat variant | Light |
-| `light-neat-3.css` | Bricolage · calm green — "Orchard" | Light |
-| `light-academic-1.css` | Alegreya · justified scholarly prose | Light |
-| `light-academic-2.css` | Light academic variant | Light |
-| `beige-decent-1.css` | Warm beige · print-like prose | Light |
-| `beige-decent-2.css` | Beige decent variant | Light |
-| `light-playful-1.css` | Casual · personal blog | Light |
-| `light-playful-2.css` | Light playful variant | Light |
-| `dark-elegant-1.css` | Cinzel headings · scholarly serif | Dark |
-| `dark-elegant-2.css` | Dark elegant variant | Dark |
-| `dark-elegant-3.css` | Lora · VS Code-dark, colourful headings — "Nocturne" | Dark |
+| `light-neat-1.css` | Figtree headings · Source Sans 3 text · clean modern blue | Light |
+| `light-neat-2.css` | Epilogue headings · Literata text · warm paper, teal | Light |
+| `light-neat-3.css` | Bricolage Grotesque · calm green — "Orchard" | Light |
+| `light-academic-1.css` | Alegreya throughout · cream paper, rubric red | Light |
+| `light-academic-2.css` | Fira Sans headings · Vollkorn text · hairline structure | Light |
+| `beige-decent-1.css` | Libre Caslon Display & Text · trade-book page, oxblood | Light |
+| `beige-decent-2.css` | Josefin Sans headings · Cardo text · bottle green | Light |
+| `light-playful-1.css` | Indie Flower headings · Shantell Sans text · ruled school notebook | Light |
+| `light-playful-2.css` | Chewy stickers · Patrick Hand text · sketchbook | Light |
+| `dark-elegant-1.css` | Cinzel headings · Source Serif 4 text · navy card | Dark |
+| `dark-elegant-2.css` | Sora headings · Vollkorn text · near-black, orange | Dark |
+| `dark-elegant-3.css` | Atkinson Hyperlegible Next headings · Charis SIL text · graphite editor — "Nocturne" | Dark |
 
 `common.css` is not a theme — it is imported automatically by each theme above.
 
@@ -41,3 +47,10 @@ class the parser emits (semantic containers, tabs/columns, spoilers, KaTeX
 blocks, Mermaid/SMILES/chart canvases, clickable QR codes) and the JavaScript the
 browser runtime needs. Start from `common.css` for the structural rules and layer
 your visual design on top.
+
+## Line length
+
+Each theme defaults to a reading measure of about 70 characters. Choose a
+wider one on the article: `class="markdown-body measure-wide"` (about 90
+characters; a theme tunes it with `--orz-measure-wide`) or `measure-full`
+(the whole width).

@@ -66,16 +66,25 @@
   --danger-border: #efb0b8;
   --danger-text: #a14153;
 
-  --span-red: #cb5260;
-  --span-yellow: #9a7615;
-  --span-green: #218763;
-  --span-blue: #1d6db0;
+  /* coloured spans: OKLCH chroma >= 0.13, >= 5:1 on the page */
+  --span-red: #bf3940;
+  --span-yellow: #5c4300;
+  --span-yellow-bg: rgba(255, 210, 48, 0.42);
+  --span-green: #0d7a3e;
+  --span-blue: #006cba;
+
+  /* callout icon discs: vivid symbol ink per type */
+  --success-mark: #138a5f;
+  --note-mark: #4e5ccc;
+  --info-mark: #1a74c4;
+  --warning-mark: #a06b00;
+  --danger-mark: #c23b4e;
 
   --font-heading: 'Figtree', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-body: 'Source Sans 3', system-ui, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   --font-code: 'Fira Code', 'JetBrains Mono', monospace;
-  --base-size: 1rem;
-  --line-height: 1.72;
+  --base-size: 1.0625rem;
+  --line-height: 1.7;
   --font-scale: 1;
   --lh-copy: var(--line-height);
   --lh-tight: 1.24;
@@ -104,7 +113,10 @@
   --transition: 180ms ease;
 
   /* markdown body container toggles */
-  --markdown-body-max-width: 940px;
+  /* ~70 characters of Source Sans 3 per line, plus the article's own padding */
+  --markdown-body-max-width: calc(36rem + 2 * var(--markdown-body-padding));
+  /* .measure-wide: ~90 characters per line */
+  --orz-measure-wide: calc(45rem + 2 * var(--markdown-body-padding));
   --markdown-body-padding: clamp(1.25rem, 3.6vw, 3.2rem);
   --markdown-body-border: none;
   --markdown-body-radius: 0;
@@ -155,12 +167,12 @@ body.size-xl,
   --font-scale: 1.16;
 }
 
-*, *::before, *::after {
+html, body, :where(.markdown-body), :where(.markdown-body) *, :where(.markdown-body) *::before, :where(.markdown-body) *::after {
   box-sizing: border-box;
 }
 
 html {
-  font-size: var(--base-size);
+  font-size: 100%;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
@@ -173,6 +185,10 @@ body {
     radial-gradient(circle at top left, rgba(98, 176, 232, 0.06), transparent 28%),
     radial-gradient(circle at top right, rgba(72, 183, 168, 0.05), transparent 22%),
     linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
+}
+
+:where(.markdown-body) {
+  /* Typography lives on the article, not the page: a host page's own UI keeps its fonts and colours (M.14). */
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--fs-100);
@@ -205,7 +221,6 @@ body {
 
 .markdown-body {
   position: relative;
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
   background: transparent;
@@ -246,7 +261,7 @@ body {
   margin-top: 0;
 }
 
-h1, h2, h3, h4, h5, h6 {
+:where(.markdown-body) h1, :where(.markdown-body) h2, :where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
   clear: both;
   position: relative;
   margin: 2.15em 0 0.7em;
@@ -254,99 +269,95 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   line-height: var(--lh-tight);
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
   scroll-margin-top: 4rem;
 }
 
-h1:first-child,
-h2:first-child,
-h3:first-child {
+:where(.markdown-body) h1:first-child,
+:where(.markdown-body) h2:first-child,
+:where(.markdown-body) h3:first-child {
   margin-top: 0;
 }
 
-h1 {
-  display: block;
-  padding: 0 0 1.05em;
-  font-size: clamp(2rem, 4.4vw, 3rem);
+:where(.markdown-body) h1 {
+  margin-bottom: 0.9em;
+  font-size: clamp(2rem, 4.4vw, 2.75rem);
   color: #173248;
+  letter-spacing: -0.035em;
   text-align: center;
 }
 
-h1::after {
-  content: '✦';
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  padding: 0 2.25rem;
-  color: var(--accent-strong);
-  font-size: 0.96rem;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  background:
-    linear-gradient(90deg, transparent 0, transparent 1.25rem, rgba(255, 255, 255, 0.97) 1.25rem, rgba(255, 255, 255, 0.97) calc(100% - 1.25rem), transparent calc(100% - 1.25rem)),
-    linear-gradient(90deg, rgba(98, 176, 232, 0.68), rgba(72, 183, 168, 0.6));
-  background-repeat: no-repeat;
-  background-size: 100% 3px, 100% 3px;
-  background-position: center 50%, center 50%;
-}
-
-h2 {
-  font-size: clamp(1.55rem, 3vw, 2.1rem);
-  padding: 0.16em 0 0.32em;
-  color: var(--accent-strong);
-  border-bottom: 2px solid var(--border-strong);
-}
-
-h2::after {
-  display: none;
-}
-
-h3 {
-  font-size: var(--fs-400);
-  padding-bottom: 0.28em;
-  color: #1f536d;
-  border-bottom: 1px dashed rgba(98, 176, 232, 0.42);
-}
-
-h3::before {
-  display: none;
-}
-
-h4 {
-  font-size: var(--fs-300);
+/* Neat 1's signature: a centred title closed by a small star between two sky-to-teal strokes */
+:where(.markdown-body) h1::after {
+  content: '\2726';
   display: block;
-  width: fit-content;
-  color: #21485d;
-  padding: 0.16em 0.58rem 0.22em;
-  background: rgba(98, 176, 232, 0.08);
-  border: 1px solid rgba(98, 176, 232, 0.18);
-  border-radius: 10px;
+  width: 6rem;
+  margin: 0.55rem auto 0;
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+  background:
+    linear-gradient(90deg, var(--accent-2), var(--accent-warm)) left center / 2rem 2px no-repeat,
+    linear-gradient(90deg, var(--accent-warm), var(--accent-2)) right center / 2rem 2px no-repeat;
 }
 
-h5 {
+:where(.markdown-body) h2 {
+  font-size: clamp(1.55rem, 3vw, 2.1rem);
+  padding: 0 0 0.32em;
+  color: var(--accent-strong);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+:where(.markdown-body) h2::after {
+  display: none;
+}
+
+:where(.markdown-body) h3 {
+  font-size: var(--fs-400);
+  color: #1f536d;
+}
+
+/* a sky dot with a halo, hung in the gutter on the bullets' axis */
+:where(.markdown-body) h3::before {
+  content: '';
+  position: absolute;
+  left: -1.05rem;
+  top: calc(var(--lh-tight) * 0.5em - 0.25rem);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(98, 176, 232, 0.2);
+  transition: opacity var(--transition);
+}
+
+:where(.markdown-body) h3:hover::before {
+  opacity: 0;
+}
+
+:where(.markdown-body) h4 {
+  font-size: var(--fs-300);
+  color: #21485d;
+  letter-spacing: -0.015em;
+}
+
+:where(.markdown-body) h5 {
   font-size: var(--fs-200);
   color: #365d78;
-  padding: 0.12em 0.5rem;
-  background: rgba(98, 176, 232, 0.07);
-  border-radius: 6px;
-  width: fit-content;
+  letter-spacing: -0.01em;
 }
 
-h6 {
-  font-size: var(--fs-100);
+:where(.markdown-body) h6 {
+  font-size: var(--fs-75);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--text-soft);
-  display: block;
-  width: fit-content;
-  padding: 0.18em 0.52rem;
-  background: #f8fbfe;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
 }
 
-.header-anchor {
+:where(.markdown-body) .header-anchor {
   float: left;
   margin-left: -1.25em;
   padding-right: 0.3em;
@@ -357,46 +368,50 @@ h6 {
   transition: opacity var(--transition), transform var(--transition), color var(--transition);
 }
 
-h1:hover .header-anchor,
-h2:hover .header-anchor,
-h3:hover .header-anchor,
-h4:hover .header-anchor,
-h5:hover .header-anchor,
-h6:hover .header-anchor {
+:where(.markdown-body) h1:hover .header-anchor,
+:where(.markdown-body) h2:hover .header-anchor,
+:where(.markdown-body) h3:hover .header-anchor,
+:where(.markdown-body) h4:hover .header-anchor,
+:where(.markdown-body) h5:hover .header-anchor,
+:where(.markdown-body) h6:hover .header-anchor {
   opacity: 0.75;
   transform: translateX(0);
 }
 
-.header-anchor:hover {
+:where(.markdown-body) .header-anchor:hover {
   color: var(--accent-strong);
 }
 
-p,
-ul,
-ol,
-blockquote,
-pre,
-table,
-.toc-wrapper,
-details.spoil,
-.tabs,
-.cols,
-.youtube-embed,
-.mermaid,
-.smiles-render {
+:where(.markdown-body) p,
+:where(.markdown-body) ul,
+:where(.markdown-body) ol,
+:where(.markdown-body) blockquote,
+:where(.markdown-body) pre,
+:where(.markdown-body) table,
+:where(.markdown-body) .toc-wrapper,
+:where(.markdown-body) details.spoil,
+:where(.markdown-body) .tabs,
+:where(.markdown-body) .cols,
+:where(.markdown-body) .youtube-embed,
+:where(.markdown-body) .mermaid,
+:where(.markdown-body) .smiles-render {
   margin: 0 0 var(--space-5);
 }
 
-p:last-child,
-ul:last-child,
-ol:last-child,
-blockquote:last-child,
-pre:last-child,
-table:last-child {
+:where(.markdown-body) p {
+  text-wrap: pretty;
+}
+
+:where(.markdown-body) p:last-child,
+:where(.markdown-body) ul:last-child,
+:where(.markdown-body) ol:last-child,
+:where(.markdown-body) blockquote:last-child,
+:where(.markdown-body) pre:last-child,
+:where(.markdown-body) table:last-child {
   margin-bottom: 0;
 }
 
-a {
+:where(.markdown-body) a {
   color: var(--link);
   text-decoration-thickness: 1.4px;
   text-decoration-color: rgba(23, 104, 181, 0.28);
@@ -404,132 +419,129 @@ a {
   transition: color var(--transition), text-decoration-color var(--transition);
 }
 
-a:hover {
+:where(.markdown-body) a:hover {
   color: var(--link-hover);
   text-decoration-color: rgba(15, 77, 134, 0.56);
 }
 
-a:visited {
+:where(.markdown-body) a:visited {
   color: var(--link-visited);
 }
 
-strong {
+:where(.markdown-body) strong {
   color: var(--heading);
   font-weight: 700;
 }
 
-em {
+:where(.markdown-body) em {
   color: #355772;
 }
 
-s,
-del {
+:where(.markdown-body) s,
+:where(.markdown-body) del {
   color: var(--text-muted);
   text-decoration-color: rgba(155, 99, 111, 0.35);
 }
 
-mark {
+:where(.markdown-body) mark {
   padding: 0.08em 0.28em;
-  color: #744f07;
-  background: rgba(232, 181, 63, 0.22);
-  border-radius: 999px;
+  color: #0f3552;
+  background: rgba(98, 176, 232, 0.24);
+  border-radius: 4px;
 }
 
-ins {
+:where(.markdown-body) ins {
   color: #177d69;
   text-decoration: underline wavy rgba(72, 183, 168, 0.75) 1.5px;
   text-underline-offset: 0.18em;
 }
 
-sub,
-sup {
+:where(.markdown-body) sub,
+:where(.markdown-body) sup {
   font-size: 0.72em;
   color: var(--text-soft);
 }
 
-code {
+:where(.markdown-body) code {
   font-family: var(--font-code);
   font-size: 0.9em;
   color: var(--inline-code);
   background: var(--code-bg);
   border: 1px solid var(--code-border);
-  border-radius: 10px;
-  padding: 0.18em 0.44em;
+  border-radius: 6px;
+  padding: 0.12em 0.38em;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-pre {
+:where(.markdown-body) pre {
   position: relative;
-  overflow-x: auto;
-  padding: 1.2rem 1.3rem;
-  background: linear-gradient(180deg, var(--code-bg) 0%, var(--code-bg-2) 100%);
+  padding: 1.05rem 1.25rem;
+  background: var(--code-bg);
   border: 1px solid var(--code-border);
-  border-radius: 18px;
-  box-shadow: var(--shadow-soft);
+  border-radius: 12px;
 }
 
-pre::before {
-  content: '';
-  position: absolute;
-  left: 1rem;
-  top: 0.7rem;
-  width: 0.62rem;
-  height: 0.62rem;
-  border-radius: 999px;
-  background: #f0c68d;
-  box-shadow: 1rem 0 0 #8cd5c6, 2rem 0 0 #9ec5ea;
+:where(.markdown-body) pre,
+:where(.markdown-body) kbd,
+:where(.markdown-body) samp {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-pre code {
+:where(.markdown-body) pre code {
   display: block;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--code-text);
-  font-size: var(--fs-75);
-  line-height: 1.72;
+  font-size: 0.875em;
+  line-height: 1.7;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
-blockquote {
-  padding: 1.1rem 1.25rem;
-  color: #3e6077;
-  background: linear-gradient(180deg, rgba(98, 176, 232, 0.1), rgba(98, 176, 232, 0.04));
+:where(.markdown-body) blockquote {
+  padding: 0.95rem 1.25rem;
+  color: #3b5a70;
+  background: rgba(98, 176, 232, 0.07);
   border: 1px solid #dbeaf6;
-  border-radius: 18px;
+  border-radius: 12px;
 }
 
-blockquote blockquote {
+:where(.markdown-body) blockquote blockquote {
   margin-top: var(--space-4);
   background: rgba(255, 255, 255, 0.7);
 }
 
-blockquote > *:last-child {
+:where(.markdown-body) blockquote > *:last-child {
   margin-bottom: 0;
 }
 
-ul,
-ol {
+:where(.markdown-body) ul,
+:where(.markdown-body) ol {
   padding-left: 1.4rem;
 }
 
-li {
+:where(.markdown-body) li {
   margin-bottom: 0.42rem;
 }
 
-li > ul,
-li > ol {
+:where(.markdown-body) li > ul,
+:where(.markdown-body) li > ol {
   margin-top: 0.42rem;
   margin-bottom: 0;
 }
 
-ul {
+:where(.markdown-body) ul {
   list-style: none;
 }
 
-ul > li {
+:where(.markdown-body) ul > li {
   position: relative;
 }
 
-ul > li::before {
+:where(.markdown-body) ul > li::before {
   content: '';
   position: absolute;
   left: -1rem;
@@ -541,21 +553,20 @@ ul > li::before {
   box-shadow: 0 0 0 3px rgba(98, 176, 232, 0.15);
 }
 
-ol {
+:where(.markdown-body) ol {
   list-style: decimal;
 }
 
-.task-list-item {
-  list-style: none;
+:where(.markdown-body) .task-list-item {
   padding-left: 0;
 }
 
-.task-list-item::before {
+:where(.markdown-body) .task-list-item::before {
   display: none;
 }
 
-.task-list-item-checkbox,
-.task-list-item input[type='checkbox'] {
+:where(.markdown-body) .task-list-item-checkbox,
+:where(.markdown-body) .task-list-item input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -568,14 +579,14 @@ ol {
   background: #fff;
 }
 
-.task-list-item-checkbox:checked,
-.task-list-item input[type='checkbox']:checked {
+:where(.markdown-body) .task-list-item-checkbox:checked,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.task-list-item-checkbox:checked::after,
-.task-list-item input[type='checkbox']:checked::after {
+:where(.markdown-body) .task-list-item-checkbox:checked::after,
+:where(.markdown-body) .task-list-item input[type='checkbox']:checked::after {
   content: '';
   position: absolute;
   left: 0.29rem;
@@ -587,20 +598,15 @@ ol {
   transform: rotate(45deg);
 }
 
-.markdown-body > table,
-.markdown-body td table {
-  width: max-content;
-  max-width: 100%;
-}
-
-table {
+:where(.markdown-body) table {
   border-collapse: separate;
-  border-radius: 18px;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
 }
 
-thead th {
+:where(.markdown-body) thead th {
   padding: 0.82rem 1rem;
   background: #f1f7fc;
   border-bottom: 1px solid var(--border-strong);
@@ -609,92 +615,86 @@ thead th {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  text-align: left;
   white-space: nowrap;
 }
 
-tbody td {
+:where(.markdown-body) tbody td {
   padding: 0.86rem 1rem;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
 
-tbody tr:nth-child(even) td {
+:where(.markdown-body) tbody tr:nth-child(even) td {
   background: rgba(98, 176, 232, 0.035);
 }
 
-tbody tr:hover td {
+:where(.markdown-body) tbody tr:hover td {
   background: rgba(72, 183, 168, 0.06);
 }
 
-tbody tr:last-child td {
+:where(.markdown-body) tbody tr:last-child td {
   border-bottom: 0;
 }
 
-hr {
+:where(.markdown-body) hr {
   height: 1px;
   margin: var(--space-6) 0;
   border: 0;
   background: linear-gradient(90deg, transparent, rgba(46, 139, 207, 0.45), rgba(72, 183, 168, 0.4), transparent);
 }
 
-img {
+:where(.markdown-body) img {
   margin: 0 auto;
   border: 1px solid #dde8f3;
-  border-radius: 18px;
-  box-shadow: var(--shadow-soft);
+  border-radius: 12px;
 }
 
-p > img {
-  display: inline;
+:where(.markdown-body) p > img {
   margin: 0;
   border-radius: 10px;
 }
 
-.footnote-ref {
+:where(.markdown-body) .footnote-ref {
   font-size: 0.85em;
 }
 
-.footnote-ref a,
-.footnote-backref {
+:where(.markdown-body) .footnote-ref a,
+:where(.markdown-body) .footnote-backref {
   color: var(--accent-strong);
   text-decoration: none;
 }
 
-.footnotes-sep {
+:where(.markdown-body) .footnotes-sep {
   margin: var(--space-6) 0 var(--space-4);
 }
 
-.footnotes {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-soft);
+:where(.markdown-body) .footnotes {
+  padding-top: var(--space-2);
   color: var(--text-soft);
   font-size: var(--fs-75);
 }
 
-.footnotes ol {
+:where(.markdown-body) .footnotes ol {
   margin-bottom: 0;
 }
 
-.footnotes li {
+:where(.markdown-body) .footnotes li {
   margin-bottom: 0.65rem;
 }
 
-.katex {
+:where(.markdown-body) .katex {
   color: #18314c;
   font-size: 1.06em;
 }
 
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+:where(.markdown-body) .katex-display {
   padding: 0.9rem 1rem;
   background: #f7fbfe;
   border: 1px solid #e0ebf4;
   border-radius: 18px;
 }
 
-.katex-error {
+:where(.markdown-body) .katex-error {
   display: inline-block;
   padding: 0.2em 0.48em;
   color: var(--danger-text);
@@ -705,117 +705,161 @@ p > img {
   font-size: var(--fs-75);
 }
 
-div.success,
-div.note,
-div.info,
-div.warning,
-div.danger {
+/* Callouts: icon-led cards. A round tinted disc at the start of the first line
+   carries a CSS-drawn symbol (info i, note lines, success tick, warning !,
+   danger x), so the type reads by shape as well as by colour. Text stays ink. */
+:where(.markdown-body) div.success,
+:where(.markdown-body) div.note,
+:where(.markdown-body) div.info,
+:where(.markdown-body) div.warning,
+:where(.markdown-body) div.danger {
+  --icon: var(--info-mark);
+  --icon-size: 1.5rem;
+  --icon-top: calc(1rem + (var(--lh-copy) * 1em - var(--icon-size)) / 2);
   position: relative;
-  overflow: hidden;
   margin-bottom: var(--space-5);
-  padding: 1rem 1.1rem;
+  padding: 1rem 1.2rem 1rem 3.2rem;
+  color: var(--text);
   border: 1px solid;
-  border-radius: 18px;
-  box-shadow: var(--shadow-soft);
+  border-radius: 14px;
 }
 
-div.success::before,
-div.note::before,
-div.info::before,
-div.warning::before,
-div.danger::before {
+/* the disc */
+:where(.markdown-body) div.success::before,
+:where(.markdown-body) div.note::before,
+:where(.markdown-body) div.info::before,
+:where(.markdown-body) div.warning::before,
+:where(.markdown-body) div.danger::before {
   content: '';
   position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
-  width: 2.9rem;
-  height: 2.9rem;
+  left: 1.05rem;
+  top: var(--icon-top);
+  width: var(--icon-size);
+  height: var(--icon-size);
   border-radius: 999px;
-  opacity: 0.28;
+  background: color-mix(in srgb, var(--icon) 16%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon) 30%, transparent);
   pointer-events: none;
 }
 
-div.success {
-  background: linear-gradient(180deg, rgba(72, 184, 143, 0.12), rgba(72, 184, 143, 0.05));
+/* the symbol, drawn on a box centred over the disc */
+:where(.markdown-body) div.success::after,
+:where(.markdown-body) div.note::after,
+:where(.markdown-body) div.info::after,
+:where(.markdown-body) div.warning::after,
+:where(.markdown-body) div.danger::after {
+  content: '';
+  position: absolute;
+  left: 1.05rem;
+  top: var(--icon-top);
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+:where(.markdown-body) div.info::after {
+  background-image:
+    radial-gradient(circle, var(--icon) 0 0.1rem, transparent 0.11rem),
+    linear-gradient(var(--icon), var(--icon));
+  background-size: 0.3rem 0.3rem, 0.16rem 0.48rem;
+  background-position: 50% 0.36rem, 50% 0.74rem;
+}
+
+:where(.markdown-body) div.warning::after {
+  background-image:
+    linear-gradient(var(--icon), var(--icon)),
+    radial-gradient(circle, var(--icon) 0 0.1rem, transparent 0.11rem);
+  background-size: 0.16rem 0.5rem, 0.3rem 0.3rem;
+  background-position: 50% 0.36rem, 50% 0.93rem;
+}
+
+:where(.markdown-body) div.note::after {
+  background-image: linear-gradient(var(--icon), var(--icon)), linear-gradient(var(--icon), var(--icon)), linear-gradient(var(--icon), var(--icon));
+  background-size: 0.66rem 0.13rem, 0.66rem 0.13rem, 0.42rem 0.13rem;
+  background-position: 0.42rem 0.5rem, 0.42rem 0.7rem, 0.42rem 0.9rem;
+}
+
+:where(.markdown-body) div.danger::after {
+  background-image: linear-gradient(var(--icon), var(--icon)), linear-gradient(var(--icon), var(--icon));
+  background-size: 0.16rem 0.7rem, 0.7rem 0.16rem;
+  background-position: center, center;
+  transform: rotate(45deg);
+}
+
+:where(.markdown-body) div.success::after {
+  left: calc(1.05rem + var(--icon-size) / 2 - 0.15rem);
+  top: calc(var(--icon-top) + 0.36rem);
+  width: 0.32rem;
+  height: 0.62rem;
+  border: solid var(--icon);
+  border-width: 0 0.16rem 0.16rem 0;
+  transform: rotate(45deg);
+}
+
+:where(.markdown-body) div.success {
+  --icon: var(--success-mark);
+  background: rgba(72, 184, 143, 0.09);
   border-color: var(--success-border);
 }
 
-div.success::before {
-  background: radial-gradient(circle, rgba(22, 120, 87, 0.75) 0%, transparent 70%);
-}
-
-div.note {
-  background: linear-gradient(180deg, rgba(108, 126, 227, 0.12), rgba(108, 126, 227, 0.05));
+:where(.markdown-body) div.note {
+  --icon: var(--note-mark);
+  background: rgba(108, 126, 227, 0.09);
   border-color: var(--note-border);
 }
 
-div.note::before {
-  background: radial-gradient(circle, rgba(69, 80, 168, 0.72) 0%, transparent 70%);
-}
-
-div.info {
-  background: linear-gradient(180deg, rgba(70, 154, 230, 0.12), rgba(70, 154, 230, 0.05));
+:where(.markdown-body) div.info {
+  background: rgba(70, 154, 230, 0.09);
   border-color: var(--info-border);
 }
 
-div.info::before {
-  background: radial-gradient(circle, rgba(18, 102, 167, 0.72) 0%, transparent 70%);
-}
-
-div.warning {
-  background: linear-gradient(180deg, rgba(232, 181, 63, 0.14), rgba(232, 181, 63, 0.06));
+:where(.markdown-body) div.warning {
+  --icon: var(--warning-mark);
+  background: rgba(232, 181, 63, 0.12);
   border-color: var(--warning-border);
 }
 
-div.warning::before {
-  background: radial-gradient(circle, rgba(142, 100, 19, 0.72) 0%, transparent 70%);
-}
-
-div.danger {
-  background: linear-gradient(180deg, rgba(223, 108, 119, 0.13), rgba(223, 108, 119, 0.06));
+:where(.markdown-body) div.danger {
+  --icon: var(--danger-mark);
+  background: rgba(223, 108, 119, 0.1);
   border-color: var(--danger-border);
 }
 
-div.danger::before {
-  background: radial-gradient(circle, rgba(161, 65, 83, 0.72) 0%, transparent 70%);
-}
-
-div.success > p:first-child > strong:first-child,
-div.success > p:first-child > b:first-child {
+:where(.markdown-body) div.success > p:first-child > strong:first-child,
+:where(.markdown-body) div.success > p:first-child > b:first-child {
   color: var(--success-text);
 }
 
-div.note > p:first-child > strong:first-child,
-div.note > p:first-child > b:first-child {
+:where(.markdown-body) div.note > p:first-child > strong:first-child,
+:where(.markdown-body) div.note > p:first-child > b:first-child {
   color: var(--note-text);
 }
 
-div.info > p:first-child > strong:first-child,
-div.info > p:first-child > b:first-child {
+:where(.markdown-body) div.info > p:first-child > strong:first-child,
+:where(.markdown-body) div.info > p:first-child > b:first-child {
   color: var(--info-text);
 }
 
-div.warning > p:first-child > strong:first-child,
-div.warning > p:first-child > b:first-child {
+:where(.markdown-body) div.warning > p:first-child > strong:first-child,
+:where(.markdown-body) div.warning > p:first-child > b:first-child {
   color: var(--warning-text);
 }
 
-div.danger > p:first-child > strong:first-child,
-div.danger > p:first-child > b:first-child {
+:where(.markdown-body) div.danger > p:first-child > strong:first-child,
+:where(.markdown-body) div.danger > p:first-child > b:first-child {
   color: var(--danger-text);
 }
 
-div.success > *:last-child,
-div.note > *:last-child,
-div.info > *:last-child,
-div.warning > *:last-child,
-div.danger > *:last-child {
+:where(.markdown-body) div.success > *:last-child,
+:where(.markdown-body) div.note > *:last-child,
+:where(.markdown-body) div.info > *:last-child,
+:where(.markdown-body) div.warning > *:last-child,
+:where(.markdown-body) div.danger > *:last-child {
   margin-bottom: 0;
 }
 
-.left {
-  float: left;
-  max-width: min(44%, 22rem);
+:where(.markdown-body) .left {
   padding: 0.85rem 0.95rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -823,30 +867,22 @@ div.danger > *:last-child {
   margin: 0 var(--space-5) var(--space-4) 0;
 }
 
-.right {
-  text-align: right;
+:where(.markdown-body) .right {
   margin: 0 0 var(--space-4);
 }
 
-.center {
-  margin: 0 auto var(--space-5);
-  text-align: center;
-  max-width: min(100%, 42rem);
-}
-
-details.spoil {
+:where(.markdown-body) details.spoil {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface-2);
 }
 
-details.spoil > summary {
+:where(.markdown-body) details.spoil > summary {
   display: flex;
   align-items: center;
   gap: 0.7rem;
   padding: 0.95rem 1.1rem;
-  cursor: pointer;
   list-style: none;
   user-select: none;
   color: var(--heading);
@@ -854,11 +890,11 @@ details.spoil > summary {
   background: rgba(98, 176, 232, 0.06);
 }
 
-details.spoil > summary::-webkit-details-marker {
+:where(.markdown-body) details.spoil > summary::-webkit-details-marker {
   display: none;
 }
 
-details.spoil > summary::before {
+:where(.markdown-body) details.spoil > summary::before {
   content: '+';
   display: inline-grid;
   place-items: center;
@@ -872,158 +908,134 @@ details.spoil > summary::before {
   line-height: 1;
 }
 
-details.spoil[open] > summary::before {
+:where(.markdown-body) details.spoil[open] > summary::before {
   content: '–';
 }
 
-details.spoil[open] > summary {
+:where(.markdown-body) details.spoil[open] > summary {
   border-bottom: 1px solid var(--border-soft);
 }
 
-details.spoil > :not(summary) {
+:where(.markdown-body) details.spoil > :not(summary) {
   padding: 1rem 1.1rem 1.1rem;
 }
 
-.tabs {
+:where(.markdown-body) .tabs {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface-2);
 }
 
-.tabs-bar {
-  display: flex;
+:where(.markdown-body) .tabs-bar {
   gap: 0.4rem;
   padding: 0.5rem;
-  overflow-x: auto;
   background: rgba(98, 176, 232, 0.05);
   border-bottom: 1px solid var(--border-soft);
-  scrollbar-width: none;
 }
 
-.tabs-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.tabs-bar-btn {
+:where(.markdown-body) .tabs-bar-btn {
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 0.56rem 0.92rem;
   background: transparent;
   color: var(--text-soft);
   font: 700 var(--fs-75)/1.2 var(--font-heading);
-  cursor: pointer;
-  white-space: nowrap;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
-.tabs-bar-btn:hover {
+:where(.markdown-body) .tabs-bar-btn:hover {
   color: var(--heading);
   border-color: var(--border);
   background: rgba(255, 255, 255, 0.7);
 }
 
-.tabs-bar-btn.active {
+:where(.markdown-body) .tabs-bar-btn.active {
   color: #fff;
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  background: var(--accent-strong);
   border-color: transparent;
 }
 
-.tab {
-  display: none;
+:where(.markdown-body) .tab {
   padding: 1.1rem 1.2rem 1.25rem;
 }
 
-.tab.active {
-  display: block;
-}
-
-.tabs:not([data-js]) .tab {
-  display: block;
-}
-
-.tabs:not([data-js]) .tab + .tab {
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab {
   border-top: 1px solid var(--border-soft);
 }
 
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+:where(.markdown-body) .cols {
   gap: 1rem;
-  align-items: start;
 }
 
-.col {
-  min-width: 0;
+:where(.markdown-body) .col {
   padding: 1rem 1.05rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 18px;
 }
 
-.col > *:last-child {
+:where(.markdown-body) .col > *:last-child {
   margin-bottom: 0;
 }
 
-.toc-wrapper {
+:where(.markdown-body) .toc-wrapper {
   position: relative;
 }
 
-nav.toc,
-.toc-list {
+:where(.markdown-body) nav.toc,
+:where(.markdown-body) .toc-list {
   padding: 1rem 1.15rem;
   background: linear-gradient(180deg, rgba(98, 176, 232, 0.08), rgba(255, 255, 255, 0.82));
   border: 1px solid var(--border);
   border-radius: 20px;
 }
 
-nav.toc ul,
-.toc-list ul {
+:where(.markdown-body) nav.toc ul,
+:where(.markdown-body) .toc-list ul {
   margin: 0;
   padding-left: 1.1rem;
 }
 
-nav.toc li,
-.toc-list li {
+:where(.markdown-body) nav.toc li,
+:where(.markdown-body) .toc-list li {
   margin-bottom: 0.26rem;
 }
 
-nav.toc li::before,
-.toc-list li::before {
+:where(.markdown-body) nav.toc li::before,
+:where(.markdown-body) .toc-list li::before {
   display: none;
 }
 
-nav.toc a,
-.toc-list a {
+:where(.markdown-body) nav.toc a,
+:where(.markdown-body) .toc-list a {
   color: var(--text-soft);
   text-decoration: none;
 }
 
-nav.toc a:hover,
-.toc-list a:hover {
+:where(.markdown-body) nav.toc a:hover,
+:where(.markdown-body) .toc-list a:hover {
   color: var(--accent-strong);
 }
 
-span.red {
+:where(.markdown-body) span.red {
   color: var(--span-red);
 }
 
-span.yellow {
-  color: var(--span-yellow);
-}
+:where(.markdown-body) span.yellow { color: #976d01; } /* text colour only, like the other spans: the most saturated gold at AA on this page */
 
-span.green {
+:where(.markdown-body) span.green {
   color: var(--span-green);
 }
 
-span.blue {
+:where(.markdown-body) span.blue {
   color: var(--span-blue);
 }
 
-span.success,
-span.info,
-span.warning,
-span.danger {
+:where(.markdown-body) span.success,
+:where(.markdown-body) span.info,
+:where(.markdown-body) span.warning,
+:where(.markdown-body) span.danger {
   gap: 0;
   padding: 0.18em 0.62em;
   border-radius: 999px;
@@ -1033,38 +1045,38 @@ span.danger {
   vertical-align: middle;
 }
 
-span.success::before,
-span.info::before,
-span.warning::before,
-span.danger::before {
+:where(.markdown-body) span.success::before,
+:where(.markdown-body) span.info::before,
+:where(.markdown-body) span.warning::before,
+:where(.markdown-body) span.danger::before {
   content: none;
 }
 
-span.success {
+:where(.markdown-body) span.success {
   background: rgba(72, 184, 143, 0.14);
   color: var(--success-text);
   border-color: var(--success-border);
 }
 
-span.info {
+:where(.markdown-body) span.info {
   background: rgba(70, 154, 230, 0.14);
   color: var(--info-text);
   border-color: var(--info-border);
 }
 
-span.warning {
+:where(.markdown-body) span.warning {
   background: rgba(232, 181, 63, 0.16);
   color: var(--warning-text);
   border-color: var(--warning-border);
 }
 
-span.danger {
+:where(.markdown-body) span.danger {
   background: rgba(223, 108, 119, 0.15);
   color: var(--danger-text);
   border-color: var(--danger-border);
 }
 
-div.test-block {
+:where(.markdown-body) div.test-block {
   padding: 0.85rem 1rem;
   margin-bottom: var(--space-5);
   background: rgba(98, 176, 232, 0.1);
@@ -1075,7 +1087,7 @@ div.test-block {
   font-size: var(--fs-75);
 }
 
-span.test-inline {
+:where(.markdown-body) span.test-inline {
   display: inline-block;
   padding: 0.12em 0.4em;
   border-radius: 8px;
@@ -1086,49 +1098,27 @@ span.test-inline {
   font-size: 0.88em;
 }
 
-div.youtube-embed {
-  position: relative;
-  overflow: hidden;
-  height: 0;
-  padding-bottom: 56.25%;
+:where(.markdown-body) div.youtube-embed {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: #ddebf5;
   box-shadow: var(--shadow-soft);
 }
 
-div.youtube-embed iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-div.mermaid {
+:where(.markdown-body) div.mermaid {
   padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface-2);
-  overflow-x: auto;
-  text-align: center;
 }
 
-div.mermaid svg {
-  max-width: 100%;
-  height: auto;
-}
-
-div.smiles-render {
-}
-
-div.smiles-render canvas,
-canvas[data-smiles] {
+:where(.markdown-body) div.smiles-render canvas,
+:where(.markdown-body) canvas[data-smiles] {
   border-radius: 0;
   box-shadow: none;
 }
 
-span.qrcode {
+:where(.markdown-body) span.qrcode {
   padding: 6px;
   vertical-align: middle;
   background: #fff;
@@ -1139,16 +1129,16 @@ span.qrcode {
 /* --------------------------------------------------------------------------
    Focus indicators
    -------------------------------------------------------------------------- */
-a:focus-visible,
-.tabs-bar-btn:focus-visible,
-details.spoil > summary:focus-visible {
+:where(.markdown-body) a:focus-visible,
+:where(.markdown-body) .tabs-bar-btn:focus-visible,
+:where(.markdown-body) details.spoil > summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
   text-decoration: none;
 }
-.task-list-item-checkbox:focus-visible,
-.task-list-item input[type='checkbox']:focus-visible {
+:where(.markdown-body) .task-list-item-checkbox:focus-visible,
+:where(.markdown-body) .task-list-item input[type='checkbox']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1163,17 +1153,11 @@ details.spoil > summary:focus-visible {
     border-radius: 22px;
   }
 
-  .left {
-    float: none;
-    max-width: 100%;
+  :where(.markdown-body) .left {
     margin: 0 0 var(--space-4);
   }
 
-  .cols {
-    grid-template-columns: 1fr;
-  }
-
-  .header-anchor {
+  :where(.markdown-body) .header-anchor {
     margin-left: -1.05em;
   }
 }
@@ -1186,7 +1170,6 @@ details.spoil > summary:focus-visible {
   }
 
   .markdown-body {
-    max-width: 100%;
     padding: 0;
     border: 0;
     box-shadow: none;
@@ -1194,65 +1177,43 @@ details.spoil > summary:focus-visible {
 
   .markdown-body::before,
   .markdown-body::after,
-  .header-anchor,
-  .tabs-bar,
-  div.youtube-embed {
+  :where(.markdown-body) .header-anchor {
     display: none !important;
   }
 
-  a {
+  :where(.markdown-body) a {
     color: #0b57d0;
     text-decoration-color: currentColor;
   }
 
-  pre,
-  code,
-  blockquote,
-  .success,
-  .note,
-  .info,
-  .warning,
-  .danger,
-  nav.toc,
-  .toc-list,
-  .col,
-  details.spoil,
-  div.mermaid,
-  div.smiles-render {
+  :where(.markdown-body) pre,
+  :where(.markdown-body) code,
+  :where(.markdown-body) blockquote,
+  :where(.markdown-body) .success,
+  :where(.markdown-body) .note,
+  :where(.markdown-body) .info,
+  :where(.markdown-body) .warning,
+  :where(.markdown-body) .danger,
+  :where(.markdown-body) nav.toc,
+  :where(.markdown-body) .toc-list,
+  :where(.markdown-body) .col,
+  :where(.markdown-body) details.spoil,
+  :where(.markdown-body) div.mermaid,
+  :where(.markdown-body) div.smiles-render {
     background: #fff !important;
     color: #111 !important;
     border-color: #d0d0d0 !important;
     box-shadow: none !important;
   }
 
-  span.success,
-  span.info,
-  span.warning,
-  span.danger {
+  :where(.markdown-body) span.success,
+  :where(.markdown-body) span.info,
+  :where(.markdown-body) span.warning,
+  :where(.markdown-body) span.danger {
     border-color: #bdbdbd !important;
     color: #111 !important;
-  }
-
-  tr,
-  iframe,
-  video,
-  pre,
-  blockquote {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 }
 
 /* code: panel tint shows through (no white highlight.js inner box) */
 .markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; }
-
-
-/* ============ modern decorative refresh ============ */
-/* blockquote — clean card with an accent gradient edge */
-.markdown-body blockquote { position: relative; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; padding: 1rem 1.25rem 1rem 1.5rem; margin: 1.7rem 0; color: var(--text-soft);
-  box-shadow: var(--shadow-soft); overflow: hidden; }
-.markdown-body blockquote::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-warm)); }
-.markdown-body blockquote p:last-child { margin-bottom: 0; }
-.markdown-body blockquote blockquote { background: var(--surface-2); }

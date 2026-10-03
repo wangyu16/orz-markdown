@@ -1,29 +1,52 @@
-@import url('https://fonts.googleapis.com/css2?family=Indie+Flower&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Indie+Flower&family=Shantell+Sans:ital,wght,BNCE,INFM@0,300..800,-100..100,0..100;1,300..800,-100..100,0..100&family=Recursive:wght,CASL,MONO@400..700,1,1&display=swap');
 @import './common.css';
 
+/* light-playful-1 — a ruled school exercise book.
+   Blue ruling aligned to the body line grid, a pink margin line, body written
+   in Shantell Sans with its informal (handwritten) axes turned up, headings in
+   Indie Flower, code in Recursive's casual mono. Blocks that are not running
+   text (code, tables, quotes, notes) sit on their own slips of paper. */
 :root {
+  color-scheme: light;
   --bg-color: #fcf9f2;
-  --text-main: #3d3b38;
-  --text-muted: #736f68;
-  --link-color: #007bb5;
-  --link-hover: #ff007f;
-  --border-color: #d1cbc1;
+  --paper-slip: #fffefa;
+  --text-main: #35332f;
+  --text-strong: #23211e;
+  --text-muted: #67635b;
+  --link-color: #00649a;
+  --link-hover: #b8195a;
+  --border-color: #d9d2c5;
+  --accent: #d6336c;        /* notebook pink: h1, markers, checks */
+  --accent-blue: #00649a;   /* ballpoint blue: h2 */
+  --accent-green: #3d6e17;  /* h3 */
 
-  --heading-font: 'Indie Flower', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive;
-  --body-font: 'Indie Flower', 'ZCOOL KuaiLe', 'HanziPen SC', 'Hannotate SC', 'Wawati SC', 'KaiTi', cursive, 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --code-font: 'Courier New', Courier, monospace;
+  --heading-font: 'Indie Flower', 'Hannotate SC', 'HanziPen SC', 'Wawati SC', 'KaiTi', cursive;
+  --body-font: 'Shantell Sans', 'Hannotate SC', 'HanziPen SC', 'Noto Sans SC', 'Noto Sans TC', 'PingFang SC', 'Hiragino Sans', 'Comic Sans MS', cursive, sans-serif;
+  --code-font: 'Recursive', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --base-size: 19px;
-  --line-height: 1.6;
+  --base-size: 18px;
+  /* The ruling: one ruled line per body line. Everything in running text
+     (paragraph gaps, list items) moves in whole rules. */
+  --rule: 2rem;                              /* body line-height = line spacing */
+  --rule-drop: 9px;                          /* line sits this far above the band's bottom = on the baseline */
+  --rule-ink: rgba(58, 128, 214, 0.36);
+  --margin-ink: rgba(222, 76, 120, 0.55);
+  --pad-l: 3.75rem;                          /* room for the margin line */
+  --pad-r: 2.25rem;
 
-  /* Sticky notes colors */
-  --note-green: #dcf5ca;
-  --note-blue: #cde6fa;
-  --note-yellow: #fef1ac;
-  --note-pink: #fad1e1;
+  /* Sticky note colours */
+  --note-green: #d6f3bd;
+  --note-blue: #cfe7fc;
+  --note-yellow: #fff1a1;
+  --note-pink: #ffd5e3;
+  --ink-success: #2f6510;
+  --ink-info: #0b5891;
+  --ink-warning: #765000;
+  --ink-danger: #a5164a;
 
-  --markdown-body-max-width: 800px;
-  --markdown-body-padding: 3rem 2rem;
+  --markdown-body-max-width: 43rem;
+  --orz-measure-wide: min(100%, 56rem);
+  --markdown-body-padding: 3rem var(--pad-r) 3.5rem var(--pad-l);
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
@@ -36,24 +59,29 @@ body {
 }
 
 .markdown-body {
-  display: flow-root;
   font-family: var(--body-font);
   font-size: var(--base-size);
-  line-height: var(--line-height);
+  font-variation-settings: 'INFM' 55, 'BNCE' 25;
+  line-height: var(--rule);
   color: var(--text-main);
-  background-color: var(--bg-color);
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
   border: var(--markdown-body-border);
   border-radius: var(--markdown-body-radius);
   box-shadow: var(--markdown-body-shadow);
-  /* subtle notebook paper lines background */
-  background-image: repeating-linear-gradient(transparent, transparent 1.5rem, rgba(0, 150, 255, 0.08) 1.5rem, rgba(0, 150, 255, 0.08) 1.6rem);
-  background-attachment: local;
+  text-align: start;
+  isolation: isolate; /* keeps the ruling (z-index -1) on this page */
+  /* the red margin line, top to bottom */
+  background:
+    linear-gradient(to right,
+      transparent calc(var(--pad-l) - 1.1rem),
+      var(--margin-ink) calc(var(--pad-l) - 1.1rem),
+      var(--margin-ink) calc(var(--pad-l) - 1.1rem + 1.5px),
+      transparent calc(var(--pad-l) - 1.1rem + 1.5px))
+    no-repeat;
 }
 
-/* Headings */
+/* ---- Headings — Indie Flower, the felt-tip of the notebook ------------- */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -62,370 +90,494 @@ body {
 .markdown-body h6 {
   clear: both;
   font-family: var(--heading-font);
-  color: #1a1a1a;
-  letter-spacing: 0.02em;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  line-height: 1.3;
+  font-weight: 400;
+  font-variation-settings: normal;
+  color: var(--text-strong);
+  letter-spacing: 0.01em;
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 .markdown-body h1 {
-  font-size: 3rem;
-  color: #ff4081;
+  font-size: 3.1rem;
+  color: var(--accent);
   text-align: center;
-  transform: rotate(-2deg);
-  margin-bottom: 1em;
-  text-shadow: 2px 2px 0px rgba(255, 64, 129, 0.2);
+  transform: rotate(-1.5deg);
+  margin-top: 0.4em;
+  margin-bottom: 0.8em;
+  /* a quick wavy pen stroke under the title */
+  text-decoration: underline wavy rgba(214, 51, 108, 0.45);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: none;
 }
 
 .markdown-body h2 {
-  font-size: 2.2rem;
-  color: #0077a0;
-  border-bottom: 3px dashed #0077a0;
+  font-size: 2.25rem;
+  color: var(--accent-blue);
+  border-bottom: 2px dashed currentColor;
   display: block;
   width: fit-content;
-  transform: rotate(1deg);
+  max-width: 100%;
+  transform: rotate(0.6deg);
 }
 
-.markdown-body h3 {
-  font-size: 1.6rem;
-  color: #4a7a1e;
-}
+.markdown-body h3 { font-size: 1.75rem; color: var(--accent-green); }
+.markdown-body h4 { font-size: 1.45rem; }
+.markdown-body h5 { font-size: 1.25rem; }
+.markdown-body h6 { font-size: 1.25rem; color: var(--text-muted); }
 
-/* Links */
+/* ---- Links and text --------------------------------------------------- */
 .markdown-body a {
   color: var(--link-color);
   text-decoration: none;
-  border-bottom: 2px dotted var(--link-color);
-  transition: color 0.3s, border-bottom-color 0.3s;
+  border-bottom: 1.5px dotted currentColor;
+  transition: color 0.2s, border-bottom-color 0.2s;
 }
 .markdown-body a:hover {
   color: var(--link-hover);
-  border-bottom-color: var(--link-hover);
+  border-bottom-style: solid;
 }
 
-/* Text */
-.markdown-body p { margin-bottom: 1.4rem; font-weight: 400; }
-.markdown-body strong { color: #bf0045; font-weight: 700; font-size: 1.05em; }
-
-/* Blockquote */
-.markdown-body blockquote blockquote {
-  margin: 0.5em 0;
-  transform: none;
+.markdown-body p { margin: 0 0 1em; text-wrap: pretty; }
+.markdown-body strong { color: var(--text-strong); font-weight: 700; }
+/* a pink highlighter pen, dragged along the lower part of the words */
+.markdown-body mark {
+  background: linear-gradient(to bottom, transparent 30%, #ffc6da 30%, #ffc6da 92%, transparent 92%);
+  color: var(--text-strong);
+  padding: 0 0.12em;
 }
 
+/* ---- Blockquote — a note on a slip, clipped into the book ------------- */
 .markdown-body blockquote {
-  margin: 2rem 1rem;
-  padding: 1rem 1.5rem;
-  background: #fff;
-  border-left: 6px solid #ffca28;
-  border-radius: 8px;
-  box-shadow: 2px 4px 10px rgba(0,0,0,0.05);
-  font-style: italic;
+  position: relative;
+  margin: 1.6rem 0.4rem 2rem;
+  padding: 1rem 1.4rem 0.9rem;
+  background: var(--paper-slip);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  box-shadow: 1px 2px 4px rgba(80, 60, 30, 0.08);
+  font-family: var(--heading-font);
+  font-size: 1.25em;
+  line-height: 1.5;
+  color: #24466e;
   transform: rotate(-0.5deg);
 }
+.markdown-body blockquote::before {
+  /* paper clip */
+  content: '';
+  position: absolute;
+  top: -0.95rem;
+  left: 1.2rem;
+  width: 1rem;
+  height: 2.6rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 42'%3E%3Cpath d='M5 28V7.5a3.2 3.2 0 0 1 6.4 0V33a5.2 5.2 0 0 1-10.4 0V5' fill='none' stroke='%23858c96' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
+  transform: rotate(6deg);
+}
+.markdown-body blockquote p { margin-bottom: 0.5em; }
+.markdown-body blockquote > :last-child { margin-bottom: 0; }
+.markdown-body blockquote blockquote {
+  margin: 0.5em 0;
+  font-size: 1em;
+  transform: none;
+  box-shadow: none;
+}
+.markdown-body blockquote blockquote::before { content: none; }
 
-/* Lists */
+/* ---- Lists ------------------------------------------------------------- */
 .markdown-body ul, .markdown-body ol {
-  margin-bottom: 1.4rem;
-  padding-left: 2rem;
-  font-weight: 400;
+  margin-bottom: 1em;
+  padding-left: 1.8rem;
 }
-.markdown-body li { margin-bottom: 0.4rem; }
-.markdown-body li::marker { color: #ff4081; font-family: var(--heading-font); }
-.markdown-body .task-list-item {
-  list-style: none;
-}
+.markdown-body li { margin-bottom: 0; }
+.markdown-body li > ul,
+.markdown-body li > ol { margin-bottom: 0; }
+.markdown-body li::marker { color: var(--accent); }
+.markdown-body ol > li::marker { font-family: var(--heading-font); font-size: 1.1em; }
 .markdown-body .task-list-item input[type="checkbox"],
 .markdown-body .task-list-item-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 1.1em;
-  height: 1.1em;
-  border: 2px solid #ff4081;
+  width: 1.05em;
+  height: 1.05em;
+  border: 2px solid var(--accent);
   border-radius: 4px;
-  background: #fff;
+  background: var(--paper-slip);
   vertical-align: -0.15em;
   margin-right: 0.5em;
   cursor: default;
   position: relative;
   display: inline-block;
-  font-weight: 400;
 }
 .markdown-body .task-list-item input[type="checkbox"]:checked,
 .markdown-body .task-list-item-checkbox:checked {
-  background: #ff4081;
-  border-color: #ff4081;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .markdown-body .task-list-item input[type="checkbox"]:checked::after,
 .markdown-body .task-list-item-checkbox:checked::after {
   content: '';
   position: absolute;
-  left: 2px;
-  top: -1px;
+  left: 3px;
+  top: 0;
   width: 5px;
   height: 9px;
-  border: 2px solid #fff;
+  border: 2px solid #fffdf8;
   border-top: none;
   border-left: none;
   transform: rotate(45deg);
 }
 
-/* Code */
-.markdown-body code {
+/* ---- Ruling -------------------------------------------------------------
+   Running text (top-level paragraphs and lists) carries its own ruling, so the
+   lines always sit under the words wherever the block lands on the page.
+   Gaps are padding (one blank ruled line), so consecutive blocks join into
+   one continuous ruled sheet; headings, code, tables, quotes and notes
+   interrupt it like things written or pasted into a real exercise book. */
+.markdown-body > p,
+.markdown-body > ul:not(.toc-list),
+.markdown-body > ol {
+  position: relative;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: var(--rule);
+}
+.markdown-body > p::before,
+.markdown-body > ul:not(.toc-list)::before,
+.markdown-body > ol::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
+  background:
+    linear-gradient(to bottom,
+      transparent calc(var(--rule) - var(--rule-drop) - 1px),
+      var(--rule-ink) calc(var(--rule) - var(--rule-drop) - 1px),
+      var(--rule-ink) calc(var(--rule) - var(--rule-drop)),
+      transparent calc(var(--rule) - var(--rule-drop)))
+    0 0 / 100% var(--rule) repeat-y;
+  pointer-events: none;
+}
+.markdown-body > p:has(> img:only-child)::before,
+.markdown-body > p.katex-block::before,
+.markdown-body > p:has(.katex-display)::before {
+  display: none;
+}
+/* inline pieces must not stretch a ruled line */
+.markdown-body > p :is(code, kbd, samp, mark, sup, sub, .katex),
+.markdown-body > :is(ul, ol) :is(code, kbd, samp, mark, sup, sub, .katex) {
+  line-height: 1;
+}
+
+/* ---- Code — printed on a slip of graph paper ---------------------------- */
+.markdown-body code,
+.markdown-body pre,
+.markdown-body kbd,
+.markdown-body samp {
   font-family: var(--code-font);
-  color: #1c1a17;
-  background: rgba(255, 200, 0, 0.3);
-  padding: 0.1em 0.4em;
-  border-radius: 8px;
+  font-variation-settings: normal;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+.markdown-body code {
+  color: #3a3226;
+  background: #f4ead2;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
   font-size: 0.85em;
-  font-weight: bold;
 }
 .markdown-body pre {
-  background: #fdfaf5;
-  color: #3d3b38;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
-  font-size: 0.9em;
-  overflow-x: auto;
-  border: 3px dashed #d1cbc1;
+  background-color: var(--paper-slip);
+  background-image:
+    linear-gradient(rgba(66, 135, 205, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(66, 135, 205, 0.07) 1px, transparent 1px);
+  background-size: 14px 14px;
+  background-position: -1px -1px;
+  color: var(--text-main);
+  padding: 1.25rem 1.5rem;
+  border-radius: 4px;
+  font-size: 0.86em;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+  box-shadow: 1px 2px 4px rgba(80, 60, 30, 0.07);
+  margin: 0.4rem 0 2rem;
 }
 .markdown-body pre code {
   background: transparent;
   color: inherit;
+  padding: 0;
+  font-size: 1em;
 }
 
-/* Tables */
+/* ---- Tables — a pasted-in chart ----------------------------------------- */
 .markdown-body table {
   border-collapse: separate;
   border-spacing: 0;
-  margin: 2rem 0;
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  margin: 0.4rem 0 2rem;
+  background: var(--paper-slip);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 1px 2px 4px rgba(80, 60, 30, 0.07);
+  line-height: 1.5;
 }
 .markdown-body img {
   margin: 1.4rem auto;
 }
-
 .markdown-body p > img {
-  display: inline;
   margin: 0;
 }
 .markdown-body th, .markdown-body td {
-  padding: 0.8rem 1rem;
+  padding: 0.55rem 1rem;
   border-bottom: 1px dashed var(--border-color);
-  font-weight: 400;
 }
+.markdown-body tr:last-child td { border-bottom: none; }
+.markdown-body tr:first-child > th:first-child { border-top-left-radius: 5px; }
+.markdown-body tr:first-child > th:last-child { border-top-right-radius: 5px; }
 .markdown-body th {
-  background: #ffeb3b;
-  color: #333;
+  background: #ffe98a;
+  color: var(--text-strong);
   font-family: var(--heading-font);
   font-size: 1.2em;
-  text-align: left;
-  font-weight: 700;
+  font-weight: 400;
+  border-bottom: 1.5px solid #e6c95a;
 }
 
-/* Callout Note Boxes (Sticky notes) */
+/* ---- Callouts — sticky notes with tape and a doodle -------------------- */
 .markdown-body .success,
 .markdown-body .info,
 .markdown-body .warning,
 .markdown-body .danger {
-  padding: 1.5rem;
-  margin: 2rem 0;
-  border-radius: 2px 15px 2px 15px;
-  box-shadow: 2px 4px 8px rgba(0,0,0,0.1);
-  font-weight: 700;
+  --note: var(--note-blue);
+  --ink: var(--ink-info);
+  padding: 1.4rem 3.6rem 1.2rem 1.5rem;
+  margin: 2.2rem 0;
+  border-radius: 2px 2px 18px 2px / 2px 2px 26px 2px;
+  background: var(--note);
+  box-shadow: 1px 3px 0 rgba(80, 60, 30, 0.06), 2px 7px 12px -4px rgba(80, 60, 30, 0.22);
+  color: var(--text-strong);
+  line-height: 1.7;
   position: relative;
 }
+.markdown-body .success { --note: var(--note-green);  --ink: var(--ink-success); transform: rotate(0.6deg); }
+.markdown-body .info    { --note: var(--note-blue);   --ink: var(--ink-info);    transform: rotate(-0.5deg); }
+.markdown-body .warning { --note: var(--note-yellow); --ink: var(--ink-warning); transform: rotate(0.35deg); }
+.markdown-body .danger  { --note: var(--note-pink);   --ink: var(--ink-danger);  transform: rotate(-0.7deg); }
 
-.markdown-body .success { background: var(--note-green); transform: rotate(1deg); }
-.markdown-body .info { background: var(--note-blue); transform: rotate(-1deg); }
-.markdown-body .warning { background: var(--note-yellow); transform: rotate(0.5deg); }
-.markdown-body .danger { background: var(--note-pink); transform: rotate(-1.5deg); }
+.markdown-body div.success > :last-child,
+.markdown-body div.info > :last-child,
+.markdown-body div.warning > :last-child,
+.markdown-body div.danger > :last-child { margin-bottom: 0; }
 
-/* Tape effect for stickies */
-.markdown-body .success::before,
-.markdown-body .info::before,
-.markdown-body .warning::before,
-.markdown-body .danger::before {
+/* labels the author writes ("**Info.**") take the note's ink */
+.markdown-body div.success strong,
+.markdown-body div.info strong,
+.markdown-body div.warning strong,
+.markdown-body div.danger strong { color: var(--ink); }
+
+/* Tape: each note is stuck down differently */
+.markdown-body div.success::before,
+.markdown-body div.info::before,
+.markdown-body div.warning::before,
+.markdown-body div.danger::before {
   content: "";
   position: absolute;
-  top: -10px;
+  top: -11px;
   left: 50%;
   transform: translateX(-50%) rotate(-2deg);
-  width: 60px;
-  height: 25px;
-  background: rgba(255,255,255,0.5);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  width: 70px;
+  height: 22px;
+  background: rgba(240, 230, 205, 0.78);
+  border-left: 1px dashed rgba(150, 130, 90, 0.25);
+  border-right: 1px dashed rgba(150, 130, 90, 0.25);
+  box-shadow: 0 1px 2px rgba(80, 60, 30, 0.12);
+}
+.markdown-body div.success::before { left: 1.4rem; transform: rotate(-8deg); }
+.markdown-body div.warning::before { left: auto; right: 1.2rem; transform: rotate(7deg); }
+.markdown-body div.danger::before {
+  left: -14px;
+  top: -6px;
+  transform: rotate(-38deg);
+  width: 64px;
 }
 
-/* Badges */
+/* Doodles in the corner, in the note's ink:
+   info — a light bulb; success — a tick; warning — a sign with "!"; danger — a cross */
+.markdown-body div.success::after,
+.markdown-body div.info::after,
+.markdown-body div.warning::after,
+.markdown-body div.danger::after {
+  content: "";
+  position: absolute;
+  top: 0.85rem;
+  right: 0.9rem;
+  width: 2rem;
+  height: 2rem;
+  background: no-repeat center / contain;
+}
+.markdown-body div.info::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%230b5891' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.3 21.5c-.2-2.6-3.9-4.4-3.8-8.9.1-4.1 3.4-7.1 7.6-7 4.1.2 7.1 3.3 6.9 7.3-.2 4.3-3.6 5.8-3.8 8.6'/%3E%3Cpath d='M12.6 24.6h6.8M13.6 27.6h4.9M16 21.3v-5.1M14.3 14.6l1.7 1.7 1.8-1.8'/%3E%3Cpath d='M16 1.6v1.6M4.9 6l1.3 1.1M27.2 6l-1.3 1.1M2.4 15h1.7M28 14.8h1.7' stroke-width='1.8'/%3E%3C/svg%3E");
+}
+.markdown-body div.success::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%232f6510' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 17.2c2.2 1.6 4.4 4 6.1 7.6 3.6-8.2 9.3-14.6 16.6-19.9'/%3E%3C/svg%3E");
+}
+.markdown-body div.warning::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23765000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.6 3.8c-.5.2-12.4 21.6-12.5 22.6-.1.9 25.2 1.2 25.7.4.5-.7-11.9-23.3-13.2-23z'/%3E%3Cpath d='M16 11.2l-.3 7.6' stroke-width='2.8'/%3E%3Ccircle cx='15.8' cy='22.6' r='.6' stroke-width='2.4'/%3E%3C/svg%3E");
+}
+.markdown-body div.danger::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23a5164a' stroke-width='2.8' stroke-linecap='round'%3E%3Cpath d='M6.5 6.2c6.4 6 12.3 12.9 19.2 19.9M25.6 6.4C18.5 12.4 12.3 19 6.2 25.8'/%3E%3C/svg%3E");
+}
+
+/* ---- Badges ------------------------------------------------------------ */
 .markdown-body span.success,
 .markdown-body span.info,
 .markdown-body span.warning,
 .markdown-body span.danger {
-  padding: 0.2em 0.8em;
-  font-family: var(--heading-font);
-  font-size: 0.9em;
-  border-radius: 20px;
-  vertical-align: middle;
-  box-shadow: 1px 2px 0px rgba(0,0,0,0.15);
-  color: #111;
+  padding: 0.05em 0.6em;
+  margin: 0 0.1em;
+  font-size: 0.85em;
+  font-weight: 700;
+  border: 1.5px solid currentColor;
+  border-radius: 0.9em 0.7em 0.95em 0.6em;
+  line-height: 1.4;
+  vertical-align: 0.05em;
+  box-shadow: none;
+  transform: none;
 }
-.markdown-body span.success { background: #69f0ae; }
-.markdown-body span.info { background: #40c4ff; }
-.markdown-body span.warning { background: #ffd740; }
-.markdown-body span.danger { background: #ff5252; color: #fff; }
+.markdown-body span.success { background: #c3eea0; color: #24520a; }
+.markdown-body span.info { background: #b9dcfb; color: #0a4a7d; }
+.markdown-body span.warning { background: #ffe66b; color: #634300; }
+.markdown-body span.danger { background: #ffc0d5; color: #93113f; }
 
-/* Spoilers */
+/* ---- Spoilers ---------------------------------------------------------- */
 .markdown-body details.spoil {
-  background: #fff;
-  border: 2px dashed var(--border-color);
-  border-radius: 12px;
+  background: var(--paper-slip);
+  border: 1.5px dashed var(--border-color);
+  border-radius: 8px;
   margin-bottom: 1.5em;
   overflow: hidden;
 }
 .markdown-body details.spoil > summary {
-  padding: 1rem;
-  background: #fdfbf7;
+  padding: 0.6rem 1rem;
   font-family: var(--heading-font);
-  font-size: 1.2rem;
-  cursor: pointer;
+  font-size: 1.25rem;
   color: var(--link-color);
 }
-.markdown-body details.spoil > :not(summary) { padding: 1rem; }
+.markdown-body details.spoil > :not(summary) { padding: 0 1rem 1rem; }
 
-/* Layout Containers */
+/* ---- Layout containers --------------------------------------------------- */
 .markdown-body .left {
-  float: left;
-  max-width: min(44%, 20rem);
   padding: 0.8rem 1rem;
   margin: 0 1.5rem 1rem 0;
-  background: rgba(255, 200, 0, 0.2);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: var(--note-yellow);
+  border-radius: 2px 2px 14px 2px;
+  box-shadow: 1px 4px 8px -3px rgba(80, 60, 30, 0.22);
+  line-height: 1.7;
 }
+.markdown-body .left > :last-child { margin-bottom: 0; }
 .markdown-body .right {
-  text-align: right;
-  margin: 0 0 1rem;
-}
-.markdown-body .center {
-  text-align: center;
   margin: 0 0 1rem;
 }
 
-/* Tabs & Cols */
+/* ---- Tabs & cols ----------------------------------------------------------- */
 .markdown-body .cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
 .markdown-body .col {
-  padding: 1.2rem;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 2px 4px 10px rgba(0,0,0,0.05);
+  padding: 1rem 1.2rem;
+  background: var(--paper-slip);
+  border-radius: 6px;
   border: 1px solid var(--border-color);
+  line-height: 1.7;
 }
+.markdown-body .col > :last-child { margin-bottom: 0; }
 
+/* index-card dividers */
 .markdown-body .tabs {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  background: var(--paper-slip);
+  border-radius: 6px;
   margin-bottom: 2rem;
-  overflow: hidden;
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
+  line-height: 1.7;
 }
 .markdown-body .tabs-bar {
-  display: flex;
-  background: #f0ede6;
-  border-bottom: 2px solid var(--border-color);
+  background: transparent;
+  padding: 0.5rem 0.6rem 0;
+  gap: 0.3rem;
+  border-bottom: 1.5px solid var(--border-color);
 }
 .markdown-body .tabs-bar-btn {
-  background: none;
-  border: none;
-  padding: 0.8rem 1.2rem;
+  background: #f1ebdc;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 0.35rem 1.1rem 0.25rem;
   font-family: var(--heading-font);
-  font-size: 1.1rem;
-  cursor: pointer;
+  font-size: 1.2rem;
   color: var(--text-muted);
 }
-.markdown-body .tabs-bar-btn.active {
-  background: #fff;
-  color: var(--text-main);
-  border-bottom: 3px solid #ff4081;
-}
-.markdown-body .tab { display: none; padding: 1.5rem; }
-.markdown-body .tab.active { display: block; }
-.markdown-body .tabs:not([data-js]) .tab { display: block; border-top: 1px dashed var(--border-color); }
+.markdown-body .tabs-bar-btn:nth-child(4n+1).active { background: var(--note-yellow); }
+.markdown-body .tabs-bar-btn:nth-child(4n+2).active { background: var(--note-blue); }
+.markdown-body .tabs-bar-btn:nth-child(4n+3).active { background: var(--note-green); }
+.markdown-body .tabs-bar-btn:nth-child(4n+4).active { background: var(--note-pink); }
+.markdown-body .tabs-bar-btn.active { color: var(--text-strong); }
+.markdown-body .tab { padding: 1.1rem 1.4rem; }
+.markdown-body .tab > :last-child { margin-bottom: 0; }
+.markdown-body .tabs:not([data-js]) .tab { border-top: 1px dashed var(--border-color); }
 
-/* Horizontal Rule */
+/* ---- Horizontal rule — a pen squiggle ------------------------------------ */
 .markdown-body hr {
   border: none;
-  border-top: 4px dotted #ccc;
-  margin: 3rem 0;
+  height: 12px;
+  margin: 2.5rem 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12'%3E%3Cpath d='M0 6c3-4.5 9-4.5 12 0s9 4.5 12 0' fill='none' stroke='%23d6336c' stroke-opacity='.55' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x left center / 24px 12px;
 }
-/* 7. Navigation, footnotes, and plugin output */
-.markdown-body span.red { color: #ff595e; font-weight: bold; }
-.markdown-body span.yellow { color: #d49a00; font-weight: bold; }
-.markdown-body span.green { color: #8ac926; font-weight: bold; }
-.markdown-body span.blue { color: #1982c4; font-weight: bold; }
+
+/* ---- Coloured spans -------------------------------------------------------- */
+.markdown-body span.red { color: #c8102e; font-weight: 700; }
+.markdown-body span.yellow { color: #936a00; font-weight: 700; } /* text colour only, like the other spans: the most saturated gold at AA on this page */
+.markdown-body span.green { color: #2c7311; font-weight: 700; }
+.markdown-body span.blue { color: #1659b8; font-weight: 700; }
 
 .markdown-body span.qrcode {
   background: #fff;
   border-radius: 8px;
 }
 
-/* TOC */
+/* ---- TOC — the contents page --------------------------------------------- */
 .markdown-body nav.toc,
 .markdown-body .toc-list {
-  background: #fff;
-  border: 2px dashed var(--border-color);
-  border-radius: 12px;
-  padding: 1.2rem 1.5rem;
-  margin: 2rem 0;
-  font-family: var(--heading-font);
+  background: var(--paper-slip);
+  border: 1.5px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 0.9rem 1.4rem;
+  margin: 0.5rem 0 2rem;
 }
 .markdown-body nav.toc ul,
 .markdown-body .toc-list ul {
   padding-left: 1.5em;
   margin-bottom: 0;
 }
-.markdown-body nav.toc li,
-.markdown-body .toc-list li {
-  margin-bottom: 0.35em;
-}
 .markdown-body nav.toc li::marker,
 .markdown-body .toc-list li::marker {
   color: var(--link-color);
 }
-.markdown-body nav.toc a,
-.markdown-body .toc-list a {
-  color: var(--link-color);
-  text-decoration: none;
-  border-bottom: 2px dotted var(--link-color);
-}
-.markdown-body nav.toc a:hover,
-.markdown-body .toc-list a:hover {
-  color: var(--link-hover);
-  border-bottom-color: var(--link-hover);
-}
 
-/* Footnotes */
+/* ---- Footnotes ------------------------------------------------------------- */
 .markdown-body .footnotes-sep {
   margin: 2.5rem 0 1rem;
-  border-top: 3px dotted #ccc;
+  border: none;
+  background: none;
+  height: 0;
+  border-top: 2px dashed var(--border-color);
 }
 .markdown-body .footnotes {
   font-size: 0.88em;
+  line-height: 1.7;
   color: var(--text-muted);
   padding-top: 0.5rem;
-  font-family: var(--body-font);
-  font-weight: 400;
 }
 .markdown-body .footnotes ol {
   margin-bottom: 0;
@@ -433,61 +585,67 @@ body {
 .markdown-body .footnote-ref a,
 .markdown-body .footnote-backref {
   color: var(--link-color);
+  border-bottom: none;
   text-decoration: none;
   font-size: 0.85em;
-  vertical-align: super;
 }
 
-/* Focus indicators */
+/* ---- Focus indicators ------------------------------------------------------ */
 .markdown-body a:focus-visible,
 .markdown-body .tabs-bar-btn:focus-visible,
 .markdown-body details.spoil > summary:focus-visible {
-  outline: 3px solid #ff4081;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
-  text-decoration: none;
 }
 .markdown-body .task-list-item input[type="checkbox"]:focus-visible,
 .markdown-body .task-list-item-checkbox:focus-visible {
-  outline: 3px solid #ff4081;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Responsive */
+/* ---- Responsive ------------------------------------------------------------ */
 @media (max-width: 640px) {
+  :root {
+    --pad-l: 2.4rem;
+    --pad-r: 1.1rem;
+  }
   .markdown-body {
-    padding: 2rem 1.25rem;
+    padding: 2rem var(--pad-r) 2.5rem var(--pad-l);
     font-size: 17px;
-    background-image: none;
   }
   .markdown-body h1 {
-    font-size: 2.2rem;
+    font-size: 2.3rem;
     transform: none;
   }
   .markdown-body h2 {
+    font-size: 1.9rem;
     transform: none;
   }
-  .markdown-body .left {
-    float: none;
-    max-width: 100%;
-    margin: 0 0 1.4rem;
-  }
-  .markdown-body .cols {
-    grid-template-columns: 1fr;
-  }
-  .markdown-body .blockquote {
-    transform: none;
-  }
+  .markdown-body blockquote,
   .markdown-body .success,
   .markdown-body .info,
   .markdown-body .warning,
   .markdown-body .danger {
     transform: none;
   }
+  .markdown-body .left {
+    margin: 0 0 1.4rem;
+  }
 }
 
-/* 8. Print */
+/* ---- Print ----------------------------------------------------------------- */
 @media print {
   body { background: #fff; color: #000; padding: 0; }
-  .markdown-body { max-width: 100%; padding: 0; border: none; box-shadow: none; }
+  .markdown-body { padding: 0; border: none; box-shadow: none; background: none; }
+  .markdown-body > p::before,
+  .markdown-body > ul::before,
+  .markdown-body > ol::before { content: none; }
+  .markdown-body .success,
+  .markdown-body .info,
+  .markdown-body .warning,
+  .markdown-body .danger,
+  .markdown-body blockquote,
+  .markdown-body h1,
+  .markdown-body h2 { transform: none; }
 }

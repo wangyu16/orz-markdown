@@ -4,7 +4,7 @@ import { md } from '../src/index';
 describe('NYML plugin', () => {
   it('renders NYML as a json script tag', () => {
     const html = md.render('{{nyml\nkey: value\n}}');
-    expect(html).toContain('<script type="application/json" id="nyml-data">');
+    expect(html).toContain('<script type="application/json" id="nyml-data" data-md="{{nyml');
     expect(html).toContain('"key": "value"');
   });
 

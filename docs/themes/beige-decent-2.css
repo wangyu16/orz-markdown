@@ -1,36 +1,53 @@
 @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Cardo:ital,wght@0,400;0,700;1,400&display=swap');
 @import './common.css';
 
+/* beige-decent-2 — "the small-press essay".
+   Linen paper, Josefin Sans for titles and labels, Cardo for the text, and a
+   bottle-green accent. Containers are drawn with tints and hairlines. */
+
 /* 1. Tokens and global setup */
 :root {
+  color-scheme: light;
   --bg-color: #eee6d8;
-  --text-main: #4a3c31;
-  --text-muted: #736458;
+  --surface: #e7dece;
+  --surface-strong: #dfd4bf;
+  --surface-light: #f4eee3;
+  --text-main: #45372c;
+  --text-soft: #574a3f;
+  --text-muted: #67594d;
+  --heading: #1f1a15;
   --link-color: #2f6154;
   --link-hover: #1e4037;
-  --border-color: #d1cfc9;
+  --border-color: #d1c6b4;
+  --border-soft: #ddd3c3;
+  --mark-bg: #dfe0bd;
 
-  --header-font: 'Josefin Sans', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
-  --main-font: 'Cardo', 'Noto Serif SC', 'Noto Serif TC', serif;
-  --code-font: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --header-font: 'Josefin Sans', 'Noto Sans SC', 'Noto Sans TC', 'Avenir Next', sans-serif;
+  --main-font: 'Cardo', 'Noto Serif SC', 'Noto Serif TC', Georgia, serif;
+  --code-font: 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
-  --info-bg: rgba(74, 144, 226, 0.12);
-  --info-border: #80a4c9;
-  --info-text: #436485;
-  --success-bg: rgba(67, 181, 92, 0.12);
-  --success-border: #7dbf8c;
-  --success-text: #4a7553;
-  --warning-bg: rgba(230, 167, 0, 0.12);
-  --warning-border: #cca23b;
-  --warning-text: #876d29;
-  --danger-bg: rgba(211, 60, 75, 0.12);
-  --danger-border: #c46d75;
-  --danger-text: #9c4b54;
+  /* Callouts: a tinted card (--x-bg), a hairline (--x-border), the badge
+     ink (--x-ink, a graphic ≥ 3:1) and the label colour (--x-text, ≥ 4.5:1). */
+  --info-bg: #e0e5e9;     --info-border: #b9c8d6;     --info-ink: #1762b6;     --info-text: #17559b;
+  --success-bg: #e0e7d6;  --success-border: #b7cdb0;  --success-ink: #137b33;  --success-text: #18692e;
+  --warning-bg: #f2e3c3;  --warning-border: #dcc28a;  --warning-ink: #b46e00;  --warning-text: #764600;
+  --danger-bg: #f1dcd5;   --danger-border: #dcb8b0;   --danger-ink: #b72533;   --danger-text: #a51d2b;
 
-  --base-size: 17px;
-  --line-height: 1.8;
+  /* Coloured spans: obviously red / green / blue (OKLCH chroma >= 0.14),
+     yellow as a gold highlighter behind dark amber ink. */
+  --span-red: #b72533;      /* oklch(0.51 0.18 22) */
+  --span-green: #05752d;    /* oklch(0.49 0.14 148) */
+  --span-blue: #0060b7;     /* oklch(0.49 0.16 252) */
+  --span-yellow-ink: #5c3b00;
+  --span-yellow-bg: #fbd452; /* oklch(0.88 0.15 92) */
 
-  --markdown-body-max-width: 760px;
+  --base-size: 18px;
+  --line-height: 1.75;
+
+  /* ~70 characters of Cardo at the body size, plus the article padding */
+  --markdown-body-max-width: calc(31em + 4rem);
+  /* .measure-wide: ~90 characters */
+  --orz-measure-wide: calc(39em + 4rem);
   --markdown-body-padding: 2.5rem 2rem 5rem;
   --markdown-body-border: none;
   --markdown-body-radius: 0;
@@ -44,18 +61,22 @@ body {
 }
 
 .markdown-body {
-  display: flow-root;
   font-family: var(--main-font);
   font-size: var(--base-size);
   line-height: var(--line-height);
   color: var(--text-main);
   background-color: var(--bg-color);
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   padding: var(--markdown-body-padding);
   border: var(--markdown-body-border);
   border-radius: var(--markdown-body-radius);
   box-shadow: var(--markdown-body-shadow);
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+}
+
+.markdown-body ::selection {
+  background: #cfd9c6;
 }
 
 /* 2. Headings and body copy */
@@ -69,40 +90,77 @@ body {
 .markdown-body h6 {
   clear: both;
   font-family: var(--header-font);
-  color: #111;
-  margin-top: 3em;
-  margin-bottom: 1.2rem;
-  font-weight: 700;
+  color: var(--heading);
+  margin-top: 2.4em;
+  margin-bottom: 0.7em;
+  font-weight: 600;
   line-height: 1.3;
+  text-wrap: balance;
 }
 
+/* The title: bottle-green Josefin over a short ruled stroke and a dot —
+   the colophon mark of a small press. */
 .markdown-body h1 {
-  font-size: 2.5em;
-  text-align: left;
-  margin-bottom: 1.5em;
-  letter-spacing: -0.03em;
+  font-size: 2.6em;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
   color: var(--link-color);
+  margin-top: 0.4em;
+  margin-bottom: 1.1em;
+  padding-bottom: 0.55em;
+  background:
+    linear-gradient(var(--link-color), var(--link-color)) left bottom / 2.4rem 2px no-repeat,
+    radial-gradient(circle, var(--link-color) 2.5px, transparent 3px) 2.95rem 100% / 7px 7px no-repeat;
 }
 
+/* Section heads: the title's green stroke, set before the first line. */
 .markdown-body h2 {
   font-size: 1.6em;
-  font-weight: 600;
+}
+.markdown-body h2::before {
+  content: '';
+  display: inline-block;
+  width: 0.75em;
+  height: 2px;
+  margin-right: 0.45em;
+  background: var(--link-color);
+  vertical-align: 0.3em;
 }
 
 .markdown-body h3 {
   font-size: 1.3em;
-  font-weight: 500;
+}
+
+.markdown-body h4 {
+  font-size: 1.05em;
+}
+
+.markdown-body h5 {
+  font-size: 0.9em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.markdown-body h6 {
+  font-size: 0.85em;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .markdown-body p {
-  margin-bottom: 1.6em;
+  margin-top: 0;
+  margin-bottom: 1.3em;
+  text-wrap: pretty;
 }
 
 .markdown-body a {
   color: var(--link-color);
   text-decoration: none;
-  border-bottom: 1px solid var(--border-color);
-  transition: all 0.2s ease;
+  border-bottom: 1px solid color-mix(in srgb, var(--link-color) 35%, transparent);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .markdown-body a:hover {
@@ -111,41 +169,60 @@ body {
 }
 
 .markdown-body strong {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.markdown-body mark {
+  background-color: var(--mark-bg);
+  color: var(--heading);
+  padding: 0.02em 0.15em;
+  border-radius: 2px;
+}
+
+.markdown-body sup,
+.markdown-body sub {
+  line-height: 0;
 }
 
 /* 3. Lists and task lists */
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 1.5em;
-  margin-bottom: 1.6em;
+  margin-top: 0;
+  margin-bottom: 1.3em;
 }
 
 .markdown-body li {
-  margin-bottom: 0.6em;
+  margin-bottom: 0.4em;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin-top: 0.4em;
+  margin-bottom: 0;
 }
 
 .markdown-body li::marker {
   color: var(--link-color);
   font-family: var(--header-font);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .markdown-body .task-list-item {
-  list-style: none;
   padding-left: 0;
 }
 .markdown-body .task-list-item input[type="checkbox"],
 .markdown-body .task-list-item-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 1em;
-  height: 1em;
-  border: 2px solid var(--border-color);
+  width: 0.85em;
+  height: 0.85em;
+  border: 1.5px solid var(--text-muted);
   border-radius: 3px;
-  background: #fff;
-  vertical-align: -0.1em;
-  margin-right: 0.5em;
+  background: var(--surface-light);
+  vertical-align: -0.06em;
+  margin: 0 0.5em 0 -1.3em;
   cursor: default;
   position: relative;
   display: inline-block;
@@ -159,87 +236,176 @@ body {
 .markdown-body .task-list-item-checkbox:checked::after {
   content: '';
   position: absolute;
-  left: 2px;
-  top: -1px;
-  width: 4px;
-  height: 8px;
-  border: 2px solid #fff;
-  border-top: none;
-  border-left: none;
+  left: 0.22em;
+  top: 0.04em;
+  width: 0.22em;
+  height: 0.45em;
+  border: solid var(--surface-light);
+  border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
 
+/* Footnotes */
+.markdown-body .footnote-ref a {
+  font-family: var(--header-font);
+  font-size: 0.72em;
+  font-weight: 600;
+  border-bottom: none;
+}
+.markdown-body .footnotes-sep {
+  border: 0;
+  height: 1px;
+  width: 5rem;
+  background: var(--border-color);
+  margin: 3em 0 1em;
+}
+.markdown-body .footnotes {
+  font-size: 0.88em;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+.markdown-body .footnotes ol {
+  margin-bottom: 0;
+}
+.markdown-body .footnote-backref {
+  border-bottom: none;
+}
+
 /* 4. Code and math */
-.markdown-body code {
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body samp,
+.markdown-body pre {
   font-family: var(--code-font);
-  color: #2d1e0f;
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 0.2em 0.4em;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.markdown-body code {
+  color: #3a2a1c;
+  background-color: var(--surface);
+  padding: 0.12em 0.36em;
   border-radius: 4px;
-  font-size: 0.85em;
+  font-size: 0.8em;
+}
+
+.markdown-body kbd {
+  font-size: 0.78em;
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--border-color);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-light);
 }
 
 .markdown-body pre {
-  background-color: #e0d5c1;
+  background-color: var(--surface-light);
   color: var(--text-main);
-  padding: 1.5em;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-bottom: 1.6em;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 1.1em 1.3em;
+  font-size: 0.8em;
+  line-height: 1.6;
+  margin: 0 0 1.4em;
 }
 
-.markdown-body pre code {
-  background-color: transparent;
+.markdown-body pre code,
+.markdown-body pre code.hljs {
+  background: transparent;
   padding: 0;
+  border-radius: 0;
   color: inherit;
-  font-size: 0.9em;
+  font-size: 1em;
+}
+
+/* KaTeX math */
+.markdown-body .katex {
+  font-size: 1.05em;
+}
+.markdown-body .katex-display {
+  padding: 0.5rem 0;
+  margin: 1.5em 0;
+}
+.markdown-body .katex-error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-family: var(--code-font);
+  font-size: 0.85em;
 }
 
 /* 5. Structural blocks */
+/* A tinted aside — no edge bar. */
 .markdown-body blockquote {
-  margin: 2em 0;
-  padding: 0.5em 0 0.5em 1.5em;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  margin: 1.8em 0;
+  padding: 0.9em 1.3em;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface);
   font-style: italic;
-  font-size: 1.15em;
-  color: var(--text-muted);
-  background-color: #e5ddd0;
+  font-size: 1.1em;
+  color: var(--text-soft);
 }
-
+.markdown-body blockquote p {
+  margin-bottom: 0.6em;
+}
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
 .markdown-body blockquote blockquote {
-  font-size: 1em;
   margin: 0.75em 0;
+  font-size: 1em;
+  background: color-mix(in srgb, var(--surface-light) 60%, transparent);
 }
 
 .markdown-body table {
   border-collapse: collapse;
-  margin-bottom: 2em;
-  font-size: 0.95em;
+  margin: 1.8em 0;
+  font-size: 0.92em;
   font-family: var(--header-font);
+  font-variant-numeric: tabular-nums;
 }
 
 .markdown-body th,
 .markdown-body td {
-  padding: 1em;
-  text-align: left;
+  padding: 0.75em 1em 0.6em;
   border-bottom: 1px solid var(--border-color);
 }
 
 .markdown-body th {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  font-size: 0.85em;
-  letter-spacing: 0.05em;
+  font-size: 0.82em;
+  letter-spacing: 0.08em;
+  border-bottom-color: var(--text-muted);
 }
 
+/* A section break: a hairline with the green colophon dot at its centre. */
 .markdown-body hr {
+  position: relative;
+  overflow: visible;
   border: 0;
   height: 1px;
   background-color: var(--border-color);
   margin: 3em 0;
+}
+.markdown-body hr::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--link-color);
+  box-shadow: 0 0 0 6px var(--bg-color);
+  transform: translate(-50%, -50%);
+}
+.markdown-body .footnotes-sep::before {
+  content: none;
 }
 
 .markdown-body img {
@@ -247,176 +413,176 @@ body {
 }
 
 .markdown-body p > img {
-  display: inline;
   margin: 0;
 }
 
 /* 6. Containers and layout helpers */
-.markdown-body .success,
-.markdown-body .info,
-.markdown-body .warning,
-.markdown-body .danger {
-  padding: 1.2em 1.5em;
-  margin: 1.5em 0;
-  border-radius: 8px;
-  border: 1px solid;
+/* Callouts are rounded tinted cards; a round ink badge sits over the
+   top-left corner, outside the text. Its white glyph names the type:
+   i for info, a tick for success, ! for warning, a cross for danger. */
+.markdown-body div:is(.info, .success, .warning, .danger) {
+  position: relative;
+  padding: 1.1em 1.4em 1.05em 1.75em;
+  margin: 2.1em 0 1.6em 0.4em;
+  border-radius: 18px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 0.97em;
+  line-height: 1.65;
+  color: var(--text-main);
+}
+
+.markdown-body div.info { --ink: var(--info-ink); background: var(--info-bg); border-color: var(--info-border); }
+.markdown-body div.success { --ink: var(--success-ink); background: var(--success-bg); border-color: var(--success-border); }
+.markdown-body div.warning { --ink: var(--warning-ink); background: var(--warning-bg); border-color: var(--warning-border); }
+.markdown-body div.danger { --ink: var(--danger-ink); background: var(--danger-bg); border-color: var(--danger-border); }
+
+.markdown-body div:is(.info, .success, .warning, .danger)::before,
+.markdown-body div:is(.info, .success, .warning, .danger)::after {
+  content: '';
+  position: absolute;
+  top: -0.8em;
+  left: -0.8em;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+}
+.markdown-body div:is(.info, .success, .warning, .danger)::before {
+  background: var(--ink);
+  box-shadow: 0 0 0 3px var(--bg-color);
+}
+.markdown-body div.info::after {
+  background:
+    radial-gradient(circle, #fff 55%, transparent 62%) 50% 24% / 0.24em 0.24em no-repeat,
+    linear-gradient(#fff, #fff) 50% 74% / 0.17em 0.72em no-repeat;
+}
+.markdown-body div.warning::after {
+  background:
+    linear-gradient(#fff, #fff) 50% 30% / 0.18em 0.78em no-repeat,
+    radial-gradient(circle, #fff 55%, transparent 62%) 50% 78% / 0.25em 0.25em no-repeat;
+}
+.markdown-body div.success::after {
+  border-radius: 0;
+  background: #fff;
+  clip-path: polygon(26% 52%, 35% 43%, 44% 52%, 65% 30%, 74% 39%, 44% 70%);
+}
+.markdown-body div.danger::after {
+  border-radius: 0;
+  background: #fff;
+  clip-path: polygon(32% 40%, 40% 32%, 50% 42%, 60% 32%, 68% 40%, 58% 50%, 68% 60%, 60% 68%, 50% 58%, 40% 68%, 32% 60%, 42% 50%);
+}
+
+.markdown-body :is(.info, .success, .warning, .danger) > p:first-child > strong:first-child {
   font-family: var(--header-font);
-  font-size: 0.95em;
+  font-weight: 700;
+  font-size: 0.92em;
+  letter-spacing: 0.02em;
 }
-
-.markdown-body .info {
-  background: var(--info-bg);
-  color: var(--info-text);
-  border-color: var(--info-border);
-}
-
-.markdown-body .success {
-  background: var(--success-bg);
-  color: var(--success-text);
-  border-color: var(--success-border);
-}
-
-.markdown-body .warning {
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  border-color: var(--warning-border);
-}
-
-.markdown-body .danger {
-  background: var(--danger-bg);
-  color: var(--danger-text);
-  border-color: var(--danger-border);
-}
+.markdown-body .info > p:first-child > strong:first-child { color: var(--info-text); }
+.markdown-body .success > p:first-child > strong:first-child { color: var(--success-text); }
+.markdown-body .warning > p:first-child > strong:first-child { color: var(--warning-text); }
+.markdown-body .danger > p:first-child > strong:first-child { color: var(--danger-text); }
 
 .markdown-body .left {
-  float: left;
-  max-width: min(44%, 20rem);
   padding: 0.8em 1em;
   margin: 0 1.5em 1em 0;
-  background: #e5ddd0;
+  background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .markdown-body .right {
-  text-align: right;
-  margin: 0 0 1em;
-}
-
-.markdown-body .center {
-  text-align: center;
   margin: 0 0 1em;
 }
 
 .markdown-body details.spoil {
-  background-color: var(--bg-color);
+  background-color: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  margin-bottom: 1.6em;
+  border-radius: 12px;
+  margin-bottom: 1.4em;
   overflow: hidden;
 }
 
 .markdown-body details.spoil > summary {
-  background-color: #dfd4bf;
-  padding: 0.95rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  list-style: none;
+  user-select: none;
+  background-color: var(--surface);
+  padding: 0.8em 1.1em 0.7em;
   font-family: var(--header-font);
   font-weight: 600;
   color: var(--text-main);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
+}
+.markdown-body details.spoil > summary::-webkit-details-marker { display: none; }
+/* The disclosure roundel: + to open, – once open (drawn, not typed). */
+.markdown-body details.spoil > summary::before {
+  content: '';
+  flex: none;
+  width: 1.35em;
+  height: 1.35em;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--surface-light), var(--surface-light)) center / 0.6em 2px no-repeat,
+    linear-gradient(var(--surface-light), var(--surface-light)) center / 2px 0.6em no-repeat,
+    var(--link-color);
+}
+.markdown-body details.spoil[open] > summary::before {
+  background:
+    linear-gradient(var(--surface-light), var(--surface-light)) center / 0.6em 2px no-repeat,
+    var(--link-color);
 }
 
 .markdown-body details.spoil[open] > summary {
   border-bottom: 1px solid var(--border-color);
 }
 
-.markdown-body details.spoil > summary::-webkit-details-marker {
-  display: none;
-}
-
-.markdown-body details.spoil > summary::before {
-  content: '+';
-  display: inline-grid;
-  place-items: center;
-  width: 1.45rem;
-  height: 1.45rem;
-  border-radius: 999px;
-  background: #f6f0e6;
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  font-weight: 700;
-  line-height: 1;
-}
-
-.markdown-body details.spoil[open] > summary::before {
-  content: '–';
-}
-
 .markdown-body details.spoil > :not(summary) {
-  padding: 1rem 1.1rem 1.1rem;
-  background-color: #f6f0e6;
+  padding: 1em 1.2em;
+  background-color: var(--surface-light);
 }
 
 .markdown-body .tabs {
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  margin-bottom: 1.6em;
+  border-radius: 12px;
+  margin-bottom: 1.4em;
   overflow: hidden;
-  background: #f6f0e6;
+  background: var(--surface-light);
 }
 
 .markdown-body .tabs-bar {
-  display: flex;
-  gap: 0.4rem;
-  background: #dfd4bf;
-  padding: 0.5rem;
-  overflow-x: auto;
+  gap: 0.35rem;
+  background: var(--surface);
+  padding: 0.45rem;
   border-bottom: 1px solid var(--border-color);
-  scrollbar-width: none;
-}
-
-.markdown-body .tabs-bar::-webkit-scrollbar {
-  display: none;
 }
 
 .markdown-body .tabs-bar-btn {
   background: transparent;
   border: 1px solid transparent;
-  padding: 0.56rem 0.92rem;
+  padding: 0.5em 0.95em 0.4em;
   border-radius: 999px;
-  cursor: pointer;
   color: var(--text-muted);
+  font-size: 0.88em;
   font-family: var(--header-font);
-  font-weight: 700;
-  transition: all 0.2s;
-  white-space: nowrap;
+  font-weight: 600;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .markdown-body .tabs-bar-btn:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--surface-light) 60%, transparent);
 }
 
 .markdown-body .tabs-bar-btn.active {
-  background: var(--border-color);
-  color: var(--text-main);
+  background: var(--surface-light);
+  border-color: var(--border-color);
+  color: var(--link-color);
 }
 
 .markdown-body .tab {
-  display: none;
-  padding: 1.1rem 1.2rem 1.25rem;
-}
-
-.markdown-body .tab.active {
-  display: block;
-}
-
-.markdown-body .tabs:not([data-js]) .tab {
-  display: block;
+  padding: 1.1em 1.25em;
 }
 
 .markdown-body .tabs:not([data-js]) .tab + .tab {
@@ -424,53 +590,44 @@ body {
 }
 
 .markdown-body .cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
-  margin-bottom: 1.6em;
+  margin-bottom: 1.4em;
 }
 
 .markdown-body .col {
-  padding: 1.2rem;
+  padding: 1.1em 1.2em;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: #f6f0e6;
-}
-
-.markdown-body .col > *:last-child {
-  margin-bottom: 0;
+  border-radius: 12px;
+  background: var(--surface-light);
 }
 
 /* 7. Navigation, footnotes, and plugin output */
-.markdown-body .toc-wrapper {
-  /* Container element */
-}
-
 .markdown-body nav.toc,
 .markdown-body .toc-list {
-  margin: 2.5em 0;
-  padding: 1.5em 2em;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 8px;
+  margin: 2.2em 0;
+  padding: 1.2em 1.6em;
+  background-color: var(--surface);
+  border-radius: 12px;
   font-family: var(--header-font);
   font-size: 0.9em;
+  line-height: 1.6;
 }
 
 .markdown-body nav.toc ul,
 .markdown-body .toc-list ul {
-  padding-left: 1.5em;
+  padding-left: 1.4em;
   margin-bottom: 0;
 }
 
 .markdown-body nav.toc li,
 .markdown-body .toc-list li {
-  margin-bottom: 0.3em;
+  margin-bottom: 0.25em;
 }
 
 .markdown-body nav.toc a,
 .markdown-body .toc-list a {
   color: var(--link-color);
-  text-decoration: none;
+  border-bottom: none;
 }
 
 .markdown-body nav.toc a:hover,
@@ -479,49 +636,30 @@ body {
   text-decoration: underline;
 }
 
-.markdown-body span.red {
-  color: #d33c4b;
-}
-
-.markdown-body span.yellow {
-  color: #e6a700;
-}
-
-.markdown-body span.green {
-  color: #43b55c;
-}
-
-.markdown-body span.blue {
-  color: #4a90e2;
-}
+.markdown-body span.red { color: var(--span-red); }
+.markdown-body span.green { color: var(--span-green); }
+.markdown-body span.blue { color: var(--span-blue); }
+.markdown-body span.yellow { color: #856000; } /* text colour only, like the other spans: the most saturated gold at AA on this page */
 
 .markdown-body span.success,
 .markdown-body span.info,
 .markdown-body span.warning,
 .markdown-body span.danger {
-  font-size: 0.75em;
+  font-size: 0.74em;
   font-family: var(--header-font);
   font-weight: 600;
-  padding: 0.3em 0.8em;
-  border-radius: 20px;
+  letter-spacing: 0.03em;
+  padding: 0.38em 0.85em 0.25em;
+  border: none;
+  border-radius: 999px;
+  vertical-align: 0.1em;
   color: #fff;
 }
 
-.markdown-body span.success {
-  background-color: var(--success-border);
-}
-
-.markdown-body span.info {
-  background-color: var(--info-border);
-}
-
-.markdown-body span.warning {
-  background-color: var(--warning-border);
-}
-
-.markdown-body span.danger {
-  background-color: var(--danger-border);
-}
+.markdown-body span.success { background: var(--span-green); }
+.markdown-body span.info { background: var(--span-blue); }
+.markdown-body span.warning { color: var(--span-yellow-ink); background: var(--span-yellow-bg); }
+.markdown-body span.danger { background: var(--span-red); }
 
 .markdown-body span.qrcode {
   background: #fff;
@@ -547,14 +685,10 @@ body {
 @media (max-width: 640px) {
   .markdown-body {
     padding: 2.5rem 1.25rem;
+    font-size: 17px;
   }
   .markdown-body .left {
-    float: none;
-    max-width: 100%;
-    margin: 0 0 1.6em;
-  }
-  .markdown-body .cols {
-    grid-template-columns: 1fr;
+    margin: 0 0 1.5em;
   }
   .markdown-body h1 {
     font-size: 2em;
@@ -570,29 +704,9 @@ body {
   }
 
   .markdown-body {
-    max-width: 100%;
     padding: 0;
     border: none;
     box-shadow: none;
+    background: #fff;
   }
-
 }
-/* code block — warm paper panel */
-.markdown-body pre { background: #f6f1e7; border: 1px solid #e6dac3; border-radius: 8px; box-shadow: 0 1px 2px rgba(120,90,50,.06); }
-.markdown-body pre code, .markdown-body pre code.hljs { background: transparent; padding: 0; color: inherit; }
-
-
-/* ============ modern decorative refresh ============ */
-/* blockquote — warm tint with a teal accent edge (pseudo-bar, not a heavy border) */
-.markdown-body blockquote { position: relative; background: #efe7d8; border: none; border-radius: 0 10px 10px 0;
-  padding: 0.9rem 1.3rem; margin: 1.9rem 0; font-style: italic; color: var(--text-muted); overflow: hidden; }
-.markdown-body blockquote::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-  background: var(--link-color); }
-.markdown-body blockquote p:last-child { margin-bottom: 0; }
-.markdown-body blockquote blockquote { background: rgba(255, 255, 255, 0.35); }
-
-/* spoiler — add a chevron indicator */
-.markdown-body details.spoil > summary { display: flex; align-items: center; gap: 0.55rem; list-style: none; }
-.markdown-body details.spoil > summary::-webkit-details-marker { display: none; }
-.markdown-body details.spoil > summary::before { content: '▸'; color: #9c8a6f; transition: transform 0.2s; }
-.markdown-body details.spoil[open] > summary::before { transform: rotate(90deg); }

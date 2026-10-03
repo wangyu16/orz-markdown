@@ -15,7 +15,7 @@
 <meta property="og:image" content="https://markdown.orz.how/media/orz-markdown-social.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.35/dist/katex.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css">
 <link rel="stylesheet" href="./site.css">
 </head>
 <body>
@@ -53,24 +53,29 @@
       <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
       <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
       <script type="text/markdown">
-A QR code you can scan: {{qr https://markdown.orz.how}}
+A QR code you can scan:
 
-Reactions {{emoji tada}} {{emoji rocket}} and a
-{{sp[orange] highlighted}} {{sp[purple] span}}.
+{{qr https://markdown.orz.how}}
+
+Reactions {{emoji tada}} {{emoji rocket}} and
+{{sp[yellow] gold}} or {{sp[blue] blue}} text.
       </script>
     </div>
     <details class="reveal"><summary>Full plugin reference</summary><div class="body">
       <table>
         <tr><th>Plugin</th><th>Example</th><th>Result</th></tr>
         <tr><td><code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>inline QR (scannable, click to enlarge)</td></tr>
-        <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed</td></tr>
+        <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed (an id or a YouTube URL; <code>?t=42</code> sets the start)</td></tr>
         <tr><td><code>mermaid</code> / <code>mm</code></td><td><code>{{mm⏎graph LR⏎A--&gt;B⏎}}</code></td><td>a diagram</td></tr>
-        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie charts</td></tr>
+        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie / doughnut charts</td></tr>
         <tr><td><code>smiles</code> / <code>sm</code></td><td><code>{{sm C1=CC=CC=C1}}</code></td><td>a chemical structure</td></tr>
         <tr><td><code>emoji</code> / <code>em</code></td><td><code>{{emoji wave}}</code></td><td>emoji by name</td></tr>
         <tr><td><code>span</code> / <code>sp</code></td><td><code>{{sp[red] text}}</code></td><td>colored / badged spans</td></tr>
         <tr><td><code>toc</code></td><td><code>{{toc 2,3}}</code></td><td>a table of contents</td></tr>
         <tr><td><code>attrs</code></td><td><code># Title{{attrs[#id]}}</code></td><td>ids, classes, attributes</td></tr>
+        <tr><td><code>space</code></td><td><code>{{space 4}}</code></td><td>inline horizontal space (rem, at most 100)</td></tr>
+        <tr><td><code>md</code> / <code>markdown</code> / <code>md-include</code></td><td><code>{{md ./part.md}}</code></td><td>include another Markdown file — only when the host allows file access; URLs are resolved beforehand by <code>prepareSources()</code></td></tr>
+        <tr><td><code>nyml</code>, <code>yaml</code> / <code>yml</code></td><td><code>{{nyml⏎key: value⏎}}</code></td><td>invisible data for scripts and document metadata</td></tr>
       </table>
     </div></details>
   </section>
@@ -118,7 +123,9 @@ Right column
   <section class="section" id="math" style="margin-top:30px">
     <h2>Math with KaTeX</h2>
     <p class="lead" style="font-size:1.12rem;max-width:680px">Inline <code>$…$</code> and display <code>$$…$$</code>,
-    rendered at parse time. <code>mhchem</code> is bundled for chemistry.</p>
+    rendered at parse time. <code>mhchem</code> is bundled for chemistry. Macro definitions
+    (<code>\def</code>, <code>\newcommand</code>) are not supported and show as source — write the expanded TeX;
+    a formula over 10,000 characters also shows as source.</p>
     <div class="demo split" data-demo>
       <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
       <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
@@ -161,18 +168,30 @@ data: 3, 7, 5
     <h2>Twelve built-in themes</h2>
     <p class="lead" style="font-size:1.12rem;max-width:680px">Light and dark, academic to playful. A theme styles the
     full rendered output, including containers, math, diagrams, and print. Switch instantly in the editor.</p>
-    <div class="grid c3" style="margin-top:4px">
+    <div class="grid c2" style="margin-top:4px">
       <div class="card" style="padding:0;overflow:hidden">
         <div style="height:64px;background:linear-gradient(135deg,#fff,#f2f2ec)"></div>
-        <div style="padding:13px 16px"><strong>Neat</strong><p style="margin:.2em 0 0">Clean, modern, two variants.</p></div></div>
+        <div style="padding:13px 16px"><strong>Neat</strong><p style="margin:.2em 0 0">Clean and modern; three variants (sans or Literata serif text), including Orchard.</p></div></div>
       <div class="card" style="padding:0;overflow:hidden">
         <div style="height:64px;background:linear-gradient(135deg,#fbf7ee,#efe6d2)"></div>
-        <div style="padding:13px 16px"><strong>Academic &amp; Beige</strong><p style="margin:.2em 0 0">Serif, paper-like, for reports.</p></div></div>
+        <div style="padding:13px 16px"><strong>Academic &amp; Beige</strong><p style="margin:.2em 0 0">Serif, paper-like, for reports; four themes.</p></div></div>
       <div class="card" style="padding:0;overflow:hidden">
         <div style="height:64px;background:linear-gradient(135deg,#1f2330,#0d0f18)"></div>
-        <div style="padding:13px 16px"><strong>Dark Elegant</strong><p style="margin:.2em 0 0">Two refined dark themes.</p></div></div>
+        <div style="padding:13px 16px"><strong>Dark Elegant</strong><p style="margin:.2em 0 0">Three refined dark themes, including Nocturne.</p></div></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="height:64px;background:linear-gradient(135deg,#fff7ef,#fde9e3)"></div>
+        <div style="padding:13px 16px"><strong>Playful</strong><p style="margin:.2em 0 0">Hand-drawn: a ruled notebook and a sketchbook.</p></div></div>
     </div>
     <p style="margin-top:16px"><a class="btn ghost" href="./editor.html">Try every theme in the editor →</a></p>
+  </section>
+
+  <!-- CJK -->
+  <section class="section" id="cjk" style="margin-top:30px">
+    <h2>Chinese and English, side by side</h2>
+    <p class="lead" style="font-size:1.12rem;max-width:680px">Emphasis works next to CJK punctuation
+    (<code>**注意：**请先阅读</code>), a line wrap between Chinese characters adds no space, and a bare URL next to
+    Chinese links only the URL (<code>访问https://orz.how获取</code>). Chinese written onto a URL path stays in the
+    link, so put a space or punctuation after a URL that prose follows.</p>
   </section>
 
   <!-- COPY -->

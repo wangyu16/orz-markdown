@@ -1,0 +1,361 @@
+/* ==========================================================================
+   orz-markdown — common.css: the STRUCTURE layer every theme imports.
+
+   This file owns layout and behavior: how containers float, align and
+   collapse, how tabs switch, how wide content scrolls instead of breaking the
+   page, how generated constructs (video, diagrams, charts, molecules, QR) size
+   themselves, and what changes for print. It sets no colours, fonts, borders
+   or shadows (the few exceptions are functional and marked).
+
+   A theme imports this file FIRST and then adds decoration only: colours,
+   typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
+   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   It may tune them through these tokens, set on :root:
+
+     --markdown-body-max-width   measure of the article       (default: none)
+     --orz-measure-wide          measure with .measure-wide   (min(100%, 64rem))
+     --orz-left-max-width        ::: left box width cap        (min(44%, 22rem))
+     --orz-float-gap             gap between ::: left and text (1.5rem)
+     --orz-center-max-width      ::: center width cap          (min(100%, 42rem))
+     --orz-cols-gap              gap between ::: cols columns  (1.5rem)
+     --orz-col-min               auto-column minimum width     (12rem)
+
+   The reader (or host) chooses the measure: a theme's default suits long
+   reading (~70 characters); `<article class="markdown-body measure-wide">`
+   gives ~90 (for tables, code, dense notes) and `measure-full` the whole width.
+
+   Narrow-screen behavior uses ONE breakpoint for the whole family: 640px.
+   See orz-markdown-skills/references/themes.md for the full theme contract.
+   ========================================================================== */
+
+/* ---- article root ---------------------------------------------------------- */
+
+.markdown-body {
+  display: flow-root;            /* contains ::: left floats without clipping */
+  max-width: var(--markdown-body-max-width, none);
+  margin-inline: auto;
+  overflow-wrap: break-word;
+}
+.markdown-body.measure-wide { max-width: var(--orz-measure-wide, min(100%, 64rem)); }
+.markdown-body.measure-full { max-width: none; }
+
+.markdown-body *,
+.markdown-body *::before,
+.markdown-body *::after {
+  box-sizing: border-box;
+}
+
+/* ---- layout containers ----------------------------------------------------- */
+
+/* ::: left [width] — a box floated left; following text wraps beside it.
+   A width argument arrives as an inline style and wins over the cap. */
+.markdown-body .left {
+  float: left;
+  max-width: var(--orz-left-max-width, min(44%, 22rem));
+  margin: 0 var(--orz-float-gap, 1.5rem) 1rem 0;
+}
+
+/* ::: right — right-aligns its content. */
+.markdown-body .right {
+  text-align: right;
+}
+
+/* ::: center — centers its content in a capped, centered column. */
+.markdown-body .center {
+  text-align: center;
+  max-width: var(--orz-center-max-width, min(100%, 42rem));
+  margin-inline: auto;
+}
+
+/* Alignment must reach the text even in themes that justify paragraphs
+   (`.markdown-body p { text-align: justify }`): text blocks inside an alignment
+   container inherit from the nearest container instead. */
+.markdown-body :is(.right, .center) :where(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, summary) {
+  text-align: inherit;
+}
+/* Block-level content follows the alignment too. */
+.markdown-body .center :where(table, img) { margin-inline: auto; }
+.markdown-body .right :where(table, img) { margin-left: auto; margin-right: 0; }
+
+/* ::: cols [ratios] — a grid. Ratios arrive as an inline grid-template-columns. */
+.markdown-body .cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--orz-col-min, 12rem)), 1fr));
+  gap: var(--orz-cols-gap, 1.5rem);
+  align-items: start;
+}
+.markdown-body .col {
+  min-width: 0;                  /* long words/code wrap instead of widening the track */
+}
+
+/* ---- tabs ------------------------------------------------------------------ */
+
+.markdown-body .tabs-bar {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.markdown-body .tabs-bar::-webkit-scrollbar { display: none; }
+.markdown-body .tabs-bar-btn {
+  flex: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.markdown-body .tab { display: none; }
+.markdown-body .tab.active { display: block; }
+/* No JavaScript (runtime not loaded): show every panel. */
+.markdown-body .tabs:not([data-js]) > .tab { display: block; }
+
+/* ---- container edges ------------------------------------------------------- */
+/* The first and last block inside a container sit on its padding, not on an
+   extra paragraph margin (a callout would otherwise look bottom-heavy). */
+.markdown-body :is(.info, .success, .warning, .danger, .left, .right, .center, .col, .tab, details, [data-orz-container]) > :first-child:not(summary) { margin-top: 0; }
+.markdown-body details > summary + * { margin-top: 0; }
+.markdown-body :is(.info, .success, .warning, .danger, .left, .right, .center, .col, .tab, details, [data-orz-container]) > :last-child { margin-bottom: 0; }
+
+/* ---- spoiler, TOC, task lists ---------------------------------------------- */
+
+:where(.markdown-body) details.spoil > summary { cursor: pointer; }
+
+.markdown-body .toc-list { list-style: none; }
+.markdown-body .toc-list > li::before { content: none; }
+
+.markdown-body .task-list-item { list-style: none; }
+.markdown-body .task-list-item::before { content: none; }
+
+/* ---- tables ---------------------------------------------------------------- */
+
+.markdown-body table {
+  width: max-content;
+  max-width: 100%;
+  display: block;                /* scrolls horizontally instead of widening the page */
+  overflow-x: auto;
+}
+/* Default cell alignment; `|:---:|` column alignment (inline style) wins. */
+.markdown-body :where(th, td) { text-align: left; }
+
+/* ---- images ---------------------------------------------------------------- */
+
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+/* Responsive by default, but explicit dimensions from `![](img =200x100)`
+   (width/height attributes) must win: only auto-size images that DON'T carry
+   an explicit width/height. */
+.markdown-body img:not([width]) { width: auto; }
+.markdown-body img:not([height]) { height: auto; }
+.markdown-body p > img {
+  display: inline;
+  margin: 0;
+}
+/* A video's width attribute must not widen the page past the article. */
+.markdown-body video { max-width: 100%; height: auto; }
+
+/* ---- code and math --------------------------------------------------------- */
+
+.markdown-body pre { overflow-x: auto; }
+
+.markdown-body .katex-display {
+  max-width: 100%;
+  overflow-x: auto;              /* a long equation scrolls inside itself */
+  overflow-y: hidden;
+}
+
+/* ---- inline badges --------------------------------------------------------- */
+
+.markdown-body span.success,
+.markdown-body span.info,
+.markdown-body span.warning,
+.markdown-body span.danger {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ---- generated constructs -------------------------------------------------- */
+
+/* {{youtube}} — a responsive 16:9 frame. */
+.markdown-body .youtube-embed {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+.markdown-body .youtube-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* {{mermaid}} — centered; a wide diagram scales down or scrolls. */
+.markdown-body .mermaid {
+  overflow-x: auto;
+  text-align: center;
+}
+.markdown-body .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* {{chart}} — never wider than its column. */
+.markdown-body canvas.orz-chart { max-width: 100%; }
+
+/* {{smiles}} — the structure is drawn on its own transparent surface; themes
+   decorate the page, not the molecule (resets are functional). */
+.markdown-body div.smiles-render {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.markdown-body div.smiles-render canvas,
+.markdown-body canvas[data-smiles] {
+  display: block;
+  max-width: min(100%, 16rem);
+  height: auto;
+  background: transparent;
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* {{qr}} — inline code with a tap-to-expand overlay (colours are functional:
+   a QR code must stay dark-on-light to scan). */
+.markdown-body span.qrcode {
+  display: inline-block;
+  position: relative;
+  padding: 4px;
+  line-height: 0;
+  cursor: zoom-in;
+}
+.markdown-body .qrcode__icon {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 0.7rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+.markdown-body span.qrcode:hover .qrcode__icon,
+.markdown-body span.qrcode:focus-visible .qrcode__icon,
+.markdown-body span.qrcode.is-expanded .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+.markdown-body span.qrcode.is-expanded { visibility: hidden; }
+
+.qrcode-overlay {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10001;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: min(90vmin, 36rem) !important;
+  height: min(90vmin, 36rem) !important;
+  aspect-ratio: 1 / 1;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  padding: 1.5rem !important;
+  background: rgba(10, 16, 24, 0.86) !important;
+  border-radius: 1rem !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+/* Inside a sentence a code is drawn at text size, so its line keeps the
+   paragraph's rhythm (tap to expand); alone in its paragraph it is full size. */
+.markdown-body span.qrcode:not(.qrcode--standalone) {
+  padding: 0.12em;
+  vertical-align: -0.3em;
+}
+.markdown-body span.qrcode:not(.qrcode--standalone) svg { width: 1.3em; }
+.markdown-body span.qrcode:not(.qrcode--standalone) .qrcode__icon { display: none; }
+.markdown-body span.qrcode.qrcode--standalone svg { width: 6rem; }
+.markdown-body span.qrcode svg,
+.qrcode-overlay svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.qrcode-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 0 1 auto;
+  object-fit: contain;
+}
+.qrcode-overlay .qrcode__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ---- narrow screens (the family breakpoint) -------------------------------- */
+
+@media (max-width: 640px) {
+  /* !important: a width argument / ratio arrives as an inline style. */
+  .markdown-body .left {
+    float: none;
+    width: auto !important;
+    max-width: 100% !important;
+    margin-right: 0;
+  }
+  .markdown-body .cols { grid-template-columns: 1fr !important; }
+}
+
+/* ---- print ----------------------------------------------------------------- */
+
+@media print {
+  .markdown-body { max-width: none; }
+
+  /* Paper cannot expand a code: print every QR large enough to scan. */
+  .markdown-body span.qrcode:not(.qrcode--standalone) svg { width: 2cm; }
+  .markdown-body span.qrcode.qrcode--standalone svg { width: 3cm; }
+
+  .markdown-body table {
+    display: table !important;
+    width: auto !important;
+    max-width: 100% !important;
+  }
+  .markdown-body thead { display: table-header-group; }
+  .markdown-body tfoot { display: table-footer-group; }
+
+  /* Paper cannot switch tabs: print every panel. */
+  .markdown-body .tabs-bar { display: none !important; }
+  .markdown-body .tab { display: block !important; }
+
+  .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .markdown-body .youtube-embed,
+  .markdown-body .qrcode__icon { display: none !important; }
+}

@@ -36,7 +36,14 @@ export function inlineDispatcher(state: StateInline, silent: boolean): boolean {
 
   if (src[cursor] === '[') {
     const argsStart = cursor + 1;
-    const bracketEnd = src.indexOf(']', argsStart);
+    // The next `]` after a position is the same for every opener before it:
+    // remember the last search, so N `{{name[` openers cost O(N) (round 8, H6).
+    const memoB = state as unknown as { __orzBracket?: { from: number; at: number } };
+    const known = memoB.__orzBracket;
+    const bracketEnd = known && argsStart >= known.from && (known.at < 0 || argsStart <= known.at)
+      ? known.at
+      : src.indexOf(']', argsStart);
+    memoB.__orzBracket = { from: Math.min(argsStart, known && known.at === bracketEnd ? known.from : argsStart), at: bracketEnd };
     if (bracketEnd === -1) {
       return false; // unclosed [
     }
@@ -49,9 +56,13 @@ export function inlineDispatcher(state: StateInline, silent: boolean): boolean {
     cursor++;
   }
 
-  // Find closing '}}' within the current inline buffer (no line crossing)
+  // Find closing '}}' within the current inline buffer (no line crossing).
+  // Remember where no closer follows, so N unclosed openers cost O(N), not O(N²).
+  const memo = state as unknown as { __orzNoCloseFrom?: number };
+  if (memo.__orzNoCloseFrom !== undefined && cursor >= memo.__orzNoCloseFrom) return false;
   const closingIdx = src.indexOf('}}', cursor);
   if (closingIdx === -1) {
+    memo.__orzNoCloseFrom = Math.min(memo.__orzNoCloseFrom ?? Infinity, cursor);
     return false; // no closing — leave as literal text
   }
 

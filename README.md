@@ -38,7 +38,7 @@ Import the configured markdown instance and use it to render markdown strings in
 
 
 ```javascript
-import md from 'orz-markdown';
+import { md } from 'orz-markdown'; // named export: the package is CommonJS, so a default import gets the module object in native ESM
 
 const markdownSource = `
 # Hello World
@@ -52,7 +52,7 @@ document.body.innerHTML = `<article class="markdown-body">${html}</article>`;
 
 ## Browser Runtime
 
-Some rendered features expect a small browser runtime layer after the HTML is mounted. This includes QR-code expand/collapse behavior and **copy-as-Markdown**, and is designed so more client-side enhancements can share the same entry point.
+Some rendered features expect a small browser runtime layer after the HTML is mounted. This includes tab bars, QR-code expand/collapse behavior and **copy-as-Markdown**, and is designed so more client-side enhancements can share the same entry point.
 
 ```javascript
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
@@ -62,7 +62,9 @@ runtimeScript.textContent = getBrowserRuntimeScript();
 document.body.appendChild(runtimeScript);
 ```
 
-If your app controls initialization directly, the runtime also exposes `window.OrzMarkdownRuntime.init(root)` and `window.OrzMarkdownRuntime.initQrCodes(root)`.
+If your app controls initialization directly, the runtime also exposes `window.OrzMarkdownRuntime.init(root)`, `initTabs(root)`, `initQrCodes(root)` and `collapseQr()`.
+
+For output that should copy as Markdown but keep tabs and QR codes static (a print master), use `getBrowserRuntimeScript({ autoInit: false })`: the copy handler is installed, nothing is rewired.
 
 ### Copy as Markdown
 
@@ -70,7 +72,7 @@ Once the runtime is loaded, selecting rendered content and copying it (Cmd/Ctrl-
 
 It only transforms selections inside an element with class `markdown-body` (wrap your rendered output in one, e.g. `<article class="markdown-body">…</article>`, or mark a container with `data-orz-copy`), and never touches selections inside `<input>`, `<textarea>`, or `contenteditable` regions.
 
-Generated constructs that lose their source after client-side rendering — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart` — carry a `data-md` attribute that the walker emits verbatim. As a result a copied table of contents yields its heading links (not `{{toc 2,3}}`) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md` attributes** if you post-process the HTML.
+Generated constructs that lose their source after rendering — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart`, `toc`, emoji, `nyml`/`yaml` islands, footnote references — carry a `data-md` attribute that the walker emits verbatim; `::: cols`, `::: left`, `::: spoil` and custom containers carry `data-orz-container`, and footnotes `data-footnote-label`. As a result a copied table of contents yields `{{toc 2,3}}` (not its heading links) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md`, `data-orz-container` or `data-footnote-label` attributes** if you post-process the HTML.
 
 You can also convert a node programmatically:
 
@@ -131,6 +133,11 @@ The bundled themes cover the parser's custom output, including:
 - SMILES canvases
 - clickable QR codes with overlay expansion hooks
 
+**Line length is the reader's choice.** Each theme defaults to a comfortable
+reading measure (about 70 characters). Add `measure-wide` to the article for
+about 90 characters (tables, code, dense notes) or `measure-full` for the
+whole width: `<article class="markdown-body measure-wide">`.
+
 For a full list of provided themes and the underlying CSS class reference for theme authors, please read the [Themes Documentation](themes/README.md).
 
 ### Embedding with your own CSS
@@ -151,6 +158,54 @@ If your host mounts the rendered output in an `<iframe>`, the
 `headLinks(scheme)` / `bodyScripts()` strings, and a `window.__orzEnhance()` that
 highlights code and draws Mermaid / SMILES / charts — so every host wires the
 preview identically instead of re-deriving it.
+
+## Package entry points
+
+| Import | What it gives you |
+|---|---|
+| `orz-markdown` | the configured `md` instance, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `VERSION`, `KATEX_VERSION` |
+| `orz-markdown/runtime` | the browser runtime (tabs, QR expand, copy-as-Markdown) as a script string |
+| `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned) |
+| `orz-markdown/doc-meta` | the DocMeta API on its own |
+| `orz-markdown/carrier` | shared helpers for single-file carriers: reversible source-island escaping, `jsonForScript`, HTML escaping, `maskInertMarkdown`, `VERSION` |
+| `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
+| `orz-markdown/themes/*` | the CSS themes |
+
+orz-markdown has no static Node dependencies: it bundles for the browser
+(esbuild, Vite, …) with no `fs`/`path`/`process` shims.
+
+### Security notes
+
+- The parser runs with `html: true`: raw HTML in the source is emitted as-is.
+  Sanitize untrusted input yourself.
+- File includes never happen by default. A host grants them per render with
+  `markdownBasePath` / `readFile`, and should confine them with
+  `markdownIncludeRoot` unless the source is fully trusted.
+- Rendering is bounded per document for the amplifications we know of (TOC,
+  QR, includes, reference links, long or macro-defining math, KaTeX output,
+  mhchem, footnotes, task lists, headings). A server rendering untrusted input should still cap the
+  input size and render in a worker with a timeout: markdown-it and its
+  plugins are not designed as a sandbox.
+- `prepareSources()` fetches URLs. **Includes are content from sources you
+  trust**, like a `<script src>`: name them. Outside a browser it fetches
+  nothing unless you pass `allowedHosts` (or your own `fetcher`, which then
+  owns that decision); in a page, the URL the author writes is the choice. The
+  default fetcher re-checks every redirect hop and gives up after
+  `timeoutMs`. The checks below are defence in depth against accidents and a
+  compromised trusted host, not a sandbox for hostile text. Fetched text is placed as block content and
+  can never change the host document around it: an include that would (an
+  open fence or comment, a list item swallowing what follows, a redefined link
+  reference) is left as the directive. Raw HTML in fetched text is limited to
+  simple layout and text elements with no `class` or `style`; a block holding
+  anything else (`<script>`, `<style>`, `<svg>`, an event handler, …) is
+  dropped and the rest of the include renders. Fetched text may not use
+  undocumented containers or span classes, and fetched math may not lap, smash
+  or move vertically, nor kern left by 1em or more in total; such an include,
+  or one that would push the document past a per-render cap the host alone
+  stays under (TOC, QR, TeX, mhchem, KaTeX output), is left as the directive. A document
+  that also has file includes (`{{md ./file}}`) keeps its URL directives
+  unless you pass the render's file settings as `includeEnv`, so the check can
+  see the file-included text too.
 
 ## Packaging
 
@@ -194,9 +249,11 @@ This project builds upon `markdown-it` and pre-configures a curated selection of
   - Layout Blocks: `left` (optional CSS width arg, e.g. `::: left 30%`), `right`, `center`
   - Interactive Blocks: `spoil` (spoilers), `tabs/tab`, `cols/col` (optional width ratios, e.g. `:::: cols 1 2 1`)
   - Arbitrary class: any `::: ClassName` not in the reserved list above becomes `<div class="ClassName">`
-  - Note: a space between `:::` and the name is required; nesting uses more colons on the outer level
+  - Note: write a space between `:::` and the name (conventional; `:::name` also parses); nesting uses more colons on the outer level
 - **markdown-it-footnote**: Footnotes syntax (`[^1]`)
-- **markdown-it-imsize**: Image sizing (`![alt](url =100x200)`)
+- Image sizing (`![alt](url =100x200)`): an internal port of markdown-it-imsize's parser (no disk access)
+- **markdown-it-cjk-breaks**: no stray space where a line wraps between two CJK characters
+- CJK-friendly emphasis (a port of markdown-it-cjk-friendly: `**注意：**请` renders bold) and CJK-aware bare-URL linking
 - **markdown-it-mark**: Highlighted text (`==marked==`)
 - **markdown-it-sub** & **markdown-it-sup**: Subscript (`~sub~`) and Superscript (`^sup^`)
 - **markdown-it-ins**: Inserted text (`++inserted++`)
@@ -210,13 +267,13 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 | Plugin Name | Alias | Syntax Example | Description |
 | :--- | :--- | :--- | :--- |
 | **Span Styles** | `sp` | `{{span[red] red text}}` | Inline span element. Perfect for colorizing or badging text. Supports color classes (`red`, `yellow`, `green`, `blue`) and badge classes (`success`, `info`, `warning`, `danger`). |
-| **Attributes** | N/A | `# Header {{attrs[id="my-id"]}}`| Injects continuous HTML attributes (classes, IDs, config properties) to the immediately preceding element. |
+| **Attributes** | N/A | `# Header {{attrs[id="my-id"]}}`| Sets attributes on the block whose text holds the marker (heading, paragraph): `#id`, `.class`, `key="value"`. A later value for the same key replaces the earlier one (write `class="a b"`). |
 | **Emoji** | `em` | `{{emoji smile}}` / `{{em tada}}` | Renders the specific text alias directly into the corresponding Unicode emoji natively. |
 | **Table of Content** | N/A | `{{toc}}` or `{{toc 2,3}}` | Autogenerates a Table of Contents based on document headings. Allows specifying bound heading ranges. |
-| **Space** | N/A | `{{space 4}}` | Inserts inline horizontal whitespace — an empty `inline-block` span sized in `rem` (`{{space 4}}` → 4rem wide). |
-| **YouTube** | `yt` | `{{youtube dQw4w9WgXcQ}}` | Embedded block element containing a responsive YouTube video iframe matching the ID. |
-| **Markdown Source**| `md` | `{{md path/to/file.md}}` | Securely embeds the complete content of an external markdown file directly into the parsed structure. |
-| **QR Code** | `qr` | `{{qr https://example.com}}` | Transforms text inline implicitly into an internally generated SVG QR Code natively. |
+| **Space** | N/A | `{{space 4}}` | Inserts inline horizontal whitespace — an empty `inline-block` span sized in `rem` (`{{space 4}}` → 4rem wide). Capped at 100rem. |
+| **YouTube** | `yt` | `{{youtube dQw4w9WgXcQ}}` | A responsive YouTube embed for a video id or a full YouTube URL (`watch?v=`, `youtu.be/`, `/embed/`, `/shorts/`; a `t=` time becomes the start). A body that is no video id shows as its directive text. |
+| **Markdown Source**| `md` | `{{md path/to/file.md}}` | Embeds another Markdown file. **Opt-in:** resolves only when the render env passes `markdownBasePath` (or a `readFile` hook); add `markdownIncludeRoot` to confine it. URL includes are resolved beforehand by `prepareSources()`. |
+| **QR Code** | `qr` | `{{qr https://example.com}}` | An SVG QR code. Alone in its paragraph it is full size for scanning; inside a sentence it is drawn at text size and expands on tap; print draws both large enough to scan. Past a QR code's capacity it renders as its text. |
 | **Mermaid** | `mm` | `{{mermaid\ngraph LR\nA-->B\n}}` | Compiles logic into a specific preconfigured payload targeted for Mermaid client-side rendering. |
 | **SMILES Chemistry**| `sm` | `{{smiles C1=CC=CC=C1}}` | Embeds SMILES chemical formulas parsed specifically for `smilesDrawer` visualization. |
 | **Chart** | N/A | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` | Declarative bar/line/pie/doughnut charts from a small line-based config (`type`, `labels`, `series: Name = …` or `data: …`, optional `title`). Rendered client-side with Chart.js. |
@@ -229,4 +286,4 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 
 ## Environment Requirement
 
-Designed natively for standard ESM environments Node.js 20+.
+Node.js ≥ 20.16 (file includes use `process.getBuiltinModule`); any modern browser via a bundler.

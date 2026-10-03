@@ -4,13 +4,13 @@ import { md } from '../src/index';
 describe('Phase 12 — YAML plugin', () => {
   it('renders YAML in script tag', () => {
     const html = md.render('{{yaml\nkey: value\n}}');
-    expect(html).toContain('<script type="application/yaml">');
+    expect(html).toContain('<script type="application/yaml" data-md="{{yaml');
     expect(html).toContain('key: value');
   });
 
   it('renders with alias {{yml}}', () => {
     const html = md.render('{{yml\nkey: value\n}}');
-    expect(html).toContain('<script type="application/yaml">');
+    expect(html).toContain('<script type="application/yaml" data-md="{{yaml');
     expect(html).toContain('key: value');
   });
 

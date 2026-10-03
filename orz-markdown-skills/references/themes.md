@@ -1,21 +1,67 @@
 # Custom Theme Guide — orz-markdown
 
-How to write a CSS theme for the parser. A theme is a single CSS file that imports `common.css` for structural rules and then styles every element the parser emits.
+How to write a CSS theme for the parser.
 
 ---
 
-## Starting Point
+## Two layers: structure and decoration
 
-Option A — start from scratch with shared infrastructure:
-```css
-@import 'orz-markdown/themes/common.css';
-/* or relative path when living alongside the bundled themes: */
-@import './common.css';
-```
+Every page that shows orz-markdown output gets its CSS in two layers.
 
-Option B — start from `assets/minimal.css` (all structural rules already included, only visual layer needed). Copy it and add your visual styles on top.
+| Layer | File | Owns | Never contains |
+|---|---|---|---|
+| **Structure** | `themes/common.css` (shared, one copy) | How things *work*: `::: left` floats and its width cap, `::: right` / `::: center` alignment (even in themes that justify text), the `::: cols` grid and its mobile collapse, tab switching and the no-JS fallback, horizontal scrolling for tables, code and long equations, 16:9 YouTube frames, diagram and chart width caps, SMILES sizing, QR sizing (text-size inside a sentence, 6rem when alone in its paragraph as `qrcode--standalone`, 2cm / 3cm in print), the article measure (`max-width: var(--markdown-body-max-width)`) and the opt-in `.measure-wide` / `.measure-full` classes, the first/last-child margin trim inside callouts and other containers, the family's single 640px breakpoint, and print (every tab printed, embeds hidden, no page breaks inside figures) | colours, fonts, borders, shadows (except the functional QR/SMILES rules) |
+| **Decoration** | one theme file (`light-neat-1.css`, …) | How things *look*: palette, typography, borders, backgrounds, radii, shadows, ornaments, and spacing rhythm (padding, margins, gaps) | any mechanism listed in the left column |
 
----
+Because the structure lives in one place, a layout fix reaches every theme at
+once, and a new theme cannot get layout subtly wrong. `tests/themes.test.ts`
+enforces the split for every bundled theme and for the starter.
+
+## What a new theme needs
+
+1. **Start from the starter.** Copy `assets/minimal.css`. It is a complete
+   theme with neutral decoration for every element the parser emits.
+2. **Import the structure first.** `@import './common.css';` must come
+   before any rule (after an optional font `@import url(...)`, as in every
+   bundled theme). That path works beside the bundled themes and in
+   `assets/`. Elsewhere, use
+   `https://cdn.jsdelivr.net/npm/orz-markdown/themes/common.css`, pinned to a
+   version if you need stability.
+3. **Declare two things on `:root`:**
+   - `color-scheme: light` or `color-scheme: dark`, so scrollbars and form
+     controls match the theme;
+   - `--markdown-body-max-width`, the article measure.
+4. **Optionally tune the layout tokens** instead of re-declaring layout:
+
+   | Token | Controls | Default |
+   |---|---|---|
+   | `--markdown-body-max-width` | width of the article (aim for ~70 characters of body text) | `none` |
+   | `--orz-measure-wide` | width with `class="markdown-body measure-wide"` (aim for ~90 characters); `measure-full` removes the cap | `min(100%, 64rem)` |
+   | `--orz-left-max-width` | cap on a `::: left` box without a width argument | `min(44%, 22rem)` |
+   | `--orz-float-gap` | gap between a `::: left` box and the text beside it | `1.5rem` |
+   | `--orz-center-max-width` | cap on a `::: center` block | `min(100%, 42rem)` |
+   | `--orz-cols-gap` | gap between `::: cols` columns (a theme may also set `gap` directly) | `1.5rem` |
+   | `--orz-col-min` | minimum width of an auto-sized column | `12rem` |
+
+5. **Decorate every element** in the checklist below. Restyle, don't delete:
+   an unstyled construct still works, but looks foreign.
+6. **Never re-declare structure.** Don't set any of these on the containers
+   (enforced by the test):
+   - `float` or `width` on `.left`;
+   - `text-align` on `.right` / `.center`;
+   - `display` or `grid-template-columns` on `.cols`;
+   - `display` on `.tab`;
+   - `display` or `overflow` on `table`;
+   - the position or padding hack on `.youtube-embed`;
+   - narrow-screen `@media` rules for `.left` / `.cols`;
+   - `max-width` or `display` on `.markdown-body` (set
+     `--markdown-body-max-width` instead, or `measure-wide` stops working).
+
+   If a mechanism seems wrong for your theme, fix it in `common.css` for
+   everyone, or add a token.
+7. **Check it.** Run `npm test`, and render `tests/example.html` (`npm run
+   render`; `npm run render:minimal` renders the starter to
+   `tests/example-minimal.html`) at desktop and phone widths in a real browser.
 
 ## Design Token Pattern
 
@@ -54,8 +100,8 @@ All bundled themes use CSS custom properties for maintainability. Define them on
 
   /* Inline span colors */
   --span-red:    #c0392b;
-  --span-yellow: #9a7615;
-  --span-green:  #218763;
+  --span-yellow: #8f6c00;
+  --span-green:  #1e7d5b;
   --span-blue:   #1d6db0;
 
   /* Typography */
@@ -66,18 +112,23 @@ All bundled themes use CSS custom properties for maintainability. Define them on
   --line-height:  1.7;
 
   /* Markdown body container */
-  --markdown-body-max-width: 860px;
   --markdown-body-padding:   clamp(1.5rem, 5vw, 3rem);
+  --markdown-body-max-width: calc(36rem + 2 * var(--markdown-body-padding)); /* ≈70ch */
+  --orz-measure-wide:        calc(46rem + 2 * var(--markdown-body-padding)); /* ≈90ch */
   --markdown-body-border:    1px solid var(--border);
   --markdown-body-shadow:    none;
   --markdown-body-radius:    0px;
 }
 ```
 
-For dark themes add `color-scheme: dark` so browser chrome adapts:
+Every theme declares its scheme (required — scrollbars, form controls and the
+default canvas follow it):
 ```css
-:root { color-scheme: dark; }
+:root { color-scheme: light; }  /* or dark */
 ```
+
+Token *names* other than the layout tokens above are each theme's own choice;
+the pattern is what matters.
 
 ---
 
@@ -85,12 +136,12 @@ For dark themes add `color-scheme: dark` so browser chrome adapts:
 
 Follow this section order in every theme file for consistency:
 
-1. `@import './common.css'` and metadata comments
+1. Metadata comment, font `@import url(...)` if any, then `@import './common.css'` (before any rule)
 2. `:root` theme tokens
 3. Optional modifier classes (`.font-*`, `.size-*`) if implemented
-4. Reset and document shell (`html`, `body`, `*`)
-5. `.markdown-body` container: max-width, padding, surface
-6. Headings `h1`–`h6` and `.header-anchor`
+4. Reset and document shell (`html`, `body`, `:where(.markdown-body) *`)
+5. `.markdown-body` container: padding, surface (the measure comes from `--markdown-body-max-width` / `--orz-measure-wide`, never `max-width`)
+6. Headings `h1`–`h6`
 7. Body copy: `p`, `strong`, `em`, `s`, `mark`, `ins`, `sub`, `sup`
 8. Links: `a`, `a:hover`, `a:visited`
 9. Lists and task lists: `ul`, `ol`, `li`, `.task-list-item`
@@ -102,8 +153,8 @@ Follow this section order in every theme file for consistency:
 15. TOC and footnotes: `.toc-list`, `.footnotes`
 16. Plugin output: `.youtube-embed`, `.mermaid`, `.smiles-render`, `canvas.orz-chart`, `.qrcode`, span color/badge classes
 17. Decorative pseudo-elements and theme-only flourishes
-18. Responsive rules (`@media`)
-19. Print rules (`@media print`)
+18. Responsive *decoration* (`@media`) — layout collapse is common.css's job
+19. Print *decoration* (`@media print`: e.g. ink-friendly colours) — pagination is common.css's job
 
 ---
 
@@ -112,17 +163,20 @@ Follow this section order in every theme file for consistency:
 Some bundled themes expose utility classes for runtime font and size switching. If you implement them, follow the same class names for interoperability:
 
 ```css
-/* Font family modifiers — applied to body or .markdown-body */
-.font-serif       { font-family: var(--font-body-serif, Georgia, serif); }
-.font-sans        { font-family: var(--font-body-sans, system-ui, sans-serif); }
-.font-handwritten { font-family: var(--font-body-handwritten, cursive); }
-.font-typewrite   { font-family: var(--font-body-mono, monospace); }
+/* Applied to body or .markdown-body. Scoped like every rule (Guideline 1),
+   and on body only custom properties — the article consumes them. */
+body.font-serif,       .markdown-body.font-serif       { --font-body: Georgia, 'Noto Serif SC', serif; }
+body.font-sans,        .markdown-body.font-sans        { --font-body: system-ui, 'Noto Sans SC', sans-serif; }
+body.font-handwritten, .markdown-body.font-handwritten { --font-body: 'Hanzi Pen SC', cursive; }
+body.font-typewrite,   .markdown-body.font-typewrite   { --font-body: monospace; }
 
-/* Size modifiers */
-.size-xs { font-size: 0.8rem; }
-.size-sm { font-size: 0.9rem; }
-.size-lg { font-size: 1.15rem; }
-.size-xl { font-size: 1.3rem; }
+body.size-xs, .markdown-body.size-xs { --font-scale: 0.9; }
+body.size-sm, .markdown-body.size-sm { --font-scale: 0.96; }
+body.size-lg, .markdown-body.size-lg { --font-scale: 1.08; }
+body.size-xl, .markdown-body.size-xl { --font-scale: 1.16; }
+
+/* …and the article reads them */
+:where(.markdown-body) { font-family: var(--font-body); font-size: calc(1rem * var(--font-scale, 1)); }
 ```
 
 These are not required by `common.css` — they are opt-in per theme.
@@ -134,45 +188,43 @@ These are not required by `common.css` — they are opt-in per theme.
 Every theme must have CSS rules for all of the following. See `references/css-classes.md` for the exact selectors.
 
 ### Container & page
-- [ ] `body` — page background, base font, line-height
-- [ ] `.markdown-body` — outer container: max-width, padding, background, border
+- [ ] `body` — page background only (typography on `body` leaks into host UI; enforced, M.14)
+- [ ] `.markdown-body` — outer container: base font, size, line-height, colour, padding, background, border
 
 ### Headings and anchors
 - [ ] `h1` `h2` `h3` `h4` `h5` `h6` — font size, color, margin, font-family
-- [ ] `.header-anchor` — hidden by default, visible on heading hover
 
 ### Inline text
 - [ ] `p` `a` `a:visited` `a:hover`
 - [ ] `strong` `em` `s` / `del` `mark` `ins` `sub` `sup`
 - [ ] `code` (inline) — background, border, border-radius, font
-- [ ] `pre` — block container: background, border, overflow
+- [ ] `pre` — block container: background, border (scrolling comes from common.css)
 - [ ] `pre > code` — reset border/background, set font-size and line-height
 
 ### Structural blocks
 - [ ] `blockquote` — left border or background, text color
 - [ ] `ul` `ol` `li` — padding, list markers
 - [ ] `.task-list-item` `.task-list-item-checkbox`
-- [ ] `table` `thead` `tbody` `th` `td` — borders, header background, row striping
+- [ ] `table` `thead` `tbody` `th` `td` — borders, header background, row striping (scrolling and default cell alignment come from common.css)
 - [ ] `hr` — height, color, margin
 - [ ] `img` — margin, optional border/radius
 
 ### Plugins and containers
 - [ ] `.footnote-ref` `.footnote-ref a` `.footnotes` `.footnotes-sep` `.footnote-backref`
-- [ ] `.katex` `.katex-display` `.katex-error`
+- [ ] `.katex` `.katex-display` `.katex-error` — size and spacing (overflow scrolling comes from common.css)
 - [ ] `div.success` `div.info` `div.warning` `div.danger` — background, border, text color
-- [ ] `.left` `.right` `.center` — float/alignment, optional box styling
+- [ ] `.left` `.right` `.center` — optional box styling only (common.css floats, aligns and caps them)
 - [ ] `details.spoil` `details.spoil > summary` — border, summary background, open/closed marker
-- [ ] `.tabs` `.tabs-bar` `.tabs-bar-btn` `.tabs-bar-btn.active` `.tab` `.tab.active`
-- [ ] `.tabs:not([data-js]) .tab` — no-JS fallback: show all panels
-- [ ] `.cols` `.col`
+- [ ] `.tabs` `.tabs-bar` `.tabs-bar-btn` `.tabs-bar-btn.active` `.tab` — look only (switching, scrolling bar and no-JS fallback come from common.css)
+- [ ] `.cols` `.col` — column surfaces and `gap` (the grid and its collapse come from common.css)
 - [ ] `.toc-list` — list reset, link styles (the parser emits only `<ul class="toc-list">`, no `nav.toc` wrapper)
 - [ ] `span.red` `span.yellow` `span.green` `span.blue`
 - [ ] `span.success` `span.info` `span.warning` `span.danger` — inline badge variant
-- [ ] `div.youtube-embed` `div.youtube-embed iframe` — 16:9 responsive wrapper (structural)
-- [ ] `div.mermaid` `div.mermaid svg`
+- [ ] `div.youtube-embed` — frame decoration only (common.css makes it 16:9 and responsive)
+- [ ] `div.mermaid` — panel decoration (centering and width cap come from common.css); dark themes usually give it a light panel
 - [ ] `div.smiles-render` `canvas[data-smiles]`
-- [ ] `canvas.orz-chart` — width-capped (Chart.js draws into it client-side)
-- [ ] `span.qrcode` — **must have `background: #fff`** (SVG is always black-on-white)
+- [ ] `canvas.orz-chart` — optional panel decoration (Chart.js draws into it; common.css caps its width)
+- [ ] `span.qrcode` — **must have `background: #fff`** (the SVG has no quiet zone; common.css's padding (4px around a standalone code, 0.12em inside a sentence) becomes the quiet zone)
 
 ---
 
@@ -180,38 +232,56 @@ Every theme must have CSS rules for all of the following. See `references/css-cl
 
 ### 1. Scope under `.markdown-body`
 
-Prefix all element rules with `.markdown-body` to avoid polluting global page styles. Exception: `body`, `html`, and `::selection` are acceptable at page scope.
+Carriers (orz-mdhtml, orz-slides, orz-paged) load the theme into a page that
+also holds editor UI, so a bare `h1`, `a` or `*` rule restyles that UI too.
+Every selector must start with one of:
+
+- `.markdown-body` — the article and everything in it;
+- `:where(.markdown-body)` — the same scope with **no added specificity**
+  (the bundled themes use it where an element rule must stay as weak as a bare
+  `h1`, so it never outranks a `.markdown-body > :first-child` style rule);
+- page scope: `:root`, `html`, `body`, `::selection`, `::-webkit-scrollbar*`,
+  `.qrcode-overlay` (the QR overlay is appended to `<body>`).
+
+The test suite enforces this for every bundled theme (claim M.14).
 
 ```css
 /* Good */
 .markdown-body h2 { ... }
-.markdown-body blockquote { ... }
+:where(.markdown-body) blockquote { ... }
 
 /* Page-scoped (OK) */
-body { background: var(--bg); font-family: var(--font-body); }
+body { background: var(--bg); }  /* page surface only — typography goes on the article (M.14) */
+
+/* The box-sizing reset: the page roots and the article, never host UI */
+html, body, :where(.markdown-body), :where(.markdown-body) *,
+:where(.markdown-body) *::before, :where(.markdown-body) *::after { box-sizing: border-box; }
 ```
 
 ### 2. Semantic callouts must be visibly distinct
 
 `div.success/info/warning/danger` must clearly differ from regular content even in neutral palettes. The four semantic meanings (green/blue/amber/red) must be preserved — do not swap, remove, or use identical styles for multiple variants.
 
-### 3. QR codes always need white background
+### 3. QR codes always need a white plate
 
-The SVG emitted inside `.qrcode` is black-on-transparent. Set an explicit white background on both the inline widget and the overlay so it reads correctly on dark themes:
+The SVG inside `span.qrcode` is black modules on its own white rect, with no
+quiet zone. Give the inline widget a white background so common.css's padding
+(4px around a standalone code, 0.12em inside a sentence) becomes the quiet zone (scanners need light around the code on
+dark themes). The expanded overlay is styled entirely by common.css
+(`!important`); leave it alone.
 
 ```css
-span.qrcode { background: #fff; padding: 4px; }
+.markdown-body span.qrcode { background: #fff; }
 ```
 
-### 4. Tabs functional CSS is non-negotiable
+### 4. Tab switching belongs to common.css
 
-The tabs show/hide behavior depends on these rules being present. They are functional, not decorative:
+Showing the active panel, hiding the rest, and the no-JS fallback (every panel
+shown) all live in common.css; a theme never sets `display` on `.tab`. A theme
+may add a separator between the fallback panels:
 
 ```css
-.tab { display: none; }
-.tab.active { display: block; }
-.tabs:not([data-js]) .tab { display: block; }          /* no-JS fallback */
-.tabs:not([data-js]) .tab + .tab { border-top: 1px solid ...; } /* visual separator */
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab { border-top: 1px solid var(--border); }
 ```
 
 ### 5. Spoiler open/close marker is functional
@@ -223,24 +293,18 @@ details.spoil > summary::before { content: '+'; }
 details.spoil[open] > summary::before { content: '–'; }
 ```
 
-### 6. YouTube embed needs the 16:9 hack
+### 6. YouTube embeds: decorate only
 
-The responsive iframe technique is structural — do not change the core ratio or remove it:
+common.css makes `.youtube-embed` a 16:9 box (`aspect-ratio`) and fills it with
+the iframe. Do not add the old `padding-bottom: 56.25%` hack or set
+position/size; a theme may add a background, border or radius.
 
-```css
-div.youtube-embed { position: relative; height: 0; padding-bottom: 56.25%; overflow: hidden; }
-div.youtube-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-```
+### 7. One breakpoint, owned by common.css
 
-### 7. Float `.left` needs a mobile breakpoint
-
-Without this the float causes overflow on narrow screens:
-
-```css
-@media (max-width: 600px) {
-  .left { float: none; max-width: 100%; margin-right: 0; }
-}
-```
+Below 640px (the family's single breakpoint) common.css unfloats `::: left`
+and stacks `::: cols`. Do not add your own narrow-screen layout rules for
+`.left` / `.cols`; a theme's `@media` rules may change decoration only (e.g.
+smaller article padding), preferably at the same 640px.
 
 ### 8. Dark themes: code block foreground vs syntax highlighting
 
@@ -277,6 +341,22 @@ drawer.draw(tree, canvas, 'light', false);
 drawer.draw(tree, canvas, 'dark', false);
 ```
 
+### 13. Reading comfort
+
+- Text is start-aligned (`text-align: start`); don't justify.
+- Ligatures are off on `code`, `pre`, `kbd` and `samp`, so `fi`, `->` or `!=`
+  read as typed:
+  `font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;`.
+- `span.red` / `span.yellow` / `span.green` / `span.blue` are text colour only,
+  no background.
+- Every text colour, spans and badges included, reaches 4.5:1 against its
+  background (WCAG AA); on light pages "yellow" is a dark gold.
+- `mark` is a soft tint, not a saturated block.
+- Each callout type differs by colour *and* by an icon or shape, so it reads
+  without colour vision.
+- The default measure is about 70 characters (`--markdown-body-max-width`);
+  `measure-wide` gives about 90.
+
 ---
 
 ## Theme Compliance Checklist
@@ -284,20 +364,17 @@ drawer.draw(tree, canvas, 'dark', false);
 Use this when auditing an existing theme or reviewing a new one:
 
 - [ ] Section order follows the 19-section structure above
-- [ ] `@import './common.css'` is the first line
+- [ ] `@import './common.css'` comes before any rule (only a font `@import url(...)` may precede it)
 - [ ] Base font size and line-height are declared as `:root` tokens near the top
 - [ ] `.markdown-body` max-width, padding, border, and shadow are easy to override
 - [ ] All heading levels `h1`–`h6` are styled distinctly
 - [ ] Ordered lists use decimal counters (`1, 2, 3`) — never `01, 02, 03`
-- [ ] Narrow tables shrink to content width instead of always stretching to full width
+- [ ] Tables are not given `width: 100%` (common.css sizes them to content)
 - [ ] All four semantic containers (`success/info/warning/danger`) are visually distinct
 - [ ] Badge spans (`span.success/info/warning/danger`) stay single-line — no pseudo-label text injected
-- [ ] QR code: `span.qrcode` has explicit `background: #fff` (SVG is always black-on-white)
-- [ ] `.left` float has a mobile breakpoint (`float: none` below ~600px)
-- [ ] Tabs show/hide CSS is functional (`display: none` default, `block` when `.active`)
-- [ ] `.tabs:not([data-js]) .tab` fallback shows all panels when JS is absent
+- [ ] QR code: `span.qrcode` has explicit `background: #fff` (the SVG has no quiet zone)
+- [ ] No structure re-declared: no `float`/`width` on `.left`, no `display` on `.tab`, no YouTube ratio hack, no narrow-screen `.left`/`.cols` layout (common.css owns them; `tests/themes.test.ts` enforces it)
 - [ ] Spoiler open/close marker (`summary::before`) communicates state clearly
-- [ ] YouTube embed uses the 16:9 padding-bottom trick
 - [ ] SMILES container is visually neutral — no decorative box styling
-- [ ] Print rules strip outer body framing, fit paper width, and repeat `thead` across pages
+- [ ] Print rules are decoration only (strip outer body framing, ink-friendly colours); pagination, `thead` repeat and printing every tab come from common.css
 - [ ] CJK font fallbacks are present in serif/sans/handwritten font stacks

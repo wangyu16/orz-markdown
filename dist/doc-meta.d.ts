@@ -83,7 +83,9 @@ export declare function extractDocMeta(source: string): {
 };
 /**
  * Merge source-declared metadata with host-injected metadata. The HOST wins,
- * field by field; unset host fields fall through to the source.
+ * field by field; host fields that are unset — `undefined`, `null`, an empty or
+ * blank string, an empty array — fall through to the source, so a host that
+ * fills a form with blanks never erases what the author wrote.
  */
 export declare function mergeDocMeta(fromSource: DocMeta, fromHost?: DocMeta): DocMeta;
 /**
@@ -101,6 +103,13 @@ export declare function renderDocMetaHead(meta: DocMeta): string;
  * `serializeDoc()` never touches it, so it survives in-file edits.
  */
 export declare function renderDocMetaIsland(meta: DocMeta): string;
-/** Read the island back out of a built document (host-side helper). */
+/**
+ * Read the island back out of a built document (host-side helper).
+ *
+ * Only the document head is searched: carriers write the island there, and the
+ * body holds author content, where a raw-HTML `<script id="orz-meta">` must not
+ * pass for the document's metadata (a spoofed `uid`). The `id` must be the
+ * attribute itself, not a suffix of another (`data-id="orz-meta"`).
+ */
 export declare function parseDocMetaIsland(html: string): DocMeta | null;
 //# sourceMappingURL=doc-meta.d.ts.map

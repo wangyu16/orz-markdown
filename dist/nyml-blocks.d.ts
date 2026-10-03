@@ -25,9 +25,15 @@ export interface NymlBlock {
 }
 /**
  * Scan a source for every `{{nyml … }}` block, in document order. Each result
- * carries its parsed `kind`, `fields`, and `[start, end)` char offsets. Blocks
- * inside an HTML comment (`<!-- … -->`) are skipped — so a commented-out element
- * (e.g. content the editor's template picker preserves) does not render.
+ * carries its parsed `kind`, `fields`, and `[start, end)` char offsets.
+ *
+ * Blocks are located by PARSING the source with the configured renderer and
+ * taking its `nyml` block tokens, so the scanner agrees with the renderer by
+ * construction: a block inside code, a comment, raw HTML, a math block, another
+ * directive's body, mid-paragraph, or escaped is not a block here either. (Three
+ * rounds of regex rules each left a new disagreement class; see
+ * notes/closed-loop.md, round 6.) Fields are read from the token's body, so a
+ * block inside a blockquote or list item parses without its prefixes.
  */
 export declare function scanNymlBlocks(source: string): NymlBlock[];
 //# sourceMappingURL=nyml-blocks.d.ts.map

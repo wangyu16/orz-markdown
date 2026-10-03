@@ -10,6 +10,7 @@
    Design Tokens
    -------------------------------------------------------------------------- */
 :root {
+  color-scheme: dark;
   /* Palette */
   --bg:            #0d0f18;
   --bg-surface:    #13161f;
@@ -24,6 +25,7 @@
   --text-heading:  #f0f4fc;
   --text-heading-2: #c7d7ff;
   --text-heading-3: #a9c1f0;
+  --text-heading-4: #82a1f6; /* oklch(0.72 0.13 268): the accent, lifted to 7:1 */
   --text-heading-5: #8eaede;
 
   --accent:        #5f8cff;  /* blue-violet */
@@ -52,7 +54,7 @@
 
   /* Typography scale */
   --base-size: 1rem;
-  --line-height: 1.75;
+  --line-height: 1.78;
   --fs-base:  var(--base-size); /* 16px default */
   --fs-sm:    0.875rem;
   --fs-xs:    0.8rem;
@@ -75,7 +77,8 @@
   --t: 0.2s ease;
 
   /* Markdown body container toggles */
-  --markdown-body-max-width: 860px;
+  --markdown-body-max-width: 720px; /* ≈70ch of Source Serif 4 at 16px */
+  --orz-measure-wide: 55rem;        /* ≈90ch with .measure-wide */
   --markdown-body-padding: clamp(1.5rem, 5vw, 3.5rem);
   --markdown-body-border: 1px solid var(--border-subtle);
   --markdown-body-radius: var(--radius-lg);
@@ -85,7 +88,7 @@
 /* --------------------------------------------------------------------------
    Reset & Base
    -------------------------------------------------------------------------- */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, :where(.markdown-body), :where(.markdown-body) *, :where(.markdown-body) *::before, :where(.markdown-body) *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
   font-size: var(--base-size);
@@ -95,12 +98,16 @@ html {
 
 body {
   background: var(--bg);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+:where(.markdown-body) {
+  /* Typography lives on the article, not the page: a host page's own UI keeps its fonts and colours (M.14). */
   color: var(--text-primary);
   font-family: 'Source Serif 4', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   font-weight: 400;
   line-height: var(--lh-text);
-  min-height: 100vh;
-  padding: 2rem 1rem;
 }
 
 /* --------------------------------------------------------------------------
@@ -115,8 +122,6 @@ body {
    Article wrapper
    -------------------------------------------------------------------------- */
 .markdown-body {
-  display: flow-root;
-  max-width: var(--markdown-body-max-width);
   margin: 0 auto;
   background: var(--bg-surface);
   border: var(--markdown-body-border);
@@ -128,7 +133,7 @@ body {
 /* --------------------------------------------------------------------------
    Headings
    -------------------------------------------------------------------------- */
-h1, h2, h3, h4, h5, h6 {
+:where(.markdown-body) h1, :where(.markdown-body) h2, :where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
   clear: both;
   font-family: 'Cinzel', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
   color: var(--text-heading);
@@ -137,46 +142,74 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 2.25em;
   margin-bottom: 0.6em;
   scroll-margin-top: 4rem;
+  text-wrap: balance;
 }
-h1:first-child, h2:first-child { margin-top: 0; }
+:where(.markdown-body) h1:first-child, :where(.markdown-body) h2:first-child { margin-top: 0; }
 
-h1 {
-  font-size: clamp(1.75rem, 4vw, 2.5rem);
+:where(.markdown-body) h1 {
+  /* An inscription: Cinzel in full capitals, generously tracked, set between two
+     rules like a title plate; a small lozenge keys the lower rule at its centre. */
+  font-size: clamp(1.45rem, 2.7vw, 1.8rem);
+  font-weight: 600;
   text-align: center;
-  letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 0.4em 1em;
+  letter-spacing: 0.1em;
+  padding: 0.6em 0.5em;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
-h2 {
-  font-size: clamp(1.4rem, 3vw, 1.875rem);
+:where(.markdown-body) h1::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  transform: rotate(45deg);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--bg-surface);
+}
+:where(.markdown-body) h2 {
+  /* title case in Cinzel = capitals + small capitals */
+  font-size: clamp(1.3rem, 2.4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-heading-2);
   border-bottom: 1px solid var(--accent-dim);
   padding-bottom: 0.3em;
 }
-h3 {
-  font-size: 1.375rem;
-  color: var(--text-heading-3);
-  padding-left: 1.4em;
-  position: relative;
+/* h3 and below switch to Source Serif 4 (display optical size): sentence-case
+   headings read naturally, and Cinzel stays reserved for the top two levels. */
+:where(.markdown-body) h3, :where(.markdown-body) h4, :where(.markdown-body) h5, :where(.markdown-body) h6 {
+  font-family: 'Source Serif 4', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  font-optical-sizing: auto;
+  letter-spacing: 0;
 }
-h3::before {
+:where(.markdown-body) h3 { font-size: 1.3rem;   font-weight: 600; color: var(--text-heading-3); position: relative; }
+/* h3: a small accent lozenge hung in the margin, centred on the first line (line-height 1.3) */
+:where(.markdown-body) h3::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0.55em;
-  width: 0.55em;
-  height: 0.55em;
-  border-radius: 999px;
+  left: -0.95em;
+  top: calc(0.65em - 0.2em);
+  width: 0.4em;
+  height: 0.4em;
+  transform: rotate(45deg);
   background: var(--accent);
 }
-h4 { font-size: 1.125rem; font-weight: 600; color: var(--accent); }
-h5 { font-size: 1rem;     font-weight: 600; color: var(--text-heading-5); }
-h6 { font-size: 0.9rem;   font-weight: 600; color: var(--text-secondary); }
+/* h4 returns to Cinzel: a small-capital label in the accent */
+:where(.markdown-body) h4 {
+  font-family: 'Cinzel', Georgia, 'Noto Serif SC', 'Noto Serif TC', serif;
+  font-size: 1.05rem; font-weight: 700; letter-spacing: 0.05em;
+  color: var(--text-heading-4); margin-top: 1.9em;
+}
+:where(.markdown-body) h5 { font-size: 1rem;     font-weight: 600; color: var(--text-heading-5); }
+:where(.markdown-body) h6 { font-size: 0.9rem;   font-weight: 600; font-style: italic; color: var(--text-secondary); }
 
 /* Anchor links from markdown-it-anchor */
-.header-anchor {
+:where(.markdown-body) .header-anchor {
   float: left;
   margin-left: -1.25em;
   padding-right: 0.25em;
@@ -187,44 +220,48 @@ h6 { font-size: 0.9rem;   font-weight: 600; color: var(--text-secondary); }
   font-size: 0.75em;
   transition: opacity var(--t);
 }
-h1:hover .header-anchor,
-h2:hover .header-anchor,
-h3:hover .header-anchor,
-h4:hover .header-anchor { opacity: 0.6; }
+:where(.markdown-body) h1:hover .header-anchor,
+:where(.markdown-body) h2:hover .header-anchor,
+:where(.markdown-body) h3:hover .header-anchor,
+:where(.markdown-body) h4:hover .header-anchor { opacity: 0.6; }
 
 /* --------------------------------------------------------------------------
    Paragraphs & Spacing
    -------------------------------------------------------------------------- */
-p { margin-bottom: var(--gap); }
-p:last-child { margin-bottom: 0; }
+:where(.markdown-body) p { margin-bottom: var(--gap); text-wrap: pretty; }
+:where(.markdown-body) p:last-child { margin-bottom: 0; }
 
 /* --------------------------------------------------------------------------
    Links
    -------------------------------------------------------------------------- */
-a {
+:where(.markdown-body) a {
   color: var(--link);
   text-decoration: underline;
   text-decoration-color: rgba(130, 180, 255, 0.35);
   text-underline-offset: 3px;
   transition: color var(--t), text-decoration-color var(--t);
 }
-a:hover { color: #aecfff; text-decoration-color: rgba(174, 207, 255, 0.7); }
-a:visited { color: var(--link-visited); }
+:where(.markdown-body) a:hover { color: #aecfff; text-decoration-color: rgba(174, 207, 255, 0.7); }
+:where(.markdown-body) a:visited { color: var(--link-visited); }
 
 /* --------------------------------------------------------------------------
    Emphasis
    -------------------------------------------------------------------------- */
-strong { font-weight: 600; color: var(--text-heading); }
-em { font-style: italic; }
-s, del { text-decoration: line-through; color: var(--text-muted); }
-mark { background: rgba(251, 191, 36, 0.25); color: #fde68a; border-radius: 2px; padding: 0 2px; }
-ins { text-decoration: underline; text-decoration-style: dashed; color: var(--span-green); }
-sub, sup { font-size: 0.75em; }
+:where(.markdown-body) strong { font-weight: 600; color: var(--text-heading); }
+:where(.markdown-body) em { font-style: italic; }
+:where(.markdown-body) s, :where(.markdown-body) del { text-decoration: line-through; color: var(--text-muted); }
+:where(.markdown-body) mark { background: rgba(232, 190, 110, 0.2); color: #f6e3b8; border-radius: 2px; padding: 0 2px; }
+:where(.markdown-body) ins { text-decoration: underline; text-decoration-style: dashed; color: var(--span-green); }
+:where(.markdown-body) sub, :where(.markdown-body) sup { font-size: 0.75em; }
 
 /* --------------------------------------------------------------------------
    Inline Code
    -------------------------------------------------------------------------- */
-code {
+:where(.markdown-body) code, :where(.markdown-body) kbd, :where(.markdown-body) samp, :where(.markdown-body) pre {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+:where(.markdown-body) code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.875em;
   background: var(--code-bg);
@@ -237,16 +274,15 @@ code {
 /* --------------------------------------------------------------------------
    Code Blocks
    -------------------------------------------------------------------------- */
-pre {
+:where(.markdown-body) pre {
   background: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: var(--radius);
   padding: 1.25rem 1.5rem;
-  overflow-x: auto;
   margin-bottom: var(--gap);
   position: relative;
 }
-pre code {
+:where(.markdown-body) pre code {
   background: none;
   border: none;
   padding: 0;
@@ -258,7 +294,7 @@ pre code {
 /* --------------------------------------------------------------------------
    Blockquotes
    -------------------------------------------------------------------------- */
-blockquote {
+:where(.markdown-body) blockquote {
   margin: var(--gap) 0;
   padding: 0.85rem 1.35rem;
   background: rgba(95, 140, 255, 0.06);
@@ -268,23 +304,23 @@ blockquote {
   font-style: italic;
   position: relative;
 }
-blockquote > blockquote { border-left-color: var(--accent-dim); margin-top: 0.75rem; }
-blockquote p:last-child { margin-bottom: 0; }
+:where(.markdown-body) blockquote > blockquote { border-left-color: var(--accent-dim); margin-top: 0.75rem; }
+:where(.markdown-body) blockquote p:last-child { margin-bottom: 0; }
 
 /* --------------------------------------------------------------------------
    Lists
    -------------------------------------------------------------------------- */
-ul, ol {
+:where(.markdown-body) ul, :where(.markdown-body) ol {
   padding-left: 1.75em;
   margin-bottom: var(--gap);
 }
-li {
+:where(.markdown-body) li {
   margin-bottom: 0.35em;
   line-height: var(--lh-text);
 }
-li > ul, li > ol { margin-top: 0.35em; margin-bottom: 0; }
-ul  { list-style-type: none; }
-ul  li::before {
+:where(.markdown-body) li > ul, :where(.markdown-body) li > ol { margin-top: 0.35em; margin-bottom: 0; }
+:where(.markdown-body) ul  { list-style-type: none; }
+:where(.markdown-body) ul  li::before {
   content: '›';
   color: var(--accent);
   display: inline-block;
@@ -294,9 +330,9 @@ ul  li::before {
 }
 
 /* Task lists (markdown-it-task-lists) */
-.task-list-item { list-style: none; padding-left: 0; }
-.task-list-item::before { display: none; }
-.task-list-item input[type="checkbox"] {
+:where(.markdown-body) .task-list-item { padding-left: 0; }
+:where(.markdown-body) .task-list-item::before { display: none; }
+:where(.markdown-body) .task-list-item input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 1.1em;
@@ -311,16 +347,16 @@ ul  li::before {
   display: inline-block;
   transition: border-color var(--t), background var(--t);
 }
-.task-list-item input[type="checkbox"]:checked {
+:where(.markdown-body) .task-list-item input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
-.task-list-item input[type="checkbox"]:checked::after {
+:where(.markdown-body) .task-list-item input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
   left: 3px; top: 0;
   width: 5px; height: 9px;
-  border: 2px solid #fff;
+  border: 2px solid var(--bg);
   border-top: none; border-left: none;
   transform: rotate(45deg);
 }
@@ -328,17 +364,13 @@ ul  li::before {
 /* --------------------------------------------------------------------------
    Tables
    -------------------------------------------------------------------------- */
-.markdown-body > table, .markdown-body td table {
-  width: max-content;
-  max-width: 100%;
-}
-table {
+:where(.markdown-body) table {
   border-collapse: collapse;
   margin-bottom: var(--gap);
   font-size: var(--fs-sm);
 }
-thead tr { background: var(--bg-elevated); }
-thead th {
+:where(.markdown-body) thead tr { background: var(--bg-elevated); }
+:where(.markdown-body) thead th {
   font-family: 'Source Serif 4', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   font-weight: 600;
   font-size: var(--fs-xs);
@@ -347,48 +379,63 @@ thead th {
   color: var(--text-secondary);
   padding: 0.65rem 1rem;
   border-bottom: 2px solid var(--border);
-  text-align: left;
   white-space: nowrap;
 }
-td {
+:where(.markdown-body) td {
   padding: 0.65rem 1rem;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: baseline;
 }
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: rgba(255,255,255,0.02); }
+:where(.markdown-body) tbody tr:last-child td { border-bottom: none; }
+:where(.markdown-body) tbody tr:hover { background: rgba(255,255,255,0.02); }
 
 /* --------------------------------------------------------------------------
    Horizontal Rule
    -------------------------------------------------------------------------- */
-hr {
+:where(.markdown-body) hr {
+  /* one fading rule, parted at the centre for an outlined lozenge */
   border: none;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border), transparent);
-  margin: 2.5rem 0;
+  overflow: visible;
+  position: relative;
+  background: linear-gradient(90deg, transparent, var(--accent-dim) 20%, var(--accent-dim) calc(50% - 1.1rem),
+    transparent calc(50% - 1.1rem), transparent calc(50% + 1.1rem), var(--accent-dim) calc(50% + 1.1rem), var(--accent-dim) 80%, transparent);
+  margin: 2.75rem 0;
+}
+:where(.markdown-body) hr::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1px solid var(--accent);
 }
 
 /* --------------------------------------------------------------------------
    Images
    -------------------------------------------------------------------------- */
-img {
+:where(.markdown-body) img {
   border-radius: var(--radius);
   margin: var(--gap) auto;
 }
-p > img { margin: 0; display: inline; }
+:where(.markdown-body) p > img { margin: 0; }
 
 /* --------------------------------------------------------------------------
    Footnotes (markdown-it-footnote)
    -------------------------------------------------------------------------- */
-.footnotes-sep { margin: 2rem 0 1rem; }
-.footnotes {
+/* the footnotes carry their own top rule; the separator hr would double it */
+:where(.markdown-body) hr.footnotes-sep { display: none; }
+:where(.markdown-body) .footnotes { margin-top: 2.5rem; }
+:where(.markdown-body) .footnotes {
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   border-top: 1px solid var(--border-subtle);
   padding-top: 1rem;
 }
-.footnotes ol { counter-reset: none; }
-.footnote-ref a, .footnote-backref {
+:where(.markdown-body) .footnotes ol { counter-reset: none; }
+:where(.markdown-body) .footnote-ref a, :where(.markdown-body) .footnote-backref {
   color: var(--accent);
   text-decoration: none;
   font-size: 0.8em;
@@ -398,14 +445,12 @@ p > img { margin: 0; display: inline; }
 /* --------------------------------------------------------------------------
    KaTeX overrides
    -------------------------------------------------------------------------- */
-.katex { font-size: 1.1em; }
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+:where(.markdown-body) .katex { font-size: 1.1em; }
+:where(.markdown-body) .katex-display {
   padding: 0.5rem 0;
   margin: var(--gap) 0;
 }
-.katex-error {
+:where(.markdown-body) .katex-error {
   background: var(--danger-bg);
   color: var(--danger-text);
   border: 1px solid var(--danger-border);
@@ -418,53 +463,68 @@ p > img { margin: 0; display: inline; }
 /* --------------------------------------------------------------------------
    Containers — Semantic colour boxes
    -------------------------------------------------------------------------- */
-.success, .info, .warning, .danger {
+/* A classical frame: a thin full border, and L-shaped brackets in the type
+   colour laid over all four corners (one pseudo-element, eight short bars). */
+:where(.markdown-body) div:is(.success, .info, .warning, .danger) {
+  --cl: var(--info-text);
+  --arm: 16px;
+  position: relative;
   border: 1px solid;
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
+  border-radius: 1px;
+  padding: 1.1rem 1.4rem;
   margin: var(--gap) 0;
 }
-.success { background: var(--success-bg); border-color: var(--success-border); }
-.info    { background: var(--info-bg);    border-color: var(--info-border);    }
-.warning { background: var(--warning-bg); border-color: var(--warning-border); }
-.danger  { background: var(--danger-bg);  border-color: var(--danger-border);  }
+:where(.markdown-body) div:is(.success, .info, .warning, .danger)::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--cl), var(--cl)) top left / var(--arm) 2px no-repeat,
+    linear-gradient(var(--cl), var(--cl)) top left / 2px var(--arm) no-repeat,
+    linear-gradient(var(--cl), var(--cl)) top right / var(--arm) 2px no-repeat,
+    linear-gradient(var(--cl), var(--cl)) top right / 2px var(--arm) no-repeat,
+    linear-gradient(var(--cl), var(--cl)) bottom left / var(--arm) 2px no-repeat,
+    linear-gradient(var(--cl), var(--cl)) bottom left / 2px var(--arm) no-repeat,
+    linear-gradient(var(--cl), var(--cl)) bottom right / var(--arm) 2px no-repeat,
+    linear-gradient(var(--cl), var(--cl)) bottom right / 2px var(--arm) no-repeat;
+}
+:where(.markdown-body) div.success { --cl: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
+:where(.markdown-body) div.info    { --cl: var(--info-text);    background: var(--info-bg);    border-color: var(--info-border);    }
+:where(.markdown-body) div.warning { --cl: var(--warning-text); background: var(--warning-bg); border-color: var(--warning-border); }
+:where(.markdown-body) div.danger  { --cl: var(--danger-text);  background: var(--danger-bg);  border-color: var(--danger-border);  }
 
-.success > p:first-child > strong:first-child,
-.success > p:first-child > b:first-child { color: var(--success-text); }
-.info    > p:first-child > strong:first-child,
-.info    > p:first-child > b:first-child { color: var(--info-text); }
-.warning > p:first-child > strong:first-child,
-.warning > p:first-child > b:first-child { color: var(--warning-text); }
-.danger  > p:first-child > strong:first-child,
-.danger  > p:first-child > b:first-child { color: var(--danger-text); }
+:where(.markdown-body) .success > p:first-child > strong:first-child,
+:where(.markdown-body) .success > p:first-child > b:first-child { color: var(--success-text); }
+:where(.markdown-body) .info    > p:first-child > strong:first-child,
+:where(.markdown-body) .info    > p:first-child > b:first-child { color: var(--info-text); }
+:where(.markdown-body) .warning > p:first-child > strong:first-child,
+:where(.markdown-body) .warning > p:first-child > b:first-child { color: var(--warning-text); }
+:where(.markdown-body) .danger  > p:first-child > strong:first-child,
+:where(.markdown-body) .danger  > p:first-child > b:first-child { color: var(--danger-text); }
 
 /* Nested containers */
-.success .warning, .info .warning, .warning .warning, .danger .warning {
+:where(.markdown-body) .success .warning, :where(.markdown-body) .info .warning, :where(.markdown-body) .warning .warning, :where(.markdown-body) .danger .warning {
   margin: var(--gap-sm) 0 0;
 }
 
 /* --------------------------------------------------------------------------
    Containers — Layout (left / right / center)
    -------------------------------------------------------------------------- */
-.left  { float: left;  margin: 0 var(--gap) var(--gap) 0; max-width: 45%; }
-.right { text-align: right; margin: 0 0 var(--gap); }
-.center {
-  text-align: center;
-  margin: var(--gap) auto;
-}
+:where(.markdown-body) .left  {  margin: 0 var(--gap) var(--gap) 0; }
+:where(.markdown-body) .right { margin: 0 0 var(--gap); }
 
 /* --------------------------------------------------------------------------
    Container — Spoiler (uses <details> rendered by custom container renderer)
    -------------------------------------------------------------------------- */
-details.spoil {
+:where(.markdown-body) details.spoil {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elevated);
   margin: var(--gap) 0;
   overflow: hidden;
 }
-details.spoil > summary {
-  cursor: pointer;
+:where(.markdown-body) details.spoil > summary {
   padding: 0.75rem 1.25rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -475,30 +535,30 @@ details.spoil > summary {
   gap: 0.5rem;
   transition: background var(--t), color var(--t);
 }
-details.spoil > summary::-webkit-details-marker { display: none; }
-details.spoil > summary::before {
+:where(.markdown-body) details.spoil > summary::-webkit-details-marker { display: none; }
+:where(.markdown-body) details.spoil > summary::before {
   content: '▶';
   font-size: 0.65em;
   transition: transform var(--t);
   display: inline-block;
   color: var(--accent);
 }
-details.spoil[open] > summary::before { transform: rotate(90deg); }
-details.spoil > summary:hover { background: var(--bg-input); color: var(--text-primary); }
-details.spoil[open] > summary {
+:where(.markdown-body) details.spoil[open] > summary::before { transform: rotate(90deg); }
+:where(.markdown-body) details.spoil > summary:hover { background: var(--bg-input); color: var(--text-primary); }
+:where(.markdown-body) details.spoil[open] > summary {
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-primary);
 }
-details.spoil > :not(summary) {
+:where(.markdown-body) details.spoil > :not(summary) {
   padding: 1rem 1.25rem;
 }
-details.spoil > p:last-child,
-details.spoil > *:last-child { padding-bottom: 1.25rem; }
+:where(.markdown-body) details.spoil > p:last-child,
+:where(.markdown-body) details.spoil > *:last-child { padding-bottom: 1.25rem; }
 
 /* --------------------------------------------------------------------------
    Container — Tabs
    -------------------------------------------------------------------------- */
-.tabs {
+:where(.markdown-body) .tabs {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -506,16 +566,12 @@ details.spoil > *:last-child { padding-bottom: 1.25rem; }
 }
 
 /* Tab bar — populated by JavaScript */
-.tabs-bar {
-  display: flex;
+:where(.markdown-body) .tabs-bar {
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.tabs-bar::-webkit-scrollbar { display: none; }
 
-.tabs-bar-btn {
+:where(.markdown-body) .tabs-bar-btn {
   padding: 0.6rem 1.1rem;
   border: none;
   background: none;
@@ -523,53 +579,43 @@ details.spoil > *:last-child { padding-bottom: 1.25rem; }
   font-family: 'Source Serif 4', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
   font-size: var(--fs-sm);
   font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
   border-bottom: 2px solid transparent;
   transition: color var(--t), border-color var(--t), background var(--t);
 }
-.tabs-bar-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
-.tabs-bar-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+:where(.markdown-body) .tabs-bar-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+:where(.markdown-body) .tabs-bar-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* Tab panels */
-.tab {
-  display: none;
+:where(.markdown-body) .tab {
   padding: 1.25rem 1.5rem;
 }
-.tab.active { display: block; }
 /* Fallback: show all tabs when JS unavailable */
-.tabs:not([data-js]) .tab { display: block; }
-.tabs:not([data-js]) .tab + .tab { border-top: 1px solid var(--border-subtle); }
+:where(.markdown-body) .tabs:not([data-js]) .tab + .tab { border-top: 1px solid var(--border-subtle); }
 
 /* --------------------------------------------------------------------------
    Container — Columns
    -------------------------------------------------------------------------- */
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+:where(.markdown-body) .cols {
   gap: var(--gap);
   margin: var(--gap) 0;
-  align-items: start;
 }
-.col {
-  min-width: 0; /* prevent overflow */
+:where(.markdown-body) .col { /* prevent overflow */
 }
-.col > p:last-child { margin-bottom: 0; }
+:where(.markdown-body) .col > p:last-child { margin-bottom: 0; }
 
 /* Responsive: single column on small screens */
 @media (max-width: 600px) {
-  .cols { grid-template-columns: 1fr; }
-  .left { float: none; max-width: 100%; margin: 0 0 var(--gap); }
+  :where(.markdown-body) .left { margin: 0 0 var(--gap); }
 }
 
 /* --------------------------------------------------------------------------
    TOC — in-document styles
    (The toc plugin generates a nested <ul> at the {{toc}} position)
    -------------------------------------------------------------------------- */
-.toc-wrapper {
+:where(.markdown-body) .toc-wrapper {
   /* Wraps the generated TOC list */
 }
-nav.toc, .toc-list {
+:where(.markdown-body) nav.toc, :where(.markdown-body) .toc-list {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -577,34 +623,34 @@ nav.toc, .toc-list {
   margin: var(--gap) 0;
   font-size: var(--fs-sm);
 }
-nav.toc ul, .toc-list ul {
+:where(.markdown-body) nav.toc ul, :where(.markdown-body) .toc-list ul {
   padding-left: 1.25em;
   margin-bottom: 0;
 }
-nav.toc li, .toc-list li { margin-bottom: 0.25em; }
-nav.toc li::before, .toc-list li::before { display: none; }
-nav.toc a, .toc-list a {
+:where(.markdown-body) nav.toc li, :where(.markdown-body) .toc-list li { margin-bottom: 0.25em; }
+:where(.markdown-body) nav.toc li::before, :where(.markdown-body) .toc-list li::before { display: none; }
+:where(.markdown-body) nav.toc a, :where(.markdown-body) .toc-list a {
   color: var(--text-secondary);
   text-decoration: none;
   transition: color var(--t);
 }
-nav.toc a:hover, .toc-list a:hover { color: var(--accent); }
+:where(.markdown-body) nav.toc a:hover, :where(.markdown-body) .toc-list a:hover { color: var(--accent); }
 
 /* --------------------------------------------------------------------------
    Span — Colour classes
    -------------------------------------------------------------------------- */
-span.red    { color: var(--span-red); }
-span.yellow { color: var(--span-yellow); }
-span.green  { color: var(--span-green); }
-span.blue   { color: var(--span-blue); }
+:where(.markdown-body) span.red    { color: var(--span-red); }
+:where(.markdown-body) span.yellow { color: var(--span-yellow); }
+:where(.markdown-body) span.green  { color: var(--span-green); }
+:where(.markdown-body) span.blue   { color: var(--span-blue); }
 
 /* --------------------------------------------------------------------------
    Span — Badge classes
    -------------------------------------------------------------------------- */
-span.success,
-span.info,
-span.warning,
-span.danger {
+:where(.markdown-body) span.success,
+:where(.markdown-body) span.info,
+:where(.markdown-body) span.warning,
+:where(.markdown-body) span.danger {
   padding: 0.15em 0.55em;
   border-radius: 999px;
   font-size: 0.8em;
@@ -613,17 +659,17 @@ span.danger {
   vertical-align: baseline;
   border: 1px solid;
 }
-span.success { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
-span.info    { background: var(--info-bg);    color: var(--info-text);    border-color: var(--info-border);    }
-span.warning { background: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
-span.danger  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger-border);  }
+:where(.markdown-body) span.success { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+:where(.markdown-body) span.info    { background: var(--info-bg);    color: var(--info-text);    border-color: var(--info-border);    }
+:where(.markdown-body) span.warning { background: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+:where(.markdown-body) span.danger  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger-border);  }
 
 /* --------------------------------------------------------------------------
    Custom plugin output styles
    -------------------------------------------------------------------------- */
 
 /* test-block (Phase 5 — dev only) */
-div.test-block {
+:where(.markdown-body) div.test-block {
   background: linear-gradient(135deg, #1a1a2e, #252848);
   border: 1px dashed var(--accent-dim);
   border-radius: var(--radius);
@@ -635,7 +681,7 @@ div.test-block {
 }
 
 /* test-inline (Phase 5 — dev only) */
-span.test-inline {
+:where(.markdown-body) span.test-inline {
   background: rgba(95, 140, 255, 0.12);
   color: var(--accent);
   border: 1px dashed var(--accent-dim);
@@ -646,43 +692,31 @@ span.test-inline {
 }
 
 /* YouTube embed (Phase 8) */
-div.youtube-embed {
-  position: relative;
-  padding-bottom: 56.25%; /* 16:9 */
-  height: 0;
-  overflow: hidden;
+:where(.markdown-body) div.youtube-embed { /* 16:9 */
   border-radius: var(--radius);
   background: #000;
   margin: var(--gap) 0;
 }
-div.youtube-embed iframe {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  border: none;
-}
 
 /* Mermaid diagrams (Phase 10) */
-div.mermaid {
+:where(.markdown-body) div.mermaid {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.5rem;
   margin: var(--gap) 0;
-  overflow-x: auto;
-  text-align: center;
 }
 
 /* SMILES / chemical structures (Phase 11) */
-div.smiles-render {
+:where(.markdown-body) div.smiles-render {
   border-radius: 0;
 }
-div.smiles-render canvas {
+:where(.markdown-body) div.smiles-render canvas {
   border-radius: 0;
 }
 
 /* QR code (Phase 9) */
-span.qrcode {
+:where(.markdown-body) span.qrcode {
   vertical-align: baseline;
   background: #fff;
   border-radius: var(--radius-sm);
@@ -699,15 +733,15 @@ span.qrcode {
 /* --------------------------------------------------------------------------
    Focus indicators (keyboard navigation)
    -------------------------------------------------------------------------- */
-a:focus-visible,
-.tabs-bar-btn:focus-visible,
-details.spoil > summary:focus-visible {
+:where(.markdown-body) a:focus-visible,
+:where(.markdown-body) .tabs-bar-btn:focus-visible,
+:where(.markdown-body) details.spoil > summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
   text-decoration: none;
 }
-.task-list-item input[type="checkbox"]:focus-visible {
+:where(.markdown-body) .task-list-item input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -717,15 +751,11 @@ details.spoil > summary:focus-visible {
    -------------------------------------------------------------------------- */
 @media print {
   body { background: #fff; color: #000; padding: 0; }
-  .markdown-body { background: #fff; border: none; box-shadow: none; padding: 0; max-width: 100%; }
-  a { color: #000; text-decoration: underline; }
-  code { background: #f4f4f4; border: 1px solid #ccc; }
-  pre  { background: #f4f4f4; }
-  blockquote { border-left-color: #aaa; background: #f9f9f9; }
-  tr, iframe, video, pre, blockquote {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+  .markdown-body { background: #fff; border: none; box-shadow: none; padding: 0; }
+  :where(.markdown-body) a { color: #000; text-decoration: underline; }
+  :where(.markdown-body) code { background: #f4f4f4; border: 1px solid #ccc; }
+  :where(.markdown-body) pre  { background: #f4f4f4; }
+  :where(.markdown-body) blockquote { border-left-color: #aaa; background: #f9f9f9; }
 }
 
 /* code: uniform dark panel (no highlight.js inner box) */
@@ -735,6 +765,5 @@ details.spoil > summary:focus-visible {
 /* ---- mermaid & charts: light panel for legibility on the dark background ---- */
 .markdown-body div.mermaid { background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
-.markdown-body div.mermaid svg { max-width: 100%; height: auto; }
 .markdown-body canvas.orz-chart { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); max-width: 100%; height: auto; }
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
