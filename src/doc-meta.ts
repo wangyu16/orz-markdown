@@ -100,6 +100,36 @@ function splitList(value: string): string[] {
 }
 
 /**
+ * The DocMeta fields of a flat nyml field map (a `kind: meta` block, or a
+ * format-1 document header, FC-18 §5.1): `title author description source
+ * date keywords license license_name license_url`. Empty values are skipped;
+ * `keywords` is split as {@link extractDocMeta} splits it. `uid` is NOT read
+ * here (FC-03: a meta block's `uid` is host-only); the carrier kit adds it
+ * for a format-1 header (FC-18 §10). Key order of the result is fixed.
+ */
+export function docMetaFromFields(fields: Readonly<Record<string, string>>): DocMeta {
+  const f = (key: string): string | undefined =>
+    Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : undefined;
+  const license: DocLicense = {};
+  if (f('license')) license.spdx = f('license');
+  if (f('license_name')) license.name = f('license_name');
+  // nyml keys are `[A-Za-z0-9_]+`, so `license-url` cannot be a key. Accept the
+  // snake_case spelling the grammar actually permits.
+  if (f('license_url')) license.url = f('license_url');
+
+  const meta: DocMeta = {};
+  if (f('title')) meta.title = f('title');
+  if (f('author')) meta.author = f('author');
+  if (f('description')) meta.description = f('description');
+  if (f('source')) meta.source = f('source');
+  if (f('date')) meta.date = f('date');
+  const keywords = f('keywords');
+  if (keywords) meta.keywords = splitList(keywords);
+  if (license.spdx || license.name || license.url) meta.license = license;
+  return meta;
+}
+
+/**
  * Read the FIRST `kind: meta` nyml block out of a source and remove it.
  *
  * Removal is not cosmetic. The nyml plugin renders every block to a
@@ -117,22 +147,7 @@ export function extractDocMeta(source: string): { meta: DocMeta; body: string } 
   const block = metaBlocks[0];
   if (!block) return { meta: {}, body: source };
 
-  const f = block.fields;
-  const license: DocLicense = {};
-  if (f['license']) license.spdx = f['license'];
-  if (f['license_name']) license.name = f['license_name'];
-  // nyml keys are `[A-Za-z0-9_]+`, so `license-url` cannot be a key. Accept the
-  // snake_case spelling the grammar actually permits.
-  if (f['license_url']) license.url = f['license_url'];
-
-  const meta: DocMeta = {};
-  if (f['title']) meta.title = f['title'];
-  if (f['author']) meta.author = f['author'];
-  if (f['description']) meta.description = f['description'];
-  if (f['source']) meta.source = f['source'];
-  if (f['date']) meta.date = f['date'];
-  if (f['keywords']) meta.keywords = splitList(f['keywords']);
-  if (license.spdx || license.name || license.url) meta.license = license;
+  const meta = docMetaFromFields(block.fields);
 
   // Splice the block out, then collapse the blank lines it leaves behind so a
   // leading meta block does not push the document down by two lines.

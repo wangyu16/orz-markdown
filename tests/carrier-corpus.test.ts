@@ -5,7 +5,8 @@
  * the same token-based scanner (`scanNymlBlocks`) every carrier will use.
  *
  * This pins the corpus itself. The FC-18 laws (round trip, determinism,
- * idempotence) run over these files once `assemble`/`extract` exist (Phase 2).
+ * idempotence) and the carrier kit's readers run over these files in
+ * tests/carrier-kit.test.ts (claims K.1–K.13).
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -57,13 +58,24 @@ function readText(path: string): string {
   return readFileSync(`${ROOT}/${path}`).toString('utf8');
 }
 
-/** FC-18 §8.1: header `title`, else the first level-1 heading, else `Untitled`. */
-function derivedTitle(text: string, headerTitle: string | undefined): string {
+/**
+ * FC-18 §8.1: header `title`, else the first level-1 heading, else — for paged
+ * — the `title` (or `text`) of the first title element (kind ending in
+ * `-title`), else `Untitled`.
+ */
+function derivedTitle(text: string, headerTitle: string | undefined, kind: Kind, headerEnd: number): string {
   if (headerTitle) return headerTitle;
   const tokens = md.parse(text, {});
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type === 'heading_open' && tokens[i].tag === 'h1') {
       return tokens[i + 1].content.replace(/\{\{attrs\[[^\]]*\]\}\}/g, '').trim();
+    }
+  }
+  if (kind === 'paged') {
+    for (const b of scanNymlBlocks(text)) {
+      if (b.start < headerEnd || !b.kind.endsWith('-title')) continue;
+      const t = (b.fields.title ?? '').trim() || (b.fields.text ?? '').trim();
+      if (t) return t;
     }
   }
   return 'Untitled';
@@ -169,8 +181,9 @@ describe.each(entries.map((e) => [e.path, e] as const))('%s', (path, e) => {
     );
   });
 
-  it('derives the manifest title (header title, else first h1, else Untitled)', () => {
-    expect(derivedTitle(text, first && (e.hasHeader || e.legacyHeader) ? first.fields.title : undefined)).toBe(e.derivedTitle);
+  it('derives the manifest title (header title, else first h1, else the paged title element, else Untitled)', () => {
+    const isHeader = Boolean(first && (e.hasHeader || e.legacyHeader));
+    expect(derivedTitle(text, isHeader ? first.fields.title : undefined, e.kind, isHeader ? first.end : 0)).toBe(e.derivedTitle);
   });
 
   if (path === 'slides/markers-in-code.slides.md') {

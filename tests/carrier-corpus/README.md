@@ -95,7 +95,7 @@ corpus file; every file here is compared byte for byte.
 | `legacyHeader` | a leading `kind: meta` block read as the header (FC-18 §5 legacy) |
 | `header` | facts the header must yield: `title author license theme uid` (`null` = absent) |
 | `keys` | every header key except `kind`, in source order (host and unknown keys included) |
-| `derivedTitle` | `<title>` per FC-18 §8.1: header title, else first level-1 heading, else `Untitled` |
+| `derivedTitle` | `<title>` per FC-18 §8.1: header title, else first level-1 heading, else — for `paged` — the `title` (or `text`) of the first title element (a nyml block whose kind ends in `-title`), else `Untitled` |
 | `slideCount` | slides only: real slide markers (outside code and directives) |
 | `elementKinds` | paged only: `kind` of every nyml block after the header, in order |
 | `byteSensitive` | see above |

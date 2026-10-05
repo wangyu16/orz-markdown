@@ -637,7 +637,7 @@
         "template",
         "front_matter"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Your Article Title",
       "elementKinds": [
         "article-title",
         "abstract"
@@ -674,7 +674,7 @@
         "format",
         "template"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Your Article Title Goes Here",
       "elementKinds": [
         "article-title",
         "abstract"
@@ -864,7 +864,7 @@
         "page_number_style",
         "dynamic_choices"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Course Name — Exam 1",
       "elementKinds": [
         "exam-title",
         "question-mc",
@@ -908,7 +908,7 @@
         "page_number_style",
         "dynamic_choices"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Course Name — Midterm Exam",
       "elementKinds": [
         "exam-title",
         "question-mc",
@@ -1025,7 +1025,7 @@
         "page_number_style",
         "front_matter"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Report Title",
       "elementKinds": [
         "report-title",
         "toc"
@@ -1065,7 +1065,7 @@
         "page_number_position",
         "page_number_style"
       ],
-      "derivedTitle": "Untitled",
+      "derivedTitle": "Report Title",
       "elementKinds": [
         "report-title",
         "toc"

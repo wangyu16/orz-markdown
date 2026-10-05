@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Carrier kit core (text format 1, FC-18)** in `orz-markdown/carrier`
+  (`src/carrier/`):
+  - header: `readHeader`, `setHeaderValue`, `removeHeaderKey` (in-place,
+    one-line edits; legacy `kind: meta` headers upgraded on the first edit),
+    `lintHeader`, and the key registry (`COMMON_HEADER_KEYS`,
+    `KIND_HEADER_KEYS`, `WRITER_KEY`, `UID_PATTERN`);
+  - document: `readDocument` (kind, format, DocMeta with `uid`, theme, lang,
+    settings, host keys, derived title, lint), `kindFromFilename`, `twinName`,
+    `mintUid`;
+  - links: `twinHref`, `registerTwinLinks` — relative links to text twins
+    render as links to the assembled twin when `env.orzTwinLinks === true`;
+  - envelope: `assembleEnvelope`, `extract`, `readIslandFromDom`, `skillUrl`,
+    `eolStyle`, `hasMixedEol`, `hasLoneSurrogate`, and the island ids. The
+    source island stores the text with LF line breaks and records
+    `data-orz-eol` / `data-orz-bom`, so a DOM read is exact too.
+  - `orz-markdown/carrier` now loads the parser (`md`) as well.
+- `docMetaFromFields` (DocMeta from a flat nyml field map), exported from the
+  main entry and `orz-markdown/doc-meta`.
+- `spec/`: the binding carrier specifications FC-18 (text form and assembly,
+  format 1) and FC-19 (editor component API).
+
+### Changed
+
+- A `{{nyml}}` block whose kind is `document` (the FC-18 document header)
+  renders nothing and takes no `nyml-data` number.
+- The nyml reader treats U+2028 and U+2029 as ordinary characters: only LF,
+  CR LF and CR end a line (a value holding them was silently dropped).
+
 ## [2.0.0] - 2026-10-03
 
 A hardening release: security fixes, a class of escaping fixes, revised

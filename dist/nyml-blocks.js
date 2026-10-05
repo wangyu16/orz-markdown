@@ -49,13 +49,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scanNymlBlocks = scanNymlBlocks;
 const indexModule = __importStar(require("./index.js"));
-/** Indentation width with tabs expanded to the next multiple of 4. */
-function indentWidth(ws) {
-    let w = 0;
-    for (const ch of ws)
-        w = ch === '\t' ? w + 4 - (w % 4) : w + 1;
-    return w;
-}
+const nyml_body_js_1 = require("./nyml-body.js");
 const OPEN = '{{nyml';
 /** Find the index of the `}}` that closes a `{{nyml` opened at/after `from`. */
 function findClosing(source, from) {
@@ -65,113 +59,9 @@ function findClosing(source, from) {
     }
     return -1;
 }
-/** Strip a single pair of matching surrounding quotes, if present. */
-function stripQuotes(s) {
-    if (s.length >= 2) {
-        const first = s[0];
-        const last = s[s.length - 1];
-        if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-            return s.slice(1, -1);
-        }
-    }
-    return s;
-}
-/**
- * Parse a nyml body into a flat `key: value` map plus its `kind`. Supports
- * `key: |` multiline blocks: subsequent lines indented more than the key are
- * dedented (block style) and joined with `\n`. The `kind:` line populates
- * `kind` rather than `fields`.
- */
+/** The body reader lives in nyml-body.ts (shared with the carrier header tools). */
 function parseBody(inner) {
-    const fields = {};
-    let kind = '';
-    // CRLF and LF sources must scan identically (Windows authors, CLAIMS M.1).
-    const lines = inner.split(/\r\n|\r|\n/);
-    // Keys live at the block's base indentation; deeper "key:" lines belong to
-    // a nested structure (e.g. under "license:") and are not top-level fields.
-    // The body arrives UNTRIMMED (the dispatcher's `rawBody`): a block that
-    // starts on the line after `{{nyml` keeps its real indentation, and the base
-    // is simply the first key's indentation (as in 1.6.3). Only when the first
-    // key sits on the opener line (`{{nyml kind: meta` — no indentation of its
-    // own) is the base taken from the later key lines, skipping the content of a
-    // `|` block that opens on that line. (Round 13 inferred the base for every
-    // body and so read a first `|` block's content as keys: round 14, M1.)
-    let base = -1;
-    let start = 0;
-    while (start < lines.length && lines[start].trim() === '')
-        start++;
-    if (start === 0 && lines.length > 1) {
-        let k = 1;
-        if (/[:\uFF1A][ \t]*\|[ \t]*$/.test(lines[0]))
-            while (k < lines.length && (lines[k].trim() === '' || /^[ \t]/.test(lines[k])))
-                k++;
-        for (; k < lines.length; k++) {
-            const km = /^([ \t]*)[A-Za-z0-9_]+[ \t]*[:\uFF1A]/.exec(lines[k]);
-            if (km) {
-                const w = indentWidth(km[1]);
-                if (base === -1 || w < base)
-                    base = w;
-            }
-        }
-    }
-    const openerLine = start === 0;
-    let i = 0;
-    while (i < lines.length) {
-        const line = lines[i];
-        // `：` (full-width colon, typed in Chinese input mode) separates like `:` (M.2).
-        const m = /^([ \t]*)([A-Za-z0-9_]+)[ \t]*[:\uFF1A][ \t]?(.*)$/.exec(line);
-        if (!m) {
-            i++;
-            continue;
-        }
-        const indent = i === 0 && openerLine && base !== -1 ? base : indentWidth(m[1]); // a key on the opener line sits at the base
-        if (base === -1)
-            base = indent;
-        if (indent > base) {
-            i++;
-            continue;
-        }
-        const key = m[2];
-        const value = m[3];
-        if (value.trim() === '|') {
-            // Multiline block: gather following lines indented more than this key.
-            const collected = [];
-            let blockIndent = -1;
-            i++;
-            while (i < lines.length) {
-                const next = lines[i];
-                if (next.trim() === '') {
-                    collected.push('');
-                    i++;
-                    continue;
-                }
-                const lead = next.match(/^[ \t]*/)?.[0] ?? '';
-                const nextIndent = indentWidth(lead);
-                if (nextIndent <= indent)
-                    break;
-                if (blockIndent === -1)
-                    blockIndent = nextIndent;
-                // Dedent by columns, so tab- and space-indented lines line up.
-                collected.push(' '.repeat(Math.max(0, nextIndent - blockIndent)) + next.slice(lead.length));
-                i++;
-            }
-            while (collected.length && collected[collected.length - 1] === '') {
-                collected.pop();
-            }
-            const joined = collected.join('\n');
-            if (key === 'kind')
-                kind = joined.trim();
-            else
-                fields[key] = joined;
-            continue;
-        }
-        const v = stripQuotes(value.trim());
-        if (key === 'kind')
-            kind = v;
-        else
-            fields[key] = v;
-        i++;
-    }
+    const { kind, fields } = (0, nyml_body_js_1.parseNymlBody)(inner);
     return { kind, fields };
 }
 /**
