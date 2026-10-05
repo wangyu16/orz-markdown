@@ -34,6 +34,14 @@ export interface NymlBlock {
  * rounds of regex rules each left a new disagreement class; see
  * notes/closed-loop.md, round 6.) Fields are read from the token's body, so a
  * block inside a blockquote or list item parses without its prefixes.
+ *
+ * `tokens`, when given, must be `md.parse(source, {})` of this very source (a
+ * caller that already parsed it saves a second parse).
  */
-export declare function scanNymlBlocks(source: string): NymlBlock[];
+export declare function scanNymlBlocks(source: string, tokens?: ReadonlyArray<{
+    type: string;
+    info: string;
+    map: [number, number] | null;
+    content: string;
+}>): NymlBlock[];
 //# sourceMappingURL=nyml-blocks.d.ts.map

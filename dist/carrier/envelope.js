@@ -27,6 +27,7 @@ exports.extract = extract;
  *
  * Browser-clean: no Node built-ins.
  */
+const ascii_js_1 = require("../ascii.js");
 const html_js_1 = require("../html.js");
 const doc_meta_js_1 = require("../doc-meta.js");
 const document_js_1 = require("./document.js");
@@ -102,7 +103,7 @@ function assembleEnvelope(text, parts) {
     const bom = text.charCodeAt(0) === 0xfeff;
     const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
     const eol = (0, text_js_1.eolStyle)(bom ? text.slice(1) : text);
-    const shell = (0, html_js_1.jsonForScript)({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery });
+    const shell = (0, html_js_1.jsonForScript)({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline' });
     const out = [
         '<!doctype html>',
         `<html lang="${(0, html_js_1.escapeAttr)(doc.lang)}" data-orz-kind="${(0, html_js_1.escapeAttr)(kind)}">`,
@@ -154,7 +155,7 @@ function readStartTag(html, at) {
     const nm = /^<([A-Za-z][A-Za-z0-9-]*)/.exec(html.slice(at, at + 64));
     if (!nm)
         return null;
-    const name = nm[1].toLowerCase();
+    const name = (0, ascii_js_1.asciiLower)(nm[1]);
     const attrs = {};
     let i = at + nm[0].length;
     const n = html.length;
@@ -170,7 +171,7 @@ function readStartTag(html, at) {
             j++;
         if (j === i)
             j++; // a stray character: skip it
-        const attr = html.slice(i, j).toLowerCase();
+        const attr = (0, ascii_js_1.asciiLower)(html.slice(i, j));
         i = j;
         while (i < n && /\s/.test(html[i]))
             i++;
@@ -203,18 +204,29 @@ function readStartTag(html, at) {
  * Walk the start tags of `html` in document order — comments and raw-text
  * content skipped, as an HTML parser skips them — until `visit` returns true.
  */
-function walkStartTags(html, visit, stopAt = Infinity, rawText = RAW_TEXT) {
-    const lower = html.toLowerCase();
-    let i = 0;
+function walkStartTags(html, visit, stopAt = Infinity, rawText = RAW_TEXT, startAt = 0) {
+    const lower = (0, ascii_js_1.asciiLower)(html); // same length as html: offsets carry over
+    let i = startAt;
     while (i < html.length && i < stopAt) {
         const lt = html.indexOf('<', i);
         if (lt < 0 || lt >= stopAt)
             return null;
         if (html.startsWith('<!--', lt)) {
-            const close = html.indexOf('-->', lt + 4);
-            if (close < 0)
+            // As the HTML tokenizer: `<!-->` and `<!--->` are whole (empty)
+            // comments; otherwise the comment ends at the first `-->` or `--!>`.
+            if (html.startsWith('<!-->', lt)) {
+                i = lt + 5;
+                continue;
+            }
+            if (html.startsWith('<!--->', lt)) {
+                i = lt + 6;
+                continue;
+            }
+            const a = html.indexOf('-->', lt + 4);
+            const b = html.indexOf('--!>', lt + 4);
+            if (a < 0 && b < 0)
                 return null;
-            i = close + 3;
+            i = a >= 0 && (b < 0 || a < b) ? a + 3 : b + 4;
             continue;
         }
         const tag = readStartTag(html, lt);
@@ -224,7 +236,7 @@ function walkStartTags(html, visit, stopAt = Infinity, rawText = RAW_TEXT) {
         }
         let el = { tag, content: [tag.end, tag.end] };
         if (rawText.has(tag.name)) {
-            const close = lower.indexOf(`</${tag.name}`, tag.end);
+            const close = endTagAt(lower, tag.name, tag.end);
             el = { tag, content: [tag.end, close < 0 ? html.length : close] };
             i = close < 0 ? html.length : close + 2 + tag.name.length;
         }
@@ -236,9 +248,22 @@ function walkStartTags(html, visit, stopAt = Infinity, rawText = RAW_TEXT) {
     }
     return null;
 }
+/**
+ * Offset of the end tag that closes a raw-text element: `</name` followed by
+ * whitespace, `/` or `>` (so `</scripts>` does not close a script). -1 if none.
+ */
+function endTagAt(lower, name, from) {
+    const needle = `</${name}`;
+    for (let at = lower.indexOf(needle, from); at >= 0; at = lower.indexOf(needle, at + 1)) {
+        const c = lower.charAt(at + needle.length);
+        if (c === '' || c === '>' || c === '/' || c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r')
+            return at;
+    }
+    return -1;
+}
 /** The first `<script>` whose `id` is `id`. */
-function findScript(html, id, stopAt = Infinity) {
-    return walkStartTags(html, (el) => el.tag.name === 'script' && el.tag.attrs['id'] === id, stopAt);
+function findScript(html, id, stopAt = Infinity, startAt = 0) {
+    return walkStartTags(html, (el) => el.tag.name === 'script' && el.tag.attrs['id'] === id, stopAt, RAW_TEXT, startAt);
 }
 /** Only these are skipped when checking shell parts for reserved ids (conservative: a lenient parser may read textarea or title content as markup). */
 const SCRIPT_STYLE = new Set(['script', 'style']);
@@ -247,7 +272,7 @@ function reservedIdIn(html) {
     if (!/orz-s(rc|hell)/i.test(html))
         return null;
     const el = walkStartTags(html, (e) => {
-        const id = Object.prototype.hasOwnProperty.call(e.tag.attrs, 'id') ? e.tag.attrs['id'].trim().toLowerCase() : '';
+        const id = Object.prototype.hasOwnProperty.call(e.tag.attrs, 'id') ? (0, ascii_js_1.asciiLower)(e.tag.attrs['id'].trim()) : '';
         return id === exports.SOURCE_ISLAND_ID || id === exports.SHELL_ISLAND_ID;
     }, Infinity, SCRIPT_STYLE);
     return el ? el.tag.attrs['id'] : null;
@@ -262,7 +287,8 @@ function isKind(v) {
  * skipped), unescaped with `unescapeScriptText`, its line endings and BOM
  * restored from `data-orz-eol` / `data-orz-bom`; kind, format, shell version
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
- * `data-orz-format`, `md`, `1`, `''`). `null` when there is no source island.
+ * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`.
+ * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
 function extract(html) {
@@ -283,18 +309,36 @@ function extract(html) {
             shellData = {};
         }
     }
-    const htmlAt = html.toLowerCase().search(/<html[\s>]/);
+    const htmlAt = html.search(/<html[\s>]/i);
     const htmlTag = htmlAt >= 0 ? readStartTag(html, htmlAt) : null;
     const kind = isKind(shellData['kind']) ? shellData['kind'] : isKind(htmlTag?.attrs['data-orz-kind']) ? htmlTag.attrs['data-orz-kind'] : 'md';
     const islandFormat = a['data-orz-format'];
     const format = typeof shellData['format'] === 'number' && Number.isInteger(shellData['format']) ? shellData['format']
         : islandFormat && /^[1-9][0-9]*$/.test(islandFormat) ? Number(islandFormat) : 1;
-    return {
+    const result = {
         text,
         kind,
         format,
         shell: typeof shellData['shell'] === 'string' ? shellData['shell'] : '',
         delivery: typeof shellData['delivery'] === 'string' ? shellData['delivery'] : '',
     };
+    // The includes island follows the source island (shell markup before it is not consulted).
+    const inc = findScript(html, exports.INCLUDES_ISLAND_ID, Infinity, island.content[1]);
+    if (inc) {
+        try {
+            const parsed = JSON.parse(html.slice(inc.content[0], inc.content[1]));
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const includes = {};
+                for (const [k, v] of Object.entries(parsed))
+                    if (typeof v === 'string')
+                        includes[k] = v;
+                result.includes = includes;
+            }
+        }
+        catch {
+            // a malformed includes island is ignored
+        }
+    }
+    return result;
 }
 //# sourceMappingURL=envelope.js.map

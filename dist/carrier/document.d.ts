@@ -12,11 +12,14 @@ export interface DocumentInfo {
     header: Header | null;
     /** DocMeta (FC-03) from the header, `uid` included (FC-18 §10). */
     meta: DocMeta;
-    /** Header `theme`, when set. */
+    /** Header `theme`, when set (the default theme is the carrier's). */
     theme?: string;
     /** Header `lang` (BCP 47), default `en`. */
     lang: string;
-    /** The kind's own header keys that are set (FC-18 §5.1: `measure`; `ratio footer transition`; the paged keys). */
+    /**
+     * The kind's own header keys (FC-18 §5.1) that are set, plus the registry
+     * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) for slides.
+     */
     settings: Record<string, string>;
     /** Host keys (`x_…`) of the header. */
     hostKeys: Record<string, string>;
@@ -25,6 +28,8 @@ export interface DocumentInfo {
     /** `lintHeader` findings for the kind. */
     lint: Lint[];
 }
+/** Registry defaults that `readDocument` resolves into `settings` (FC-18 §5.1). */
+export declare const SETTING_DEFAULTS: Readonly<Record<Kind, Readonly<Record<string, string>>>>;
 /**
  * The kind a file name gives (FC-18 §3): `*.slides.md` / `*.slides.html` →
  * `slides`, `*.paged.md` / `*.paged.html` → `paged`, `*.md` / `*.md.html` →
@@ -43,10 +48,10 @@ export declare function twinName(name: string): string | null;
  * Read a document's facts from its text, without rendering (FC-19 §2).
  *
  * kind: `opts.kind`, else the file name's kind, else the header's `carrier`,
- * else `md`. title (FC-18 §8.1): the header `title`, else the first level-1
- * heading (token-based, plain text), else — for `paged` — the `title` (or
- * `text`) of the first title element (a nyml block whose kind ends in
- * `-title`), else `Untitled`.
+ * else `md`. title (FC-18 §8.1): the header `title`, else the first top-level
+ * level-1 heading (plain text; for slides only after the first slide marker),
+ * else — for `paged` — the `title` (or `text`) of the first title element
+ * (the first nyml block whose kind ends in `-title`), else `Untitled`.
  */
 export declare function readDocument(text: string, opts?: {
     kind?: Kind;

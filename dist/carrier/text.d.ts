@@ -11,4 +11,11 @@ export declare function eolStyle(text: string): EolStyle;
 export declare function hasMixedEol(text: string): boolean;
 /** True when the text holds an unpaired UTF-16 surrogate (not representable in a UTF-8 file). */
 export declare function hasLoneSurrogate(text: string): boolean;
+/**
+ * Decode a file's bytes as UTF-8 text EXACTLY: a leading BOM is kept (as
+ * U+FEFF), which `File.text()`, `Blob.text()`, `Response.text()` and a default
+ * `TextDecoder` all strip. Invalid UTF-8 sequences become U+FFFD. Use this
+ * (with `file.arrayBuffer()`) to read a text twin so the round trip stays exact.
+ */
+export declare function decodeText(bytes: Uint8Array | ArrayBuffer): string;
 //# sourceMappingURL=text.d.ts.map

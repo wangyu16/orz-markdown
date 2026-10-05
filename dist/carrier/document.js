@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.mintUid = void 0;
+exports.SETTING_DEFAULTS = exports.mintUid = void 0;
 exports.kindFromFilename = kindFromFilename;
 exports.twinName = twinName;
 exports.readDocument = readDocument;
@@ -8,6 +8,8 @@ exports.readDocument = readDocument;
  * Document facts read from a format-1 text without rendering it (FC-18 §3,
  * §5, §8.1; FC-19 `readDocument`).
  *
+ * Cost: the header is read in O(header); the body is parsed at most once, and
+ * only when the title must come from it (or a lint check needs the blocks).
  * Browser-clean and deterministic (the random `mintUid` lives in uid.ts).
  */
 const index_js_1 = require("../index.js");
@@ -16,6 +18,12 @@ const nyml_blocks_js_1 = require("../nyml-blocks.js");
 const header_js_1 = require("./header.js");
 var uid_js_1 = require("./uid.js");
 Object.defineProperty(exports, "mintUid", { enumerable: true, get: function () { return uid_js_1.mintUid; } });
+/** Registry defaults that `readDocument` resolves into `settings` (FC-18 §5.1). */
+exports.SETTING_DEFAULTS = {
+    md: { measure: 'normal' },
+    slides: { ratio: '16:9' },
+    paged: {},
+};
 function isKind(v) {
     return v === 'md' || v === 'slides' || v === 'paged';
 }
@@ -61,7 +69,7 @@ function twinName(name) {
         return `${dir}${m[1]}.md.html`;
     return null;
 }
-/** Plain text of a heading's inline children (text, code, math, image alt). */
+/** Plain text of inline tokens: text, code and math source as written, `{{sp}}` body text, image alt. */
 function inlineText(children, fallback) {
     if (!children)
         return fallback;
@@ -73,22 +81,37 @@ function inlineText(children, fallback) {
             s += ' ';
         else if (c.type === 'image')
             s += inlineText(c.children, c.content);
+        else if (c.type === 'plugin_inline' && (c.info === 'sp' || c.info === 'span')) {
+            s += inlineText(index_js_1.md.parseInline(c.content, {})[0]?.children, c.content);
+        }
     }
     return s;
 }
-function firstH1(text) {
-    const tokens = index_js_1.md.parse(text, {});
+const SLIDE_MARKER = /^<!--\s*slide\b/;
+/**
+ * The first TOP-LEVEL level-1 heading (not inside a blockquote, list or
+ * container). For slides, only headings after the first slide marker count.
+ */
+function firstH1(tokens, kind) {
+    let inSlides = kind !== 'slides';
     for (let i = 0; i < tokens.length - 1; i++) {
-        if (tokens[i].type === 'heading_open' && tokens[i].tag === 'h1') {
-            const t = inlineText(tokens[i + 1].children, tokens[i + 1].content).replace(/\s+/g, ' ').trim();
-            if (t)
-                return t;
+        const t = tokens[i];
+        if (!inSlides) {
+            if (t.level === 0 && t.type === 'html_block' && SLIDE_MARKER.test(t.content))
+                inSlides = true;
+            continue;
+        }
+        if (t.type === 'heading_open' && t.tag === 'h1' && t.level === 0) {
+            const text = inlineText(tokens[i + 1].children, tokens[i + 1].content).replace(/\s+/g, ' ').trim();
+            if (text)
+                return text;
         }
     }
     return null;
 }
-function pagedTitle(text, header) {
-    for (const b of (0, nyml_blocks_js_1.scanNymlBlocks)(text)) {
+/** paged: the `title` (else `text`) of strictly the first title element (kind ending in `-title`). */
+function pagedTitle(blocks, header) {
+    for (const b of blocks) {
         if (header && b.start < header.end)
             continue;
         // A title element is a block whose kind ends in `-title` (article-title,
@@ -96,9 +119,7 @@ function pagedTitle(text, header) {
         if (!b.kind.endsWith('-title'))
             continue;
         const own = (k) => (Object.prototype.hasOwnProperty.call(b.fields, k) ? b.fields[k].trim() : '');
-        const t = own('title') || own('text');
-        if (t)
-            return t;
+        return own('title') || own('text') || null;
     }
     return null;
 }
@@ -106,17 +127,22 @@ function pagedTitle(text, header) {
  * Read a document's facts from its text, without rendering (FC-19 §2).
  *
  * kind: `opts.kind`, else the file name's kind, else the header's `carrier`,
- * else `md`. title (FC-18 §8.1): the header `title`, else the first level-1
- * heading (token-based, plain text), else — for `paged` — the `title` (or
- * `text`) of the first title element (a nyml block whose kind ends in
- * `-title`), else `Untitled`.
+ * else `md`. title (FC-18 §8.1): the header `title`, else the first top-level
+ * level-1 heading (plain text; for slides only after the first slide marker),
+ * else — for `paged` — the `title` (or `text`) of the first title element
+ * (the first nyml block whose kind ends in `-title`), else `Untitled`.
  */
 function readDocument(text, opts) {
     const named = opts?.kind ?? (opts?.filename ? kindFromFilename(opts.filename) : null);
     const peek = named ? null : (0, header_js_1.readHeader)(text);
     const carrier = peek && Object.prototype.hasOwnProperty.call(peek.fields, 'carrier') ? peek.fields['carrier'] : undefined;
     const kind = named ?? (isKind(carrier) ? carrier : null) ?? 'md';
-    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind);
+    // One parse at most, shared by the title and the lint's block scan.
+    let tokens = null;
+    const parse = () => (tokens ?? (tokens = index_js_1.md.parse(text, {})));
+    let blocks = null;
+    const scan = () => (blocks ?? (blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text, parse())));
+    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan);
     const fields = header ? header.fields : {};
     const get = (k) => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
     const fmt = get('format');
@@ -125,7 +151,7 @@ function readDocument(text, opts) {
     const uid = get('uid');
     if (uid)
         meta.uid = uid;
-    const settings = {};
+    const settings = { ...exports.SETTING_DEFAULTS[kind] };
     const hostKeys = {};
     for (const key of header ? header.keys : []) {
         if (header_js_1.KIND_HEADER_KEYS[kind].includes(key))
@@ -134,7 +160,10 @@ function readDocument(text, opts) {
             hostKeys[key] = fields[key];
     }
     const headerTitle = (get('title') ?? '').trim();
-    const title = headerTitle || firstH1(text) || (kind === 'paged' ? pagedTitle(text, header) : null) || 'Untitled';
+    let title = headerTitle;
+    if (!title && text.trim() !== '') {
+        title = firstH1(parse(), kind) ?? (kind === 'paged' ? pagedTitle(scan(), header) : null) ?? '';
+    }
     const info = {
         kind,
         format,
@@ -143,7 +172,7 @@ function readDocument(text, opts) {
         lang: (get('lang') ?? '').trim() || 'en',
         settings,
         hostKeys,
-        title,
+        title: title || 'Untitled',
         lint,
     };
     const theme = (get('theme') ?? '').trim();

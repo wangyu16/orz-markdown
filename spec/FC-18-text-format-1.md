@@ -114,7 +114,16 @@ theme: light-neat-3
   the nyml reader accepts (`[A-Za-z0-9_]+`, the full-width `：`) and lint warns
   on anything else.
 - **No `}}` in a value.** The header ends at the first `}}`, so a value must
-  not contain that sequence (write `} }` in CSS); lint reports it.
+  not contain that sequence (write `} }` in CSS). **Detection:** lint reports
+  `closer-in-value` (error) when the header's closing `}}` line holds other
+  text that is not a `key: value` line (the header ended inside a value, e.g.
+  a CSS line of a `|` value ending in `}}`), or when text follows the closing
+  `}}` on its line; a compact `key: value}}` closing line is only a warning
+  (`closer-not-alone`). The grammar does not change: the header ends at the
+  first `}}`.
+- An entry is its key line plus the following lines indented deeper than the
+  key (a `|` value's content, or nested lines the flat reader ignores); tools
+  edit, remove and move entries whole.
 - Duplicate key: the last one wins (and a lint warning).
 - **Unknown keys are kept untouched** — the header is never re-serialized
   (§9), so anything a tool or host adds survives every edit, save and update.
@@ -223,11 +232,15 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
 - **Reserved ids:** the shell parts must not contain an element with id
   `orz-src` or `orz-shell`; `assemble` refuses them.
 - **Derived, never edited separately:** `<title>` (header `title`, else the
-  first level-1 heading, else — for `paged` — the `title` (else `text`) field
-  of the first title element, i.e. the first nyml block after the header
-  whose kind ends in `-title` (`article-title`, `report-title`,
-  `exam-title`, …; `cv-header` and `letterhead` are not title elements), else
-  `Untitled`);
+  first **top-level** level-1 heading — not one inside a blockquote, list or
+  container; for `slides` only a heading after the first slide marker (text
+  before it never counts); its plain text, with `{{sp}}` text and math source
+  as written — else, for `paged`, the `title` (else `text`) field of strictly
+  the first title element, i.e. the first nyml block after the header whose
+  kind ends in `-title` (`article-title`, `report-title`, `exam-title`, …;
+  `cv-header` and `letterhead` are not title elements; if that element has
+  neither field the chain goes on to `Untitled`, it does not try the next
+  element), else `Untitled`);
   templates carry a `title` key in their header so new documents start titled; head metadata and `#orz-meta` (from
   the header; nothing else), `lang`. Theme presentation (classes, styles) is
   applied by the shell parts, not by the envelope.
@@ -290,7 +303,19 @@ Edit rules in detail:
   would trim or unquote (leading or trailing spaces, surrounding quotes, a lone
   `|`) is written in double quotes so it reads back exactly. Keys written by a
   tool match `[a-z][a-z0-9_]*`; `kind` is never edited.
-- **No header:** a new one is inserted at the start of the text (after a BOM):
+- **Multi-line values** (explicit path, e.g. `custom_css`, `dynamic_choices`):
+  written as `key: |` followed by the value's lines, each indented by the
+  key's indentation plus two spaces, in the header's line ending. Refused when
+  it would not read back exactly: `}}`, CR, NUL, whitespace-only lines, a
+  trailing empty line, an indented first line, tab indentation.
+- **Closing line:** when the edited entry ends on the closing `}}` line
+  (`key: value}}`), the header's line ending is written before `}}`.
+- Several changes may be applied in one pass (`editHeader`); every byte
+  outside the edited entries stays unchanged.
+- **No header:** a new one is inserted at the start of the text (after a BOM).
+  Note: a file that starts with Jekyll/Hugo front matter (`---` or `+++`)
+  then has the header before it, where those tools no longer see their front
+  matter; lint warns `front-matter`. The inserted header is:
   `{{nyml`, `kind: document`, `key: value`, `}}`, a blank line, in the text's
   line ending.
 - **Legacy headers** are upgraded first (§5).
@@ -311,7 +336,7 @@ Edit rules in detail:
 ## 11. Conformance
 
 - **Golden corpus** in `orz-markdown/tests/carrier-corpus/` (plan in
-  [FC-19 draft §6](FC-19-editor-component.md#6-golden-corpus-and-conformance)).
+  [FC-19 §6](FC-19-editor-component.md#6-golden-corpus-and-conformance)).
 - **Laws 1–2** as property tests over the corpus and random text (any Unicode,
   CRLF/CR, BOM, `</script>`, `<!--`, very long lines, empty text).
 - **Law 4** checked by rendering the corpus with consecutive shell versions.

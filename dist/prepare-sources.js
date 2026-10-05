@@ -111,6 +111,7 @@ function hasLocalInclude(text) {
     // As the renderer decides: an empty target or any `scheme://` is never read (round 24, F4).
     return parser().parse(text, {}).some((t) => t.type === 'plugin_block' && INCLUDE_ALIASES.has(t.info) && t.content.trim() !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(t.content.trim()));
 }
+const ascii_js_1 = require("./ascii.js");
 const source_scan_js_1 = require("./source-scan.js");
 const doc_meta_js_1 = require("./doc-meta.js");
 const toc_js_1 = require("./plugins/toc.js");
@@ -418,7 +419,7 @@ function safeUrl(raw, srcset = false) {
 const RENDER_IDS = /^(fn(ref)?\d+(:\d+)?|nyml-data(-\d+)?|orz-meta|orz-hljs|orz[a-z0-9_]*|hljs|mermaid)$/;
 function attrsOk(attrs, raw, auto = false) {
     for (const [name, value] of attrs) {
-        const key = name.toLowerCase();
+        const key = (0, ascii_js_1.asciiLower)(name);
         if (/^on/.test(key) || /^data-(md|orz-)/.test(key))
             return false; // handlers; copy breadcrumbs
         if (raw ? !RAW_ATTRS.test(key) : !TOKEN_ATTRS.test(key))
@@ -435,7 +436,7 @@ function attrsOk(attrs, raw, auto = false) {
             return false;
         // Links may open a new tab, but never keep a handle on the host page
         // (reverse tabnabbing) or navigate it from inside a preview frame (round 14).
-        if (key === 'target' && value.trim().toLowerCase() !== '_blank')
+        if (key === 'target' && (0, ascii_js_1.asciiLower)(value.trim()) !== '_blank')
             return false;
         if (key === 'rel' && !value.trim().split(/\s+/).every((r) => /^(noopener|noreferrer|nofollow)$/i.test(r)))
             return false;
@@ -504,7 +505,7 @@ function rawHtmlStaysInside(tokens, dropped) {
                 return false; // unterminated tag or quote, doctype, CDATA, bare "<"
             at = STRICT_TAG.lastIndex;
             const [, close, rawName, attrs, slash] = m;
-            const name = rawName.toLowerCase();
+            const name = (0, ascii_js_1.asciiLower)(rawName);
             const stack = frames[frames.length - 1];
             if (!(name in ALLOWED_HTML) && !VOID_HTML.has(name))
                 return false;
@@ -517,10 +518,10 @@ function rawHtmlStaysInside(tokens, dropped) {
             if (name === 'input') {
                 // Only a checkbox (what the task-list plugin emits), in any attribute order.
                 const ok = list.every(([k, v]) => {
-                    const key = k.toLowerCase();
-                    return (key === 'type' && v.toLowerCase() === 'checkbox') || key === 'checked' || key === 'disabled' || (key === 'class' && v === 'task-list-item-checkbox');
+                    const key = (0, ascii_js_1.asciiLower)(k);
+                    return (key === 'type' && (0, ascii_js_1.asciiLower)(v) === 'checkbox') || key === 'checked' || key === 'disabled' || (key === 'class' && v === 'task-list-item-checkbox');
                 });
-                if (!ok || !list.some(([k, v]) => k.toLowerCase() === 'type' && v.toLowerCase() === 'checkbox'))
+                if (!ok || !list.some(([k, v]) => (0, ascii_js_1.asciiLower)(k) === 'type' && (0, ascii_js_1.asciiLower)(v) === 'checkbox'))
                     return false;
             }
             else {
@@ -528,10 +529,10 @@ function rawHtmlStaysInside(tokens, dropped) {
                     return false; // handlers, javascript: URLs, classes, styles
                 // `name` only on <a>: on <img>/<form>/… it overrides document methods
                 // (`<img name="querySelectorAll">` turned off enhancement: round 14, H4).
-                if (name !== 'a' && list.some(([k]) => k.toLowerCase() === 'name'))
+                if (name !== 'a' && list.some(([k]) => (0, ascii_js_1.asciiLower)(k) === 'name'))
                     return false;
                 // A floated image or table beside the host text after it (round 14, LOW).
-                if (/^(img|video|table|picture)$/.test(name) && list.some(([k, v]) => k.toLowerCase() === 'align' && /^(left|right)$/i.test(v.trim())))
+                if (/^(img|video|table|picture)$/.test(name) && list.some(([k, v]) => (0, ascii_js_1.asciiLower)(k) === 'align' && /^(left|right)$/i.test(v.trim())))
                     return false;
             }
             const parent = ALLOWED_HTML[name];
@@ -770,7 +771,7 @@ function parseHost({ doc, regions }, base = {}) {
         prevType = t.type;
         for (const x of [t, ...(t.children ?? [])]) {
             for (const [k, v] of x.attrs ?? [])
-                if (k.toLowerCase() === 'id') {
+                if ((0, ascii_js_1.asciiLower)(k) === 'id') {
                     const key = idKey(v);
                     ids.set(key, (ids.get(key) ?? 0) + 1);
                 }

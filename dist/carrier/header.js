@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = void 0;
 exports.readHeader = readHeader;
+exports.editHeader = editHeader;
 exports.setHeaderValue = setHeaderValue;
 exports.removeHeaderKey = removeHeaderKey;
 exports.lintHeader = lintHeader;
@@ -10,11 +11,13 @@ exports.readHeaderAndLint = readHeaderAndLint;
  * The format-1 document header (FC-18 §5): reading, in-place editing (§9) and
  * lint.
  *
- * The header is located with the token-based scanner (`scanNymlBlocks`), so a
- * header-looking block inside code or a directive is never taken for it, and
- * its values are read with the same flat nyml reader that gives every block
- * its fields. Edits touch exactly one line: the header is never re-serialized,
- * so unknown keys, host keys, comments-by-convention and formatting survive.
+ * The header is located with the token-based scanner (`scanNymlBlocks`), run
+ * on the leading header candidates only (cost O(header), not O(document)), so
+ * a header-looking block inside code or a directive is never taken for it, and
+ * its values are read with the same flat nyml reader that gives every block its
+ * fields. Edits touch exactly the edited lines: the header is never
+ * re-serialized, so unknown keys, host keys, comments-by-convention and
+ * formatting survive.
  *
  * Browser-clean: no Node built-ins, no clock, no randomness.
  */
@@ -47,7 +50,7 @@ exports.WRITER_KEY = /^[a-z][a-z0-9_]*$/;
 /** A valid `uid` (FC-18 §5.1, §10). */
 exports.UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
 const LINE_BREAK = /\r\n|\r|\n/;
-const KEY_HEAD = /^([ \t]*)([A-Za-z0-9_]+)([ \t]*[:\uFF1A])/;
+const KEY_HEAD = /^([ \t]*)([A-Za-z0-9_]+)([ \t]*[:：])/;
 function firstLineBreak(s) {
     const m = LINE_BREAK.exec(s);
     return m ? m[0] : null;
@@ -62,13 +65,23 @@ function dropColumns(line, width) {
     }
     return line.slice(i);
 }
+/** 1-based line number of an offset (CR LF, CR and LF each end a line). */
+function lineAt(text, offset) {
+    let n = 1;
+    for (let i = 0; i < offset && i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        if (c === 10 || (c === 13 && text.charCodeAt(i + 1) !== 10))
+            n++;
+    }
+    return n;
+}
 function layoutOf(text, block) {
     const close = block.end - 2;
     // Opener indentation: the columns before `{{nyml` on its line.
     let lineStart = block.start;
     while (lineStart > 0 && text[lineStart - 1] !== '\n' && text[lineStart - 1] !== '\r')
         lineStart--;
-    const openerIndent = (0, nyml_body_js_1.indentWidth)(text.slice(lineStart, block.start).replace(/^\uFEFF/, ''));
+    const openerIndent = (0, nyml_body_js_1.indentWidth)(text.slice(lineStart, block.start).replace(/^﻿/, ''));
     let bodyFrom = block.start + '{{nyml'.length;
     if (text[bodyFrom] === '[') {
         const br = text.indexOf(']', bodyFrom);
@@ -105,30 +118,53 @@ function layoutOf(text, block) {
         const regionFrom = regions[e.line][0] + skipped[e.line];
         const keyStart = regionFrom + (head ? head[1].length : 0);
         const sepEnd = head ? regionFrom + head[0].length : keyStart;
-        return {
-            ...e,
-            keyStart,
-            sepEnd,
-            valueEnd: regions[e.endLine][1],
-            full: e.line > 0 && e.endLine < last,
-        };
+        return { ...e, keyStart, sepEnd, valueEnd: regions[e.endLine][1], full: e.line > 0 && e.endLine < last };
     });
-    const eol = firstLineBreak(text.slice(block.start, block.end)) ?? firstLineBreak(text) ?? '\n';
+    const eol = firstLineBreak(text.slice(block.start, block.end)) ?? firstLineBreak(text.slice(0, Math.min(text.length, block.end + 4096))) ?? '\n';
     const indented = entries.find((e) => e.line > 0);
     const keyIndent = indented ? text.slice(lines[indented.line].start, indented.keyStart) : '';
     return { block, lines, regions, skipped, entries, fields: parsed.fields, eol, keyIndent, keyIndentWidth: (0, nyml_body_js_1.indentWidth)(keyIndent) };
 }
-const LEADING = /^\uFEFF?[ \t\r\n]*$/;
+/** A text can have a header only if it starts (after a BOM and whitespace) with `{{nyml`. */
+const HEADER_START = /^﻿?[ \t\r\n]*\{\{nyml/;
 const BETWEEN = /^[ \t\r\n]*$/;
 function own(obj, key) {
     return Object.prototype.hasOwnProperty.call(obj, key);
 }
+/** End (past `}}`) of the `{{nyml` candidate at `at`, as the dispatcher closes it; -1 if unclosed. */
+function candidateEnd(text, at) {
+    let from = at + 6;
+    if (text[from] === '[') {
+        let br = from + 1;
+        while (br < text.length && text[br] !== ']' && text[br] !== '\n' && text[br] !== '\r')
+            br++;
+        if (text[br] === ']')
+            from = br + 1;
+    }
+    const close = text.indexOf('}}', from);
+    return close < 0 ? -1 : close + 2;
+}
 function locate(text) {
-    if (text.indexOf('{{nyml') < 0)
+    const m = HEADER_START.exec(text);
+    if (!m)
         return null;
-    const blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text);
+    // Scan only the leading candidates (the header, or a legacy pair): the
+    // scanner's verdict on a block at the start does not depend on what follows.
+    const end1 = candidateEnd(text, m[0].length - 6);
+    if (end1 < 0)
+        return null;
+    let prefixEnd = end1;
+    let p = end1;
+    while (p < text.length && (text[p] === ' ' || text[p] === '\t' || text[p] === '\r' || text[p] === '\n'))
+        p++;
+    if (text.startsWith('{{nyml', p)) {
+        const end2 = candidateEnd(text, p);
+        if (end2 >= 0)
+            prefixEnd = end2;
+    }
+    const blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text.slice(0, prefixEnd));
     const first = blocks[0];
-    if (!first || !LEADING.test(text.slice(0, first.start)))
+    if (!first || !/^﻿?[ \t\r\n]*$/.test(text.slice(0, first.start)))
         return null;
     if (first.kind !== 'document' && first.kind !== 'meta')
         return null;
@@ -153,19 +189,33 @@ function locate(text) {
         }
     };
     if (paired) {
-        const doc = layouts.find((l) => l.block.kind === 'document');
-        const meta = layouts.find((l) => l.block.kind === 'meta');
-        add(doc, true);
-        add(meta, false);
+        add(layouts.find((l) => l.block.kind === 'document'), true);
+        add(layouts.find((l) => l.block.kind === 'meta'), false);
     }
     else {
         add(layouts[0], true);
+    }
+    const entries = [];
+    let lineNo = 1;
+    let counted = 0;
+    for (const layout of layouts) {
+        for (const e of layout.entries) {
+            if (e.key === 'kind')
+                continue;
+            lineNo += lineAt(text.slice(counted, e.keyStart), e.keyStart - counted) - 1;
+            counted = e.keyStart;
+            let valueFrom = e.sepEnd;
+            while (valueFrom < e.valueEnd && (text[valueFrom] === ' ' || text[valueFrom] === '\t'))
+                valueFrom++;
+            entries.push({ key: e.key, keyFrom: e.keyStart, valueFrom, to: e.valueEnd, line: lineNo });
+        }
     }
     const header = {
         start: first.start,
         end: used[used.length - 1].end,
         fields,
         keys,
+        entries,
         legacy: paired ? 'meta+document' : first.kind === 'meta' ? 'meta' : null,
         lineEnding: layouts[0].eol === '\r\n' ? '\r\n' : layouts[0].eol === '\r' ? '\r' : '\n',
         blocks: used.map((b) => ({ start: b.start, end: b.end, kind: b.kind })),
@@ -181,18 +231,12 @@ function locate(text) {
  * and a `kind: meta` and a `kind: document` block that lead the text together
  * (either order, only whitespace between) are ONE header whose document keys
  * win. Returns `null` for a text without a header (any plain Markdown file).
+ * Cost: O(header) — the body is not parsed.
  */
 function readHeader(text) {
     return locate(text)?.header ?? null;
 }
 // ── editing (FC-18 §9) ──────────────────────────────────────────────────────
-function checkWriterKey(key) {
-    if (typeof key !== 'string' || !exports.WRITER_KEY.test(key)) {
-        throw new Error(`orz header: "${key}" is not a writable key (keys are [a-z][a-z0-9_]*)`);
-    }
-    if (key === 'kind')
-        throw new Error('orz header: the "kind" line cannot be edited');
-}
 /** The value text to write so the flat reader reads back exactly `value`. */
 function encodeValue(value) {
     if (value === '')
@@ -200,21 +244,60 @@ function encodeValue(value) {
     const quoted = value.length >= 2 && (value[0] === '"' || value[0] === "'") && value[value.length - 1] === value[0];
     return value !== value.trim() || quoted || value === '|' ? `"${value}"` : value;
 }
-function checkValue(value) {
-    if (typeof value !== 'string')
-        throw new Error('orz header: a value must be a string');
-    if (/[\r\n]/.test(value))
-        throw new Error('orz header: a header value edited by a tool must be a single line');
-    if (value.includes('}}'))
+function checkChange(key, change) {
+    if (key === 'kind')
+        throw new Error('orz header: the "kind" line cannot be edited');
+    if (change === null) {
+        if (!/^[A-Za-z0-9_]+$/.test(key))
+            throw new Error(`orz header: "${key}" is not a nyml key`);
+        return;
+    }
+    if (!exports.WRITER_KEY.test(key))
+        throw new Error(`orz header: "${key}" is not a writable key (keys are [a-z][a-z0-9_]*)`);
+    if (typeof change === 'string') {
+        if (/[\r\n]/.test(change))
+            throw new Error('orz header: a single-line value must not contain a line break (use { multiline })');
+        if (change.includes('}}'))
+            throw new Error('orz header: a value must not contain "}}" (it would end the header)');
+        if (change.includes('\u0000'))
+            throw new Error('orz header: a value must not contain U+0000');
+        return;
+    }
+    if (!change || typeof change.multiline !== 'string')
+        throw new Error('orz header: a change is a string, null or { multiline: string }');
+    const v = change.multiline;
+    if (v.includes('}}'))
         throw new Error('orz header: a value must not contain "}}" (it would end the header)');
-    if (value.includes('\u0000'))
-        throw new Error('orz header: a value must not contain U+0000');
+    if (/[\r\u0000]/.test(v))
+        throw new Error('orz header: a multi-line value uses LF line breaks and no U+0000');
+    const lines = v.split('\n');
+    if (lines.some((l) => l !== '' && l.trim() === ''))
+        throw new Error('orz header: a multi-line value must not hold whitespace-only lines (they read back empty)');
+    if (lines.length > 1 && lines[lines.length - 1] === '')
+        throw new Error('orz header: a multi-line value must not end with an empty line (it would be dropped)');
+    const firstContent = lines.find((l) => l !== '');
+    if (firstContent !== undefined && /^[ \t]/.test(firstContent))
+        throw new Error('orz header: the first line of a multi-line value must not be indented (the reader dedents by it)');
+    if (lines.some((l) => /^[ \t]*\t/.test(l)))
+        throw new Error('orz header: a multi-line value must not indent with tabs (the reader turns them into spaces)');
+}
+/** The text after the separator for a change (`' value'`, `''`, or `' |' + lines`). */
+function valuePart(change, indent, eol) {
+    if (typeof change === 'string') {
+        const enc = encodeValue(change);
+        return enc === '' ? '' : ` ${enc}`;
+    }
+    const lines = change.multiline.split('\n');
+    if (change.multiline === '')
+        return ' |';
+    return ` |${lines.map((l) => eol + (l === '' ? '' : `${indent}  ${l}`)).join('')}`;
 }
 /**
  * Merge a legacy meta+document pair into one `kind: document` block: the
- * document block's lines first (its `kind` line dropped), then the lines of the
- * meta keys the document block does not set. Whitespace between the blocks
- * goes; everything outside the header is untouched.
+ * document block's lines first (its `kind` line dropped), then the meta
+ * block's lines that the document block does not override — its other keys
+ * with their nested lines, and its non-key lines (comments). Whitespace
+ * between the blocks goes; everything outside the header is untouched.
  */
 function mergePair(text, loc) {
     const doc = loc.layouts.find((l) => l.block.kind === 'document');
@@ -226,27 +309,28 @@ function mergePair(text, loc) {
         const raw = text.slice(from, to);
         return k === 0 ? raw.replace(/^[ \t]+/, '') : dropColumns(raw, layout.keyIndentWidth);
     };
-    const kindLines = new Set();
-    for (const e of doc.entries)
-        if (e.key === 'kind')
+    const owners = (layout) => {
+        const m = new Map();
+        for (const e of layout.entries)
             for (let k = e.line; k <= e.endLine; k++)
-                kindLines.add(k);
-    const last = doc.lines.length - 1;
-    for (let k = 0; k <= last; k++) {
-        if (kindLines.has(k))
-            continue;
-        const t = lineText(doc, k);
-        if ((k === 0 || k === last) && t.trim() === '')
-            continue;
-        out.push(t);
-    }
+                m.set(k, e.key);
+        return m;
+    };
     const docKeys = new Set(doc.entries.map((e) => e.key));
-    for (const e of meta.entries) {
-        if (e.key === 'kind' || docKeys.has(e.key))
-            continue;
-        for (let k = e.line; k <= e.endLine; k++)
-            out.push(lineText(meta, k));
-    }
+    const copy = (layout, skip) => {
+        const own = owners(layout);
+        const last = layout.lines.length - 1;
+        for (let k = 0; k <= last; k++) {
+            if (skip(own.get(k)))
+                continue;
+            const t = lineText(layout, k);
+            if ((k === 0 || k === last) && t.trim() === '')
+                continue;
+            out.push(t);
+        }
+    };
+    copy(doc, (o) => o === 'kind');
+    copy(meta, (o) => o === 'kind' || (o !== undefined && docKeys.has(o)));
     const merged = `{{nyml${eol}kind: document${eol}${out.map((l) => l + eol).join('')}}}`;
     return text.slice(0, loc.header.start) + merged + text.slice(loc.header.end);
 }
@@ -275,138 +359,211 @@ function locateForEdit(text) {
     return { text, loc };
 }
 /**
- * Set one header value (FC-18 §9). An existing key has its value replaced on
- * its own line (indentation, key spelling and separator kept; a `key: |`
- * value's continuation lines are replaced with it; with duplicate keys, the
- * last — the one that wins — is edited). A new key is inserted as
- * `key: value` just before the closing `}}` line, with the header's
- * indentation and line ending. A text without a header gets one at its start
- * (after a BOM): `{{nyml`, `kind: document`, `key: value`, `}}`, a blank line.
- * A legacy header is upgraded first: a meta+document pair is merged into one
- * `kind: document` block (the document block's lines, then the meta-only keys'
- * lines); a lone `kind: meta` block's kind line becomes `kind: document`.
- * Every other byte of the text is unchanged.
+ * Apply several header changes in one pass (FC-18 §9): `string` sets a
+ * single-line value, `{ multiline }` writes a `key: |` value, `null` removes
+ * the key. Changes apply in the object's key order (insertions too).
  *
- * Throws for a key outside `[a-z][a-z0-9_]*`, for `kind`, and for a value with
- * a line break (CR or LF), `}}` or U+0000. Values that the reader would trim or unquote
- * (leading/trailing spaces, surrounding quotes, a lone `|`) are written quoted
- * so they read back exactly.
+ * - An existing key has only its value part replaced (indentation, key
+ *   spelling and separator kept); with duplicates the last one (the one that
+ *   wins) is edited; the replaced part includes the entry's nested and `|`
+ *   lines. If the entry ends on the closing `}}` line, the header's line
+ *   ending is written before `}}`.
+ * - A new key is inserted just before the closing `}}` line with the
+ *   indentation of the header's keys and the header's line ending.
+ * - A removed key loses its line, its nested lines and every duplicate.
+ * - A multi-line value is written as `key: |` and its lines, each indented by
+ *   the key's indentation plus two spaces, in the header's line ending.
+ * - A text without a header gets one at its start (after a BOM) for the sets.
+ * - A legacy header is upgraded first (pair merged; lone meta → document).
+ *
+ * Throws (and changes nothing) for `kind`, a set key outside
+ * `[a-z][a-z0-9_]*`, a value with `}}` or U+0000, a single-line value with a
+ * line break, and a multi-line value that would not read back exactly (CR,
+ * whitespace-only lines, a trailing empty line, an indented first line, tab
+ * indentation). Every byte outside the edited entries is unchanged; removing
+ * absent keys returns the text as is.
  */
-function setHeaderValue(text, key, value) {
-    checkWriterKey(key);
-    checkValue(value);
-    const encoded = encodeValue(value);
-    const lineBody = encoded === '' ? `${key}:` : `${key}: ${encoded}`;
+function editHeader(text, changes) {
+    const list = Object.keys(changes).map((k) => [k, changes[k]]);
+    for (const [k, c] of list)
+        checkChange(k, c);
+    const before = locate(text);
+    const effective = list.filter(([k, c]) => c !== null || (before !== null && own(before.header.fields, k)));
+    if (effective.length === 0)
+        return text;
     const { text: src, loc } = locateForEdit(text);
+    const sets = effective.filter(([, c]) => c !== null);
     if (!loc) {
+        if (!sets.length)
+            return text;
         const eol = firstLineBreak(text) ?? '\n';
-        const at = text.startsWith('\uFEFF') ? 1 : 0;
-        return text.slice(0, at) + `{{nyml${eol}kind: document${eol}${lineBody}${eol}}}${eol}${eol}` + text.slice(at);
+        const at = text.startsWith('﻿') ? 1 : 0;
+        const body = sets.map(([k, c]) => `${k}:${valuePart(c, '', eol)}${eol}`).join('');
+        return text.slice(0, at) + `{{nyml${eol}kind: document${eol}${body}}}${eol}${eol}` + text.slice(at);
     }
     const layout = loc.layouts[0];
-    const hits = layout.entries.filter((e) => e.key === key);
-    const hit = hits[hits.length - 1];
-    if (hit) {
-        return src.slice(0, hit.sepEnd) + (encoded === '' ? '' : ` ${encoded}`) + src.slice(hit.valueEnd);
-    }
     const last = layout.lines.length - 1;
-    if (last > 0) {
-        const at = layout.lines[last].start;
-        return src.slice(0, at) + layout.keyIndent + lineBody + layout.eol + src.slice(at);
+    const ops = [];
+    let inserts = '';
+    for (const [key, change] of effective) {
+        const hits = layout.entries.filter((e) => e.key === key);
+        if (change === null) {
+            for (const e of hits) {
+                ops.push(e.full ? { from: layout.lines[e.line].start, to: layout.lines[e.endLine].next, insert: '' } : { from: e.keyStart, to: e.valueEnd, insert: '' });
+            }
+            continue;
+        }
+        const hit = hits[hits.length - 1];
+        if (hit) {
+            const indent = hit.line > 0 ? src.slice(layout.lines[hit.line].start, hit.keyStart) : layout.keyIndent;
+            const onCloser = hit.endLine === last;
+            ops.push({ from: hit.sepEnd, to: hit.valueEnd, insert: valuePart(change, indent, layout.eol) + (onCloser ? layout.eol : '') });
+        }
+        else {
+            inserts += `${layout.keyIndent}${key}:${valuePart(change, layout.keyIndent, layout.eol)}${layout.eol}`;
+        }
     }
-    // A one-line header (`{{nyml kind: document}}`): open a line before `}}`.
-    const close = layout.block.end - 2;
-    return src.slice(0, close) + layout.eol + lineBody + layout.eol + src.slice(close);
+    if (inserts) {
+        if (last > 0)
+            ops.push({ from: layout.lines[last].start, to: layout.lines[last].start, insert: inserts });
+        else
+            ops.push({ from: layout.block.end - 2, to: layout.block.end - 2, insert: layout.eol + inserts });
+    }
+    ops.sort((a, b) => b.from - a.from || b.to - a.to);
+    let out = src;
+    for (const op of ops)
+        out = out.slice(0, op.from) + op.insert + out.slice(op.to);
+    return out;
 }
 /**
- * Remove a header key (FC-18 §9): its line goes (with a `key: |` value's
- * continuation lines, and every duplicate of the key, so the key is really
- * unset). Every other byte is unchanged. A text without the key is returned
- * as is; a legacy header holding it is upgraded first (as for
- * {@link setHeaderValue}). Throws for `kind`.
+ * Set one header value (FC-18 §9): `editHeader(text, { [key]: value })` — the
+ * value's line is edited in place, or `key: value` is inserted before the
+ * closing `}}` line, or a header is created; a legacy header is upgraded
+ * first. Throws for a key outside `[a-z][a-z0-9_]*`, `kind`, and a value with
+ * a line break (CR or LF), `}}` or U+0000. Values the reader would trim or
+ * unquote are written quoted so they read back exactly.
+ */
+function setHeaderValue(text, key, value) {
+    if (typeof value !== 'string')
+        throw new Error('orz header: a value must be a string');
+    return editHeader(text, { [key]: value });
+}
+/**
+ * Remove a header key (FC-18 §9): `editHeader(text, { [key]: null })` — its
+ * line goes with its nested and `|` lines and every duplicate. A text without
+ * the key is returned as is. Throws for `kind`.
  */
 function removeHeaderKey(text, key) {
-    if (key === 'kind')
-        throw new Error('orz header: the "kind" line cannot be removed');
-    const first = locate(text);
-    if (!first || !own(first.header.fields, key))
-        return text;
-    const { text: src, loc } = locateForEdit(text);
-    if (!loc)
-        return text;
-    const hits = loc.layouts[0].entries.filter((e) => e.key === key).sort((a, b) => b.keyStart - a.keyStart);
-    let out = src;
-    for (const e of hits) {
-        const lines = loc.layouts[0].lines;
-        out = e.full
-            ? out.slice(0, lines[e.line].start) + out.slice(lines[e.endLine].next)
-            : out.slice(0, e.keyStart) + out.slice(e.valueEnd);
-    }
-    return out;
+    return editHeader(text, { [key]: null });
 }
 // ── lint ────────────────────────────────────────────────────────────────────
 function isKindName(v) {
     return v === 'md' || v === 'slides' || v === 'paged';
 }
+const STRAY_HINT = /kind[ \t]*[:：][ \t]*["']?document/;
+const FRONT_MATTER = /^﻿?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
 /**
  * Lint the header of a text. `kind` selects the key registry; without it the
  * header's `carrier` key does, and without that every kind's keys are known.
+ * Findings that concern a line carry `line` (1-based), `from` and `to`.
  *
- * Codes: `legacy-header` (warning), `kind-not-first` (warning: the `kind`
- * line is not the first key, so renderers do not treat the block as the
- * header), `duplicate-key` (warning: the last one wins), `key-grammar`
- * (warning: not `[a-z][a-z0-9_]*` with an ASCII `:`), `unknown-key` (warning:
- * not `x_…` and not in the FC-18 §5.1 registry for the kind), `host-key`
- * (warning: an `x_` key not shaped `x_<name>_<key>`), `closer-in-value`
- * (error: `}}` in a value, or text after the closing `}}` on its line),
- * `bad-uid` (error), `bad-format` (error: not a positive integer),
- * `newer-format` (error: format above 1 — the file opens read-only),
- * `bad-carrier` (error), `carrier-mismatch` (warning). Text-level, with or
- * without a header: `nul` (error), `lone-surrogate` (error), `mixed-eol`
- * (warning: assembling normalizes to the first line break's style).
+ * Header codes: `legacy-header` (warning), `kind-not-first` (warning),
+ * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
+ * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
+ * the closing `}}` line holds other text that is not a key line — the
+ * header ended inside a value — or text follows `}}`), `duplicate-key`
+ * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
+ * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
+ * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
+ * `bad-ratio` (warnings: value shapes). Text codes, with or without a header:
+ * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
+ * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
+ * inserted by a tool would precede), `stray-document-block` (warning: a
+ * `kind: document` block that is not the header; it renders nothing).
  */
 function lintHeader(text, kind) {
     return lintLocated(text, locate(text), kind);
 }
 /**
- * The header and its lint in one scan (for `readDocument`).
+ * The header and its lint in one scan (for `readDocument`). `blocks`, when
+ * given, returns `scanNymlBlocks(text)` (so a caller that parses the text
+ * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-function readHeaderAndLint(text, kind) {
+function readHeaderAndLint(text, kind, blocks) {
     const loc = locate(text);
-    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind) };
+    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind, blocks) };
 }
-function lintLocated(text, loc, kind) {
+function lintLocated(text, loc, kind, blocks) {
     const out = [];
+    const at = (from, to) => ({ line: lineAt(text, from), from, to });
     if (text.includes('\u0000'))
         out.push({ level: 'error', code: 'nul', message: 'the text holds U+0000 (NUL), which format 1 cannot store' });
     if ((0, text_js_1.hasLoneSurrogate)(text))
         out.push({ level: 'error', code: 'lone-surrogate', message: 'the text holds a lone surrogate, which a UTF-8 file cannot represent' });
     if ((0, text_js_1.hasMixedEol)(text))
         out.push({ level: 'warning', code: 'mixed-eol', message: 'the text mixes line-ending styles; assembling stores them all in the style of the first line break' });
+    const fm = FRONT_MATTER.exec(text);
+    if (fm) {
+        out.push({ level: 'warning', code: 'front-matter', message: `the text starts with ${fm[1]} front matter (Jekyll/Hugo); a header inserted by a tool goes before it, where those tools no longer see it`, ...at(fm.index, fm.index + fm[0].length) });
+    }
+    const headerEnd = loc ? loc.header.end : 0;
+    if (STRAY_HINT.test(headerEnd ? text.slice(headerEnd) : text)) {
+        const inHeader = new Set(loc ? loc.header.blocks.map((b) => b.start) : []);
+        for (const b of blocks ? blocks() : (0, nyml_blocks_js_1.scanNymlBlocks)(text)) {
+            if (b.kind === 'document' && !inHeader.has(b.start)) {
+                out.push({ level: 'warning', code: 'stray-document-block', message: 'a kind: document block that is not the header (it does not lead the text); it renders nothing and is not read', ...at(b.start, b.end) });
+            }
+        }
+    }
     if (!loc)
         return out;
     const { header } = loc;
     const fields = header.fields;
     if (header.legacy) {
-        out.push({ level: 'warning', code: 'legacy-header', message: header.legacy === 'meta' ? 'legacy kind: meta block read as the header; editing tools keep it, a format-1 header is a kind: document block' : 'legacy kind: meta + kind: document pair read as one header; the next header edit merges them' });
+        out.push({ level: 'warning', code: 'legacy-header', message: header.legacy === 'meta' ? 'legacy kind: meta block read as the header; the next header edit turns it into kind: document' : 'legacy kind: meta + kind: document pair read as one header; the next header edit merges them', ...at(header.start, header.end) });
     }
     for (const layout of loc.layouts) {
         const keyed = layout.entries;
+        const last = layout.lines.length - 1;
+        const bStart = layout.block.start;
         if (layout.block.kind === 'document' && keyed.length && keyed[0].key !== 'kind') {
-            out.push({ level: 'warning', code: 'kind-not-first', message: 'the header block should start with its kind: document line' });
+            out.push({ level: 'warning', code: 'kind-not-first', message: 'the kind: document line should be the first key (renderers hide the block either way; other Markdown tools show the first lines)', ...at(bStart, bStart + 6) });
+        }
+        const [f0, t0] = layout.regions[0];
+        if (text.slice(f0, t0).trim() !== '') {
+            out.push({ level: 'warning', code: 'opener-not-alone', message: '{{nyml should stand alone on its line (keys start on the next line)', ...at(bStart, layout.lines[0].end) });
+        }
+        if (last > 0) {
+            const [fl, tl] = layout.regions[last];
+            if (text.slice(fl, tl).trim() !== '') {
+                const keyOnCloser = keyed.some((e) => e.line === last);
+                if (keyOnCloser) {
+                    out.push({ level: 'warning', code: 'closer-not-alone', message: '}} should stand alone on its line', ...at(layout.lines[last].start, layout.block.end) });
+                }
+                else {
+                    out.push({ level: 'error', code: 'closer-in-value', message: 'the header ends at a "}}" inside a value (the closing line holds other text): the rest of the header becomes body text; write "} }"', ...at(layout.lines[last].start, layout.block.end) });
+                }
+            }
+        }
+        let e = layout.block.end;
+        while (e < text.length && (text[e] === ' ' || text[e] === '\t'))
+            e++;
+        if (e < text.length && text[e] !== '\n' && text[e] !== '\r') {
+            out.push({ level: 'error', code: 'closer-in-value', message: 'text follows the closing "}}" on its line: a value probably contains "}}" (write "} }")', ...at(layout.block.end - 2, e) });
         }
         const seen = new Set();
         const reported = new Set();
-        for (const e of keyed) {
-            if (seen.has(e.key) && !reported.has(e.key)) {
-                reported.add(e.key);
-                out.push({ level: 'warning', code: 'duplicate-key', key: e.key, message: `duplicate key "${e.key}": the last one wins` });
+        for (const en of keyed) {
+            const pos = at(en.keyStart, en.valueEnd);
+            if (seen.has(en.key) && !reported.has(en.key)) {
+                reported.add(en.key);
+                out.push({ level: 'warning', code: 'duplicate-key', key: en.key, message: `duplicate key "${en.key}": the last one wins`, ...pos });
             }
-            seen.add(e.key);
-            const sep = text.slice(e.sepEnd - 1, e.sepEnd);
-            if (!exports.WRITER_KEY.test(e.key) || sep !== ':') {
-                out.push({ level: 'warning', code: 'key-grammar', key: e.key, message: `key "${e.key}" should be [a-z][a-z0-9_]* followed by an ASCII ":"` });
+            seen.add(en.key);
+            const sep = text.slice(en.sepEnd - 1, en.sepEnd);
+            if (!exports.WRITER_KEY.test(en.key) || sep !== ':') {
+                out.push({ level: 'warning', code: 'key-grammar', key: en.key, message: `key "${en.key}" should be [a-z][a-z0-9_]* followed by an ASCII ":"`, ...pos });
             }
         }
     }
@@ -415,42 +572,44 @@ function lintLocated(text, loc, kind) {
     for (const k of effective ? [effective] : ['md', 'slides', 'paged'])
         for (const key of exports.KIND_HEADER_KEYS[k])
             known.add(key);
+    const posOf = (key) => {
+        const hits = header.entries.filter((x) => x.key === key);
+        const en = hits[hits.length - 1];
+        return en ? { line: en.line, from: en.keyFrom, to: en.to } : {};
+    };
     for (const key of header.keys) {
         if (key.startsWith('x_')) {
             if (!/^x_[a-z0-9]+_[a-z0-9_]+$/.test(key))
-                out.push({ level: 'warning', code: 'host-key', key, message: `host key "${key}" should be shaped x_<name>_<key>` });
+                out.push({ level: 'warning', code: 'host-key', key, message: `host key "${key}" should be shaped x_<name>_<key>`, ...posOf(key) });
         }
         else if (!known.has(key)) {
-            out.push({ level: 'warning', code: 'unknown-key', key, message: `"${key}" is not a format-1 header key${effective ? ` for kind ${effective}` : ''} (kept untouched)` });
+            out.push({ level: 'warning', code: 'unknown-key', key, message: `"${key}" is not a format-1 header key${effective ? ` for kind ${effective}` : ''} (kept untouched)`, ...posOf(key) });
         }
         if (fields[key].includes('}}'))
-            out.push({ level: 'error', code: 'closer-in-value', key, message: `the value of "${key}" contains "}}"` });
+            out.push({ level: 'error', code: 'closer-in-value', key, message: `the value of "${key}" contains "}}"`, ...posOf(key) });
     }
-    for (const b of header.blocks) {
-        let e = b.end;
-        while (e < text.length && (text[e] === ' ' || text[e] === '\t'))
-            e++;
-        if (e < text.length && text[e] !== '\n' && text[e] !== '\r') {
-            out.push({ level: 'error', code: 'closer-in-value', message: 'text follows the closing "}}" on its line: a value probably contains "}}" (write "} }")' });
-        }
-    }
-    if (own(fields, 'uid') && !exports.UID_PATTERN.test(fields['uid'])) {
-        out.push({ level: 'error', code: 'bad-uid', key: 'uid', message: 'uid must match doc-[0-9a-z]{10,32}' });
-    }
+    const check = (key, ok, level, code, message) => {
+        if (own(fields, key) && !ok(fields[key]))
+            out.push({ level, code, key, message, ...posOf(key) });
+    };
+    check('uid', (v) => exports.UID_PATTERN.test(v), 'error', 'bad-uid', 'uid must match doc-[0-9a-z]{10,32}');
     if (own(fields, 'format')) {
         const f = fields['format'];
         if (!/^[1-9][0-9]*$/.test(f))
-            out.push({ level: 'error', code: 'bad-format', key: 'format', message: `format "${f}" is not a positive integer` });
+            out.push({ level: 'error', code: 'bad-format', key: 'format', message: `format "${f}" is not a positive integer`, ...posOf('format') });
         else if (Number(f) > 1)
-            out.push({ level: 'error', code: 'newer-format', key: 'format', message: `format ${f} is newer than this reader (format 1): open read-only` });
+            out.push({ level: 'error', code: 'newer-format', key: 'format', message: `format ${f} is newer than this reader (format 1): open read-only`, ...posOf('format') });
     }
     if (own(fields, 'carrier')) {
         const c = fields['carrier'];
         if (!isKindName(c))
-            out.push({ level: 'error', code: 'bad-carrier', key: 'carrier', message: `carrier "${c}" is not md, slides or paged` });
+            out.push({ level: 'error', code: 'bad-carrier', key: 'carrier', message: `carrier "${c}" is not md, slides or paged`, ...posOf('carrier') });
         else if (kind && c !== kind)
-            out.push({ level: 'warning', code: 'carrier-mismatch', key: 'carrier', message: `carrier "${c}" differs from the kind "${kind}"` });
+            out.push({ level: 'warning', code: 'carrier-mismatch', key: 'carrier', message: `carrier "${c}" differs from the kind "${kind}"`, ...posOf('carrier') });
     }
+    check('lang', (v) => /^(?:[A-Za-z]{2,8}|[xXiI])(?:-[A-Za-z0-9]{1,8})*$/.test(v), 'warning', 'bad-lang', 'lang should be a BCP 47 language tag (e.g. en, zh-Hans, pt-BR)');
+    check('measure', (v) => v === 'normal' || v === 'wide' || v === 'full', 'warning', 'bad-measure', 'measure is normal, wide or full');
+    check('ratio', (v) => /^[1-9][0-9]*(?:\.[0-9]+)?:[1-9][0-9]*(?:\.[0-9]+)?$/.test(v), 'warning', 'bad-ratio', 'ratio is W:H (e.g. 16:9, 4:3)');
     return out;
 }
 //# sourceMappingURL=header.js.map

@@ -1,18 +1,12 @@
 import { register } from '../registry.js';
 import { escapeAttr, jsonForScript } from '../html.js';
 import { parseNymlV2 } from './nyml_parser.js';
-import { parseNymlBody } from '../nyml-body.js';
 
 register({
   type: 'block',
   aliases: ['nyml'],
   render(_args: string | null, body: string | null, env: object): string {
     const rawContent = body ?? '';
-    // FC-18 §5: a `kind: document` block (the document header) renders
-    // nothing and takes no `nyml-data` number; the carriers read it from the
-    // source text (orz-markdown/carrier). Its kind is read with the same flat
-    // reader as `scanNymlBlocks`/`readHeader`, wherever the kind line is.
-    if (parseNymlBody(rawContent).kind === 'document') return '';
     let parsedContent;
     try {
       parsedContent = parseNymlV2(rawContent);

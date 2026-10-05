@@ -15,4 +15,4 @@ Implementation: `src/carrier/` — `header.ts` (`readHeader`, `setHeaderValue`,
 and the `env.orzTwinLinks` render rule), `envelope.ts` (`assembleEnvelope`,
 `extract`, `readIslandFromDom`), `text.ts` (line-ending and surrogate facts), `index.ts` — exported as `orz-markdown/carrier` (`src/carrier.ts`),
 never imported by the parser entry. Shared reader: `src/nyml-body.ts`. Claims
-K.1–K.13 (and M.22) in `notes/CLAIMS.md`, tests in `tests/carrier-kit.test.ts`.
+K.1–K.18 (and M.22, M.23) in `notes/CLAIMS.md`, tests in `tests/carrier-kit.test.ts`.

@@ -29,6 +29,7 @@
  * written anywhere else would be silently dropped on save.
  */
 
+import { asciiLower } from './ascii.js';
 import { scanNymlBlocks } from './nyml-blocks.js';
 import { escapeAttr, jsonForScript } from './html.js';
 
@@ -280,7 +281,7 @@ export function parseDocMetaIsland(html: string): DocMeta | null {
   const head = headEnd < 0 ? html : html.slice(0, headEnd);
   // Tag by tag with indexOf: a backtracking pattern from every "<script" to the
   // end of the head was quadratic (also 1.6.3; round 19, H2).
-  const lower = head.toLowerCase();
+  const lower = asciiLower(head); // same length as head: offsets carry over
   // Each character is looked at once: the next '<script' is searched from the
   // end of this tag (round 20, B-H1: from the next character was quadratic).
   for (let at = lower.indexOf('<script'), end = 0; at >= 0; at = lower.indexOf('<script', Math.max(at + 7, end))) {

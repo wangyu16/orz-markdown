@@ -28,3 +28,19 @@ export function hasLoneSurrogate(text: string): boolean {
   return LONE_SURROGATE.test(text);
 }
 
+
+interface TextDecoderLike {
+  decode(input: ArrayBuffer | ArrayBufferView): string;
+}
+
+/**
+ * Decode a file's bytes as UTF-8 text EXACTLY: a leading BOM is kept (as
+ * U+FEFF), which `File.text()`, `Blob.text()`, `Response.text()` and a default
+ * `TextDecoder` all strip. Invalid UTF-8 sequences become U+FFFD. Use this
+ * (with `file.arrayBuffer()`) to read a text twin so the round trip stays exact.
+ */
+export function decodeText(bytes: Uint8Array | ArrayBuffer): string {
+  const Ctor = (globalThis as { TextDecoder?: new (label: string, opts: { ignoreBOM: boolean }) => TextDecoderLike }).TextDecoder;
+  if (!Ctor) throw new Error('orz carrier: decodeText needs TextDecoder');
+  return new Ctor('utf-8', { ignoreBOM: true }).decode(bytes);
+}

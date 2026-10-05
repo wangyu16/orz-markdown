@@ -1,6 +1,6 @@
 /**
- * The orz carrier kit core (FC-18 text format 1, src/carrier/): claims K.1–K.11
- * in notes/CLAIMS.md. The golden corpus (tests/carrier-corpus/) is the shared
+ * The orz carrier kit core (FC-18 text format 1, src/carrier/): claims K.1–K.18,
+ * M.22 and M.23 in notes/CLAIMS.md (closed-loop round 1 reproductions at the end). The golden corpus (tests/carrier-corpus/) is the shared
  * oracle; random text comes from a small seeded PRNG (no fast-check).
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -9,11 +9,12 @@ import { webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import {
   assembleEnvelope, extract, readHeader, readDocument, setHeaderValue, removeHeaderKey, lintHeader,
-  kindFromFilename, twinName, twinHref, mintUid, registerTwinLinks, readIslandFromDom, UID_PATTERN, TWIN_LINKS_RULE,
+  kindFromFilename, twinName, twinHref, mintUid, registerTwinLinks, readIslandFromDom, editHeader, decodeText, UID_PATTERN, TWIN_LINKS_RULE,
   type ShellParts, type Kind,
 } from '../src/carrier';
 import { md } from '../src/index';
 import { escapeScriptText } from '../src/html';
+import { parseDocMetaIsland } from '../src/doc-meta';
 import { scanNymlBlocks } from '../src/nyml-blocks';
 
 const ROOT = 'tests/carrier-corpus';
@@ -69,6 +70,8 @@ const HAZARDS = [
   '<!--', '-->', '<!--<script>', ']]>', '<\\/script', '<\\\\script', '<\\script', '\\', '<', '>', '&amp;', '"', "'",
   '{{nyml\nkind: document\ntitle: T\n}}\n', '}}', '{{', '`', '```', '\u2028', '\u2029', '\u00a0', '\t', '\uFFFD',
   '<script type="text/markdown" id="orz-src">', '</body>', '</html>',
+  // case mappings that change length (toLowerCase/toUpperCase) or map to ASCII
+  'İ', 'İstanbul', 'ß', 'ẞ', 'ﬃ', 'ŉ', 'ǰ', 'ΐ', 'K', 'ſ', 'İ</SCRİPT>',
 ];
 
 function randomText(rand: () => number): string {
@@ -133,7 +136,7 @@ describe('envelope laws (FC-18 §2)', () => {
       const html = assembleEnvelope(t, PARTS[0]);
       const start = html.indexOf('<script type="text/markdown" id="orz-src"');
       const open = html.indexOf('>', start) + 1;
-      const close = html.toLowerCase().indexOf('</script', open);
+      const close = open + html.slice(open).search(/<\/script/i); // not toLowerCase(): İ changes length
       expect(close).toBe(open + escapeScriptText(t.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')).length);
       expect(html.slice(open, close)).not.toMatch(/\r/);
       // no <script either (it could open the double-escaped state after <!--)
@@ -573,6 +576,8 @@ describe('lintHeader', () => {
     ].join('\n') + '\n';
     const codes = lintHeader(text, 'paged').map((l) => `${l.level}:${l.code}:${l.key ?? ''}`);
     expect(codes).toEqual([
+      'warning:closer-not-alone:',
+      'error:closer-in-value:',
       'warning:duplicate-key:title',
       'warning:key-grammar:Title',
       'warning:key-grammar:theme',
@@ -580,7 +585,6 @@ describe('lintHeader', () => {
       'warning:unknown-key:page_szie',
       'warning:unknown-key:ratio',
       'warning:host-key:x_bad',
-      'error:closer-in-value:',
       'error:bad-uid:uid',
       'error:newer-format:format',
       'error:bad-carrier:carrier',
@@ -733,5 +737,209 @@ describe('nyml line separators', () => {
     const html = md.render(src);
     expect(html).toContain('"title": "a\\u2028b"');
     expect(readHeader('{{nyml\nkind: document\ntitle: a\u2028b\n}}\n')!.fields.title).toBe('a\u2028b');
+  });
+});
+
+// ── closed-loop round 1 (kit core): reproductions and fixes ──────────────────
+
+const P0: ShellParts = { kind: 'md', shellVersion: '1.0.0', delivery: 'inline', headHtml: '', bodyHtml: '' };
+
+describe('round 1: length-changing case mappings (R1A-1)', () => {
+  it('[K.1] Turkish İ (and other length-changing case mappings) in the text, title and header do not shift extract offsets', () => {
+    for (const t of ['# İstanbul\n\nİzmir ve Ankara.\n', '{{nyml\nkind: document\ntitle: İstanbul notları\n}}\n\nMetin.\n', 'ß ẞ ﬃ ŉ ǰ ΐ K ſ İ\n', 'İ</SCRİPT><script>İ']) {
+      for (const p of PARTS) {
+        const x = extract(assembleEnvelope(t, p))!;
+        expect(x.text).toBe(t);
+        expect(x.shell).toBe(p.shellVersion);
+      }
+    }
+  });
+
+  it('[M.23] HTML scanners case-map ASCII only: parseDocMetaIsland and extract find their islands after İ, ẞ and ﬃ in the head', () => {
+    const f = assembleEnvelope('{{nyml\nkind: document\nauthor: İlker Yılmaz\ntitle: ẞ ﬃ İ\n}}\n', P0);
+    expect(parseDocMetaIsland(f)).toEqual({ title: 'ẞ ﬃ İ', author: 'İlker Yılmaz' });
+    const raw = '<!doctype html><html><head><title>İİİİ</title><script type="application/orz-meta+json" id="orz-meta">{"title":"x"}</script></head><body></body></html>';
+    expect(parseDocMetaIsland(raw)).toEqual({ title: 'x' });
+    expect(extract('<p>İİİ ẞ</p><script id="orz-src">ok</script>')!.text).toBe('ok');
+    // the sweep: no src module indexes a toLowerCase()/toUpperCase() copy of a document
+    for (const f2 of ['src/doc-meta.ts', 'src/carrier/envelope.ts', 'src/prepare-sources.ts', 'src/source-scan.ts']) {
+      const code = readFileSync(f2, 'utf8');
+      expect(/(?:html|head|source|src|text)\.toLowerCase\(\)/.test(code), f2).toBe(false);
+    }
+  });
+});
+
+describe('round 1: header findings', () => {
+  it('[K.10] a "}}" ending a line inside a | value cuts the header: lint reports closer-in-value (error) at the closing line (R1A-2)', () => {
+    const t = '{{nyml\nkind: document\ntemplate: note\ncustom_css: |\n  @media print {\n    h1 { color: red }}\n  .x { a: b }\npage_size: A5\n}}\n\n# Body\n';
+    expect(readHeader(t)!.fields.page_size).toBeUndefined(); // the grammar: the header ends at the first }}
+    const l = lintHeader(t, 'paged').find((x) => x.code === 'closer-in-value')!;
+    expect(l.level).toBe('error');
+    expect(l.line).toBe(6);
+    expect(t.slice(l.from!, l.to)).toBe('    h1 { color: red }}');
+    // a compact `key: value}}` closing line is only a warning
+    expect(lintHeader('{{nyml\nkind: document\ntitle: x}}\n').map((x) => `${x.level}:${x.code}`)).toEqual(['warning:closer-not-alone']);
+  });
+
+  it('[K.4] an entry owns its nested lines: remove and set take them along, and a | value before it keeps its text (R1A-3)', () => {
+    const t = '{{nyml\nkind: document\ndescription: |\n  First para.\nlicense:\n  spdx: CC-BY-4.0\n  url: https://x\ntitle: T\n}}\n';
+    const r = removeHeaderKey(t, 'license');
+    expect(r).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\ntitle: T\n}}\n');
+    expect(readHeader(r)!.fields).toEqual({ description: 'First para.', title: 'T' });
+    const s2 = setHeaderValue(t, 'license', 'MIT');
+    expect(s2).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\nlicense: MIT\ntitle: T\n}}\n');
+  });
+
+  it('[K.4] merging a legacy pair keeps the meta keys\' nested lines and its comment lines', () => {
+    const t = '{{nyml\nkind: meta\ntitle: M\nlicense:\n  spdx: CC-BY-4.0\n  note: keep me\n# a comment line\nauthor: A\n}}\n{{nyml\nkind: document\ntheme: t\n}}\nBody\n';
+    expect(setHeaderValue(t, 'theme', 'u')).toBe('{{nyml\nkind: document\ntheme: u\ntitle: M\nlicense:\n  spdx: CC-BY-4.0\n  note: keep me\n# a comment line\nauthor: A\n}}\nBody\n');
+  });
+
+  it('[K.4] setting a key that sits on the closing line writes the line ending before "}}", so a value ending in "}" reads back (R1A-4)', () => {
+    for (const v of ['a}', '}', 'x']) {
+      const out = setHeaderValue('{{nyml\nkind: document\ntitle: T}}\n\nBody\n', 'title', v);
+      expect(out).toBe(`{{nyml\nkind: document\ntitle: ${v}\n}}\n\nBody\n`);
+      expect(readHeader(out)!.fields.title).toBe(v);
+    }
+    expect(readHeader(setHeaderValue('{{nyml kind: document}}\n', 'title', 'a}'))!.fields.title).toBe('a}');
+  });
+
+  it('[K.6] the renderer reads the kind from the same raw body as scanNymlBlocks: suppressed iff the scanner says document (R1A-5)', () => {
+    for (const t of ['{{nyml\ntitle: x\n  kind: document\n}}\n', '{{nyml\n  title: x\nkind: document\n}}\n', '{{nyml\n\ttitle: x\n  kind: document\n}}\n', '{{nyml kind: document\n  title: x\n}}\n']) {
+      expect(scanNymlBlocks(t)[0].kind === 'document', JSON.stringify(t)).toBe(md.render(t) === '');
+      expect(readHeader(t) !== null && readHeader(t)!.legacy === null, JSON.stringify(t)).toBe(md.render(t) === '');
+    }
+  });
+
+  it('[K.10] lint: stray kind: document blocks, opener sharing a line, front matter, lang/measure/ratio shapes, with line positions', () => {
+    const stray = '{{nyml\nkind: document\ntitle: A\n}}\n\nText\n\n{{nyml\nkind: document\ntitle: B\n}}\n';
+    expect(lintHeader(stray).map((l) => `${l.code}@${l.line}`)).toEqual(['stray-document-block@8']);
+    expect(lintHeader('{{nyml\nkind: report-title\ntitle: R\n}}\n\n{{nyml\nkind: document\npage_size: A4\n}}\n', 'paged').map((l) => l.code)).toEqual(['stray-document-block']);
+    expect(lintHeader('```\n{{nyml\nkind: document\n}}\n```\n')).toEqual([]); // in code: not a block
+    expect(lintHeader('{{nyml kind: document\ntitle: T\n}}\n').map((l) => l.code)).toEqual(['opener-not-alone']);
+    expect(lintHeader('---\nlayout: post\n---\n\n# Hi\n').map((l) => `${l.code}@${l.line}`)).toEqual(['front-matter@1']);
+    expect(lintHeader('﻿+++\ntitle = "x"\n+++\n').map((l) => l.code)).toEqual(['front-matter']);
+    const vals = '{{nyml\nkind: document\nlang: english language\nmeasure: huge\nratio: wide\n}}\n';
+    expect(lintHeader(vals).map((l) => `${l.code}@${l.line}`)).toEqual(['bad-lang@3', 'bad-measure@4', 'bad-ratio@5']);
+    expect(lintHeader('{{nyml\nkind: document\nlang: zh-Hans-CN\nmeasure: wide\nratio: 4:3\n}}\n')).toEqual([]);
+    expect(lintHeader('{{nyml\ntitle: x\nkind: document\n}}\n')[0].message).toMatch(/renderers hide/);
+    const dup = lintHeader('{{nyml\nkind: document\ntitle: A\ntitle: B\n}}\n')[0];
+    expect([dup.code, dup.line, dup.from, dup.to]).toEqual(['duplicate-key', 4, 31, 39]);
+  });
+});
+
+describe('round 1: extract follows the HTML tokenizer (R1A-6)', () => {
+  it('[K.15] "</script" closes only before whitespace, "/" or ">"; "<!-->", "<!--->" and "--!>" end comments as in browsers', () => {
+    expect(extract('<script id="orz-src">N</scripts></script>')!.text).toBe('N</scripts>');
+    expect(extract('<script id="orz-src">A</script\tx>')!.text).toBe('A');
+    expect(extract('<script id="orz-src">B</SCRIPT/>')!.text).toBe('B');
+    expect(extract('<!--><script id="orz-src">D</script><!-- --> <script id="orz-src">E</script>')!.text).toBe('D');
+    expect(extract('<!---><script id="orz-src">D2</script>')!.text).toBe('D2');
+    expect(extract('<!-- x --!><script id="orz-src">F</script>')!.text).toBe('F');
+    expect(extract('<!-- <script id="orz-src">X</script> --><script id="orz-src">C</script>')!.text).toBe('C');
+  });
+});
+
+describe('round 1: title chain (FC-18 §8.1)', () => {
+  it('[K.16] only a top-level H1 counts; slides ignore text before the first slide marker; paged takes strictly the first title element; {{sp}} text and math source are kept', () => {
+    expect(readDocument('> # Quoted\n\n- # Listed\n\n::: note\n# Inside\n:::\n\n# Real\n').title).toBe('Real');
+    expect(readDocument('> # Quoted\n').title).toBe('Untitled');
+    expect(readDocument('# Pre\n\n<!-- slide -->\n# Real\n', { kind: 'slides' }).title).toBe('Real');
+    expect(readDocument('# Pre\n', { kind: 'slides' }).title).toBe('Untitled');
+    expect(readDocument('# Pre\n', { kind: 'md' }).title).toBe('Pre');
+    const paged = '{{nyml\nkind: document\n}}\n\n{{nyml\nkind: report-title\nsubtitle: s\n}}\n\n{{nyml\nkind: exam-title\ntitle: Second\n}}\n';
+    expect(readDocument(paged, { kind: 'paged' }).title).toBe('Untitled');
+    expect(readDocument('# Hello {{sp[red] big *bold*}} $x^2$ end\n').title).toBe('Hello big bold x^2 end');
+  });
+
+  it('[K.16] readDocument resolves registry defaults into settings (measure normal, ratio 16:9) and ShellParts.delivery defaults to inline', () => {
+    expect(readDocument('# x\n').settings).toEqual({ measure: 'normal' });
+    expect(readDocument('# x\n', { kind: 'slides' }).settings).toEqual({ ratio: '16:9' });
+    expect(readDocument('{{nyml\nkind: document\nratio: 4:3\n}}\n', { kind: 'slides' }).settings).toEqual({ ratio: '4:3' });
+    expect(readDocument('# x\n', { kind: 'paged' }).settings).toEqual({});
+    expect(readDocument('# x\n').theme).toBeUndefined();
+    const f = assembleEnvelope('x', { kind: 'md', shellVersion: '1', headHtml: '', bodyHtml: '' });
+    expect(extract(f)!.delivery).toBe('inline');
+  });
+});
+
+describe('round 1: cost (K.14)', () => {
+  const header = '{{nyml\nkind: document\ntitle: Big\nauthor: A\n}}\n\n';
+  const bodyOf = (n: number): string => Array.from({ length: n }, (_, i) => `## Section ${i}\n\nParagraph ${i} with **bold**, \`code\`, [link](x${i}.md) and $x^${i % 9}$.\n\n- a\n- b\n`).join('\n');
+  const best = (f: () => unknown, n = 5): number => { let b = Infinity; for (let i = 0; i < n; i++) { const t = performance.now(); f(); b = Math.min(b, performance.now() - t); } return b; };
+
+  it('[K.14] readHeader is O(header): on a 3.5 MB text it takes ≤ 5 ms, and 4× the body costs the same within 4×', () => {
+    const small = header + bodyOf(38_000);
+    const big = header + bodyOf(152_000);
+    expect(small.length).toBeGreaterThan(3_500_000);
+    const ts = best(() => readHeader(small));
+    const tb = best(() => readHeader(big));
+    expect(ts).toBeLessThanOrEqual(5);
+    expect(tb).toBeLessThanOrEqual(Math.max(5, 4 * ts));
+    expect(readHeader(big)!.fields.title).toBe('Big');
+  }, 60_000);
+
+  it('[K.14] readDocument with a header title never parses the body; without one it parses it once', () => {
+    const text = header + bodyOf(2000);
+    const spy = vi.spyOn(md, 'parse');
+    try {
+      readDocument(text);
+      expect(spy.mock.calls.every(([src]) => (src as string).length < 200)).toBe(true);
+      spy.mockClear();
+      readDocument(bodyOf(2000));
+      expect(spy.mock.calls.filter(([src]) => (src as string).length > 1000).length).toBe(1);
+      spy.mockClear();
+      readDocument('{{nyml\nkind: document\n}}\n\n' + bodyOf(500) + '\n{{nyml\nkind: document\n}}\n', { kind: 'paged' });
+      expect(spy.mock.calls.filter(([src]) => (src as string).length > 1000).length).toBe(1); // title and stray lint share it
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('[K.14] assembleEnvelope and extract are linear: 4× the input costs under 8× the time', () => {
+    const a = header + bodyOf(5000);
+    const b = header + bodyOf(20000);
+    const ta = best(() => assembleEnvelope(a, PARTS[0]), 3);
+    const tb = best(() => assembleEnvelope(b, PARTS[0]), 3);
+    expect(tb).toBeLessThan(8 * ta + 5);
+    const fa = assembleEnvelope(a, PARTS[0]);
+    const fb = assembleEnvelope(b, PARTS[0]);
+    const xa = best(() => extract(fa), 3);
+    const xb = best(() => extract(fb), 3);
+    expect(xb).toBeLessThan(8 * xa + 5);
+  }, 60_000);
+});
+
+describe('round 1: API additions', () => {
+  it('[K.17] Header.entries and lint findings carry positions; editHeader applies several sets, removes and multi-line values in one pass', () => {
+    const t = '{{nyml\r\n  kind: document\r\n  title: T\r\n  author: A\r\n  license:\r\n    spdx: X\r\n}}\r\n\r\nBody\r\n';
+    const h = readHeader(t)!;
+    expect(h.entries.map((e) => [e.key, e.line, t.slice(e.keyFrom, e.valueFrom), t.slice(e.valueFrom, e.to)])).toEqual([
+      ['title', 3, 'title: ', 'T'],
+      ['author', 4, 'author: ', 'A'],
+      ['license', 5, 'license:', '\r\n    spdx: X'],
+    ]);
+    const out = editHeader(t, { title: 'New', author: null, custom_css: { multiline: 'a {\n  b: c;\n}\n\nd { }' }, license: { multiline: 'MIT' } });
+    expect(out).toBe('{{nyml\r\n  kind: document\r\n  title: New\r\n  license: |\r\n    MIT\r\n  custom_css: |\r\n    a {\r\n      b: c;\r\n    }\r\n\r\n    d { }\r\n}}\r\n\r\nBody\r\n');
+    expect(readHeader(out)!.fields).toEqual({ title: 'New', license: 'MIT', custom_css: 'a {\n  b: c;\n}\n\nd { }' });
+    expect(editHeader(t, { zzz: null })).toBe(t);
+    for (const bad of ['a }} b', 'x\r\ny', '  indented first', 'trailing\n', 'ws\n  \nx', '\tx', 'a\n\tb']) {
+      expect(() => editHeader(t, { custom_css: { multiline: bad } }), JSON.stringify(bad)).toThrow();
+    }
+    expect(() => editHeader(t, { title: 'ok', kind: 'x' })).toThrow();
+    expect(editHeader('# Hi\n', { title: 'T', notes: { multiline: 'a\nb' } })).toBe('{{nyml\nkind: document\ntitle: T\nnotes: |\n  a\n  b\n}}\n\n# Hi\n');
+  });
+
+  it('[K.18] decodeText keeps a BOM and decodes UTF-8 exactly (File.text() and a default TextDecoder strip the BOM)', () => {
+    const text = '﻿{{nyml\r\nkind: document\r\n}}\r\n# İ 中文 👩🏽‍🔬\r\n';
+    const bytes = new TextEncoder().encode(text);
+    expect(decodeText(bytes)).toBe(text);
+    expect(decodeText(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))).toBe(text);
+    expect(new TextDecoder().decode(bytes)).toBe(text.slice(1));
+  });
+
+  it('[K.3] extract returns the resolved includes stored in #orz-includes', () => {
+    expect(extract(assembleEnvelope('x', PARTS[2]))!.includes).toEqual(PARTS[2].includes);
+    expect(extract(assembleEnvelope('x', PARTS[0]))!.includes).toBeUndefined();
   });
 });

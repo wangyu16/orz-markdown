@@ -17,7 +17,11 @@ export interface NymlBodyEntry {
     key: string;
     /** Index of the key's line in the body's lines (split on CR LF, CR, LF). */
     line: number;
-    /** Index of the value's last non-blank line (`line` unless a `|` value has content). */
+    /**
+     * Index of the entry's last line: the key line plus every following line
+     * indented deeper than the key (a `|` value's content, or nested lines the
+     * flat reader ignores), up to the last non-blank one.
+     */
     endLine: number;
     /** True for a `key: |` value. */
     multiline: boolean;

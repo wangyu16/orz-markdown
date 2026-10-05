@@ -40,6 +40,9 @@ npm run check:site # website starter versions + discovery metadata
 - `src/html.ts` — the ONLY escaping helpers (`escapeHtml`, `escapeAttr`,
   `jsonForScript`, `escapeScriptText`/`unescapeScriptText`). Every value that
   reaches HTML goes through them.
+- `src/ascii.ts` — `asciiLower`: ASCII-only case mapping. Use it for HTML names and
+  whenever a lowered copy's offsets are applied to the original (`toLowerCase()`
+  changes length for `İ` and others; claim M.23).
 - `src/source-scan.ts` — `maskInertMarkdown`: blanks code/comments/HTML blocks so
   pre-render scanners (nyml, prepareSources) agree with the renderer.
 - `src/doc-meta.ts`, `src/nyml-blocks.ts` — the family's DocMeta API and nyml scanner.

@@ -18,6 +18,7 @@ import { inlineDispatcher } from './rules/inline-dispatcher.js';
 import { getDefinition } from './registry.js';
 import { escapeAttr, escapeHtml } from './html.js';
 import { parseAttrs } from './plugins/attrs.js';
+import { parseNymlBody } from './nyml-body.js';
 import { registerSpan } from './plugins/span.js';
 import { registerToc } from './plugins/toc.js';
 import { registerAttrs } from './plugins/attrs.js';
@@ -437,6 +438,13 @@ md.renderer.rules['plugin_block'] = (
   const token = tokens[idx];
   const def = getDefinition(token.info);
   if (!def) return '';
+  // FC-18 §5: a nyml block whose kind is `document` (the document header)
+  // renders nothing and takes no `nyml-data` number. The kind is read from the
+  // same raw body `scanNymlBlocks` reads, so renderer and readHeader agree.
+  if (token.info === 'nyml') {
+    const raw = (token.meta as { rawBody?: string } | null)?.rawBody ?? token.content ?? '';
+    if (parseNymlBody(raw).kind === 'document') return '';
+  }
   const args = token.meta?.args ?? null;
   return def.render(args, token.content || null, env);
 };

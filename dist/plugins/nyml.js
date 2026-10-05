@@ -3,18 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const registry_js_1 = require("../registry.js");
 const html_js_1 = require("../html.js");
 const nyml_parser_js_1 = require("./nyml_parser.js");
-const nyml_body_js_1 = require("../nyml-body.js");
 (0, registry_js_1.register)({
     type: 'block',
     aliases: ['nyml'],
     render(_args, body, env) {
         const rawContent = body ?? '';
-        // FC-18 §5: a `kind: document` block (the document header) renders
-        // nothing and takes no `nyml-data` number; the carriers read it from the
-        // source text (orz-markdown/carrier). Its kind is read with the same flat
-        // reader as `scanNymlBlocks`/`readHeader`, wherever the kind line is.
-        if ((0, nyml_body_js_1.parseNymlBody)(rawContent).kind === 'document')
-            return '';
         let parsedContent;
         try {
             parsedContent = (0, nyml_parser_js_1.parseNymlV2)(rawContent);

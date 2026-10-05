@@ -33,7 +33,11 @@ export interface NymlBodyEntry {
   key: string;
   /** Index of the key's line in the body's lines (split on CR LF, CR, LF). */
   line: number;
-  /** Index of the value's last non-blank line (`line` unless a `|` value has content). */
+  /**
+   * Index of the entry's last line: the key line plus every following line
+   * indented deeper than the key (a `|` value's content, or nested lines the
+   * flat reader ignores), up to the last non-blank one.
+   */
   endLine: number;
   /** True for a `key: |` value. */
   multiline: boolean;
@@ -131,7 +135,15 @@ export function parseNymlBody(inner: string): { kind: string; fields: Record<str
     const v = stripQuotes(value.trim());
     if (key === 'kind') kind = v;
     else fields[key] = v;
-    entries.push({ key, line: i, endLine: i, multiline: false });
+    // The entry also owns the deeper lines after it (nested structure the flat
+    // reader ignores), so removing or replacing it cannot strand them.
+    let endLine = i;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].trim() === '') continue;
+      if (indentWidth(lines[j].match(/^[ \t]*/)?.[0] ?? '') <= indent) break;
+      endLine = j;
+    }
+    entries.push({ key, line: i, endLine, multiline: false });
     i++;
   }
 

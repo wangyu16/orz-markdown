@@ -7,8 +7,8 @@ export interface ShellParts {
     kind: Kind;
     /** The shell version written to the generator meta and `#orz-shell`. */
     shellVersion: string;
-    /** FC-18 §8.2: `inline` (default for carriers) or `cdn`. Recorded in `#orz-shell`. */
-    delivery: 'inline' | 'cdn';
+    /** FC-18 §8.2: `inline` (the default) or `cdn`. Recorded in `#orz-shell`. */
+    delivery?: 'inline' | 'cdn';
     /** Shell assets for `<head>` (styles, scripts), written after `#orz-shell`. Must not hold an element with id `orz-src` or `orz-shell`. */
     headHtml: string;
     /** Shell markup for `<body>`, written after the source island (and `#orz-includes`). Same id rule. */
@@ -26,6 +26,8 @@ export interface Extracted {
     shell: string;
     /** The delivery (`''` when the file has no `#orz-shell`). */
     delivery: string;
+    /** The resolved includes stored in `#orz-includes`, when the file has them. */
+    includes?: Record<string, string>;
 }
 /** Id of the source island. */
 export declare const SOURCE_ISLAND_ID = "orz-src";
@@ -72,7 +74,8 @@ export declare function readIslandFromDom(el: IslandElement): string;
  * skipped), unescaped with `unescapeScriptText`, its line endings and BOM
  * restored from `data-orz-eol` / `data-orz-bom`; kind, format, shell version
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
- * `data-orz-format`, `md`, `1`, `''`). `null` when there is no source island.
+ * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`.
+ * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
 export declare function extract(html: string): Extracted | null;

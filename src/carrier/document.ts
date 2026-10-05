@@ -2,11 +2,13 @@
  * Document facts read from a format-1 text without rendering it (FC-18 §3,
  * §5, §8.1; FC-19 `readDocument`).
  *
+ * Cost: the header is read in O(header); the body is parsed at most once, and
+ * only when the title must come from it (or a lint check needs the blocks).
  * Browser-clean and deterministic (the random `mintUid` lives in uid.ts).
  */
 import { md } from '../index.js';
 import { docMetaFromFields, type DocMeta } from '../doc-meta.js';
-import { scanNymlBlocks } from '../nyml-blocks.js';
+import { scanNymlBlocks, type NymlBlock } from '../nyml-blocks.js';
 import { readHeader, readHeaderAndLint, KIND_HEADER_KEYS, type Header, type Lint } from './header.js';
 
 export { mintUid } from './uid.js';
@@ -23,11 +25,14 @@ export interface DocumentInfo {
   header: Header | null;
   /** DocMeta (FC-03) from the header, `uid` included (FC-18 §10). */
   meta: DocMeta;
-  /** Header `theme`, when set. */
+  /** Header `theme`, when set (the default theme is the carrier's). */
   theme?: string;
   /** Header `lang` (BCP 47), default `en`. */
   lang: string;
-  /** The kind's own header keys that are set (FC-18 §5.1: `measure`; `ratio footer transition`; the paged keys). */
+  /**
+   * The kind's own header keys (FC-18 §5.1) that are set, plus the registry
+   * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) for slides.
+   */
   settings: Record<string, string>;
   /** Host keys (`x_…`) of the header. */
   hostKeys: Record<string, string>;
@@ -36,6 +41,13 @@ export interface DocumentInfo {
   /** `lintHeader` findings for the kind. */
   lint: Lint[];
 }
+
+/** Registry defaults that `readDocument` resolves into `settings` (FC-18 §5.1). */
+export const SETTING_DEFAULTS: Readonly<Record<Kind, Readonly<Record<string, string>>>> = {
+  md: { measure: 'normal' },
+  slides: { ratio: '16:9' },
+  paged: {},
+};
 
 function isKind(v: unknown): v is Kind {
   return v === 'md' || v === 'slides' || v === 'paged';
@@ -78,9 +90,9 @@ export function twinName(name: string): string | null {
   return null;
 }
 
-type Tok = { type: string; tag: string; content: string; children: Tok[] | null };
+type Tok = { type: string; tag: string; info: string; level: number; content: string; children: Tok[] | null; map: [number, number] | null };
 
-/** Plain text of a heading's inline children (text, code, math, image alt). */
+/** Plain text of inline tokens: text, code and math source as written, `{{sp}}` body text, image alt. */
 function inlineText(children: Tok[] | null, fallback: string): string {
   if (!children) return fallback;
   let s = '';
@@ -88,30 +100,44 @@ function inlineText(children: Tok[] | null, fallback: string): string {
     if (c.type === 'text' || c.type === 'code_inline' || c.type === 'math_inline') s += c.content;
     else if (c.type === 'softbreak' || c.type === 'hardbreak') s += ' ';
     else if (c.type === 'image') s += inlineText(c.children, c.content);
+    else if (c.type === 'plugin_inline' && (c.info === 'sp' || c.info === 'span')) {
+      s += inlineText(md.parseInline(c.content, {})[0]?.children as unknown as Tok[] | null, c.content);
+    }
   }
   return s;
 }
 
-function firstH1(text: string): string | null {
-  const tokens = md.parse(text, {}) as unknown as Tok[];
+const SLIDE_MARKER = /^<!--\s*slide\b/;
+
+/**
+ * The first TOP-LEVEL level-1 heading (not inside a blockquote, list or
+ * container). For slides, only headings after the first slide marker count.
+ */
+function firstH1(tokens: Tok[], kind: Kind): string | null {
+  let inSlides = kind !== 'slides';
   for (let i = 0; i < tokens.length - 1; i++) {
-    if (tokens[i].type === 'heading_open' && tokens[i].tag === 'h1') {
-      const t = inlineText(tokens[i + 1].children, tokens[i + 1].content).replace(/\s+/g, ' ').trim();
-      if (t) return t;
+    const t = tokens[i];
+    if (!inSlides) {
+      if (t.level === 0 && t.type === 'html_block' && SLIDE_MARKER.test(t.content)) inSlides = true;
+      continue;
+    }
+    if (t.type === 'heading_open' && t.tag === 'h1' && t.level === 0) {
+      const text = inlineText(tokens[i + 1].children, tokens[i + 1].content).replace(/\s+/g, ' ').trim();
+      if (text) return text;
     }
   }
   return null;
 }
 
-function pagedTitle(text: string, header: Header | null): string | null {
-  for (const b of scanNymlBlocks(text)) {
+/** paged: the `title` (else `text`) of strictly the first title element (kind ending in `-title`). */
+function pagedTitle(blocks: NymlBlock[], header: Header | null): string | null {
+  for (const b of blocks) {
     if (header && b.start < header.end) continue;
     // A title element is a block whose kind ends in `-title` (article-title,
     // report-title, exam-title, …); cv-header and letterhead are not.
     if (!b.kind.endsWith('-title')) continue;
     const own = (k: string): string => (Object.prototype.hasOwnProperty.call(b.fields, k) ? b.fields[k].trim() : '');
-    const t = own('title') || own('text');
-    if (t) return t;
+    return own('title') || own('text') || null;
   }
   return null;
 }
@@ -120,17 +146,22 @@ function pagedTitle(text: string, header: Header | null): string | null {
  * Read a document's facts from its text, without rendering (FC-19 §2).
  *
  * kind: `opts.kind`, else the file name's kind, else the header's `carrier`,
- * else `md`. title (FC-18 §8.1): the header `title`, else the first level-1
- * heading (token-based, plain text), else — for `paged` — the `title` (or
- * `text`) of the first title element (a nyml block whose kind ends in
- * `-title`), else `Untitled`.
+ * else `md`. title (FC-18 §8.1): the header `title`, else the first top-level
+ * level-1 heading (plain text; for slides only after the first slide marker),
+ * else — for `paged` — the `title` (or `text`) of the first title element
+ * (the first nyml block whose kind ends in `-title`), else `Untitled`.
  */
 export function readDocument(text: string, opts?: { kind?: Kind; filename?: string }): DocumentInfo {
   const named = opts?.kind ?? (opts?.filename ? kindFromFilename(opts.filename) : null);
   const peek = named ? null : readHeader(text);
   const carrier = peek && Object.prototype.hasOwnProperty.call(peek.fields, 'carrier') ? peek.fields['carrier'] : undefined;
   const kind: Kind = named ?? (isKind(carrier) ? carrier : null) ?? 'md';
-  const { header, lint } = readHeaderAndLint(text, kind);
+  // One parse at most, shared by the title and the lint's block scan.
+  let tokens: Tok[] | null = null;
+  const parse = (): Tok[] => (tokens ??= md.parse(text, {}) as unknown as Tok[]);
+  let blocks: NymlBlock[] | null = null;
+  const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse()));
+  const { header, lint } = readHeaderAndLint(text, kind, scan);
   const fields: Record<string, string> = header ? header.fields : {};
   const get = (k: string): string | undefined => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
   const fmt = get('format');
@@ -138,14 +169,17 @@ export function readDocument(text: string, opts?: { kind?: Kind; filename?: stri
   const meta: DocMeta = docMetaFromFields(fields);
   const uid = get('uid');
   if (uid) meta.uid = uid;
-  const settings: Record<string, string> = {};
+  const settings: Record<string, string> = { ...SETTING_DEFAULTS[kind] };
   const hostKeys: Record<string, string> = {};
   for (const key of header ? header.keys : []) {
     if (KIND_HEADER_KEYS[kind].includes(key)) settings[key] = fields[key];
     else if (key.startsWith('x_')) hostKeys[key] = fields[key];
   }
   const headerTitle = (get('title') ?? '').trim();
-  const title = headerTitle || firstH1(text) || (kind === 'paged' ? pagedTitle(text, header) : null) || 'Untitled';
+  let title = headerTitle;
+  if (!title && text.trim() !== '') {
+    title = firstH1(parse(), kind) ?? (kind === 'paged' ? pagedTitle(scan(), header) : null) ?? '';
+  }
   const info: DocumentInfo = {
     kind,
     format,
@@ -154,7 +188,7 @@ export function readDocument(text: string, opts?: { kind?: Kind; filename?: stri
     lang: (get('lang') ?? '').trim() || 'en',
     settings,
     hostKeys,
-    title,
+    title: title || 'Untitled',
     lint,
   };
   const theme = (get('theme') ?? '').trim();

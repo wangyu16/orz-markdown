@@ -37,6 +37,7 @@ exports.mergeDocMeta = mergeDocMeta;
 exports.renderDocMetaHead = renderDocMetaHead;
 exports.renderDocMetaIsland = renderDocMetaIsland;
 exports.parseDocMetaIsland = parseDocMetaIsland;
+const ascii_js_1 = require("./ascii.js");
 const nyml_blocks_js_1 = require("./nyml-blocks.js");
 const html_js_1 = require("./html.js");
 /** The `kind:` value that marks a metadata block. */
@@ -265,7 +266,7 @@ function parseDocMetaIsland(html) {
     const head = headEnd < 0 ? html : html.slice(0, headEnd);
     // Tag by tag with indexOf: a backtracking pattern from every "<script" to the
     // end of the head was quadratic (also 1.6.3; round 19, H2).
-    const lower = head.toLowerCase();
+    const lower = (0, ascii_js_1.asciiLower)(head); // same length as head: offsets carry over
     // Each character is looked at once: the next '<script' is searched from the
     // end of this tag (round 20, B-H1: from the next character was quadratic).
     for (let at = lower.indexOf('<script'), end = 0; at >= 0; at = lower.indexOf('<script', Math.max(at + 7, end))) {

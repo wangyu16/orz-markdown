@@ -75,8 +75,11 @@ function parseBody(inner) {
  * rounds of regex rules each left a new disagreement class; see
  * notes/closed-loop.md, round 6.) Fields are read from the token's body, so a
  * block inside a blockquote or list item parses without its prefixes.
+ *
+ * `tokens`, when given, must be `md.parse(source, {})` of this very source (a
+ * caller that already parsed it saves a second parse).
  */
-function scanNymlBlocks(source) {
+function scanNymlBlocks(source, tokens) {
     const out = [];
     if (source.indexOf(OPEN) < 0)
         return out; // fast path: no candidate at all
@@ -86,7 +89,7 @@ function scanNymlBlocks(source) {
         if (c === 10 || (c === 13 && source.charCodeAt(i + 1) !== 10))
             lineStarts.push(i + 1);
     }
-    for (const token of renderer().parse(source, {})) {
+    for (const token of tokens ?? renderer().parse(source, {})) {
         if (token.type !== 'plugin_block' || token.info !== 'nyml' || !token.map)
             continue;
         const lineStart = lineStarts[token.map[0]] ?? 0;

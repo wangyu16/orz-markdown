@@ -20,6 +20,7 @@
  *
  * Browser-clean: no Node built-ins.
  */
+import { asciiLower } from '../ascii.js';
 import { escapeAttr, escapeHtml, escapeScriptText, jsonForScript, unescapeScriptText } from '../html.js';
 import { renderDocMetaHead, renderDocMetaIsland } from '../doc-meta.js';
 import { readDocument, type Kind } from './document.js';
@@ -34,8 +35,8 @@ export interface ShellParts {
   kind: Kind;
   /** The shell version written to the generator meta and `#orz-shell`. */
   shellVersion: string;
-  /** FC-18 §8.2: `inline` (default for carriers) or `cdn`. Recorded in `#orz-shell`. */
-  delivery: 'inline' | 'cdn';
+  /** FC-18 §8.2: `inline` (the default) or `cdn`. Recorded in `#orz-shell`. */
+  delivery?: 'inline' | 'cdn';
   /** Shell assets for `<head>` (styles, scripts), written after `#orz-shell`. Must not hold an element with id `orz-src` or `orz-shell`. */
   headHtml: string;
   /** Shell markup for `<body>`, written after the source island (and `#orz-includes`). Same id rule. */
@@ -54,6 +55,8 @@ export interface Extracted {
   shell: string;
   /** The delivery (`''` when the file has no `#orz-shell`). */
   delivery: string;
+  /** The resolved includes stored in `#orz-includes`, when the file has them. */
+  includes?: Record<string, string>;
 }
 
 /** Id of the source island. */
@@ -124,7 +127,7 @@ export function assembleEnvelope(text: string, parts: ShellParts): string {
   const bom = text.charCodeAt(0) === 0xfeff;
   const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
   const eol = eolStyle(bom ? text.slice(1) : text);
-  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery });
+  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline' });
   const out: string[] = [
     '<!doctype html>',
     `<html lang="${escapeAttr(doc.lang)}" data-orz-kind="${escapeAttr(kind)}">`,
@@ -191,7 +194,7 @@ const RAW_TEXT = new Set(['script', 'style', 'title', 'textarea', 'xmp', 'iframe
 function readStartTag(html: string, at: number): Tag | null {
   const nm = /^<([A-Za-z][A-Za-z0-9-]*)/.exec(html.slice(at, at + 64));
   if (!nm) return null;
-  const name = nm[1].toLowerCase();
+  const name = asciiLower(nm[1]);
   const attrs: Record<string, string> = {};
   let i = at + nm[0].length;
   const n = html.length;
@@ -202,7 +205,7 @@ function readStartTag(html: string, at: number): Tag | null {
     let j = i;
     while (j < n && !/[\s/>=]/.test(html[j])) j++;
     if (j === i) j++; // a stray character: skip it
-    const attr = html.slice(i, j).toLowerCase();
+    const attr = asciiLower(html.slice(i, j));
     i = j;
     while (i < n && /\s/.test(html[i])) i++;
     let value = '';
@@ -236,23 +239,28 @@ interface Element {
  * Walk the start tags of `html` in document order — comments and raw-text
  * content skipped, as an HTML parser skips them — until `visit` returns true.
  */
-function walkStartTags(html: string, visit: (el: Element) => boolean, stopAt = Infinity, rawText: ReadonlySet<string> = RAW_TEXT): Element | null {
-  const lower = html.toLowerCase();
-  let i = 0;
+function walkStartTags(html: string, visit: (el: Element) => boolean, stopAt = Infinity, rawText: ReadonlySet<string> = RAW_TEXT, startAt = 0): Element | null {
+  const lower = asciiLower(html); // same length as html: offsets carry over
+  let i = startAt;
   while (i < html.length && i < stopAt) {
     const lt = html.indexOf('<', i);
     if (lt < 0 || lt >= stopAt) return null;
     if (html.startsWith('<!--', lt)) {
-      const close = html.indexOf('-->', lt + 4);
-      if (close < 0) return null;
-      i = close + 3;
+      // As the HTML tokenizer: `<!-->` and `<!--->` are whole (empty)
+      // comments; otherwise the comment ends at the first `-->` or `--!>`.
+      if (html.startsWith('<!-->', lt)) { i = lt + 5; continue; }
+      if (html.startsWith('<!--->', lt)) { i = lt + 6; continue; }
+      const a = html.indexOf('-->', lt + 4);
+      const b = html.indexOf('--!>', lt + 4);
+      if (a < 0 && b < 0) return null;
+      i = a >= 0 && (b < 0 || a < b) ? a + 3 : b + 4;
       continue;
     }
     const tag = readStartTag(html, lt);
     if (!tag) { i = lt + 1; continue; }
     let el: Element = { tag, content: [tag.end, tag.end] };
     if (rawText.has(tag.name)) {
-      const close = lower.indexOf(`</${tag.name}`, tag.end);
+      const close = endTagAt(lower, tag.name, tag.end);
       el = { tag, content: [tag.end, close < 0 ? html.length : close] };
       i = close < 0 ? html.length : close + 2 + tag.name.length;
     } else {
@@ -263,9 +271,22 @@ function walkStartTags(html: string, visit: (el: Element) => boolean, stopAt = I
   return null;
 }
 
+/**
+ * Offset of the end tag that closes a raw-text element: `</name` followed by
+ * whitespace, `/` or `>` (so `</scripts>` does not close a script). -1 if none.
+ */
+function endTagAt(lower: string, name: string, from: number): number {
+  const needle = `</${name}`;
+  for (let at = lower.indexOf(needle, from); at >= 0; at = lower.indexOf(needle, at + 1)) {
+    const c = lower.charAt(at + needle.length);
+    if (c === '' || c === '>' || c === '/' || c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r') return at;
+  }
+  return -1;
+}
+
 /** The first `<script>` whose `id` is `id`. */
-function findScript(html: string, id: string, stopAt = Infinity): Element | null {
-  return walkStartTags(html, (el) => el.tag.name === 'script' && el.tag.attrs['id'] === id, stopAt);
+function findScript(html: string, id: string, stopAt = Infinity, startAt = 0): Element | null {
+  return walkStartTags(html, (el) => el.tag.name === 'script' && el.tag.attrs['id'] === id, stopAt, RAW_TEXT, startAt);
 }
 
 /** Only these are skipped when checking shell parts for reserved ids (conservative: a lenient parser may read textarea or title content as markup). */
@@ -275,7 +296,7 @@ const SCRIPT_STYLE = new Set(['script', 'style']);
 function reservedIdIn(html: string): string | null {
   if (!/orz-s(rc|hell)/i.test(html)) return null;
   const el = walkStartTags(html, (e) => {
-    const id = Object.prototype.hasOwnProperty.call(e.tag.attrs, 'id') ? e.tag.attrs['id'].trim().toLowerCase() : '';
+    const id = Object.prototype.hasOwnProperty.call(e.tag.attrs, 'id') ? asciiLower(e.tag.attrs['id'].trim()) : '';
     return id === SOURCE_ISLAND_ID || id === SHELL_ISLAND_ID;
   }, Infinity, SCRIPT_STYLE);
   return el ? el.tag.attrs['id'] : null;
@@ -292,7 +313,8 @@ function isKind(v: unknown): v is Kind {
  * skipped), unescaped with `unescapeScriptText`, its line endings and BOM
  * restored from `data-orz-eol` / `data-orz-bom`; kind, format, shell version
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
- * `data-orz-format`, `md`, `1`, `''`). `null` when there is no source island.
+ * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`.
+ * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
 export function extract(html: string): Extracted | null {
@@ -310,18 +332,33 @@ export function extract(html: string): Extracted | null {
       shellData = {};
     }
   }
-  const htmlAt = html.toLowerCase().search(/<html[\s>]/);
+  const htmlAt = html.search(/<html[\s>]/i);
   const htmlTag = htmlAt >= 0 ? readStartTag(html, htmlAt) : null;
   const kind: Kind = isKind(shellData['kind']) ? shellData['kind'] : isKind(htmlTag?.attrs['data-orz-kind']) ? (htmlTag!.attrs['data-orz-kind'] as Kind) : 'md';
   const islandFormat = a['data-orz-format'];
   const format =
     typeof shellData['format'] === 'number' && Number.isInteger(shellData['format']) ? (shellData['format'] as number)
       : islandFormat && /^[1-9][0-9]*$/.test(islandFormat) ? Number(islandFormat) : 1;
-  return {
+  const result: Extracted = {
     text,
     kind,
     format,
     shell: typeof shellData['shell'] === 'string' ? (shellData['shell'] as string) : '',
     delivery: typeof shellData['delivery'] === 'string' ? (shellData['delivery'] as string) : '',
   };
+  // The includes island follows the source island (shell markup before it is not consulted).
+  const inc = findScript(html, INCLUDES_ISLAND_ID, Infinity, island.content[1]);
+  if (inc) {
+    try {
+      const parsed = JSON.parse(html.slice(inc.content[0], inc.content[1])) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const includes: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) if (typeof v === 'string') includes[k] = v;
+        result.includes = includes;
+      }
+    } catch {
+      // a malformed includes island is ignored
+    }
+  }
+  return result;
 }

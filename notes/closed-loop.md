@@ -1102,3 +1102,8 @@ upgrade).
 matching a later host heading is refused), round-22 B-L2 (removing a block
 reshapes the fetched document around it), B-L3/F8 (copy of a host followed by
 `` ` `` / `...` can link on re-render), the theme `:root` token note (FC-05).
+
+---
+
+The carrier-kit verification (carrier rebuild, from 2026-10-05) has its own
+record: [carrier-kit-loop.md](carrier-kit-loop.md).

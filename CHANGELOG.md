@@ -24,11 +24,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `eolStyle`, `hasMixedEol`, `hasLoneSurrogate`, and the island ids. The
     source island stores the text with LF line breaks and records
     `data-orz-eol` / `data-orz-bom`, so a DOM read is exact too.
-  - `orz-markdown/carrier` now loads the parser (`md`) as well.
+  - `editHeader` (several sets, removes and `key: |` multi-line values in one
+    pass), `Header.entries` (per-key positions) and `line`/`from`/`to` on
+    lint findings; new lint codes (`closer-in-value` for a header cut inside a
+    value, `closer-not-alone`, `opener-not-alone`, `stray-document-block`,
+    `front-matter`, `bad-lang`, `bad-measure`, `bad-ratio`, `nul`,
+    `lone-surrogate`, `mixed-eol`);
+  - `decodeText` (UTF-8 bytes → text, keeping the BOM that `File.text()`
+    strips); `extract` returns `includes`; `ShellParts.delivery` is optional
+    (default `inline`); `readDocument` resolves `measure`/`ratio` defaults.
+  - `orz-markdown/carrier` now loads the parser (`md`) as well, and importing
+    it registers the twin-link core rule on the shared `md` (inert unless a
+    render's env sets `orzTwinLinks: true`).
 - `docMetaFromFields` (DocMeta from a flat nyml field map), exported from the
   main entry and `orz-markdown/doc-meta`.
 - `spec/`: the binding carrier specifications FC-18 (text form and assembly,
   format 1) and FC-19 (editor component API).
+
+### Fixed
+
+- HTML scanners lowered a whole document with `toLowerCase()` and used its
+  offsets on the original: a `İ` (or another length-changing case mapping)
+  before an island shifted every offset, so `parseDocMetaIsland` missed the
+  island. Case mapping for HTML is now ASCII-only (`src/ascii.ts`).
 
 ### Changed
 

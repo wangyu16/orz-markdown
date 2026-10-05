@@ -135,7 +135,17 @@ function parseNymlBody(inner) {
             kind = v;
         else
             fields[key] = v;
-        entries.push({ key, line: i, endLine: i, multiline: false });
+        // The entry also owns the deeper lines after it (nested structure the flat
+        // reader ignores), so removing or replacing it cannot strand them.
+        let endLine = i;
+        for (let j = i + 1; j < lines.length; j++) {
+            if (lines[j].trim() === '')
+                continue;
+            if (indentWidth(lines[j].match(/^[ \t]*/)?.[0] ?? '') <= indent)
+                break;
+            endLine = j;
+        }
+        entries.push({ key, line: i, endLine, multiline: false });
         i++;
     }
     return { kind, fields, entries };

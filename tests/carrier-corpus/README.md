@@ -1,7 +1,7 @@
 # Carrier golden corpus — text format 1
 
 Shared test documents for the orz carrier rebuild (FC-18 text format 1, FC-19
-editor component; drafts in `../../../docs/drafts/` of the family root). Every
+editor component; binding specs in [`../../spec/`](../../spec/)). Every
 carrier (orz-mdhtml, orz-slides, orz-paged) and every shell version is tested
 against the **same** texts: the FC-18 laws (round trip, determinism,
 idempotence, content independence), `readDocument` agreement with the header,

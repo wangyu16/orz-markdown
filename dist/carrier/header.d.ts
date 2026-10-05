@@ -1,3 +1,18 @@
+/**
+ * The format-1 document header (FC-18 §5): reading, in-place editing (§9) and
+ * lint.
+ *
+ * The header is located with the token-based scanner (`scanNymlBlocks`), run
+ * on the leading header candidates only (cost O(header), not O(document)), so
+ * a header-looking block inside code or a directive is never taken for it, and
+ * its values are read with the same flat nyml reader that gives every block its
+ * fields. Edits touch exactly the edited lines: the header is never
+ * re-serialized, so unknown keys, host keys, comments-by-convention and
+ * formatting survive.
+ *
+ * Browser-clean: no Node built-ins, no clock, no randomness.
+ */
+import { type NymlBlock } from '../nyml-blocks.js';
 /** One nyml block that is part of the header. */
 export interface HeaderBlock {
     /** Offset of `{{nyml`. */
@@ -6,6 +21,18 @@ export interface HeaderBlock {
     end: number;
     /** The block's `kind` (`document` or, for a legacy header, `meta`). */
     kind: string;
+}
+/** Where one `key: value` entry of the header sits in the text. */
+export interface HeaderEntry {
+    key: string;
+    /** Offset of the key's first character. */
+    keyFrom: number;
+    /** Offset of the value's first character (after the separator and its spaces). */
+    valueFrom: number;
+    /** Offset of the end of the entry (its last line's end, nested and `|` lines included; or the closing `}}`). */
+    to: number;
+    /** 1-based line number of the key. */
+    line: number;
 }
 /** The document header of a text (FC-18 §5). */
 export interface Header {
@@ -17,6 +44,8 @@ export interface Header {
     fields: Record<string, string>;
     /** The keys of `fields`, in source order (legacy pair: the document block's keys, then the meta-only keys). */
     keys: string[];
+    /** Every key line (duplicates included, `kind` excluded) in source order, with its position. */
+    entries: HeaderEntry[];
     /** `null` for a format-1 header; `'meta'` for a lone legacy `kind: meta` block; `'meta+document'` for an adjacent pair. */
     legacy: null | 'meta' | 'meta+document';
     /** The header's line ending (its first line break, else the text's); `'\n'` when there is none. */
@@ -31,7 +60,16 @@ export interface Lint {
     code: string;
     message: string;
     key?: string;
+    /** 1-based line of the finding, when it concerns a line. */
+    line?: number;
+    /** Offsets of the text the finding concerns, when it concerns a line. */
+    from?: number;
+    to?: number;
 }
+/** One change for {@link editHeader}: a single-line value, `null` to remove, or a `key: |` value. */
+export type HeaderChange = string | null | {
+    multiline: string;
+};
 /** The kinds of document (FC-18 §3). Declared here too to keep header.ts free of document.ts. */
 type KindName = 'md' | 'slides' | 'paged';
 /** Keys every kind accepts (FC-18 §5.1). */
@@ -51,58 +89,77 @@ export declare const UID_PATTERN: RegExp;
  * and a `kind: meta` and a `kind: document` block that lead the text together
  * (either order, only whitespace between) are ONE header whose document keys
  * win. Returns `null` for a text without a header (any plain Markdown file).
+ * Cost: O(header) — the body is not parsed.
  */
 export declare function readHeader(text: string): Header | null;
 /**
- * Set one header value (FC-18 §9). An existing key has its value replaced on
- * its own line (indentation, key spelling and separator kept; a `key: |`
- * value's continuation lines are replaced with it; with duplicate keys, the
- * last — the one that wins — is edited). A new key is inserted as
- * `key: value` just before the closing `}}` line, with the header's
- * indentation and line ending. A text without a header gets one at its start
- * (after a BOM): `{{nyml`, `kind: document`, `key: value`, `}}`, a blank line.
- * A legacy header is upgraded first: a meta+document pair is merged into one
- * `kind: document` block (the document block's lines, then the meta-only keys'
- * lines); a lone `kind: meta` block's kind line becomes `kind: document`.
- * Every other byte of the text is unchanged.
+ * Apply several header changes in one pass (FC-18 §9): `string` sets a
+ * single-line value, `{ multiline }` writes a `key: |` value, `null` removes
+ * the key. Changes apply in the object's key order (insertions too).
  *
- * Throws for a key outside `[a-z][a-z0-9_]*`, for `kind`, and for a value with
- * a line break (CR or LF), `}}` or U+0000. Values that the reader would trim or unquote
- * (leading/trailing spaces, surrounding quotes, a lone `|`) are written quoted
- * so they read back exactly.
+ * - An existing key has only its value part replaced (indentation, key
+ *   spelling and separator kept); with duplicates the last one (the one that
+ *   wins) is edited; the replaced part includes the entry's nested and `|`
+ *   lines. If the entry ends on the closing `}}` line, the header's line
+ *   ending is written before `}}`.
+ * - A new key is inserted just before the closing `}}` line with the
+ *   indentation of the header's keys and the header's line ending.
+ * - A removed key loses its line, its nested lines and every duplicate.
+ * - A multi-line value is written as `key: |` and its lines, each indented by
+ *   the key's indentation plus two spaces, in the header's line ending.
+ * - A text without a header gets one at its start (after a BOM) for the sets.
+ * - A legacy header is upgraded first (pair merged; lone meta → document).
+ *
+ * Throws (and changes nothing) for `kind`, a set key outside
+ * `[a-z][a-z0-9_]*`, a value with `}}` or U+0000, a single-line value with a
+ * line break, and a multi-line value that would not read back exactly (CR,
+ * whitespace-only lines, a trailing empty line, an indented first line, tab
+ * indentation). Every byte outside the edited entries is unchanged; removing
+ * absent keys returns the text as is.
+ */
+export declare function editHeader(text: string, changes: Readonly<Record<string, HeaderChange>>): string;
+/**
+ * Set one header value (FC-18 §9): `editHeader(text, { [key]: value })` — the
+ * value's line is edited in place, or `key: value` is inserted before the
+ * closing `}}` line, or a header is created; a legacy header is upgraded
+ * first. Throws for a key outside `[a-z][a-z0-9_]*`, `kind`, and a value with
+ * a line break (CR or LF), `}}` or U+0000. Values the reader would trim or
+ * unquote are written quoted so they read back exactly.
  */
 export declare function setHeaderValue(text: string, key: string, value: string): string;
 /**
- * Remove a header key (FC-18 §9): its line goes (with a `key: |` value's
- * continuation lines, and every duplicate of the key, so the key is really
- * unset). Every other byte is unchanged. A text without the key is returned
- * as is; a legacy header holding it is upgraded first (as for
- * {@link setHeaderValue}). Throws for `kind`.
+ * Remove a header key (FC-18 §9): `editHeader(text, { [key]: null })` — its
+ * line goes with its nested and `|` lines and every duplicate. A text without
+ * the key is returned as is. Throws for `kind`.
  */
 export declare function removeHeaderKey(text: string, key: string): string;
 /**
  * Lint the header of a text. `kind` selects the key registry; without it the
  * header's `carrier` key does, and without that every kind's keys are known.
+ * Findings that concern a line carry `line` (1-based), `from` and `to`.
  *
- * Codes: `legacy-header` (warning), `kind-not-first` (warning: the `kind`
- * line is not the first key, so renderers do not treat the block as the
- * header), `duplicate-key` (warning: the last one wins), `key-grammar`
- * (warning: not `[a-z][a-z0-9_]*` with an ASCII `:`), `unknown-key` (warning:
- * not `x_…` and not in the FC-18 §5.1 registry for the kind), `host-key`
- * (warning: an `x_` key not shaped `x_<name>_<key>`), `closer-in-value`
- * (error: `}}` in a value, or text after the closing `}}` on its line),
- * `bad-uid` (error), `bad-format` (error: not a positive integer),
- * `newer-format` (error: format above 1 — the file opens read-only),
- * `bad-carrier` (error), `carrier-mismatch` (warning). Text-level, with or
- * without a header: `nul` (error), `lone-surrogate` (error), `mixed-eol`
- * (warning: assembling normalizes to the first line break's style).
+ * Header codes: `legacy-header` (warning), `kind-not-first` (warning),
+ * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
+ * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
+ * the closing `}}` line holds other text that is not a key line — the
+ * header ended inside a value — or text follows `}}`), `duplicate-key`
+ * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
+ * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
+ * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
+ * `bad-ratio` (warnings: value shapes). Text codes, with or without a header:
+ * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
+ * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
+ * inserted by a tool would precede), `stray-document-block` (warning: a
+ * `kind: document` block that is not the header; it renders nothing).
  */
 export declare function lintHeader(text: string, kind?: KindName): Lint[];
 /**
- * The header and its lint in one scan (for `readDocument`).
+ * The header and its lint in one scan (for `readDocument`). `blocks`, when
+ * given, returns `scanNymlBlocks(text)` (so a caller that parses the text
+ * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-export declare function readHeaderAndLint(text: string, kind: KindName): {
+export declare function readHeaderAndLint(text: string, kind: KindName, blocks?: () => NymlBlock[]): {
     header: Header | null;
     lint: Lint[];
 };

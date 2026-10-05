@@ -116,6 +116,7 @@ function hasLocalInclude(text: string): boolean {
   return parser().parse(text, {}).some((t) => t.type === 'plugin_block' && INCLUDE_ALIASES.has(t.info) && t.content.trim() !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(t.content.trim()));
 }
 
+import { asciiLower } from './ascii.js';
 import { maskInlineCode } from './source-scan.js';
 import { extractDocMeta } from './doc-meta.js';
 import type { IncludeEnv } from './plugins/markdown-include.js';
@@ -446,7 +447,7 @@ const RENDER_IDS = /^(fn(ref)?\d+(:\d+)?|nyml-data(-\d+)?|orz-meta|orz-hljs|orz[
 
 function attrsOk(attrs: Array<[string, string]>, raw: boolean, auto = false): boolean {
   for (const [name, value] of attrs) {
-    const key = name.toLowerCase();
+    const key = asciiLower(name);
     if (/^on/.test(key) || /^data-(md|orz-)/.test(key)) return false; // handlers; copy breadcrumbs
     if (raw ? !RAW_ATTRS.test(key) : !TOKEN_ATTRS.test(key)) return false;
     // Fetched text cannot add landmarks or headings to the host's
@@ -457,7 +458,7 @@ function attrsOk(attrs: Array<[string, string]>, raw: boolean, auto = false): bo
     if (ARIA_REFS.test(key)) return false;
     // Links may open a new tab, but never keep a handle on the host page
     // (reverse tabnabbing) or navigate it from inside a preview frame (round 14).
-    if (key === 'target' && value.trim().toLowerCase() !== '_blank') return false;
+    if (key === 'target' && asciiLower(value.trim()) !== '_blank') return false;
     if (key === 'rel' && !value.trim().split(/\s+/).every((r) => /^(noopener|noreferrer|nofollow)$/i.test(r))) return false;
     if (key === 'class' && !value.trim().split(/\s+/).every((c) => TOKEN_CLASSES.test(c))) return false;
     if (key === 'style' && !TOKEN_STYLE.test(value.replace(/\s+/g, ''))) return false;
@@ -517,7 +518,7 @@ function rawHtmlStaysInside(tokens: ParsedToken[], dropped?: Array<[number, numb
       if (!m) return false; // unterminated tag or quote, doctype, CDATA, bare "<"
       at = STRICT_TAG.lastIndex;
       const [, close, rawName, attrs, slash] = m;
-      const name = rawName.toLowerCase();
+      const name = asciiLower(rawName);
       const stack = frames[frames.length - 1];
       if (!(name in ALLOWED_HTML) && !VOID_HTML.has(name)) return false;
       if (close) {
@@ -528,17 +529,17 @@ function rawHtmlStaysInside(tokens: ParsedToken[], dropped?: Array<[number, numb
       if (name === 'input') {
         // Only a checkbox (what the task-list plugin emits), in any attribute order.
         const ok = list.every(([k, v]) => {
-          const key = k.toLowerCase();
-          return (key === 'type' && v.toLowerCase() === 'checkbox') || key === 'checked' || key === 'disabled' || (key === 'class' && v === 'task-list-item-checkbox');
+          const key = asciiLower(k);
+          return (key === 'type' && asciiLower(v) === 'checkbox') || key === 'checked' || key === 'disabled' || (key === 'class' && v === 'task-list-item-checkbox');
         });
-        if (!ok || !list.some(([k, v]) => k.toLowerCase() === 'type' && v.toLowerCase() === 'checkbox')) return false;
+        if (!ok || !list.some(([k, v]) => asciiLower(k) === 'type' && asciiLower(v) === 'checkbox')) return false;
       } else {
         if (!attrsOk(list, true)) return false; // handlers, javascript: URLs, classes, styles
         // `name` only on <a>: on <img>/<form>/… it overrides document methods
         // (`<img name="querySelectorAll">` turned off enhancement: round 14, H4).
-        if (name !== 'a' && list.some(([k]) => k.toLowerCase() === 'name')) return false;
+        if (name !== 'a' && list.some(([k]) => asciiLower(k) === 'name')) return false;
         // A floated image or table beside the host text after it (round 14, LOW).
-        if (/^(img|video|table|picture)$/.test(name) && list.some(([k, v]) => k.toLowerCase() === 'align' && /^(left|right)$/i.test(v.trim()))) return false;
+        if (/^(img|video|table|picture)$/.test(name) && list.some(([k, v]) => asciiLower(k) === 'align' && /^(left|right)$/i.test(v.trim()))) return false;
       }
       const parent = ALLOWED_HTML[name];
       if (parent && !parent.includes(stack[stack.length - 1] ?? '')) return false;
@@ -732,7 +733,7 @@ function parseHost({ doc, regions }: Doc, base: Record<string, unknown> = {}): P
     if (t.type === 'inline' && prevType === 'heading_open') headingBytes += t.content.length; // only heading text counts (round 20, M2)
     prevType = t.type;
     for (const x of [t, ...(t.children ?? [])]) {
-      for (const [k, v] of x.attrs ?? []) if (k.toLowerCase() === 'id') { const key = idKey(v); ids.set(key, (ids.get(key) ?? 0) + 1); }
+      for (const [k, v] of x.attrs ?? []) if (asciiLower(k) === 'id') { const key = idKey(v); ids.set(key, (ids.get(key) ?? 0) + 1); }
       // An id (or an anchor name) written in raw HTML is a target too (round 11,
       // H1) — read with the same strict tokenizer, attribute names in any case,
       // once per tag (a regex per "<" was quadratic: round 14, H1/H3).

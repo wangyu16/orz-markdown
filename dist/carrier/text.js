@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.eolStyle = eolStyle;
 exports.hasMixedEol = hasMixedEol;
 exports.hasLoneSurrogate = hasLoneSurrogate;
+exports.decodeText = decodeText;
 /** The style of a text's FIRST line break (`lf` when it has none). */
 function eolStyle(text) {
     const m = /\r\n|\r|\n/.exec(text);
@@ -24,5 +25,17 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF]
 /** True when the text holds an unpaired UTF-16 surrogate (not representable in a UTF-8 file). */
 function hasLoneSurrogate(text) {
     return LONE_SURROGATE.test(text);
+}
+/**
+ * Decode a file's bytes as UTF-8 text EXACTLY: a leading BOM is kept (as
+ * U+FEFF), which `File.text()`, `Blob.text()`, `Response.text()` and a default
+ * `TextDecoder` all strip. Invalid UTF-8 sequences become U+FFFD. Use this
+ * (with `file.arrayBuffer()`) to read a text twin so the round trip stays exact.
+ */
+function decodeText(bytes) {
+    const Ctor = globalThis.TextDecoder;
+    if (!Ctor)
+        throw new Error('orz carrier: decodeText needs TextDecoder');
+    return new Ctor('utf-8', { ignoreBOM: true }).decode(bytes);
 }
 //# sourceMappingURL=text.js.map
