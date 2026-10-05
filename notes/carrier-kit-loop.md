@@ -103,3 +103,36 @@ difference.
 (`__proto__` keys are data), K.22 (`withoutHeader`); K.2–K.5, K.9, K.10, K.12,
 K.14–K.16, K.18 reworded. K.9 now runs in real Chrome (not skipped here).
 Measured: 1,621 tests green, `tsc` clean, build passes.
+
+### Round 3 — 2026-10-05 (confirming)
+
+One fresh adversary on the round-2 fixes, with targeted mutations of every new
+or reworded claim. **No HIGH; 2 MEDIUM, 3 LOW, all ORZ.** Held: CR/CR LF
+normalization on every read path; the private parser renders the corpus
+identically to `md` (identical rule chains and options); `carrier/read`
+bundles to 6.4 KB with no parser modules; prototype-named keys are data;
+`withoutHeader` on every header shape; 6,000 random edits; lint over the 32
+corpus files and 579 family `.md` files raised no error or warning; 15 of 19
+mutations caught — the 4 survivors are F2–F4 below.
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| F1 the round-2 orphan-`}}` scan read the closing `}}` of the next block as a cut header: a paged element, `{{mermaid}}` or a fenced block right after the header, and the canonical back-to-back legacy pair, gave a false `closer-in-value` error (reading unaffected) | ORZ | MED | fix — scan after the last header block only, stop at `{{` and fences; no-error cases in K.10 |
+| F2 the K.2 determinism check scanned a hand-kept file list: a new module using `Date.now()`, or a `__filename` read, survived | ORZ | MED | fix — file list from the import graph; machine-path reads forbidden |
+| F3 K.9's Chrome lint comparison had almost no inputs | ORZ | LOW | fix — lint fixtures and hazard texts added |
+| F4 K.22 header-less BOM case untested | ORZ | LOW | fix |
+| F5 the `register()` half of K.19 unbound | ORZ | LOW | fix |
+| a hard break in the H1 vanished from the title | SPEC | LOW | fix — reads as one space (§8.1) |
+| `audit-round21` [R.7] 40 s bound flakes under concurrent load | — | LOW | not kit code; passes alone (known since the 2.0.0 loop) |
+| `eval`-built evasion of the K.2 check | — | — | dismissed — hostile, out of scope |
+
+**Loop 1 closes** after these fixes (stop rule: a round with no HIGH classed
+ORZ or ISOLATION). Next loop: the whole kit at the end of Phase 2.
+
+**After round 3 — loop 1 closed 2026-10-05.** All six fixes taken (K.2, K.9,
+K.10, K.16, K.19, K.22 reworded; the determinism check now covers the 42
+modules of the carrier's import graph and catches an injected `Date.now()`).
+Measured: 1,624 tests green, `tsc` clean, build passes, Chrome tests ran.
+Summary of loop 1: 3 rounds; 3 HIGH found and fixed (U+0130 round trip, a
+`}}` cutting the header silently, a browser claim never run in a browser);
+claims K.1–K.22 and M.22–M.23 bound and mutation-checked.

@@ -154,8 +154,8 @@ export declare function removeHeaderKey(text: string, key: string): string;
  * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
  * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
  * the header ended at a `}}` inside a value — the closing line holds non-key
- * text, or a lone `}}` line or key lines follow the header before the first
- * blank line, or text follows `}}`), `ignored-line` (warning: lines indented
+ * text, or a lone `}}` line follows the header before the first blank line,
+ * `{{…` line or fence, or text follows `}}`), `ignored-line` (warning: lines indented
  * under a scalar key, which the flat reader ignores), `kind-case` (warning:
  * `Kind:` / `kind: Document` — not read as the header), `duplicate-key`
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`

@@ -588,8 +588,8 @@ const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
  * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
  * the header ended at a `}}` inside a value — the closing line holds non-key
- * text, or a lone `}}` line or key lines follow the header before the first
- * blank line, or text follows `}}`), `ignored-line` (warning: lines indented
+ * text, or a lone `}}` line follows the header before the first blank line,
+ * `{{…` line or fence, or text follows `}}`), `ignored-line` (warning: lines indented
  * under a scalar key, which the flat reader ignores), `kind-case` (warning:
  * `Kind:` / `kind: Document` — not read as the header), `duplicate-key`
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
@@ -665,11 +665,11 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
     if (text.slice(f0, t0).trim() !== '') {
       out.push({ level: 'warning', code: 'opener-not-alone', message: '{{nyml should stand alone on its line (keys start on the next line)', ...at(bStart, layout.lines[0].end) });
     }
-    // Lines right after the header, up to the first blank line: a lone `}}`
-    // there (or key lines after a compact closer) means the header was cut
-    // short by a `}}` inside a value.
+    // Lines right after the header (after its LAST block), up to the first
+    // blank line or the start of another construct (`{{…`, a fence): a lone
+    // `}}` there means the header was cut short by a `}}` inside a value.
     const after: Array<{ from: number; to: number; text: string }> = [];
-    {
+    if (layout === loc.layouts[loc.layouts.length - 1]) {
       let p = layout.block.end;
       const eolAt = /\r\n|\r|\n/g;
       eolAt.lastIndex = p;
@@ -680,21 +680,20 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
         const m = eolAt.exec(text);
         const end = m ? m.index : text.length;
         const line = text.slice(p, end);
-        if (line.trim() === '') break;
+        if (line.trim() === '' || /^[ \t]*(?:\{\{|```|~~~)/.test(line)) break;
         after.push({ from: p, to: end, text: line });
         if (!m) break;
         p = m.index + m[0].length;
       }
     }
     const orphan = after.find((l) => l.text.trim() === '}}');
-    const keyAfter = after.find((l) => /^[ \t]*[A-Za-z0-9_]+[ \t]*[:\uFF1A]/.test(l.text));
     const closerBlame = (): Pick<Lint, 'line' | 'from' | 'to'> => at(layout.lines[last].start, layout.block.end);
     let cut = false;
     if (last > 0) {
       const [fl, tl] = layout.regions[last];
       if (text.slice(fl, tl).trim() !== '') {
         const keyOnCloser = keyed.some((e) => e.line === last);
-        if (!keyOnCloser || orphan || keyAfter) {
+        if (!keyOnCloser || orphan) {
           cut = true;
           out.push({ level: 'error', code: 'closer-in-value', message: 'the header ends at a "}}" inside a value: the rest of the header becomes body text; write "} }"', ...closerBlame() });
         } else {

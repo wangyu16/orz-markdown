@@ -14,7 +14,7 @@ import {
   kindFromFilename, twinName, twinHref, mintUid, registerTwinLinks, readIslandFromDom, editHeader, decodeText, withoutHeader, UID_PATTERN, TWIN_LINKS_RULE,
   type ShellParts, type Kind,
 } from '../src/carrier';
-import { md } from '../src/index';
+import { md, register } from '../src/index';
 import { escapeScriptText } from '../src/html';
 import { parseDocMetaIsland } from '../src/doc-meta';
 import { kitParser } from '../src/carrier/parser';
@@ -52,6 +52,24 @@ const PARTS: ShellParts[] = [
     bodyHtml: '<!-- <script id="orz-src">FAKE-BODY</script> --><pre>&lt;script id="orz-src"&gt;FAKE-BODY</pre><div data-id="orz-src" class="orz-shell">orz-src</div>',
     includes: { 'b/z.md': '# Z </script> <!--', 'a.md': 'A', '10': 'ten', '9': 'nine' },
   },
+];
+
+/** Header texts the lint tests use (also compared Node vs Chrome in K.9). */
+const LINT_FIXTURES = [
+  '{{nyml\nkind: document\ntitle: A\n}}\n{{nyml\nkind: article-title\ntitle: x\n}}\n\nbody\n',
+  '{{nyml\nkind: document\n}}\n{{mermaid\ngraph TD\n  A --> B\n}}\n',
+  '{{nyml\nkind: document\ntitle: A\n}}\n```css\na { b: c }}\n}}\n```\n',
+  '{{nyml\nkind: meta\ntitle: A\n}}\n{{nyml\nkind: document\ntheme: x\n}}\n\nbody\n',
+  '{{nyml\nkind: document\ntitle: A}}\nNote: hello\n',
+  '{{nyml\nkind: document\ntitle: Set {{x}}\nauthor: X\n}}\n\nbody\n',
+  '{{nyml\nkind: document\ncustom_css: |\n  a { b: c }\n  }}\ntitle: T\n}}\n',
+  '{{nyml\nkind: document\ntemplate: note\ncustom_css: |\n  @media print {\n    h1 { color: red }}\n  .x { a: b }\npage_size: A5\n}}\n\n# Body\n',
+  '{{nyml\nkind: document\nlicense: CC-BY-4.0\n  name: Creative Commons\ntitle: A\n}}\n',
+  '{{nyml\nKind: document\ntitle: T\n}}\n',
+  '---\nlayout: post\n---\n\n# Hi\n',
+  '{{nyml\nkind: document\nlang: english language\nmeasure: huge\nratio: wide\n}}\n',
+  '{{nyml\nkind: document\ntitle: A\n}}\n\nText\n\n{{nyml\nkind: document\ntitle: B\n}}\n',
+  'a\r\nb\nc',
 ];
 
 // ── seeded random text ────────────────────────────────────────────────────
@@ -178,34 +196,66 @@ describe('envelope laws (FC-18 §2)', () => {
     for (const t of RANDOM_TEXTS.slice(0, 60)) expect(fresh.assembleEnvelope(t, PARTS[2])).toBe(assembleEnvelope(t, PARTS[2]));
   }, 60_000);
 
-  it('[K.2] no code that readDocument or assembleEnvelope runs reads a clock, randomness, the environment or the locale (static check; exemptions listed)', () => {
+  /**
+   * Static check over every module reachable from src/carrier.ts (value and
+   * type imports). `read` lets the test inject a module to prove the check bites.
+   */
+  const staticHits = (read: (f: string) => string | null): string[] => {
     const strip = (src: string): string => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
       .replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''");
-    const files = [
-      'src/index.ts', 'src/env.ts', 'src/registry.ts', 'src/ascii.ts', 'src/html.ts', 'src/doc-meta.ts', 'src/nyml-body.ts', 'src/nyml-blocks.ts', 'src/carrier.ts',
-      ...readdirSync('src/carrier').map((f) => `src/carrier/${f}`),
-      ...readdirSync('src/plugins').map((f) => `src/plugins/${f}`),
-      ...readdirSync('src/rules').map((f) => `src/rules/${f}`),
-    ];
-    const forbidden = [/\bDate\b/, /Math\.random/, /\bperformance\b/, /\bprocess\b/, /getRandomValues/, /\bcrypto\b/, /toLocale/, /\bIntl\b/, /localeCompare/, /\bnavigator\b/, /\bdocument\s*[.[]/, /typeof\s+document\b/, /\blocation\s*[.[]/, /\bglobalThis\b/, /\bwindow\s*[.[]/];
-    // Known-safe uses, each with its reason.
-    const exempt: Record<string, RegExp[]> = {
+    const seen = new Set<string>();
+    const queue = ['src/carrier.ts'];
+    while (queue.length) {
+      const f = queue.pop()!;
+      if (seen.has(f)) continue;
+      seen.add(f);
+      for (const m of (read(f) ?? '').matchAll(/(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g)) {
+        const parts: string[] = [];
+        for (const seg of `${f.slice(0, f.lastIndexOf('/'))}/${m[1]}`.split('/')) {
+          if (seg === '.' || seg === '') continue;
+          if (seg === '..') parts.pop(); else parts.push(seg);
+        }
+        const base = parts.join('/').replace(/\.js$/, '');
+        const next = [`${base}.ts`, `${base}/index.ts`].find((c) => read(c) !== null);
+        if (next) queue.push(next);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(30);
+    const forbidden = [/\bDate\b/, /Math\.random/, /\bperformance\b/, /\bprocess\b/, /getRandomValues/, /\bcrypto\b/, /toLocale/, /\bIntl\b/, /localeCompare/, /\bnavigator\b/, /\bdocument\s*[.[]/, /typeof\s+document\b/, /\blocation\s*[.[]/, /\bglobalThis\b/, /\bwindow\s*[.[]/, /\b__filename\b/, /\b__dirname\b/, /\bimport\.meta\b/, /\brequire\s*\(/, /\bfetch\s*\(/];
+    // Known-safe uses, each with its reason ('*': the whole module).
+    const exempt: Record<string, RegExp[] | '*'> = {
+      'src/prepare-sources.ts': '*', // remote-include pre-pass: a host calls it before rendering; never on the readDocument/assemble path
       'src/carrier/uid.ts': [/getRandomValues/, /\bcrypto\b/, /\bglobalThis\b/], // mintUid: creation tools only, never assembleEnvelope
       'src/carrier/text.ts': [/\bglobalThis\b/], // decodeText's TextDecoder: reading bytes, not on the assemble path
       'src/plugins/markdown-include.ts': [/\bprocess\b/, /\bglobalThis\b/], // file includes: only with an env the host passes (the kit passes {})
       'src/plugins/cjk.ts': [/\bwindow\s*[.[]/], // a local variable named window
     };
     const hits: string[] = [];
-    for (const f of files) {
-      const lines = strip(readFileSync(f, 'utf8')).split('\n');
-      lines.forEach((line, i) => {
-        for (const bad of forbidden) if (bad.test(line) && !(exempt[f] ?? []).some((e) => e.source === bad.source)) hits.push(`${f}:${i + 1} ${bad.source}`);
+    for (const f of seen) {
+      const ex = exempt[f];
+      if (ex === '*') continue;
+      strip(read(f) ?? '').split('\n').forEach((line, i) => {
+        for (const bad of forbidden) if (bad.test(line) && !(ex ?? []).some((e) => e.source === bad.source)) hits.push(`${f}:${i + 1} ${bad.source}`);
       });
     }
-    expect(hits).toEqual([]);
+    return hits;
+  };
+  const readSrc = (f: string): string | null => (existsSync(f) ? readFileSync(f, 'utf8') : null);
+
+  it('[K.2] no module reachable from orz-markdown/carrier reads a clock, randomness, the environment, the locale or the file system (static check over the import graph; exemptions listed)', () => {
+    expect(staticHits(readSrc)).toEqual([]);
     expect(readFileSync('src/carrier/envelope.ts', 'utf8')).not.toContain('mintUid');
+  });
+
+  it('[K.2] the static check bites: a new module with Date.now() imported by document.ts is reported', () => {
+    const probe = (f: string): string | null => {
+      if (f === 'src/carrier/zz-probe.ts') return 'export const stamp = () => Date.now();\n';
+      if (f === 'src/carrier/document.ts') return `import { stamp } from './zz-probe.js';\n${readSrc(f)}`;
+      return readSrc(f);
+    };
+    expect(staticHits(probe)).toEqual(['src/carrier/zz-probe.ts:1 \\bDate\\b']);
   });
 
   it('[K.3] idempotence: assembleEnvelope(extract(F).text, p) === F, and extract returns the kind, format, shell and delivery written', () => {
@@ -817,6 +867,8 @@ describe('round 1: header findings', () => {
   it('[K.4] merging a legacy pair keeps the meta keys\' nested lines and its comment lines', () => {
     const t = '{{nyml\nkind: meta\ntitle: M\nlicense:\n  spdx: CC-BY-4.0\n  note: keep me\n# a comment line\nauthor: A\n}}\n{{nyml\nkind: document\ntheme: t\n}}\nBody\n';
     expect(setHeaderValue(t, 'theme', 'u')).toBe('{{nyml\nkind: document\ntheme: u\ntitle: M\nlicense:\n  spdx: CC-BY-4.0\n  note: keep me\n# a comment line\nauthor: A\n}}\nBody\n');
+    // the back-to-back pair lints clean of errors (no false closer-in-value from the first block)
+    expect(lintHeader(t).map((l) => `${l.code}@${l.line}`)).toEqual(['legacy-header@1', 'ignored-line@5']);
   });
 
   it('[K.4] setting a key that sits on the closing line writes the line ending before "}}", so a value ending in "}" reads back (R1A-4)', () => {
@@ -973,7 +1025,7 @@ describe('round 1: API additions', () => {
 // ── closed-loop round 2 (kit core): reproductions and fixes ──────────────────
 
 describe('round 2: real browser and environment', () => {
-  it('[K.9] in real Chrome, the esbuild bundle of dist/carrier.js assembles the same bytes and reads the same document facts and lint as Node, for every corpus file and every parts set (skips without Chrome or dist)', async (ctx) => {
+  it('[K.9] in real Chrome, the esbuild bundle of dist/carrier.js assembles the same bytes and reads the same document facts and lint as Node, for every corpus file, lint fixture, hazard and sample random text and every parts set (skips without Chrome or dist)', async (ctx) => {
     if (!existsSync('dist/carrier.js')) { ctx.skip(); return; }
     let browser: import('playwright-core').Browser;
     try {
@@ -987,7 +1039,12 @@ describe('round 2: real browser and environment', () => {
       const { build } = await import('esbuild');
       const bundle = await build({ entryPoints: ['dist/carrier.js'], bundle: true, platform: 'browser', format: 'iife', globalName: 'orzc', write: false, logLevel: 'silent', target: ['es2020'] });
       const nodeKit = createRequire(import.meta.url)('../dist/carrier.js') as typeof import('../src/carrier');
-      const inputs = corpus.map(({ e, text }) => ({ text, kind: e.kind }));
+      const inputs = [
+        ...corpus.map(({ e, text }) => ({ text, kind: e.kind, name: e.path })),
+        ...LINT_FIXTURES.map((text, i) => ({ text, kind: (['md', 'slides', 'paged'] as const)[i % 3], name: `lint fixture ${i}` })),
+        ...HAZARDS.filter((h) => !/[\uD800-\uDFFF]/.test(h) || /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(h)).map((text, i) => ({ text, kind: 'md' as const, name: `hazard ${i}` })),
+        ...RANDOM_TEXTS.slice(0, 40).map((text, i) => ({ text, kind: 'md' as const, name: `random ${i}` })),
+      ];
       const node = inputs.map(({ text, kind }) => ({
         html: PARTS.map((p) => nodeKit.assembleEnvelope(text, p)),
         doc: JSON.stringify(nodeKit.readDocument(text, { kind })),
@@ -998,7 +1055,7 @@ describe('round 2: real browser and environment', () => {
       page.on('pageerror', (err) => errors.push(String(err)));
       await page.setContent('<!doctype html><html><head></head><body></body></html>');
       await page.addScriptTag({ content: bundle.outputFiles[0].text });
-      const chrome = await page.evaluate(({ inputs, parts }) => {
+      const chrome = await page.evaluate(({ inputs, parts }: { inputs: Array<{ text: string; kind: Kind }>; parts: ShellParts[] }) => {
         const c = (globalThis as unknown as { orzc: typeof import('../src/carrier') }).orzc;
         return inputs.map(({ text, kind }) => ({
           html: parts.map((p) => c.assembleEnvelope(text, p)),
@@ -1008,14 +1065,22 @@ describe('round 2: real browser and environment', () => {
       }, { inputs, parts: PARTS });
       expect(errors).toEqual([]);
       chrome.forEach((r, i) => {
-        if (r.html.some((h, j) => h !== node[i].html[j])) throw new Error(`assembled bytes differ for ${corpus[i].e.path}`);
-        expect(r.doc, corpus[i].e.path).toBe(node[i].doc);
-        expect(r.lint, corpus[i].e.path).toBe(node[i].lint);
+        if (r.html.some((h, j) => h !== node[i].html[j])) throw new Error(`assembled bytes differ for ${inputs[i].name}`);
+        expect(r.doc, inputs[i].name).toBe(node[i].doc);
+        expect(r.lint, inputs[i].name).toBe(node[i].lint);
       });
     } finally {
       await browser.close();
     }
   }, 180_000);
+
+  it('[K.19] a block plugin registered with register() applies through the kit\'s private parser (an H1 inside it no longer becomes the title)', () => {
+    const t = '{{zzkitbox\n# Inside\n}}\n\n# Real\n';
+    expect(readDocument(t).title).toBe('Inside'); // not a block yet: its lines are Markdown
+    register({ type: 'block', aliases: ['zzkitbox'], render: () => '<div></div>' });
+    expect(readDocument(t).title).toBe('Real');
+    expect(md.render(t)).toContain('<div></div>');
+  });
 
   it('[K.19] the kit parses with a private instance: a host changing md (options, disabled rules, plugins) does not change assembled bytes or document facts', () => {
     const texts = [...corpus.map((c) => c.text), '# "Quotes" -- and... (c)\n', 'Intro\n\n# Title {{sp[x] here}}\n'];
@@ -1102,6 +1167,21 @@ describe('round 2: header', () => {
     expect(lintHeader('{{nyml\nkind: document\ntitle: x}}\n\nauthor: X\n}}\n').map((l) => l.code)).toEqual(['closer-not-alone']);
   });
 
+  it('[K.10] no false closer-in-value: a header followed directly by a paged element, {{mermaid}}, a fence holding "}}", a back-to-back legacy pair, or a compact closer and a body line (R3-1)', () => {
+    const cases: Array<[string, string[]]> = [
+      [LINT_FIXTURES[0], []],
+      [LINT_FIXTURES[1], []],
+      [LINT_FIXTURES[2], []],
+      [LINT_FIXTURES[3], ['legacy-header']],
+      [LINT_FIXTURES[4], ['closer-not-alone']],
+      ['{{nyml\nkind: document\n}}\n{{toc}}\n', []],
+      ['{{nyml\nkind: document\ntitle: A\n}}\n~~~\n}}\n~~~\n', []],
+    ];
+    for (const [t, codes] of cases) expect(lintHeader(t, 'paged').map((l) => l.code), JSON.stringify(t)).toEqual(codes);
+    // the real cuts from rounds 1–2 still error
+    for (const t of [LINT_FIXTURES[5], LINT_FIXTURES[6], LINT_FIXTURES[7]]) expect(lintHeader(t, 'paged').map((l) => l.code), JSON.stringify(t)).toContain('closer-in-value');
+  });
+
   it('[K.10] lint warns ignored-line under a scalar key and kind-case for Kind: / kind: Document (R2-3, R2-10)', () => {
     const t = '{{nyml\nkind: document\nlicense: CC-BY-4.0\n  name: Creative Commons\n  url: https://x\ntitle: A\n}}\n';
     const l = lintHeader(t).find((x) => x.code === 'ignored-line')!;
@@ -1158,6 +1238,9 @@ describe('round 2: header', () => {
     expect(pair.slice(w.offset)).toBe(w.body);
     expect(md.render(w.body)).not.toContain('nyml-data');
     expect(withoutHeader('# Plain\n')).toEqual({ body: '# Plain\n', offset: 0 });
+    expect(withoutHeader('\uFEFF# B\n')).toEqual({ body: '\uFEFF# B\n', offset: 0 });
+    expect(withoutHeader(' \n\t\n')).toEqual({ body: ' \n\t\n', offset: 0 });
+    expect(withoutHeader('')).toEqual({ body: '', offset: 0 });
   });
 });
 
@@ -1169,6 +1252,9 @@ describe('round 2: document facts and the envelope', () => {
     expect(readDocument('# ![alt *x*](i.png) A<sup>2</sup> [link](x.md)\n').title).toBe('alt *x* A2 link');
     expect(readDocument('# ![a photo](i.png) of B\n').title).toBe('a photo of B');
     expect(readDocument('  <!-- slide -->\n# S1\n', { kind: 'slides' }).title).toBe('S1');
+    // a hard break inside the heading reads as one space (FC-18 §8.1)
+    expect(readDocument('# One<br>Two<BR/>Three\n').title).toBe('One Two Three');
+    expect(readDocument('One\\\nTwo  \nThree\n===\n').title).toBe('One Two Three');
     expect(readDocument('# Pre\n  <!-- slide bg=red -->\n# S1\n', { kind: 'slides' }).title).toBe('S1');
   });
 

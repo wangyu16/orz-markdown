@@ -95,7 +95,8 @@ type Tok = { type: string; tag: string; info: string; level: number; content: st
 
 /**
  * The plain text a reader sees in a heading (FC-18 §8.1): text after the
- * typographer and entity decoding, code and math source as written, `{{sp}}`
+ * typographer and entity decoding, a hard break (`<br>`, `\\`, two spaces) as
+ * one space, code and math source as written, `{{sp}}`
  * body text, `{{emoji}}` characters, image alt text; markup (raw HTML, link
  * syntax, attrs) dropped.
  */
@@ -105,6 +106,7 @@ function inlineText(children: Tok[] | null, fallback: string): string {
   for (const c of children) {
     if (c.type === 'text' || c.type === 'text_special' || c.type === 'code_inline' || c.type === 'math_inline') s += c.content;
     else if (c.type === 'softbreak' || c.type === 'hardbreak') s += ' ';
+    else if (c.type === 'html_inline' && /^<br\s*\/?>$/i.test(c.content)) s += ' ';
     else if (c.type === 'image') s += inlineText(c.children, c.content);
     else if (c.type === 'plugin_inline' && (c.info === 'sp' || c.info === 'span')) {
       s += inlineText(kitParser().parseInline(c.content, {})[0]?.children as unknown as Tok[] | null, c.content);

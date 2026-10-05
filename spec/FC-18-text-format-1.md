@@ -123,7 +123,10 @@ theme: light-neat-3
   a CSS line of a `|` value ending in `}}`), when a lone `}}` line or key lines
   follow the header before the first blank line (the header was cut by a `}}`
   in a single-line value or a lone indented `}}` in a `|` value), or when text
-  follows the closing `}}` on its line; a compact `key: value}}` closing line
+  follows the closing `}}` on its line. The lines checked are those right after
+  the header's last block, up to the first blank line, the first line starting
+  with `{{`, or a fence (` ``` ` / `~~~`), so a header followed directly by an
+  element block, a directive or a code block is not reported; a compact `key: value}}` closing line
   otherwise is only a warning (`closer-not-alone`). The grammar does not
   change: the header ends at the first `}}`.
 - **Entries (one rule).** An entry is its key line plus the following lines
@@ -246,7 +249,8 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
   container; for `slides` only a heading after the first slide marker (a
   top-level `<!-- slide` comment block, indentation allowed; text before it
   never counts); its plain text as a reader sees it — typographer output,
-  entities decoded, `{{emoji}}` characters, `{{sp}}` text, math source as
+  entities decoded, a hard break (`<br>`, a backslash or two-space break) as
+  one space, `{{emoji}}` characters, `{{sp}}` text, math source as
   written, image alt text as the renderer writes it, markup dropped — else, for `paged`, the `title` (else `text`) field of strictly
   the first title element, i.e. the first nyml block after the header whose
   kind ends in `-title` (`article-title`, `report-title`, `exam-title`, …;
