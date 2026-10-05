@@ -15,6 +15,7 @@
 import { scanNymlBlocks, type NymlBlock } from '../nyml-blocks.js';
 import { indentWidth, parseNymlBody, type NymlBodyEntry } from '../nyml-body.js';
 import { hasLoneSurrogate, hasMixedEol } from './text.js';
+import { kitParser } from './parser.js';
 
 /** One nyml block that is part of the header. */
 export interface HeaderBlock {
@@ -155,7 +156,11 @@ function firstLineBreak(s: string): string | null {
   return m ? m[0] : null;
 }
 
-/** Remove up to `width` columns of leading whitespace (tabs to multiples of 4). */
+/**
+ * Remove up to `width` columns of leading whitespace (tabs to multiples of 4),
+ * as markdown-it's `getLines` does: a tab that reaches past `width` leaves its
+ * overshoot as spaces.
+ */
 function dropColumns(line: string, width: number): string {
   let col = 0;
   let i = 0;
@@ -163,7 +168,17 @@ function dropColumns(line: string, width: number): string {
     col = line[i] === '\t' ? col + 4 - (col % 4) : col + 1;
     i++;
   }
-  return line.slice(i);
+  return ' '.repeat(Math.max(0, col - width)) + line.slice(i);
+}
+
+/** Set an own data property (a `__proto__` key is data, not the prototype). */
+function put(obj: Record<string, string>, key: string, value: string): void {
+  Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
+}
+
+/** The token-based scan of `source` with the kit's private parser. */
+function scan(source: string): NymlBlock[] {
+  return scanNymlBlocks(source, kitParser().parse(source, {}));
 }
 
 /** 1-based line number of an offset (CR LF, CR and LF each end a line). */
@@ -181,7 +196,7 @@ function layoutOf(text: string, block: NymlBlock): Layout {
   // Opener indentation: the columns before `{{nyml` on its line.
   let lineStart = block.start;
   while (lineStart > 0 && text[lineStart - 1] !== '\n' && text[lineStart - 1] !== '\r') lineStart--;
-  const openerIndent = indentWidth(text.slice(lineStart, block.start).replace(/^﻿/, ''));
+  const openerIndent = indentWidth(text.slice(lineStart, block.start).replace(/^\uFEFF/, ''));
   let bodyFrom = block.start + '{{nyml'.length;
   if (text[bodyFrom] === '[') {
     const br = text.indexOf(']', bodyFrom);
@@ -203,7 +218,8 @@ function layoutOf(text: string, block: NymlBlock): Layout {
   const bodyLines: string[] = regions.map(([from, to], k) => {
     const raw = text.slice(from, to);
     // The dispatcher skips the whitespace after `{{nyml` and reads later lines
-    // relative to the opener's indentation; mirror it so positions map 1:1.
+    // relative to the opener's indentation; mirror it so the reader sees what
+    // the scanner sees (positions are mapped from the raw line below).
     const seen = k === 0 ? raw.replace(/^[ \t]+/, '') : dropColumns(raw, openerIndent);
     skipped.push(raw.length - seen.length);
     return seen;
@@ -211,11 +227,12 @@ function layoutOf(text: string, block: NymlBlock): Layout {
   const parsed = parseNymlBody(bodyLines.join('\n'));
 
   const entries: PlacedEntry[] = parsed.entries.map((e) => {
-    const lineText = bodyLines[e.line];
-    const head = KEY_HEAD.exec(lineText);
-    const regionFrom = regions[e.line][0] + skipped[e.line];
-    const keyStart = regionFrom + (head ? head[1].length : 0);
-    const sepEnd = head ? regionFrom + head[0].length : keyStart;
+    const [from, to] = regions[e.line];
+    const raw = text.slice(from, to);
+    const lead = (/^[ \t]*/.exec(raw) ?? [''])[0].length;
+    const head = KEY_HEAD.exec(raw.slice(lead));
+    const keyStart = from + lead;
+    const sepEnd = head ? keyStart + head[2].length + head[3].length : keyStart;
     return { ...e, keyStart, sepEnd, valueEnd: regions[e.endLine][1], full: e.line > 0 && e.endLine < last };
   });
 
@@ -231,7 +248,7 @@ interface Located {
 }
 
 /** A text can have a header only if it starts (after a BOM and whitespace) with `{{nyml`. */
-const HEADER_START = /^﻿?[ \t\r\n]*\{\{nyml/;
+const HEADER_START = /^\uFEFF?[ \t\r\n]*\{\{nyml/;
 const BETWEEN = /^[ \t\r\n]*$/;
 
 function own(obj: Record<string, string>, key: string): boolean {
@@ -264,9 +281,9 @@ function locate(text: string): Located | null {
     const end2 = candidateEnd(text, p);
     if (end2 >= 0) prefixEnd = end2;
   }
-  const blocks = scanNymlBlocks(text.slice(0, prefixEnd));
+  const blocks = scan(text.slice(0, prefixEnd));
   const first = blocks[0];
-  if (!first || !/^﻿?[ \t\r\n]*$/.test(text.slice(0, first.start))) return null;
+  if (!first || !/^\uFEFF?[ \t\r\n]*$/.test(text.slice(0, first.start))) return null;
   if (first.kind !== 'document' && first.kind !== 'meta') return null;
   const second = blocks[1];
   const paired =
@@ -281,8 +298,8 @@ function locate(text: string): Located | null {
   const add = (layout: Layout, overwrite: boolean): void => {
     for (const e of layout.entries) {
       if (e.key === 'kind' || !own(layout.fields, e.key)) continue;
-      if (!own(fields, e.key)) { keys.push(e.key); fields[e.key] = layout.fields[e.key]; }
-      else if (overwrite) fields[e.key] = layout.fields[e.key];
+      if (!own(fields, e.key)) { keys.push(e.key); put(fields, e.key, layout.fields[e.key]); }
+      else if (overwrite) put(fields, e.key, layout.fields[e.key]);
     }
   };
   if (paired) {
@@ -330,6 +347,20 @@ function locate(text: string): Located | null {
  */
 export function readHeader(text: string): Header | null {
   return locate(text)?.header ?? null;
+}
+
+/**
+ * The text without its header, for a carrier that renders the body: `body` is
+ * `text.slice(offset)`, where `offset` is the end of the header (legacy blocks
+ * included; a BOM before the header goes with it). A text without a header is
+ * returned whole (`offset` 0). Renderers must render this body: the shared
+ * `md` hides a `kind: document` block but renders a legacy `kind: meta`
+ * block as a data island.
+ */
+export function withoutHeader(text: string): { body: string; offset: number } {
+  const loc = locate(text);
+  if (!loc) return { body: text, offset: 0 };
+  return { body: text.slice(loc.header.end), offset: loc.header.end };
 }
 
 // ── editing (FC-18 §9) ──────────────────────────────────────────────────────
@@ -476,7 +507,7 @@ export function editHeader(text: string, changes: Readonly<Record<string, Header
   if (!loc) {
     if (!sets.length) return text;
     const eol = firstLineBreak(text) ?? '\n';
-    const at = text.startsWith('﻿') ? 1 : 0;
+    const at = text.startsWith('\uFEFF') ? 1 : 0;
     const body = sets.map(([k, c]) => `${k}:${valuePart(c, '', eol)}${eol}`).join('');
     return text.slice(0, at) + `{{nyml${eol}kind: document${eol}${body}}}${eol}${eol}` + text.slice(at);
   }
@@ -495,8 +526,14 @@ export function editHeader(text: string, changes: Readonly<Record<string, Header
     const hit = hits[hits.length - 1];
     if (hit) {
       const indent = hit.line > 0 ? src.slice(layout.lines[hit.line].start, hit.keyStart) : layout.keyIndent;
-      const onCloser = hit.endLine === last;
-      ops.push({ from: hit.sepEnd, to: hit.valueEnd, insert: valuePart(change, indent, layout.eol) + (onCloser ? layout.eol : '') });
+      // A scalar value over a scalar key replaces the key line only (its deeper
+      // lines stay, ignored as before). A `|` value, old or new, replaces the
+      // whole entry: deeper lines would otherwise be read as part of it.
+      const whole = hit.multiline || typeof change !== 'string';
+      const endLine = whole ? hit.endLine : hit.line;
+      const to = whole ? hit.valueEnd : layout.regions[hit.line][1];
+      const onCloser = endLine === last;
+      ops.push({ from: hit.sepEnd, to, insert: valuePart(change, indent, layout.eol) + (onCloser ? layout.eol : '') });
     } else {
       inserts += `${layout.keyIndent}${key}:${valuePart(change, layout.keyIndent, layout.eol)}${layout.eol}`;
     }
@@ -540,7 +577,7 @@ function isKindName(v: string | undefined): v is KindName {
 }
 
 const STRAY_HINT = /kind[ \t]*[:：][ \t]*["']?document/;
-const FRONT_MATTER = /^﻿?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
+const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
 
 /**
  * Lint the header of a text. `kind` selects the key registry; without it the
@@ -550,8 +587,11 @@ const FRONT_MATTER = /^﻿?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * Header codes: `legacy-header` (warning), `kind-not-first` (warning),
  * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
  * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
- * the closing `}}` line holds other text that is not a key line — the
- * header ended inside a value — or text follows `}}`), `duplicate-key`
+ * the header ended at a `}}` inside a value — the closing line holds non-key
+ * text, or a lone `}}` line or key lines follow the header before the first
+ * blank line, or text follows `}}`), `ignored-line` (warning: lines indented
+ * under a scalar key, which the flat reader ignores), `kind-case` (warning:
+ * `Kind:` / `kind: Document` — not read as the header), `duplicate-key`
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
@@ -589,13 +629,26 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
   const headerEnd = loc ? loc.header.end : 0;
   if (STRAY_HINT.test(headerEnd ? text.slice(headerEnd) : text)) {
     const inHeader = new Set(loc ? loc.header.blocks.map((b) => b.start) : []);
-    for (const b of blocks ? blocks() : scanNymlBlocks(text)) {
+    for (const b of blocks ? blocks() : scan(text)) {
       if (b.kind === 'document' && !inHeader.has(b.start)) {
         out.push({ level: 'warning', code: 'stray-document-block', message: 'a kind: document block that is not the header (it does not lead the text); it renders nothing and is not read', ...at(b.start, b.end) });
       }
     }
   }
-  if (!loc) return out;
+  if (!loc) {
+    // A leading block that would be the header but for the case of `kind`.
+    const m = HEADER_START.exec(text);
+    if (m) {
+      const end = candidateEnd(text, m[0].length - 6);
+      const block = end < 0 ? '' : text.slice(m[0].length - 6, end);
+      const k = /(^|[\r\n]|\{\{nyml)[ \t]*(kind)[ \t]*[:\uFF1A][ \t]*["']?(document|meta)["']?[ \t]*(?=[\r\n}]|$)/i.exec(block);
+      if (k && (k[2] !== 'kind' || (k[3] !== 'document' && k[3] !== 'meta'))) {
+        const from = m[0].length - 6 + k.index + k[1].length;
+        out.push({ level: 'warning', code: 'kind-case', message: `"${k[0].trim()}" is not read as the header: write "kind: ${k[3].toLowerCase()}" in lower case`, ...at(from, from + k[0].length - k[1].length) });
+      }
+    }
+    return out;
+  }
   const { header } = loc;
   const fields = header.fields;
   if (header.legacy) {
@@ -612,16 +665,49 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
     if (text.slice(f0, t0).trim() !== '') {
       out.push({ level: 'warning', code: 'opener-not-alone', message: '{{nyml should stand alone on its line (keys start on the next line)', ...at(bStart, layout.lines[0].end) });
     }
+    // Lines right after the header, up to the first blank line: a lone `}}`
+    // there (or key lines after a compact closer) means the header was cut
+    // short by a `}}` inside a value.
+    const after: Array<{ from: number; to: number; text: string }> = [];
+    {
+      let p = layout.block.end;
+      const eolAt = /\r\n|\r|\n/g;
+      eolAt.lastIndex = p;
+      const firstEol = eolAt.exec(text);
+      p = firstEol ? firstEol.index + firstEol[0].length : text.length;
+      while (p < text.length) {
+        eolAt.lastIndex = p;
+        const m = eolAt.exec(text);
+        const end = m ? m.index : text.length;
+        const line = text.slice(p, end);
+        if (line.trim() === '') break;
+        after.push({ from: p, to: end, text: line });
+        if (!m) break;
+        p = m.index + m[0].length;
+      }
+    }
+    const orphan = after.find((l) => l.text.trim() === '}}');
+    const keyAfter = after.find((l) => /^[ \t]*[A-Za-z0-9_]+[ \t]*[:\uFF1A]/.test(l.text));
+    const closerBlame = (): Pick<Lint, 'line' | 'from' | 'to'> => at(layout.lines[last].start, layout.block.end);
+    let cut = false;
     if (last > 0) {
       const [fl, tl] = layout.regions[last];
       if (text.slice(fl, tl).trim() !== '') {
         const keyOnCloser = keyed.some((e) => e.line === last);
-        if (keyOnCloser) {
-          out.push({ level: 'warning', code: 'closer-not-alone', message: '}} should stand alone on its line', ...at(layout.lines[last].start, layout.block.end) });
+        if (!keyOnCloser || orphan || keyAfter) {
+          cut = true;
+          out.push({ level: 'error', code: 'closer-in-value', message: 'the header ends at a "}}" inside a value: the rest of the header becomes body text; write "} }"', ...closerBlame() });
         } else {
-          out.push({ level: 'error', code: 'closer-in-value', message: 'the header ends at a "}}" inside a value (the closing line holds other text): the rest of the header becomes body text; write "} }"', ...at(layout.lines[last].start, layout.block.end) });
+          out.push({ level: 'warning', code: 'closer-not-alone', message: '}} should stand alone on its line', ...closerBlame() });
         }
       }
+    }
+    if (!cut && orphan) {
+      out.push({ level: 'error', code: 'closer-in-value', message: 'a lone "}}" follows the header: the header ended earlier, at a "}}" inside a value; write "} }"', ...at(orphan.from, orphan.to) });
+    }
+    for (const en of keyed) {
+      if (en.multiline || en.endLine === en.line) continue;
+      out.push({ level: 'warning', code: 'ignored-line', key: en.key, message: `lines indented under "${en.key}" are ignored (the header is flat; only a "key: |" value spans lines)`, ...at(layout.lines[en.line + 1]?.start ?? en.valueEnd, en.valueEnd) });
     }
     let e = layout.block.end;
     while (e < text.length && (text[e] === ' ' || text[e] === '\t')) e++;

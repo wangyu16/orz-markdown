@@ -1,20 +1,23 @@
 /**
- * The orz carrier kit core (FC-18 text format 1, src/carrier/): claims K.1–K.18,
- * M.22 and M.23 in notes/CLAIMS.md (closed-loop round 1 reproductions at the end). The golden corpus (tests/carrier-corpus/) is the shared
+ * The orz carrier kit core (FC-18 text format 1, src/carrier/): claims K.1–K.22,
+ * M.22 and M.23 in notes/CLAIMS.md (closed-loop round 1 and 2 reproductions at
+ * the end; rounds recorded in notes/carrier-kit-loop.md). The golden corpus (tests/carrier-corpus/) is the shared
  * oracle; random text comes from a small seeded PRNG (no fast-check).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import {
   assembleEnvelope, extract, readHeader, readDocument, setHeaderValue, removeHeaderKey, lintHeader,
-  kindFromFilename, twinName, twinHref, mintUid, registerTwinLinks, readIslandFromDom, editHeader, decodeText, UID_PATTERN, TWIN_LINKS_RULE,
+  kindFromFilename, twinName, twinHref, mintUid, registerTwinLinks, readIslandFromDom, editHeader, decodeText, withoutHeader, UID_PATTERN, TWIN_LINKS_RULE,
   type ShellParts, type Kind,
 } from '../src/carrier';
 import { md } from '../src/index';
 import { escapeScriptText } from '../src/html';
 import { parseDocMetaIsland } from '../src/doc-meta';
+import { kitParser } from '../src/carrier/parser';
 import { scanNymlBlocks } from '../src/nyml-blocks';
 
 const ROOT = 'tests/carrier-corpus';
@@ -175,16 +178,33 @@ describe('envelope laws (FC-18 §2)', () => {
     for (const t of RANDOM_TEXTS.slice(0, 60)) expect(fresh.assembleEnvelope(t, PARTS[2])).toBe(assembleEnvelope(t, PARTS[2]));
   }, 60_000);
 
-  it('[K.2] the envelope, header, document and link code uses no clock, randomness or environment (static check)', () => {
-    const strip = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-    for (const f of ['src/carrier/envelope.ts', 'src/carrier/header.ts', 'src/carrier/document.ts', 'src/carrier/links.ts', 'src/carrier/text.ts', 'src/carrier/index.ts', 'src/carrier.ts', 'src/html.ts', 'src/doc-meta.ts', 'src/nyml-body.ts', 'src/nyml-blocks.ts']) {
-      const code = strip(readFileSync(f, 'utf8'));
-      for (const bad of [/\bDate\b/, /Math\.random/, /\bperformance\./, /\bprocess\./, /getRandomValues/, /\bcrypto\b/, /toLocale/, /Intl\./]) {
-        expect(bad.test(code), `${f}: ${bad}`).toBe(false);
-      }
+  it('[K.2] no code that readDocument or assembleEnvelope runs reads a clock, randomness, the environment or the locale (static check; exemptions listed)', () => {
+    const strip = (src: string): string => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+      .replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''");
+    const files = [
+      'src/index.ts', 'src/env.ts', 'src/registry.ts', 'src/ascii.ts', 'src/html.ts', 'src/doc-meta.ts', 'src/nyml-body.ts', 'src/nyml-blocks.ts', 'src/carrier.ts',
+      ...readdirSync('src/carrier').map((f) => `src/carrier/${f}`),
+      ...readdirSync('src/plugins').map((f) => `src/plugins/${f}`),
+      ...readdirSync('src/rules').map((f) => `src/rules/${f}`),
+    ];
+    const forbidden = [/\bDate\b/, /Math\.random/, /\bperformance\b/, /\bprocess\b/, /getRandomValues/, /\bcrypto\b/, /toLocale/, /\bIntl\b/, /localeCompare/, /\bnavigator\b/, /\bdocument\s*[.[]/, /typeof\s+document\b/, /\blocation\s*[.[]/, /\bglobalThis\b/, /\bwindow\s*[.[]/];
+    // Known-safe uses, each with its reason.
+    const exempt: Record<string, RegExp[]> = {
+      'src/carrier/uid.ts': [/getRandomValues/, /\bcrypto\b/, /\bglobalThis\b/], // mintUid: creation tools only, never assembleEnvelope
+      'src/carrier/text.ts': [/\bglobalThis\b/], // decodeText's TextDecoder: reading bytes, not on the assemble path
+      'src/plugins/markdown-include.ts': [/\bprocess\b/, /\bglobalThis\b/], // file includes: only with an env the host passes (the kit passes {})
+      'src/plugins/cjk.ts': [/\bwindow\s*[.[]/], // a local variable named window
+    };
+    const hits: string[] = [];
+    for (const f of files) {
+      const lines = strip(readFileSync(f, 'utf8')).split('\n');
+      lines.forEach((line, i) => {
+        for (const bad of forbidden) if (bad.test(line) && !(exempt[f] ?? []).some((e) => e.source === bad.source)) hits.push(`${f}:${i + 1} ${bad.source}`);
+      });
     }
-    // Randomness lives only in uid.ts (mintUid), which the envelope never calls.
-    expect(readFileSync('src/carrier/uid.ts', 'utf8')).toContain('getRandomValues');
+    expect(hits).toEqual([]);
     expect(readFileSync('src/carrier/envelope.ts', 'utf8')).not.toContain('mintUid');
   });
 
@@ -542,7 +562,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['document.ts', 'envelope.ts', 'header.ts', 'index.ts', 'links.ts', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['document.ts', 'envelope.ts', 'header.ts', 'index.ts', 'links.ts', 'parser.ts', 'read.ts', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {
@@ -781,13 +801,17 @@ describe('round 1: header findings', () => {
     expect(lintHeader('{{nyml\nkind: document\ntitle: x}}\n').map((x) => `${x.level}:${x.code}`)).toEqual(['warning:closer-not-alone']);
   });
 
-  it('[K.4] an entry owns its nested lines: remove and set take them along, and a | value before it keeps its text (R1A-3)', () => {
+  it('[K.4] an entry owns its nested lines: remove takes them along (a | value before it keeps its text), a scalar set replaces the key line only (R1A-3, R2-3)', () => {
     const t = '{{nyml\nkind: document\ndescription: |\n  First para.\nlicense:\n  spdx: CC-BY-4.0\n  url: https://x\ntitle: T\n}}\n';
     const r = removeHeaderKey(t, 'license');
     expect(r).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\ntitle: T\n}}\n');
     expect(readHeader(r)!.fields).toEqual({ description: 'First para.', title: 'T' });
+    // a scalar set replaces the key line only (R2-3); its nested lines stay, ignored as before
     const s2 = setHeaderValue(t, 'license', 'MIT');
-    expect(s2).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\nlicense: MIT\ntitle: T\n}}\n');
+    expect(s2).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\nlicense: MIT\n  spdx: CC-BY-4.0\n  url: https://x\ntitle: T\n}}\n');
+    expect(readHeader(s2)!.fields).toEqual({ description: 'First para.', license: 'MIT', title: 'T' });
+    // a | value over it replaces the whole entry (the nested lines would become its content)
+    expect(editHeader(t, { license: { multiline: 'MIT' } })).toBe('{{nyml\nkind: document\ndescription: |\n  First para.\nlicense: |\n  MIT\ntitle: T\n}}\n');
   });
 
   it('[K.4] merging a legacy pair keeps the meta keys\' nested lines and its comment lines', () => {
@@ -868,20 +892,22 @@ describe('round 1: cost (K.14)', () => {
   const bodyOf = (n: number): string => Array.from({ length: n }, (_, i) => `## Section ${i}\n\nParagraph ${i} with **bold**, \`code\`, [link](x${i}.md) and $x^${i % 9}$.\n\n- a\n- b\n`).join('\n');
   const best = (f: () => unknown, n = 5): number => { let b = Infinity; for (let i = 0; i < n; i++) { const t = performance.now(); f(); b = Math.min(b, performance.now() - t); } return b; };
 
-  it('[K.14] readHeader is O(header): on a 3.5 MB text it takes ≤ 5 ms, and 4× the body costs the same within 4×', () => {
+  it('[K.14] readHeader is O(header): on a 3.5 MB text it costs under 1/100 of parsing the document, and the same for 4× the body (ratios to a baseline measured in this run)', () => {
     const small = header + bodyOf(38_000);
     const big = header + bodyOf(152_000);
     expect(small.length).toBeGreaterThan(3_500_000);
+    const tenth = small.slice(0, Math.floor(small.length / 10));
+    const baseline = 10 * best(() => md.parse(tenth, {}), 2); // ≈ one full parse of the 3.5 MB text
     const ts = best(() => readHeader(small));
     const tb = best(() => readHeader(big));
-    expect(ts).toBeLessThanOrEqual(5);
-    expect(tb).toBeLessThanOrEqual(Math.max(5, 4 * ts));
+    expect(ts).toBeLessThan(baseline / 100);
+    expect(tb).toBeLessThan(baseline / 100);
     expect(readHeader(big)!.fields.title).toBe('Big');
   }, 60_000);
 
-  it('[K.14] readDocument with a header title never parses the body; without one it parses it once', () => {
+  it('[K.14] readDocument with a header title never parses the body; without one it parses it once', async () => {
     const text = header + bodyOf(2000);
-    const spy = vi.spyOn(md, 'parse');
+    const spy = vi.spyOn(kitParser(), 'parse');
     try {
       readDocument(text);
       expect(spy.mock.calls.every(([src]) => (src as string).length < 200)).toBe(true);
@@ -941,5 +967,233 @@ describe('round 1: API additions', () => {
   it('[K.3] extract returns the resolved includes stored in #orz-includes', () => {
     expect(extract(assembleEnvelope('x', PARTS[2]))!.includes).toEqual(PARTS[2].includes);
     expect(extract(assembleEnvelope('x', PARTS[0]))!.includes).toBeUndefined();
+  });
+});
+
+// ── closed-loop round 2 (kit core): reproductions and fixes ──────────────────
+
+describe('round 2: real browser and environment', () => {
+  it('[K.9] in real Chrome, the esbuild bundle of dist/carrier.js assembles the same bytes and reads the same document facts and lint as Node, for every corpus file and every parts set (skips without Chrome or dist)', async (ctx) => {
+    if (!existsSync('dist/carrier.js')) { ctx.skip(); return; }
+    let browser: import('playwright-core').Browser;
+    try {
+      const { chromium } = await import('playwright-core');
+      browser = await chromium.launch({ channel: 'chrome' });
+    } catch {
+      ctx.skip();
+      return;
+    }
+    try {
+      const { build } = await import('esbuild');
+      const bundle = await build({ entryPoints: ['dist/carrier.js'], bundle: true, platform: 'browser', format: 'iife', globalName: 'orzc', write: false, logLevel: 'silent', target: ['es2020'] });
+      const nodeKit = createRequire(import.meta.url)('../dist/carrier.js') as typeof import('../src/carrier');
+      const inputs = corpus.map(({ e, text }) => ({ text, kind: e.kind }));
+      const node = inputs.map(({ text, kind }) => ({
+        html: PARTS.map((p) => nodeKit.assembleEnvelope(text, p)),
+        doc: JSON.stringify(nodeKit.readDocument(text, { kind })),
+        lint: JSON.stringify(nodeKit.lintHeader(text, kind)),
+      }));
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', (err) => errors.push(String(err)));
+      await page.setContent('<!doctype html><html><head></head><body></body></html>');
+      await page.addScriptTag({ content: bundle.outputFiles[0].text });
+      const chrome = await page.evaluate(({ inputs, parts }) => {
+        const c = (globalThis as unknown as { orzc: typeof import('../src/carrier') }).orzc;
+        return inputs.map(({ text, kind }) => ({
+          html: parts.map((p) => c.assembleEnvelope(text, p)),
+          doc: JSON.stringify(c.readDocument(text, { kind })),
+          lint: JSON.stringify(c.lintHeader(text, kind)),
+        }));
+      }, { inputs, parts: PARTS });
+      expect(errors).toEqual([]);
+      chrome.forEach((r, i) => {
+        if (r.html.some((h, j) => h !== node[i].html[j])) throw new Error(`assembled bytes differ for ${corpus[i].e.path}`);
+        expect(r.doc, corpus[i].e.path).toBe(node[i].doc);
+        expect(r.lint, corpus[i].e.path).toBe(node[i].lint);
+      });
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
+
+  it('[K.19] the kit parses with a private instance: a host changing md (options, disabled rules, plugins) does not change assembled bytes or document facts', () => {
+    const texts = [...corpus.map((c) => c.text), '# "Quotes" -- and... (c)\n', 'Intro\n\n# Title {{sp[x] here}}\n'];
+    const before = texts.map((t) => [assembleEnvelope(t, PARTS[0]), JSON.stringify(readDocument(t))]);
+    const saved = { ...md.options };
+    md.set({ typographer: false, html: false, linkify: false });
+    md.disable(['heading', 'lheading']);
+    md.core.ruler.push('host_mutation', (state) => { for (const t of state.tokens) if (t.type === 'inline') t.content = 'X'; });
+    try {
+      const after = texts.map((t) => [assembleEnvelope(t, PARTS[0]), JSON.stringify(readDocument(t))]);
+      expect(after).toEqual(before);
+      expect(readDocument('# "Quotes" -- and...\n').title).toBe('“Quotes” – and…');
+    } finally {
+      md.set(saved);
+      md.enable(['heading', 'lheading']);
+      md.core.ruler.disable('host_mutation');
+    }
+  });
+});
+
+describe('round 2: reading files', () => {
+  it('[K.12] an assembled file whose line endings were converted to CR LF (git autocrlf, a Windows editor) extracts the same text, as the DOM reads it (R2-1)', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    for (const t of ['# A\nb\n', '# A\r\nb\r\n', '﻿{{nyml\rkind: document\r}}\r', ...corpus.map((c) => c.text)]) {
+      const html = assembleEnvelope(t, PARTS[0]);
+      for (const converted of [html.replace(/\n/g, '\r\n'), html.replace(/\n/g, '\r')]) {
+        expect(extract(converted)!.text).toBe(t);
+        const el = new win.DOMParser().parseFromString(converted, 'text/html').getElementById('orz-src');
+        expect(readIslandFromDom(el as unknown as Parameters<typeof readIslandFromDom>[0])).toBe(t);
+      }
+    }
+    await win.happyDOM.close();
+  });
+
+  it('[K.15] extract skips bogus comments (<?…>, <!x…>, doctype) and end-tag attributes, as the tokenizer does', () => {
+    expect(extract('<? <script id="orz-src">B</script> ?><script id="orz-src">X</script>')!.text).toBe('X');
+    expect(extract('<!x <script id="orz-src">B</script>><script id="orz-src">X</script>')!.text).toBe('X'); // the bogus comment ends at the first >
+    expect(extract('<!DOCTYPE html><script id="orz-src">X</script>')!.text).toBe('X');
+    expect(extract(`</div title="<script id='orz-src'>"><script id="orz-src">X</script>`)!.text).toBe('X');
+    expect(extract(`<script>1</script title="<script id='orz-src'>"><script id="orz-src">X</script>`)!.text).toBe('X');
+    expect(extract('</ <script id="orz-src">B</script>><script id="orz-src">X</script>')!.text).toBe('X');
+  });
+
+  it('[K.18] decodeText({ fatal: true }) throws on invalid UTF-8; by default it becomes U+FFFD', () => {
+    const bad = new Uint8Array([0x41, 0xe9, 0x42]);
+    expect(decodeText(bad)).toBe('A�B');
+    expect(() => decodeText(bad, { fatal: true })).toThrow();
+    expect(decodeText(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]), { fatal: true })).toBe('﻿A');
+  });
+
+  it('[K.20] orz-markdown/carrier/read is parser-free: its import graph has no parser module, it bundles under 30 KB minified, and the package exports it', async () => {
+    // Value imports only (`import type` is erased at build time).
+    const graph = importGraph('src/carrier/read.ts', (f, spec) => resolveRelative(f, spec, ['.ts']), /^\s*(?:import|export)\s+(?!type\b)[^'";]*?from\s*['"]([^'"]+)['"]/gm);
+    expect([...graph].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts']);
+    const { build } = await import('esbuild');
+    const out = await build({ stdin: { contents: "export * from './src/carrier/read';", resolveDir: '.', loader: 'ts' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
+    const size = out.outputFiles[0].contents.byteLength;
+    expect(size).toBeLessThan(30_000);
+    expect(Object.keys(out.metafile!.inputs).filter((f) => /index\.ts|markdown-it|katex/.test(f))).toEqual([]);
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { exports: Record<string, string>; dependencies: Record<string, string> };
+    expect(pkg.exports['./carrier/read']).toBe('./dist/carrier/read.js');
+    expect(pkg.dependencies['@types/markdown-it']).toBeDefined(); // the .d.ts files expose markdown-it types
+    const read = await import('../src/carrier/read');
+    expect(Object.keys(read).sort()).toEqual(['INCLUDES_ISLAND_ID', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'jsonForScript', 'readIslandFromDom', 'reservedIdIn', 'unescapeScriptText']);
+  });
+});
+
+describe('round 2: header', () => {
+  it('[K.10] an orphan "}}" after the header (a single-line value ending in "}}", or a lone "}}" inside a | value) is the closer-in-value error (R2-2, R2-5)', () => {
+    const cases = [
+      '{{nyml\nkind: document\ntitle: Set {{x}}\nauthor: X\n}}\n\nbody\n',
+      '{{nyml\nkind: document\ntitle: x}}\nauthor: X\n}}\n',
+      '{{nyml\nkind: document\ncustom_css: |\n  a { b: c }\n  }}\ntitle: T\n}}\n',
+      '{{nyml\nkind: document\ncustom_css: |\n  @media x { a { b: c }}\ntitle: T\n}}\n\nbody\n',
+    ];
+    for (const t of cases) {
+      const codes = lintHeader(t).map((l) => `${l.level}:${l.code}`);
+      expect(codes, JSON.stringify(t)).toContain('error:closer-in-value');
+      expect(codes, JSON.stringify(t)).not.toContain('warning:closer-not-alone');
+    }
+    // a compact closer followed by body text (no key line, no lone }}) stays a warning
+    expect(lintHeader('{{nyml\nkind: document\ntitle: x}}\nSome text: here\n').map((l) => l.code)).toEqual(['closer-not-alone']);
+    expect(lintHeader('{{nyml\nkind: document\ntitle: x}}\n\nauthor: X\n}}\n').map((l) => l.code)).toEqual(['closer-not-alone']);
+  });
+
+  it('[K.10] lint warns ignored-line under a scalar key and kind-case for Kind: / kind: Document (R2-3, R2-10)', () => {
+    const t = '{{nyml\nkind: document\nlicense: CC-BY-4.0\n  name: Creative Commons\n  url: https://x\ntitle: A\n}}\n';
+    const l = lintHeader(t).find((x) => x.code === 'ignored-line')!;
+    expect([l.key, l.line, t.slice(l.from!, l.to)]).toEqual(['license', 4, '  name: Creative Commons\n  url: https://x']);
+    expect(lintHeader('{{nyml\nkind: document\ncustom_css: |\n  a\n    b\n}}\n')).toEqual([]);
+    for (const k of ['Kind: document', 'kind: Document', 'KIND: DOCUMENT', 'kind: META']) {
+      const text = `{{nyml\n${k}\ntitle: T\n}}\n`;
+      expect(readHeader(text), k).toBeNull();
+      expect(lintHeader(text).map((x) => `${x.code}@${x.line}`), k).toEqual(['kind-case@2']);
+    }
+  });
+
+  it('[K.5] readHeader reads the fields scanNymlBlocks reads, for tab- and space-indented openers and keys (R2-4; seeded generator)', () => {
+    const r = mulberry32(0x7ab5);
+    const pick = <T,>(a: T[]): T => a[Math.floor(r() * a.length)];
+    let compared = 0;
+    for (let i = 0; i < 1500; i++) {
+      const ind = pick(['', ' ', '  ', '   ']);
+      const keyInd = pick(['', ' ', '  ', '\t', ' \t', '\t ']);
+      const lines = ['kind: document', ...Array.from({ length: 1 + Math.floor(r() * 4) }, () => pick(['title: A', 'author: B C', 'x: |\n  a\n\tb', 'license: CC\n\tname: X', 'deep: x\n  \tnested: y', 'k：v']))];
+      const body = lines.join('\n').split('\n').map((l) => pick([keyInd, ind + keyInd, '']) + l).join('\n');
+      const t = (`${pick(['', '﻿', '\n'])}${ind}{{nyml\n${body}\n${pick(['', ind, '\t'])}}}\n\n# H\n`).replace(/\n/g, pick(['\n', '\r\n']));
+      const h = readHeader(t);
+      const b = scanNymlBlocks(t)[0];
+      if (!h || !b) continue;
+      compared++;
+      expect(h.fields, JSON.stringify(t)).toEqual(b.fields);
+      for (const e of h.entries) expect(t.startsWith(e.key, e.keyFrom), JSON.stringify(t)).toBe(true);
+    }
+    expect(compared).toBeGreaterThan(300);
+  });
+
+  it('[K.21] keys named __proto__, constructor or toString are ordinary data in header fields and keys and in #orz-includes (R2-7, F9)', () => {
+    const t = '{{nyml\nkind: document\n__proto__: p\nconstructor: c\ntoString: s\ntitle: T\n}}\n';
+    const h = readHeader(t)!;
+    expect(h.keys).toEqual(['__proto__', 'constructor', 'toString', 'title']);
+    expect(Object.getPrototypeOf(h.fields)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(h.fields, '__proto__')).toBe(true);
+    expect(JSON.parse(JSON.stringify(h.fields))).toEqual(JSON.parse('{"__proto__":"p","constructor":"c","toString":"s","title":"T"}'));
+    expect(Object.prototype.hasOwnProperty.call(scanNymlBlocks(t)[0].fields, '__proto__')).toBe(true);
+    expect(readDocument(t).title).toBe('T');
+    const includes = JSON.parse('{"__proto__":"p","constructor":"c","a":"x"}') as Record<string, string>;
+    const x = extract(assembleEnvelope('x', { ...PARTS[0], includes }))!;
+    expect(Object.keys(x.includes!)).toEqual(['__proto__', 'a', 'constructor']);
+    expect(Object.prototype.hasOwnProperty.call(x.includes, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(x.includes)).toBe(Object.prototype);
+  });
+
+  it('[K.22] withoutHeader returns the body after the header (legacy blocks and a leading BOM included) and its offset; a header-less text whole', () => {
+    expect(withoutHeader('﻿{{nyml\nkind: document\ntitle: T\n}}\n\n# B\n')).toEqual({ body: '\n\n# B\n', offset: 34 });
+    const pair = '{{nyml\nkind: meta\nauthor: A\n}}\n\n{{nyml\nkind: document\n}}\nBody\n';
+    const w = withoutHeader(pair);
+    expect(w.body).toBe('\nBody\n');
+    expect(pair.slice(w.offset)).toBe(w.body);
+    expect(md.render(w.body)).not.toContain('nyml-data');
+    expect(withoutHeader('# Plain\n')).toEqual({ body: '# Plain\n', offset: 0 });
+  });
+});
+
+describe('round 2: document facts and the envelope', () => {
+  it('[K.16] the derived title is the heading text as a reader sees it (typographer, entities, emoji characters, image alt, sp text) and slide markers may be indented (R2-8)', () => {
+    expect(readDocument('# "Quotes" -- and... (c) &amp; \\*x\\*\n').title).toBe('“Quotes” – and… © & *x*');
+    expect(readDocument('# Hello {{emoji smile}} {{emoji nosuchname}}\n').title).toBe('Hello 😄 {{emoji nosuchname}}');
+    // image alt as the renderer writes it (orz's image rule keeps * in alt text)
+    expect(readDocument('# ![alt *x*](i.png) A<sup>2</sup> [link](x.md)\n').title).toBe('alt *x* A2 link');
+    expect(readDocument('# ![a photo](i.png) of B\n').title).toBe('a photo of B');
+    expect(readDocument('  <!-- slide -->\n# S1\n', { kind: 'slides' }).title).toBe('S1');
+    expect(readDocument('# Pre\n  <!-- slide bg=red -->\n# S1\n', { kind: 'slides' }).title).toBe('S1');
+  });
+
+  it('[K.3] title and author are trimmed everywhere (<title>, head tags, #orz-meta) and a value empty after trimming is omitted; only a well-formed uid is metadata (F7, F8)', () => {
+    const t = '{{nyml\nkind: document\ntitle: "  Padded Title  "\nauthor: " "\ndescription: |\n  Two\n  lines \nuid: doc-BAD\n}}\n';
+    const doc = readDocument(t);
+    expect(doc.title).toBe('Padded Title');
+    expect(doc.meta).toEqual({ title: 'Padded Title', description: 'Two\nlines' });
+    const html = assembleEnvelope(t, PARTS[0]);
+    expect(html).toContain('<title>Padded Title</title>');
+    expect(html).toContain('"title": "Padded Title"');
+    expect(html).not.toContain('name="author"');
+    expect(html.slice(0, html.indexOf('</head>'))).not.toContain('doc-BAD');
+    expect(readDocument('{{nyml\nkind: document\nuid: doc-abcdefghij\n}}\n').meta.uid).toBe('doc-abcdefghij');
+  });
+
+  it('[K.3] the envelope escapes lang and the generator, orders #orz-meta keys, sorts includes by code unit and drops non-string includes on extract (F11)', () => {
+    const t = '{{nyml\nkind: document\nauthor: A\ntitle: T\nlang: en"><script>x\n}}\n';
+    const html = assembleEnvelope(t, { ...PARTS[0], shellVersion: '1.0"><b>', includes: { 'a.md': '1', 'B.md': '2', 'Ä.md': '3', 'a.MD': '4' } });
+    expect(html).toContain('<html lang="en&quot;&gt;&lt;script&gt;x" data-orz-kind="md">');
+    expect(html).toContain('<meta name="generator" content="orz-md 1.0&quot;&gt;&lt;b&gt;">');
+    const island = html.slice(html.indexOf('id="orz-meta">'), html.indexOf('</script>', html.indexOf('id="orz-meta">')));
+    expect(island.indexOf('"title"')).toBeLessThan(island.indexOf('"author"'));
+    expect(html).toContain('{"B.md":"2","a.MD":"4","a.md":"1","Ä.md":"3"}');
+    const forged = html.replace(/(<script type="application\/json" id="orz-includes">)[^<]*/, '$1{"a":1,"b":"x","c":null,"d":["y"]}');
+    expect(extract(forged)!.includes).toEqual({ b: 'x' });
   });
 });

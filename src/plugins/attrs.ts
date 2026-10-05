@@ -18,17 +18,21 @@ export function parseAttrs(attrString: string): Array<[string, string]> {
   return result;
 }
 
-export function registerAttrs(md: MarkdownIt): void {
+export function registerAttrs(md: MarkdownIt, registry = true): void {
   // The inline token acts as a marker; actual work is done in the core rule
-  register({
-    type: 'inline',
-    aliases: ['attrs'],
-    render(_args, _body, _env) {
-      // Rendered content is empty — the core rule removes this token and
-      // applies the attributes to the preceding block token instead
-      return '';
-    },
-  });
+  // `registry: false` for a second, private instance (the carrier kit's parser):
+  // the global plugin registry keeps the shared `md`'s definitions.
+  if (registry) {
+    register({
+      type: 'inline',
+      aliases: ['attrs'],
+      render(_args, _body, _env) {
+        // Rendered content is empty — the core rule removes this token and
+        // applies the attributes to the preceding block token instead
+        return '';
+      },
+    });
+  }
 
   // One pass per inline token (a splice per marker, and an attrSet walk per
   // distinct key, were quadratic: round 18, M1).

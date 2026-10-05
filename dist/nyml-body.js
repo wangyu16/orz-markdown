@@ -31,6 +31,10 @@ function stripQuotes(s) {
     }
     return s;
 }
+/** Set an own data property: a `__proto__` key is data, not the prototype. */
+function setField(obj, key, value) {
+    Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
+}
 /** The pattern of a key line; group 1 indentation, 2 key, 3 value. */
 // `[^\r\n]*`, not `.*`: U+2028/U+2029 are ordinary characters in a value
 // (only CR, LF and CR LF break lines), but `.` does not match them.
@@ -126,7 +130,7 @@ function parseNymlBody(inner) {
             if (key === 'kind')
                 kind = joined.trim();
             else
-                fields[key] = joined;
+                setField(fields, key, joined);
             entries.push({ key, line: keyLine, endLine: lastContent, multiline: true });
             continue;
         }
@@ -134,7 +138,7 @@ function parseNymlBody(inner) {
         if (key === 'kind')
             kind = v;
         else
-            fields[key] = v;
+            setField(fields, key, v);
         // The entry also owns the deeper lines after it (nested structure the flat
         // reader ignores), so removing or replacing it cannot strand them.
         let endLine = i;

@@ -33,11 +33,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `decodeText` (UTF-8 bytes → text, keeping the BOM that `File.text()`
     strips); `extract` returns `includes`; `ShellParts.delivery` is optional
     (default `inline`); `readDocument` resolves `measure`/`ratio` defaults.
+  - `withoutHeader` (the body a carrier renders, with its offset);
+    `decodeText(bytes, { fatal })`; lint codes `ignored-line` and `kind-case`;
+    `extract` reads a file whose line endings were converted to CR LF.
+  - `orz-markdown/carrier/read`: the parser-free reading entry (`extract`,
+    `readIslandFromDom`, `decodeText`, the escape helpers; under 30 KB
+    minified). `DocMeta`/`DocLicense` types re-exported from the carrier.
+  - The kit parses with a private markdown-it instance configured like `md`,
+    so a host's `md.set()`/`md.use()` cannot change assembled bytes.
   - `orz-markdown/carrier` now loads the parser (`md`) as well, and importing
     it registers the twin-link core rule on the shared `md` (inert unless a
     render's env sets `orzTwinLinks: true`).
-- `docMetaFromFields` (DocMeta from a flat nyml field map), exported from the
-  main entry and `orz-markdown/doc-meta`.
+- `docMetaFromFields` (DocMeta from a flat nyml field map; values trimmed,
+  empty ones omitted), exported from the main entry and `orz-markdown/doc-meta`.
+- `createMarkdown()`: builds a markdown-it instance with the shared `md`'s
+  configuration (the `{{name}}` plugin registry stays global).
+- `scanNymlBlocks(source, tokens?)` accepts the tokens of a parse the caller
+  already has.
 - `spec/`: the binding carrier specifications FC-18 (text form and assembly,
   format 1) and FC-19 (editor component API).
 
@@ -54,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renders nothing and takes no `nyml-data` number.
 - The nyml reader treats U+2028 and U+2029 as ordinary characters: only LF,
   CR LF and CR end a line (a value holding them was silently dropped).
+- A nyml key named `__proto__` is kept as data (it was dropped).
+- `@types/markdown-it` is a dependency (the published types expose it).
 
 ## [2.0.0] - 2026-10-03
 

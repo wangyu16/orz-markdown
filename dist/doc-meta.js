@@ -69,13 +69,19 @@ function splitList(value) {
 /**
  * The DocMeta fields of a flat nyml field map (a `kind: meta` block, or a
  * format-1 document header, FC-18 §5.1): `title author description source
- * date keywords license license_name license_url`. Empty values are skipped;
+ * date keywords license license_name license_url`. Values are trimmed and
+ * empty ones skipped;
  * `keywords` is split as {@link extractDocMeta} splits it. `uid` is NOT read
  * here (FC-03: a meta block's `uid` is host-only); the carrier kit adds it
  * for a format-1 header (FC-18 §10). Key order of the result is fixed.
  */
 function docMetaFromFields(fields) {
-    const f = (key) => Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : undefined;
+    // Values are trimmed; one that is empty after trimming is absent (so the
+    // head tags, the island and a derived title all agree).
+    const f = (key) => {
+        const v = Object.prototype.hasOwnProperty.call(fields, key) ? fields[key].trim() : '';
+        return v === '' ? undefined : v;
+    };
     const license = {};
     if (f('license'))
         license.spdx = f('license');

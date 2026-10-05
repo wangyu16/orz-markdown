@@ -60,3 +60,46 @@ K.16 (title chain, defaults), K.17 (`editHeader`, header entries, lint
 positions), K.18 (`decodeText`), M.23 (ASCII-only case mapping); K.1, K.3,
 K.4, K.6, K.10 reworded. Sweep: no other `src/` code indexes a case-mapped
 copy. Measured: 1,607 tests green, `tsc` clean, build passes.
+
+### Round 2 — 2026-10-05
+
+Two fresh adversaries: A verified the round-1 fixes and hunted their
+siblings; B audited what round 1 did not (determinism across environments,
+metadata escaping, API fitness, bundle size, vacuous claims by mutation).
+
+**1 HIGH (a verification gap, not broken behaviour), 6 MEDIUM, ~15 LOW.**
+Verified at scale: prefix-only header location agrees with a full scan on all
+813 family `.md` files and 6,000 random documents; 12,000 random header edits
+byte-exact; `closer-in-value` catches every cut with no false error on the
+family files (paged `custom_css` templates included); Node and Chrome 154
+(tr-TR, Asia/Tokyo) byte-identical on 944 inputs; TZ/LANG/ICU make no
+difference.
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| B-F1 K.9 ("the browser bundle gives the same bytes") ran only in a Node `vm`, on md files and one parts set — a browser-only byte difference survived every test (mutation M9b). Behaviour checked by hand in Chrome: holds | ORZ | HIGH | fix — K.9 runs in real Chrome on all corpus files × all parts |
+| A-R2-1 `extract` did not normalize CR LF in the island as the HTML parser does: a `.html` converted to CR LF (git autocrlf) gave doubled CRs, unlike the DOM read | ORZ | MED | fix |
+| A-R2-2 a single-line value ending in `}}` (a title mentioning `{{x}}`) cuts the header; lint said only `closer-not-alone` | ORZ+SPEC | MED | fix — `closer-in-value` error when key lines or a lone `}}` follow; same rule for a lone indented `}}` in a `\|` value (A-R2-5) |
+| A-R2-3 setting a scalar key deleted the deeper lines under it (spec §5 vs §9 disagreed) | SPEC+ORZ | MED | fix — set replaces only the key line; remove/merge keep the whole extent; lint `ignored-line`; one rule in §5/§9 |
+| B-F2 the kit parsed with the shared, mutable `md`: a host's `md.set()` changed assembled bytes (laws 2–3 between hosts) | ORZ | MED | fix — a private, identically configured instance |
+| B-F3 FC-03 still said "host values win"; FC-18 says the header is the only source | SPEC | MED | fixed in the family contracts (format-1 note) |
+| B-F4 importing only `extract` pulled the whole parser (837 KB min) | ORZ | MED | fix — parser-free `orz-markdown/carrier/read` with a size claim |
+| A-R2-4 tab-indented header under an indented opener: fields differed from the scanner's | ORZ | LOW | fix |
+| A-R2-6 K.15 overstated tokenizer fidelity on foreign HTML | ORZ | LOW | claim narrowed; bogus comments and end-tag attributes skipped |
+| `__proto__` keys (A-R2-7, B-F9) | ORZ | LOW | fix — null-prototype maps |
+| title details: indented slide marker, emoji, image alt, typographer (A-R2-8, B-F13) | ORZ+SPEC | LOW | fix — "plain text as a reader sees it", pinned in §8.1 |
+| `decodeText` silently replaces invalid UTF-8 (A-R2-9) | SPEC | LOW | fix — `fatal` option; noted in §3 |
+| lint gaps: `Kind:`/`Document` (A-R2-10) | ORZ | LOW | fix |
+| B-F5 bundling `src/` (not `dist/`) duplicates KaTeX and breaks `\ce` | ORZ | LOW | dismissed for the kit (pre-existing; every published bundle uses `dist/`); K.9 now bundles `dist/` |
+| B-F6/F11 K.2 static check incomplete; four mutations survived (meta key order, `lang`/generator escaping, include filtering) | ORZ | LOW | fix — checks widened, assertions added |
+| B-F7/F8 title/author trimming inconsistent; invalid `uid` passed into `#orz-meta` | ORZ | LOW | fix |
+| B-F10 `.d.ts` needs `@types/markdown-it`; DocMeta types not re-exported | ORZ | LOW | fix |
+| B-F12 K.14 absolute timing flaky under load; K.12 Chrome test skips without Chrome | ORZ | LOW | fix (ratio against a same-run baseline); skip noted (real-substrate claims are unverified without Chrome — CLAIMS.md header) |
+| B-F14 a lone legacy `kind: meta` header still renders an island; carriers must cut it | ORZ | LOW | fix — `withoutHeader`, documented |
+| B-F15 spec/README.md lagged the API | ORZ | LOW | fix |
+
+**After round 2.** All fixes taken, each a test bound to a claim: new K.19
+(private parser), K.20 (parser-free `carrier/read` under 30 KB), K.21
+(`__proto__` keys are data), K.22 (`withoutHeader`); K.2–K.5, K.9, K.10, K.12,
+K.14–K.16, K.18 reworded. K.9 now runs in real Chrome (not skipped here).
+Measured: 1,621 tests green, `tsc` clean, build passes.

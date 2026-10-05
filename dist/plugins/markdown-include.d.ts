@@ -43,5 +43,5 @@ export declare function resolveIncludePath(target: string, env: IncludeEnv): str
  * headings from the TOC.) One level only: a directive inside an included file
  * is left unexpanded and renders nothing.
  */
-export declare function registerMarkdownInclude(md: MarkdownIt): void;
+export declare function registerMarkdownInclude(md: MarkdownIt, registry?: boolean): void;
 //# sourceMappingURL=markdown-include.d.ts.map

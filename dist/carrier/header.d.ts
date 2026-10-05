@@ -93,6 +93,18 @@ export declare const UID_PATTERN: RegExp;
  */
 export declare function readHeader(text: string): Header | null;
 /**
+ * The text without its header, for a carrier that renders the body: `body` is
+ * `text.slice(offset)`, where `offset` is the end of the header (legacy blocks
+ * included; a BOM before the header goes with it). A text without a header is
+ * returned whole (`offset` 0). Renderers must render this body: the shared
+ * `md` hides a `kind: document` block but renders a legacy `kind: meta`
+ * block as a data island.
+ */
+export declare function withoutHeader(text: string): {
+    body: string;
+    offset: number;
+};
+/**
  * Apply several header changes in one pass (FC-18 §9): `string` sets a
  * single-line value, `{ multiline }` writes a `key: |` value, `null` removes
  * the key. Changes apply in the object's key order (insertions too).
@@ -141,8 +153,11 @@ export declare function removeHeaderKey(text: string, key: string): string;
  * Header codes: `legacy-header` (warning), `kind-not-first` (warning),
  * `opener-not-alone` (warning: keys on the `{{nyml` line), `closer-not-alone`
  * (warning: a compact `key: value}}` closing line), `closer-in-value` (error:
- * the closing `}}` line holds other text that is not a key line — the
- * header ended inside a value — or text follows `}}`), `duplicate-key`
+ * the header ended at a `}}` inside a value — the closing line holds non-key
+ * text, or a lone `}}` line or key lines follow the header before the first
+ * blank line, or text follows `}}`), `ignored-line` (warning: lines indented
+ * under a scalar key, which the flat reader ignores), `kind-case` (warning:
+ * `Kind:` / `kind: Document` — not read as the header), `duplicate-key`
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,

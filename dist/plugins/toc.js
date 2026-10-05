@@ -30,15 +30,19 @@ function buildTocHTML(headings, directive) {
     html += '</ul>\n';
     return html;
 }
-function registerToc(md) {
+function registerToc(md, registry = true) {
     // The render function just returns the pre-built HTML injected by the core rule
-    (0, registry_js_1.register)({
-        type: 'block',
-        aliases: ['toc'],
-        render(_args, body, _env) {
-            return body ?? '';
-        },
-    });
+    // `registry: false` for a second, private instance (the carrier kit's parser):
+    // the global plugin registry keeps the shared `md`'s definitions.
+    if (registry) {
+        (0, registry_js_1.register)({
+            type: 'block',
+            aliases: ['toc'],
+            render(_args, body, _env) {
+                return body ?? '';
+            },
+        });
+    }
     md.core.ruler.push('toc_resolve', (state) => {
         // An inline render (span body, spoil label) shares the document env; it has
         // no headings and must not overwrite the document's tocHeadings.

@@ -12,6 +12,7 @@
     "./doc-meta": "./dist/doc-meta.js",
     "./version": "./dist/version.js",
     "./carrier": "./dist/carrier.js",
+    "./carrier/read": "./dist/carrier/read.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -56,6 +57,7 @@
   "bugs": "https://github.com/wangyu16/orz-markdown/issues",
   "dependencies": {
     "@traptitech/markdown-it-katex": "^3.6.0",
+    "@types/markdown-it": "^14.1.2",
     "katex": "0.16.47",
     "markdown-it": "^14.3.2",
     "markdown-it-anchor": "^9.2.0",
@@ -71,7 +73,6 @@
     "qrcode-svg": "^1.1.0"
   },
   "devDependencies": {
-    "@types/markdown-it": "^14.1.2",
     "@types/markdown-it-anchor": "^7.0.0",
     "@types/markdown-it-container": "^4.0.0",
     "@types/markdown-it-footnote": "^3.0.4",

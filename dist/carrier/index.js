@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.editHeader = exports.readHeader = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -9,6 +9,7 @@ exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID 
  */
 var header_js_1 = require("./header.js");
 Object.defineProperty(exports, "readHeader", { enumerable: true, get: function () { return header_js_1.readHeader; } });
+Object.defineProperty(exports, "withoutHeader", { enumerable: true, get: function () { return header_js_1.withoutHeader; } });
 Object.defineProperty(exports, "editHeader", { enumerable: true, get: function () { return header_js_1.editHeader; } });
 Object.defineProperty(exports, "setHeaderValue", { enumerable: true, get: function () { return header_js_1.setHeaderValue; } });
 Object.defineProperty(exports, "removeHeaderKey", { enumerable: true, get: function () { return header_js_1.removeHeaderKey; } });

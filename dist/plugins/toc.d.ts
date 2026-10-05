@@ -3,5 +3,5 @@ import type MarkdownIt from 'markdown-it';
 export declare const MAX_TOC_ENTRIES = 20000;
 /** Total TOC output per render, roughly in characters. */
 export declare const MAX_TOC_BYTES = 8000000;
-export declare function registerToc(md: MarkdownIt): void;
+export declare function registerToc(md: MarkdownIt, registry?: boolean): void;
 //# sourceMappingURL=toc.d.ts.map

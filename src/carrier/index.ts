@@ -4,7 +4,7 @@
  * consumers through `orz-markdown/carrier` (src/carrier.ts); the parser entry
  * never imports this folder.
  */
-export { readHeader, editHeader, setHeaderValue, removeHeaderKey, lintHeader, COMMON_HEADER_KEYS, KIND_HEADER_KEYS, WRITER_KEY, UID_PATTERN } from './header.js';
+export { readHeader, withoutHeader, editHeader, setHeaderValue, removeHeaderKey, lintHeader, COMMON_HEADER_KEYS, KIND_HEADER_KEYS, WRITER_KEY, UID_PATTERN } from './header.js';
 export type { Header, HeaderBlock, HeaderEntry, HeaderChange, Lint } from './header.js';
 export { readDocument, kindFromFilename, twinName, mintUid, SETTING_DEFAULTS } from './document.js';
 export type { Kind, DocumentInfo } from './document.js';

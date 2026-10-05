@@ -53,7 +53,10 @@ npm run check:site # website starter versions + discovery metadata
   `document.ts` (`readDocument`, file-name kinds and twins), `uid.ts`
   (`mintUid`, the only randomness), `text.ts` (line-ending/surrogate facts),
   `links.ts` (twin-link rule, inert unless `env.orzTwinLinks`), `envelope.ts`
-  (`assembleEnvelope`/`extract`/`readIslandFromDom`). The parser entry must
+  (`assembleEnvelope`), `read.ts` (`extract`/`readIslandFromDom`/`decodeText`:
+  parser-free, exported as `orz-markdown/carrier/read`), `parser.ts` (the kit's
+  private parser from `createMarkdown()` in `src/index.ts`, so a host's
+  `md.set()` cannot change assembled bytes; K.19). The parser entry must
   never import `src/carrier/` (claim K.8); envelope code stays deterministic
   (K.2). `src/nyml-body.ts` is the flat nyml reader shared by the scanner and
   the header tools.

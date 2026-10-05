@@ -21,17 +21,21 @@ function parseAttrs(attrString) {
     }
     return result;
 }
-function registerAttrs(md) {
+function registerAttrs(md, registry = true) {
     // The inline token acts as a marker; actual work is done in the core rule
-    (0, registry_js_1.register)({
-        type: 'inline',
-        aliases: ['attrs'],
-        render(_args, _body, _env) {
-            // Rendered content is empty — the core rule removes this token and
-            // applies the attributes to the preceding block token instead
-            return '';
-        },
-    });
+    // `registry: false` for a second, private instance (the carrier kit's parser):
+    // the global plugin registry keeps the shared `md`'s definitions.
+    if (registry) {
+        (0, registry_js_1.register)({
+            type: 'inline',
+            aliases: ['attrs'],
+            render(_args, _body, _env) {
+                // Rendered content is empty — the core rule removes this token and
+                // applies the attributes to the preceding block token instead
+                return '';
+            },
+        });
+    }
     // One pass per inline token (a splice per marker, and an attrSet walk per
     // distinct key, were quadratic: round 18, M1).
     md.core.ruler.push('attrs_resolve', (state) => {

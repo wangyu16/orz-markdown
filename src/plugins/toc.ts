@@ -36,15 +36,19 @@ function buildTocHTML(headings: Heading[], directive: string): string {
   return html;
 }
 
-export function registerToc(md: MarkdownIt): void {
+export function registerToc(md: MarkdownIt, registry = true): void {
   // The render function just returns the pre-built HTML injected by the core rule
-  register({
-    type: 'block',
-    aliases: ['toc'],
-    render(_args, body, _env) {
-      return body ?? '';
-    },
-  });
+  // `registry: false` for a second, private instance (the carrier kit's parser):
+  // the global plugin registry keeps the shared `md`'s definitions.
+  if (registry) {
+    register({
+      type: 'block',
+      aliases: ['toc'],
+      render(_args, body, _env) {
+        return body ?? '';
+      },
+    });
+  }
 
   md.core.ruler.push('toc_resolve', (state) => {
     // An inline render (span body, spoil label) shares the document env; it has

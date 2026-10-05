@@ -31,8 +31,16 @@ exports.VERSION = exports.maskInertMarkdown = exports.unescapeScriptText = expor
  * - envelope: `assembleEnvelope`, `extract`, `readIslandFromDom`
  *
  * Browser-safe (no Node built-ins). Since the carrier kit reads headers with
- * the token-based scanner, importing this entry also loads the parser (`md`);
- * loading it registers the (inert by default) twin-link rule on `md`.
+ * the token-based scanner, importing this entry also loads the parser; the kit
+ * parses with a PRIVATE instance configured like `md` (so a host's `md.set()`
+ * cannot change assembled bytes), and loading it registers the (inert by
+ * default) twin-link rule on the shared `md`. A reader that only extracts
+ * texts from files imports the parser-free `orz-markdown/carrier/read`.
+ *
+ * Rendering a text: render `withoutHeader(text).body` (with
+ * `env.orzTwinLinks` in an assembled file). The shared `md` hides a
+ * `kind: document` header but renders a legacy `kind: meta` header as a data
+ * island, so a renderer must not render the header part.
  */
 var html_js_1 = require("./html.js");
 Object.defineProperty(exports, "escapeHtml", { enumerable: true, get: function () { return html_js_1.escapeHtml; } });

@@ -50,7 +50,10 @@ text plus a regenerable **shell**. Converting is deterministic in one direction
 - **Any plain Markdown file is a valid `md` document** (no header needed), so
   existing `.md` files work unchanged.
 - Encoding: UTF-8. The envelope stores the text exactly as given; renderers
-  normalize line endings internally, never in storage.
+  normalize line endings internally, never in storage. Tools read a text twin
+  from its bytes with `decodeText` (UTF-8, keeping a BOM — `File.text()` and a
+  default `TextDecoder` strip it; `{ fatal: true }` refuses invalid UTF-8
+  instead of replacing it with U+FFFD).
 
 ## 4. Text layout
 
@@ -117,13 +120,18 @@ theme: light-neat-3
   not contain that sequence (write `} }` in CSS). **Detection:** lint reports
   `closer-in-value` (error) when the header's closing `}}` line holds other
   text that is not a `key: value` line (the header ended inside a value, e.g.
-  a CSS line of a `|` value ending in `}}`), or when text follows the closing
-  `}}` on its line; a compact `key: value}}` closing line is only a warning
-  (`closer-not-alone`). The grammar does not change: the header ends at the
-  first `}}`.
-- An entry is its key line plus the following lines indented deeper than the
-  key (a `|` value's content, or nested lines the flat reader ignores); tools
-  edit, remove and move entries whole.
+  a CSS line of a `|` value ending in `}}`), when a lone `}}` line or key lines
+  follow the header before the first blank line (the header was cut by a `}}`
+  in a single-line value or a lone indented `}}` in a `|` value), or when text
+  follows the closing `}}` on its line; a compact `key: value}}` closing line
+  otherwise is only a warning (`closer-not-alone`). The grammar does not
+  change: the header ends at the first `}}`.
+- **Entries (one rule).** An entry is its key line plus the following lines
+  indented deeper than the key. For a `key: |` value those lines are the
+  value. For a scalar key they are ignored by the reader (lint
+  `ignored-line`): setting a scalar value replaces the key line only (the
+  ignored lines stay); writing a `|` value over a key, removing a key, and
+  merging a legacy pair take the whole entry.
 - Duplicate key: the last one wins (and a lint warning).
 - **Unknown keys are kept untouched** — the header is never re-serialized
   (§9), so anything a tool or host adds survives every edit, save and update.
@@ -225,17 +233,21 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
   and CR LF into LF). Attributes: `data-orz-format`; `data-orz-eol`
   (`lf` / `crlf` / `cr`: the style of the text's first line break, `lf` when
   it has none); `data-orz-bom` (present when the text starts with U+FEFF).
-  `extract` reads `#orz-src`, unescapes and restores the line-ending style and
-  the BOM — nothing else; a reader of the DOM (`readIslandFromDom`) applies the
+  `extract` reads `#orz-src`, reads its line breaks as a parser does (CR and
+  CR LF as LF, so a file converted to CR LF after assembly still extracts
+  exactly), unescapes and restores the line-ending style and the BOM —
+  nothing else; a reader of the DOM (`readIslandFromDom`) applies the
   same restoration to the element's `textContent`. Experimental files (slides'
   `#orz-deck`) are not read by `extract`; they are not migrated.
 - **Reserved ids:** the shell parts must not contain an element with id
   `orz-src` or `orz-shell`; `assemble` refuses them.
 - **Derived, never edited separately:** `<title>` (header `title`, else the
   first **top-level** level-1 heading — not one inside a blockquote, list or
-  container; for `slides` only a heading after the first slide marker (text
-  before it never counts); its plain text, with `{{sp}}` text and math source
-  as written — else, for `paged`, the `title` (else `text`) field of strictly
+  container; for `slides` only a heading after the first slide marker (a
+  top-level `<!-- slide` comment block, indentation allowed; text before it
+  never counts); its plain text as a reader sees it — typographer output,
+  entities decoded, `{{emoji}}` characters, `{{sp}}` text, math source as
+  written, image alt text as the renderer writes it, markup dropped — else, for `paged`, the `title` (else `text`) field of strictly
   the first title element, i.e. the first nyml block after the header whose
   kind ends in `-title` (`article-title`, `report-title`, `exam-title`, …;
   `cv-header` and `letterhead` are not title elements; if that element has
@@ -293,8 +305,9 @@ Edit rules in detail:
 
 - **Set an existing key:** only the value part of its line is replaced; the
   indentation, the key's spelling and its separator (`:` or `：`) are kept.
-  With duplicate keys the last one (the one that wins) is edited. A `key: |`
-  value is replaced together with its continuation lines.
+  With duplicate keys the last one (the one that wins) is edited. A scalar
+  set over a scalar key replaces the key line only; when the old or the new
+  value is a `key: |` value, the whole entry (§5) is replaced.
 - **Insert:** `key: value` just before the closing `}}` line, with the
   indentation of the header's keys and the header's line ending.
 - **Remove:** the key's line goes, with a `key: |` value's continuation lines

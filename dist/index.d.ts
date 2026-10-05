@@ -14,7 +14,6 @@ export { register } from './registry.js';
 export type { PluginDefinition } from './registry.js';
 export { prepareSources } from './prepare-sources.js';
 export type { PrepareSourcesOptions } from './prepare-sources.js';
-declare const md: MarkdownIt;
 /**
  * TeX characters rendered per document, and of them inside `\ce{…}`/`\pu{…}`
  * arguments (4,000 small reactions are ~80,000).
@@ -26,6 +25,18 @@ export declare const MAX_CHEM_TOTAL = 100000;
  * 52 s: round 21, H7). 5,000 display formulas of a textbook are ~45 MB.
  */
 export declare const MAX_KATEX_OUTPUT = 64000000;
+/**
+ * Build an orz-markdown parser/renderer: a markdown-it instance with exactly
+ * the configuration of the shared `md` (options, plugins, containers, rules).
+ * Each instance has its own options and rule chains, so `md.set()` / `md.use()`
+ * by a host change only that instance. The `{{name}}` plugin registry
+ * (`register()`) is global by design: plugins registered by a host apply to
+ * every instance. `registerPlugins: false` builds a parser that leaves the
+ * registry's definitions bound to the shared `md` (the carrier kit's private
+ * parser).
+ */
+export declare function createMarkdown(registerPlugins?: boolean): MarkdownIt;
+declare const md: MarkdownIt;
 export default md;
 export { md };
 export * from './doc-meta.js';

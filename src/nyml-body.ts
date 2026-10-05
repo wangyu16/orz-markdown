@@ -27,6 +27,11 @@ export function stripQuotes(s: string): string {
   return s;
 }
 
+/** Set an own data property: a `__proto__` key is data, not the prototype. */
+function setField(obj: Record<string, string>, key: string, value: string): void {
+  Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
+}
+
 /** One top-level `key: value` entry of a body, by line index. */
 export interface NymlBodyEntry {
   /** The key as written (`kind` included). */
@@ -127,14 +132,14 @@ export function parseNymlBody(inner: string): { kind: string; fields: Record<str
       }
       const joined = collected.join('\n');
       if (key === 'kind') kind = joined.trim();
-      else fields[key] = joined;
+      else setField(fields, key, joined);
       entries.push({ key, line: keyLine, endLine: lastContent, multiline: true });
       continue;
     }
 
     const v = stripQuotes(value.trim());
     if (key === 'kind') kind = v;
-    else fields[key] = v;
+    else setField(fields, key, v);
     // The entry also owns the deeper lines after it (nested structure the flat
     // reader ignores), so removing or replacing it cannot strand them.
     let endLine = i;

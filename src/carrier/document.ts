@@ -6,10 +6,11 @@
  * only when the title must come from it (or a lint check needs the blocks).
  * Browser-clean and deterministic (the random `mintUid` lives in uid.ts).
  */
-import { md } from '../index.js';
+import * as nodeEmoji from 'node-emoji';
+import { kitParser } from './parser.js';
 import { docMetaFromFields, type DocMeta } from '../doc-meta.js';
 import { scanNymlBlocks, type NymlBlock } from '../nyml-blocks.js';
-import { readHeader, readHeaderAndLint, KIND_HEADER_KEYS, type Header, type Lint } from './header.js';
+import { readHeader, readHeaderAndLint, KIND_HEADER_KEYS, UID_PATTERN, type Header, type Lint } from './header.js';
 
 export { mintUid } from './uid.js';
 
@@ -92,22 +93,31 @@ export function twinName(name: string): string | null {
 
 type Tok = { type: string; tag: string; info: string; level: number; content: string; children: Tok[] | null; map: [number, number] | null };
 
-/** Plain text of inline tokens: text, code and math source as written, `{{sp}}` body text, image alt. */
+/**
+ * The plain text a reader sees in a heading (FC-18 §8.1): text after the
+ * typographer and entity decoding, code and math source as written, `{{sp}}`
+ * body text, `{{emoji}}` characters, image alt text; markup (raw HTML, link
+ * syntax, attrs) dropped.
+ */
 function inlineText(children: Tok[] | null, fallback: string): string {
   if (!children) return fallback;
   let s = '';
   for (const c of children) {
-    if (c.type === 'text' || c.type === 'code_inline' || c.type === 'math_inline') s += c.content;
+    if (c.type === 'text' || c.type === 'text_special' || c.type === 'code_inline' || c.type === 'math_inline') s += c.content;
     else if (c.type === 'softbreak' || c.type === 'hardbreak') s += ' ';
     else if (c.type === 'image') s += inlineText(c.children, c.content);
     else if (c.type === 'plugin_inline' && (c.info === 'sp' || c.info === 'span')) {
-      s += inlineText(md.parseInline(c.content, {})[0]?.children as unknown as Tok[] | null, c.content);
+      s += inlineText(kitParser().parseInline(c.content, {})[0]?.children as unknown as Tok[] | null, c.content);
+    } else if (c.type === 'plugin_inline' && (c.info === 'emoji' || c.info === 'em')) {
+      const name = c.content.trim();
+      s += nodeEmoji.get(name) ?? `{{emoji ${name}}}`;
     }
   }
   return s;
 }
 
-const SLIDE_MARKER = /^<!--\s*slide\b/;
+/** A slide marker: a top-level HTML-comment block `<!-- slide …` (indentation allowed). */
+const SLIDE_MARKER = /^[ \t]*<!--\s*slide\b/;
 
 /**
  * The first TOP-LEVEL level-1 heading (not inside a blockquote, list or
@@ -158,17 +168,18 @@ export function readDocument(text: string, opts?: { kind?: Kind; filename?: stri
   const kind: Kind = named ?? (isKind(carrier) ? carrier : null) ?? 'md';
   // One parse at most, shared by the title and the lint's block scan.
   let tokens: Tok[] | null = null;
-  const parse = (): Tok[] => (tokens ??= md.parse(text, {}) as unknown as Tok[]);
+  const parse = (): Tok[] => (tokens ??= kitParser().parse(text, {}) as unknown as Tok[]);
   let blocks: NymlBlock[] | null = null;
-  const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse()));
+  const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse() as never));
   const { header, lint } = readHeaderAndLint(text, kind, scan);
   const fields: Record<string, string> = header ? header.fields : {};
   const get = (k: string): string | undefined => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
   const fmt = get('format');
   const format = fmt !== undefined && /^[1-9][0-9]*$/.test(fmt) ? Number(fmt) : 1;
   const meta: DocMeta = docMetaFromFields(fields);
-  const uid = get('uid');
-  if (uid) meta.uid = uid;
+  // Only a well-formed uid is metadata (lint reports a bad one).
+  const uid = (get('uid') ?? '').trim();
+  if (UID_PATTERN.test(uid)) meta.uid = uid;
   const settings: Record<string, string> = { ...SETTING_DEFAULTS[kind] };
   const hostKeys: Record<string, string> = {};
   for (const key of header ? header.keys : []) {

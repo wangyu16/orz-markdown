@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SETTING_DEFAULTS = exports.mintUid = void 0;
 exports.kindFromFilename = kindFromFilename;
@@ -12,7 +45,8 @@ exports.readDocument = readDocument;
  * only when the title must come from it (or a lint check needs the blocks).
  * Browser-clean and deterministic (the random `mintUid` lives in uid.ts).
  */
-const index_js_1 = require("../index.js");
+const nodeEmoji = __importStar(require("node-emoji"));
+const parser_js_1 = require("./parser.js");
 const doc_meta_js_1 = require("../doc-meta.js");
 const nyml_blocks_js_1 = require("../nyml-blocks.js");
 const header_js_1 = require("./header.js");
@@ -69,25 +103,35 @@ function twinName(name) {
         return `${dir}${m[1]}.md.html`;
     return null;
 }
-/** Plain text of inline tokens: text, code and math source as written, `{{sp}}` body text, image alt. */
+/**
+ * The plain text a reader sees in a heading (FC-18 §8.1): text after the
+ * typographer and entity decoding, code and math source as written, `{{sp}}`
+ * body text, `{{emoji}}` characters, image alt text; markup (raw HTML, link
+ * syntax, attrs) dropped.
+ */
 function inlineText(children, fallback) {
     if (!children)
         return fallback;
     let s = '';
     for (const c of children) {
-        if (c.type === 'text' || c.type === 'code_inline' || c.type === 'math_inline')
+        if (c.type === 'text' || c.type === 'text_special' || c.type === 'code_inline' || c.type === 'math_inline')
             s += c.content;
         else if (c.type === 'softbreak' || c.type === 'hardbreak')
             s += ' ';
         else if (c.type === 'image')
             s += inlineText(c.children, c.content);
         else if (c.type === 'plugin_inline' && (c.info === 'sp' || c.info === 'span')) {
-            s += inlineText(index_js_1.md.parseInline(c.content, {})[0]?.children, c.content);
+            s += inlineText((0, parser_js_1.kitParser)().parseInline(c.content, {})[0]?.children, c.content);
+        }
+        else if (c.type === 'plugin_inline' && (c.info === 'emoji' || c.info === 'em')) {
+            const name = c.content.trim();
+            s += nodeEmoji.get(name) ?? `{{emoji ${name}}}`;
         }
     }
     return s;
 }
-const SLIDE_MARKER = /^<!--\s*slide\b/;
+/** A slide marker: a top-level HTML-comment block `<!-- slide …` (indentation allowed). */
+const SLIDE_MARKER = /^[ \t]*<!--\s*slide\b/;
 /**
  * The first TOP-LEVEL level-1 heading (not inside a blockquote, list or
  * container). For slides, only headings after the first slide marker count.
@@ -139,7 +183,7 @@ function readDocument(text, opts) {
     const kind = named ?? (isKind(carrier) ? carrier : null) ?? 'md';
     // One parse at most, shared by the title and the lint's block scan.
     let tokens = null;
-    const parse = () => (tokens ?? (tokens = index_js_1.md.parse(text, {})));
+    const parse = () => (tokens ?? (tokens = (0, parser_js_1.kitParser)().parse(text, {})));
     let blocks = null;
     const scan = () => (blocks ?? (blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text, parse())));
     const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan);
@@ -148,8 +192,9 @@ function readDocument(text, opts) {
     const fmt = get('format');
     const format = fmt !== undefined && /^[1-9][0-9]*$/.test(fmt) ? Number(fmt) : 1;
     const meta = (0, doc_meta_js_1.docMetaFromFields)(fields);
-    const uid = get('uid');
-    if (uid)
+    // Only a well-formed uid is metadata (lint reports a bad one).
+    const uid = (get('uid') ?? '').trim();
+    if (header_js_1.UID_PATTERN.test(uid))
         meta.uid = uid;
     const settings = { ...exports.SETTING_DEFAULTS[kind] };
     const hostKeys = {};

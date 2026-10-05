@@ -14,8 +14,11 @@ export declare function hasLoneSurrogate(text: string): boolean;
 /**
  * Decode a file's bytes as UTF-8 text EXACTLY: a leading BOM is kept (as
  * U+FEFF), which `File.text()`, `Blob.text()`, `Response.text()` and a default
- * `TextDecoder` all strip. Invalid UTF-8 sequences become U+FFFD. Use this
- * (with `file.arrayBuffer()`) to read a text twin so the round trip stays exact.
+ * `TextDecoder` all strip. Invalid UTF-8 becomes U+FFFD, or — with
+ * `{ fatal: true }` — throws (a tool that must not save a damaged text back
+ * uses it). Use this (with `file.arrayBuffer()`) to read a text twin.
  */
-export declare function decodeText(bytes: Uint8Array | ArrayBuffer): string;
+export declare function decodeText(bytes: Uint8Array | ArrayBuffer, options?: {
+    fatal?: boolean;
+}): string;
 //# sourceMappingURL=text.d.ts.map

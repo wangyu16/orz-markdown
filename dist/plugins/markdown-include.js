@@ -115,16 +115,20 @@ const MAX_INCLUDED = 5000000;
  * headings from the TOC.) One level only: a directive inside an included file
  * is left unexpanded and renders nothing.
  */
-function registerMarkdownInclude(md) {
-    (0, registry_js_1.register)({
-        type: 'block',
-        aliases: ['markdown', 'md', 'md-include'],
-        // Reached only for directives the core rule did not expand: URL includes
-        // (resolve them with prepareSources), unreadable or refused paths, nested.
-        render() {
-            return '';
-        },
-    });
+function registerMarkdownInclude(md, registry = true) {
+    // `registry: false` for a second, private instance (the carrier kit's parser):
+    // the global plugin registry keeps the shared `md`'s definitions.
+    if (registry) {
+        (0, registry_js_1.register)({
+            type: 'block',
+            aliases: ['markdown', 'md', 'md-include'],
+            // Reached only for directives the core rule did not expand: URL includes
+            // (resolve them with prepareSources), unreadable or refused paths, nested.
+            render() {
+                return '';
+            },
+        });
+    }
     md.core.ruler.after('block', 'orz_include', (state) => {
         if (state.inlineMode)
             return;

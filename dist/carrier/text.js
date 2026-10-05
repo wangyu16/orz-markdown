@@ -29,13 +29,14 @@ function hasLoneSurrogate(text) {
 /**
  * Decode a file's bytes as UTF-8 text EXACTLY: a leading BOM is kept (as
  * U+FEFF), which `File.text()`, `Blob.text()`, `Response.text()` and a default
- * `TextDecoder` all strip. Invalid UTF-8 sequences become U+FFFD. Use this
- * (with `file.arrayBuffer()`) to read a text twin so the round trip stays exact.
+ * `TextDecoder` all strip. Invalid UTF-8 becomes U+FFFD, or — with
+ * `{ fatal: true }` — throws (a tool that must not save a damaged text back
+ * uses it). Use this (with `file.arrayBuffer()`) to read a text twin.
  */
-function decodeText(bytes) {
+function decodeText(bytes, options) {
     const Ctor = globalThis.TextDecoder;
     if (!Ctor)
         throw new Error('orz carrier: decodeText needs TextDecoder');
-    return new Ctor('utf-8', { ignoreBOM: true }).decode(bytes);
+    return new Ctor('utf-8', { ignoreBOM: true, fatal: options?.fatal === true }).decode(bytes);
 }
 //# sourceMappingURL=text.js.map
