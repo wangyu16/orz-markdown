@@ -1,0 +1,1255 @@
+{
+  "format": 1,
+  "description": "Golden corpus of format-1 text documents (FC-18, FC-19 §6). See README.md.",
+  "files": [
+    {
+      "path": "md/minimal.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Lab Safety Reminder",
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title"
+      ],
+      "derivedTitle": "Lab Safety Reminder",
+      "byteSensitive": false,
+      "purpose": "Smallest format-1 document: a header with format and title, then one paragraph.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-18 §8.1 derived title",
+        "FC-19 create-edit-save-reopen exact",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/every-construct.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Acids, Bases, and Buffers — Week 3 Notes",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "light-neat-3",
+        "uid": "doc-7k2m9x4q1z"
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "description",
+        "date",
+        "keywords",
+        "source",
+        "license",
+        "license_name",
+        "license_url",
+        "uid",
+        "lang",
+        "theme",
+        "measure"
+      ],
+      "derivedTitle": "Acids, Bases, and Buffers — Week 3 Notes",
+      "byteSensitive": false,
+      "purpose": "Every FC-01 construct (headings with {{attrs[#blk-…]}} ids, emphasis variants, lists, tasks, tables, code, math with mhchem, footnotes incl. inline, every container incl. left/right/center/spoil/tabs/cols/nesting/custom, every {{plugin}} and alias, raw HTML) under a header using every md registry key.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §8.1 derived title",
+        "FC-18 §9 header edited in place",
+        "FC-18 §5 token-based header scan",
+        "FC-19 create-edit-save-reopen exact",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/no-header.md",
+      "kind": "md",
+      "hasHeader": false,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [],
+      "derivedTitle": "Reading a Burette",
+      "byteSensitive": false,
+      "purpose": "Plain Markdown with no header: any existing .md file is a valid md document; title derives from the first level-1 heading.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §8.1 derived title",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/legacy-meta-block.md",
+      "kind": "md",
+      "hasHeader": false,
+      "legacyHeader": true,
+      "header": {
+        "title": "Introduction to Polymers",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "title",
+        "author",
+        "description",
+        "license",
+        "license_name",
+        "license_url",
+        "source",
+        "date",
+        "keywords"
+      ],
+      "derivedTitle": "Introduction to Polymers",
+      "byteSensitive": false,
+      "purpose": "Experimental-era file whose only metadata is a leading {{nyml kind: meta}} block (DocMeta), read as the header.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §5 legacy header",
+        "FC-18 §8.1 derived title",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/host-keys.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Chapter 4 — Intermolecular Forces",
+        "author": "Yu Wang",
+        "license": "CC-BY-SA-4.0",
+        "theme": "light-academic-1",
+        "uid": "doc-q8w3e5r7t2"
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "uid",
+        "theme",
+        "x_alembic_chapter",
+        "x_alembic_course",
+        "x_alembic_visibility",
+        "x_alembic_progress_weight",
+        "x_coursewerk_unit",
+        "subtitle",
+        "reading_time"
+      ],
+      "derivedTitle": "Chapter 4 — Intermolecular Forces",
+      "byteSensitive": false,
+      "purpose": "Host keys (x_alembic_*, x_coursewerk_*) and unknown family-looking keys (subtitle, reading_time) that must survive every edit, save and update in order.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §5 header syntax",
+        "FC-18 §5 host keys",
+        "FC-18 §5 unknown keys kept",
+        "FC-18 §9 header edited in place",
+        "FC-19 create-edit-save-reopen exact",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/crlf.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Titration Data (Windows-authored)",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "light-neat-1",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "theme",
+        "custom_css"
+      ],
+      "derivedTitle": "Titration Data (Windows-authored)",
+      "byteSensitive": true,
+      "purpose": "Every line ends in CR LF, including header lines, a custom_css | value, and a code line with trailing spaces; storage must keep the bytes.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-18 §5 multi-line value",
+        "FC-18 §9 header edited in place",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/bom.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Notes Saved with a Byte-Order Mark",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license"
+      ],
+      "derivedTitle": "Notes Saved with a Byte-Order Mark",
+      "byteSensitive": true,
+      "purpose": "Starts with a UTF-8 BOM (EF BB BF) before {{nyml; the header still leads and extraction returns the BOM.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/script-close.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Embedding Snippets </script> Safely",
+        "author": "Yu Wang",
+        "license": "MIT",
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "description",
+        "license"
+      ],
+      "derivedTitle": "Embedding Snippets </script> Safely",
+      "byteSensitive": true,
+      "purpose": "Text (header values, prose, code spans, fences, raw HTML) containing </script>, <script, <!--, <!--<script>, ]]>, and case variants; no trailing newline.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §8.1 island escaping",
+        "FC-18 §8.1 derived title",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/unicode.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "多语言测试 — Ünïcödé Coverage 🧪",
+        "author": "王宇 (Yu Wang)",
+        "license": "CC0-1.0",
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "lang",
+        "keywords"
+      ],
+      "derivedTitle": "多语言测试 — Ünïcödé Coverage 🧪",
+      "byteSensitive": false,
+      "purpose": "CJK, RTL (Arabic, Hebrew, bidi marks), emoji ZWJ/flag/keycap sequences, combining marks (NFC vs NFD), astral-plane characters, special spaces; full-width separators in keywords.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §8.1 derived title",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "md/large.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Large Document — 48 Problem Sets",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": null,
+        "uid": "doc-0large0000"
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "uid"
+      ],
+      "derivedTitle": "Large Document — 48 Problem Sets",
+      "byteSensitive": false,
+      "purpose": "About 2,000 lines (48 sections with ids, tables, math, code, spoilers) plus one very long line; generated deterministically (README).",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/minimal.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Buffers in Five Minutes",
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title"
+      ],
+      "derivedTitle": "Buffers in Five Minutes",
+      "slideCount": 1,
+      "byteSensitive": false,
+      "purpose": "Smallest deck: a header and one plain slide.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-19 create-edit-save-reopen exact",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/every-layout.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Every Layout — Polymer Characterization",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "paper",
+        "uid": "doc-s1l2a3y4o5"
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "uid",
+        "theme",
+        "ratio",
+        "footer",
+        "transition"
+      ],
+      "derivedTitle": "Every Layout — Polymer Characterization",
+      "slideCount": 15,
+      "byteSensitive": false,
+      "purpose": "Every preset (2col, 3col, 2row, main-side with and without ratios; quad), raw row/col splits incl. px/fr tracks and deep nesting, and floats with z order; every slides header key.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.2 markers outside code and directives",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/every-template.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Every Template — Controlled Polymerization",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "chalk",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "theme",
+        "ratio",
+        "footer"
+      ],
+      "derivedTitle": "Every Template — Controlled Polymerization",
+      "slideCount": 17,
+      "byteSensitive": false,
+      "purpose": "Every structure template and variant: title v1–v6, section v1–v4, outline v1–v3, closing v1–v3, then a normal slide.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §7.2 markers outside code and directives",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/notes-and-fragments.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Presenter Features — Titration Lab Briefing",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "executive",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "theme",
+        "ratio",
+        "footer",
+        "transition"
+      ],
+      "derivedTitle": "Presenter Features — Titration Lab Briefing",
+      "slideCount": 12,
+      "byteSensitive": false,
+      "purpose": "@notes, whole-slide step, {{attrs[.fragment]}}, per-slide @footer, @body on templates, and slide options bg (colour, image), t, id, class (quoted), fit=scroll/off; ratio 4:3.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §7.2 markers outside code and directives",
+        "FC-18 §5.1 key registry",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/markers-in-code.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Writing orz-slides Decks — Markers in Code",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "architect",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "theme"
+      ],
+      "derivedTitle": "Writing orz-slides Decks — Markers in Code",
+      "slideCount": 5,
+      "byteSensitive": false,
+      "purpose": "Slide and region markers (and a header example and a retired <!-- deck --> preamble) inside ``` / ~~~ / ```` fences, indented code, code spans, and multi-line {{yaml}}, {{mermaid}}, {{nyml}} directives; must NOT split: exactly 5 slides, 1 header.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §7.2 markers outside code and directives",
+        "FC-18 §5 token-based header scan",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "slides/title-v2-long-title.slides.md",
+      "kind": "slides",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "D-46 Reproduction — Long Title on Title Template v2",
+        "author": "Yu Wang",
+        "license": null,
+        "theme": "paper",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "theme",
+        "ratio"
+      ],
+      "derivedTitle": "D-46 Reproduction — Long Title on Title Template v2",
+      "slideCount": 3,
+      "byteSensitive": false,
+      "purpose": "Reproduces STATUS D-46: a long title on template=title v=2 is cut off; with a short-title v2 control and a long-title v1 control.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-19 display-defect screenshot"
+      ],
+      "defect": "D-46"
+    },
+    {
+      "path": "paged/minimal.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Stockroom Note",
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "template"
+      ],
+      "derivedTitle": "Stockroom Note",
+      "elementKinds": [],
+      "byteSensitive": false,
+      "purpose": "Smallest paged document: a header with title and template, one paragraph.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §4 header leads the text",
+        "FC-18 §5 header syntax",
+        "FC-19 create-edit-save-reopen exact",
+        "FC-19 update from previous shell exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/article-page.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "front_matter"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "article-title",
+        "abstract"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/article-page.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/article-section.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "article-title",
+        "abstract"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/article-section.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/cover-letter.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "letterhead",
+        "letter-inside-address",
+        "letter-signature"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/cover-letter.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/cv-elegant.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "custom_css"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "cv-header"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/cv-elegant.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §5 multi-line value",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/cv-modern.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "custom_css"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "cv-header"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/cv-modern.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §5 multi-line value",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/cv.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "cv-header"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/cv.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/exam-page.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "page_number_position",
+        "page_number_style",
+        "dynamic_choices"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "exam-title",
+        "question-mc",
+        "question-mc",
+        "question-open",
+        "question-open"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/exam-page.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §5 multi-line value",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/exam-section.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "page_number_position",
+        "page_number_style",
+        "dynamic_choices"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "exam-title",
+        "question-mc",
+        "question-mc",
+        "question-open"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/exam-section.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §5 multi-line value",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/letter.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "letterhead",
+        "letter-inside-address",
+        "letter-signature"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/letter.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/note.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template"
+      ],
+      "derivedTitle": "Note Title",
+      "elementKinds": [],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/note.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/report-page.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "header_center",
+        "footer_left",
+        "page_number_position",
+        "page_number_style",
+        "front_matter"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "report-title",
+        "toc"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/report-page.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/every-template/report-section.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": null,
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "template",
+        "header_center",
+        "page_number_position",
+        "page_number_style"
+      ],
+      "derivedTitle": "Untitled",
+      "elementKinds": [
+        "report-title",
+        "toc"
+      ],
+      "byteSensitive": false,
+      "purpose": "orz-paged assets/templates/report-section.md in format 1: its kind: document settings block is the header (format: 1 added), body byte-identical.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/elements.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Every Element — Department Annual Report",
+        "author": "Yu Wang",
+        "license": "CC-BY-4.0",
+        "theme": "light-academic-2",
+        "uid": "doc-p4g3d1e2l9"
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "uid",
+        "lang",
+        "theme",
+        "template",
+        "page_size",
+        "margin_top",
+        "margin_bottom",
+        "margin_left",
+        "margin_right",
+        "font_preset",
+        "font_heading_preset",
+        "font_size",
+        "line_height",
+        "decoration_color",
+        "page_background",
+        "page_number_position",
+        "page_number_style",
+        "header_left",
+        "header_right",
+        "header_rule",
+        "footer_left",
+        "footer_rule",
+        "first_page_hide_header",
+        "first_page_hide_footer",
+        "front_matter",
+        "limit_image_to_page",
+        "keep_image_together",
+        "repeat_table_header",
+        "avoid_table_row_breaks",
+        "custom_css"
+      ],
+      "derivedTitle": "Every Element — Department Annual Report",
+      "elementKinds": [
+        "report-title",
+        "abstract",
+        "toc",
+        "article-title",
+        "exam-title",
+        "question-mc",
+        "question-open",
+        "letterhead",
+        "letter-inside-address",
+        "letter-signature",
+        "cv-header",
+        "timestamp"
+      ],
+      "byteSensitive": false,
+      "purpose": "All twelve element kinds (placement: page on report-title, abstract, toc; section on article/exam titles) and nearly every paged settings key in the header, incl. quoted values and custom_css.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-18 §5 header syntax",
+        "FC-18 §5.1 key registry",
+        "FC-18 §5 multi-line value",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §9 header edited in place",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    },
+    {
+      "path": "paged/columns-across-pages.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "D-48 Reproduction — Two Columns Across a Page Break",
+        "author": "Yu Wang",
+        "license": null,
+        "theme": null,
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "template",
+        "page_size",
+        "margin_top",
+        "margin_bottom",
+        "font_size"
+      ],
+      "derivedTitle": "D-48 Reproduction — Two Columns Across a Page Break",
+      "elementKinds": [],
+      "byteSensitive": false,
+      "purpose": "Reproduces STATUS D-48: a :::: cols block on A5 long enough to cross a page break; both columns must continue on the next page.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 law 4 content independence",
+        "FC-19 display-defect screenshot"
+      ],
+      "defect": "D-48"
+    },
+    {
+      "path": "paged/dynamic-choices.paged.md",
+      "kind": "paged",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Quiz 2 — Buffers",
+        "author": "Yu Wang",
+        "license": "CC-BY-NC-4.0",
+        "theme": "light-neat-2",
+        "uid": null
+      },
+      "keys": [
+        "format",
+        "title",
+        "author",
+        "license",
+        "template",
+        "theme",
+        "page_number_position",
+        "page_number_style",
+        "dynamic_choices"
+      ],
+      "derivedTitle": "Quiz 2 — Buffers",
+      "elementKinds": [
+        "exam-title",
+        "question-mc",
+        "question-mc",
+        "question-open"
+      ],
+      "byteSensitive": false,
+      "purpose": "dynamic_choices | map with three keys (answer-key, audience, campus) driving question answers and data-show-when / data-hide-when HTML in the body.",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 2 determinism",
+        "FC-18 law 3 idempotence",
+        "FC-18 §3 kind from file name",
+        "FC-19 readDocument agrees with header",
+        "FC-18 §5 header syntax",
+        "FC-18 §5 multi-line value",
+        "FC-18 §5.1 key registry",
+        "FC-18 §7.3 element blocks",
+        "FC-18 §9 header edited in place",
+        "FC-19 create-edit-save-reopen exact"
+      ],
+      "defect": null
+    }
+  ]
+}
