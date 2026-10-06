@@ -29,6 +29,17 @@ export interface Extracted {
   includes?: Record<string, string>;
 }
 
+/**
+ * The npm package of each kind's carrier (its agent skill ships there; its
+ * browser bundle and release manifest are `<package>-browser`). Hard-coded:
+ * the update check derives its manifest URL from it, never from a document.
+ */
+export const KIND_PACKAGE: Readonly<Record<Kind, string>> = {
+  md: 'orz-mdhtml',
+  slides: 'orz-slides',
+  paged: 'orz-paged',
+};
+
 /** Id of the source island. */
 export const SOURCE_ISLAND_ID = 'orz-src';
 /** Id of the shell marker island. */

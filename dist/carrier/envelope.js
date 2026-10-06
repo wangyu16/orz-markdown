@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.readIslandFromDom = exports.extract = void 0;
+exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.readIslandFromDom = exports.extract = void 0;
 exports.skillUrl = skillUrl;
 exports.assembleEnvelope = assembleEnvelope;
 /**
@@ -33,6 +33,7 @@ const read_js_1 = require("./read.js");
 var read_js_2 = require("./read.js");
 Object.defineProperty(exports, "extract", { enumerable: true, get: function () { return read_js_2.extract; } });
 Object.defineProperty(exports, "readIslandFromDom", { enumerable: true, get: function () { return read_js_2.readIslandFromDom; } });
+Object.defineProperty(exports, "KIND_PACKAGE", { enumerable: true, get: function () { return read_js_2.KIND_PACKAGE; } });
 Object.defineProperty(exports, "SOURCE_ISLAND_ID", { enumerable: true, get: function () { return read_js_2.SOURCE_ISLAND_ID; } });
 Object.defineProperty(exports, "SHELL_ISLAND_ID", { enumerable: true, get: function () { return read_js_2.SHELL_ISLAND_ID; } });
 Object.defineProperty(exports, "INCLUDES_ISLAND_ID", { enumerable: true, get: function () { return read_js_2.INCLUDES_ISLAND_ID; } });
@@ -40,15 +41,9 @@ var text_js_2 = require("./text.js");
 Object.defineProperty(exports, "eolStyle", { enumerable: true, get: function () { return text_js_2.eolStyle; } });
 Object.defineProperty(exports, "hasMixedEol", { enumerable: true, get: function () { return text_js_2.hasMixedEol; } });
 Object.defineProperty(exports, "hasLoneSurrogate", { enumerable: true, get: function () { return text_js_2.hasLoneSurrogate; } });
-/** The npm package of each kind's carrier (its agent skill ships there). */
-exports.KIND_PACKAGE = {
-    md: 'orz-mdhtml',
-    slides: 'orz-slides',
-    paged: 'orz-paged',
-};
 /** The agent skill URL of a kind's carrier. */
 function skillUrl(kind) {
-    const pkg = exports.KIND_PACKAGE[kind];
+    const pkg = read_js_1.KIND_PACKAGE[kind];
     return `https://cdn.jsdelivr.net/npm/${pkg}/${pkg}-skills/SKILL.md`;
 }
 /** The agent banner (an HTML comment; holds no tag-like text and no `--`). */

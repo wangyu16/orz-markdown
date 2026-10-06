@@ -123,3 +123,83 @@ export function globalWindow<T>(): T | undefined {
     return undefined;
   }
 }
+
+// ── chrome and update UI (chrome.ts, indicator.ts, update.ts) ─────────────
+
+/** An event as the chrome reads it (a DOM `Event` / `KeyboardEvent` satisfies it). */
+export interface UiEventLike {
+  readonly key?: string;
+  readonly target?: unknown;
+  readonly relatedTarget?: unknown;
+  preventDefault(): void;
+  stopPropagation?(): void;
+  composedPath?(): unknown[];
+}
+export type UiListener = (event: UiEventLike) => void;
+
+/** The part of `CSSStyleDeclaration` the chrome writes. */
+export interface StyleLike {
+  setProperty(name: string, value: string): void;
+}
+
+/** The part of a DOM `Element` / `HTMLElement` the chrome writes. Only writes: the chrome never reads page content (its one markup write, an icon, is typed in chrome.ts). */
+export interface UiElement {
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+  getAttribute(name: string): string | null;
+  /** `Node.append` (elements and text nodes). */
+  append(...nodes: unknown[]): void;
+  appendChild(node: unknown): unknown;
+  remove(): void;
+  addEventListener(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+  removeEventListener(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+  focus?(options?: { preventScroll?: boolean }): void;
+  className: string;
+  hidden: boolean;
+  readonly style?: StyleLike;
+  readonly ownerDocument?: UiDocument | null;
+  readonly parentNode?: { insertBefore(node: unknown, before: unknown): unknown } | null;
+  readonly nextSibling?: unknown;
+  attachShadow?(init: { mode: 'open' | 'closed' }): ShadowRootLike;
+  after?(...nodes: unknown[]): void;
+  getBoundingClientRect?(): { top: number; left: number; bottom: number; right: number; width: number; height: number };
+  /** `HTMLButtonElement.disabled`. */
+  disabled?: boolean;
+}
+
+/** `CharacterData` (a DOM `Text`): the chrome changes a message through `data`. */
+export interface TextLike {
+  data: string;
+}
+
+/** The part of a `ShadowRoot` the chrome uses. */
+export interface ShadowRootLike {
+  append(...nodes: unknown[]): void;
+  appendChild(node: unknown): unknown;
+  contains?(node: unknown): boolean;
+  adoptedStyleSheets?: unknown[];
+  readonly host?: unknown;
+  addEventListener?(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+  removeEventListener?(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+}
+
+/** The view a chrome document belongs to (a `Window` satisfies it). */
+export interface UiView {
+  readonly innerWidth?: number;
+  readonly innerHeight?: number;
+  readonly CSSStyleSheet?: new () => { replaceSync(css: string): void };
+  setTimeout(handler: () => void, ms: number): unknown;
+  clearTimeout(id: unknown): void;
+  matchMedia?(query: string): { matches: boolean };
+}
+
+/** The part of `Document` the chrome and the update use. */
+export interface UiDocument {
+  createElement(tag: string): UiElement;
+  createElementNS?(ns: string, tag: string): UiElement;
+  createTextNode(text: string): TextLike;
+  readonly body: UiElement | null;
+  readonly defaultView?: UiView | null;
+  addEventListener(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+  removeEventListener(type: string, listener: UiListener, options?: boolean | { capture?: boolean }): void;
+}

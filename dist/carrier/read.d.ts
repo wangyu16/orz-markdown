@@ -15,6 +15,12 @@ export interface Extracted {
     /** The resolved includes stored in `#orz-includes`, when the file has them. */
     includes?: Record<string, string>;
 }
+/**
+ * The npm package of each kind's carrier (its agent skill ships there; its
+ * browser bundle and release manifest are `<package>-browser`). Hard-coded:
+ * the update check derives its manifest URL from it, never from a document.
+ */
+export declare const KIND_PACKAGE: Readonly<Record<Kind, string>>;
 /** Id of the source island. */
 export declare const SOURCE_ISLAND_ID = "orz-src";
 /** Id of the shell marker island. */

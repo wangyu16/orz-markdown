@@ -66,10 +66,19 @@ npm run check:site # website starter versions + discovery metadata
   IndexedDB under the header `uid` → download; it saves the HTML the caller
   assembled, never the live DOM), `createPreferenceStore` (reader preferences
   by `uid`, fail closed), `connectHost` / `embedCarrierFrame` (file and host
-  sides of `orz-host-save/-ai/-include@1`). Parser-free and Node-safe (no
-  browser global touched at load; claim S.11); not imported by
-  `orz-markdown/carrier`, whose import graph must stay free of browser state
-  (K.2).
+  sides of `orz-host-save/-ai/-include@1`), the quiet update in `update.ts`
+  (`checkForUpdate` once a day per kind, `reassemble` — SHA-384-verified,
+  script-safe bundle run in a `sandbox="allow-scripts"` iframe, accepted only
+  when `extract` gives back the exact text/kind/version — and
+  `performUpdate`) with `mountUpdateIndicator` in `indicator.ts`, and the
+  shell chrome in `chrome.ts` (`CHROME_CSS` tokens, `ICONS`,
+  `createShadowRoot`, `showToast`). Update URLs are hard-coded (jsDelivr +
+  `KIND_PACKAGE`, RULES §5.4): never add a path that takes a URL from a
+  document. Parser-free (its only non-shell import is the parser-free
+  `read.ts`) and Node-safe (no browser global touched at load; claims S.11,
+  U.10, V.5); not imported by `orz-markdown/carrier`, whose import graph must
+  stay free of browser state (K.2). Only `chrome.ts` writes `innerHTML`, and
+  only `ICONS` constants (V.4); no shell module reads the page DOM (S.4).
 - `spec/` — binding carrier specs owned here: FC-18 (text form and assembly)
   and FC-19 (editor component), plus the canonical host protocols (FC-12)
   and the shell runtime (FC-11). Change them only through the family's
@@ -123,8 +132,9 @@ npm run check:site # website starter versions + discovery metadata
   `tests/browser-copy.test.ts` drives real Chrome through `playwright-core` and
   self-skips when Chrome is absent — the claims it binds (C.14–C.16, C.19,
   C.20, M.8) are then unverified; the same holds for the Chrome parts of
-  `tests/carrier-kit.test.ts` (K.9, K.12) and `tests/carrier-shell.test.ts`
-  (S.12).
+  `tests/carrier-kit.test.ts` (K.9, K.12), `tests/carrier-shell.test.ts`
+  (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
+  U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;

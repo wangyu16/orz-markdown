@@ -24,9 +24,9 @@ import { escapeAttr, escapeHtml, escapeScriptText, jsonForScript } from '../html
 import { renderDocMetaHead, renderDocMetaIsland } from '../doc-meta.js';
 import { readDocument, type Kind } from './document.js';
 import { eolStyle, hasLoneSurrogate } from './text.js';
-import { reservedIdIn, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
+import { reservedIdIn, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 
-export { extract, readIslandFromDom, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
+export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
 
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
@@ -48,12 +48,6 @@ export interface ShellParts {
   includes?: Record<string, string>;
 }
 
-/** The npm package of each kind's carrier (its agent skill ships there). */
-export const KIND_PACKAGE: Readonly<Record<Kind, string>> = {
-  md: 'orz-mdhtml',
-  slides: 'orz-slides',
-  paged: 'orz-paged',
-};
 
 /** The agent skill URL of a kind's carrier. */
 export function skillUrl(kind: Kind): string {

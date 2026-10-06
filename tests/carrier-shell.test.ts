@@ -311,8 +311,9 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
 
   it('[S.4] the save never reads the live DOM: no shell module names a DOM-reading or serializing API, and save writes exactly the html it is given', async () => {
     const forbidden = /\b(outerHTML|innerHTML|innerText|textContent|documentElement|XMLSerializer|cloneNode|querySelector(All)?|getElementById|getElementsBy\w+|serializeToString|\.head\b)\b/;
-    const files = readdirSync('src/carrier/shell').filter((f) => f.endsWith('.ts'));
-    expect(files.sort()).toEqual(['file-side.ts', 'host-side.ts', 'index.ts', 'preferences.ts', 'protocol.ts', 'save.ts', 'types.ts']);
+    // chrome.ts is the UI module that writes icons into its own shadow root (V.4 binds it); every other module is checked.
+    const files = readdirSync('src/carrier/shell').filter((f) => f.endsWith('.ts') && f !== 'chrome.ts');
+    expect(files.sort()).toEqual(['file-side.ts', 'host-side.ts', 'index.ts', 'indicator.ts', 'preferences.ts', 'protocol.ts', 'save.ts', 'types.ts', 'update.ts']);
     const hits: string[] = [];
     for (const f of files) {
       readFileSync(`src/carrier/shell/${f}`, 'utf8').split('\n').forEach((line, i) => {
@@ -722,18 +723,27 @@ function valueImports(entry: string): Set<string> {
   return seen;
 }
 
-/** Measured 2026-10-05: 13,902 bytes minified (esbuild, ESM, browser). Bound = measurement + ~30 % margin. */
-const SHELL_BUNDLE_LIMIT = 18_000;
+/**
+ * Measured 2026-10-05: 13,902 bytes minified (esbuild, ESM, browser) for step 2a; 44,331 bytes
+ * with the update and the chrome (step 2b). Bound = measurement + ~30 % margin.
+ */
+const SHELL_BUNDLE_LIMIT = 58_000;
+/** The parser-free reader the update verifies with (K.20's graph). */
+const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
-  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell only, it bundles for the browser under 18 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
+  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, it bundles for the browser under 58 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
     const graph = [...valueImports('src/carrier/shell/index.ts')].sort();
-    expect(graph).toEqual(['src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/preferences.ts', 'src/carrier/shell/protocol.ts', 'src/carrier/shell/save.ts', 'src/carrier/shell/types.ts']);
+    expect(graph).toEqual([
+      ...READER_GRAPH,
+      'src/carrier/shell/chrome.ts', 'src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/indicator.ts',
+      'src/carrier/shell/preferences.ts', 'src/carrier/shell/protocol.ts', 'src/carrier/shell/save.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts',
+    ].sort());
     const { build } = await import('esbuild');
     const out = await build({ entryPoints: ['src/carrier/shell/index.ts'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
     const size = out.outputFiles[0].contents.byteLength;
     expect(size).toBeLessThan(SHELL_BUNDLE_LIMIT);
-    expect(Object.keys(out.metafile!.inputs).filter((f) => !f.startsWith('src/carrier/shell/'))).toEqual([]);
+    expect(Object.keys(out.metafile!.inputs).filter((f) => !f.startsWith('src/carrier/shell/')).sort()).toEqual(READER_GRAPH);
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { exports: Record<string, string> };
     expect(pkg.exports['./carrier/shell']).toBe('./dist/carrier/shell/index.js');
     const carrierGraph = [...valueImports('src/carrier.ts')];
@@ -749,7 +759,7 @@ describe('module boundaries', () => {
     const out = await build({ entryPoints: ['src/carrier/shell/index.ts'], bundle: true, platform: 'neutral', format: 'cjs', write: false, logLevel: 'silent' });
     const touched: string[] = [];
     const ctx: Record<string, unknown> = { module: { exports: {} }, setTimeout, clearTimeout, setInterval, clearInterval };
-    for (const name of ['window', 'document', 'localStorage', 'sessionStorage', 'indexedDB', 'navigator', 'location', 'self', 'parent', 'showSaveFilePicker']) {
+    for (const name of ['window', 'document', 'localStorage', 'sessionStorage', 'indexedDB', 'navigator', 'location', 'self', 'parent', 'showSaveFilePicker', 'fetch', 'crypto']) {
       Object.defineProperty(ctx, name, { get() { touched.push(name); throw new Error(`touched ${name}`); } });
     }
     ctx.exports = (ctx.module as { exports: unknown }).exports;

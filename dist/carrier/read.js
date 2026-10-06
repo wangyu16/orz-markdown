@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
 exports.readIslandFromDom = readIslandFromDom;
 exports.reservedIdIn = reservedIdIn;
 exports.extract = extract;
@@ -26,6 +26,16 @@ Object.defineProperty(exports, "decodeText", { enumerable: true, get: function (
 Object.defineProperty(exports, "eolStyle", { enumerable: true, get: function () { return text_js_1.eolStyle; } });
 Object.defineProperty(exports, "hasMixedEol", { enumerable: true, get: function () { return text_js_1.hasMixedEol; } });
 Object.defineProperty(exports, "hasLoneSurrogate", { enumerable: true, get: function () { return text_js_1.hasLoneSurrogate; } });
+/**
+ * The npm package of each kind's carrier (its agent skill ships there; its
+ * browser bundle and release manifest are `<package>-browser`). Hard-coded:
+ * the update check derives its manifest URL from it, never from a document.
+ */
+exports.KIND_PACKAGE = {
+    md: 'orz-mdhtml',
+    slides: 'orz-slides',
+    paged: 'orz-paged',
+};
 /** Id of the source island. */
 exports.SOURCE_ISLAND_ID = 'orz-src';
 /** Id of the shell marker island. */

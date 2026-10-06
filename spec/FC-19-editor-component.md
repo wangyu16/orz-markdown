@@ -15,7 +15,7 @@ wants (FD-06).
 
 ```ts
 mountEditor(element: HTMLElement, options: EditorOptions): Editor
-assemble(text: string, options?: { delivery?: "inline" | "cdn" }): Promise<string>
+assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string }): Promise<string>
 extract(html: string): { text: string; kind: Kind; format: number; shell: string } | null
 readDocument(text: string): DocumentInfo        // header + derived facts, no rendering
 renderPreview(text: string, options?): Promise<string>  // sandboxable HTML for thumbnails / read-only views
@@ -24,6 +24,32 @@ version: string                                  // the shell version
 
 `readDocument` lets an app index documents (title, author, licence, keywords,
 kind, `uid`, theme) without rendering — what Alembic's discovery space needs.
+
+`engineSource` (optional) is the exact text of this browser bundle. An inline
+assembly (`delivery: "inline"`) inlines it instead of fetching or embedding a
+copy of its own — the quiet update (spec/shell-runtime.md §7) passes the
+bundle it has just verified, so the new file carries exactly those bytes.
+
+**The standard bundle global** (binding addition, 2026-10-05). Every carrier
+browser bundle (`orz-<x>.browser.js`, the file named by `bundle.path` in its
+`release.json`, spec/shell-runtime.md §6) sets, when it loads:
+
+```ts
+globalThis.OrzCarrier = {
+  kind: Kind;                 // "md" | "slides" | "paged"
+  version: string;            // the shell version (= the package version)
+  formats: number[];          // the text formats it reads and writes (FC-18)
+  assemble, extract, readDocument, mountEditor,   // as above
+  renderPreview?,             // as above
+};
+```
+
+The update runs `OrzCarrier.assemble` of a newer release in a sandboxed
+opaque-origin iframe, with nothing else from the page available, so
+`assemble` must work from the bundle alone (no page DOM, no storage, no
+network for `inline` beyond what the bundle carries) and must write
+`shell = version`. The bundle must be script-safe (no `<script` or
+`</script` sequence; spec/shell-runtime.md §6).
 
 ## 3. `EditorOptions`
 

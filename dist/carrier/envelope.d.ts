@@ -1,5 +1,5 @@
 import { type Kind } from './document.js';
-export { extract, readIslandFromDom, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
+export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
@@ -18,8 +18,6 @@ export interface ShellParts {
     /** Resolved includes (FC-18 §8.3, D4): target → text, stored in `#orz-includes` with sorted keys. */
     includes?: Record<string, string>;
 }
-/** The npm package of each kind's carrier (its agent skill ships there). */
-export declare const KIND_PACKAGE: Readonly<Record<Kind, string>>;
 /** The agent skill URL of a kind's carrier. */
 export declare function skillUrl(kind: Kind): string;
 /**

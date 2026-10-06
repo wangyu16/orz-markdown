@@ -74,6 +74,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`md`/`slides`/`paged`/`poster`), the security rules for both sides, and
   format-1 saves (`source` is the exact text twin; hosts persist the text).
   `spec/shell-runtime.md`: the save order and reader preferences.
+- **Quiet update** in `orz-markdown/carrier/shell` (FD-05;
+  `spec/shell-runtime.md` §6–§7):
+  - the release manifest: every `orz-<x>-browser` package publishes
+    `release.json` (`kind`, `version`, `formats`, `notes`, `bundle.path`,
+    `bundle.integrity` = `sha384-…`); manifest and bundle URLs are hard-coded
+    jsDelivr patterns over `KIND_PACKAGE` (now also exported by
+    `orz-markdown/carrier/read`), never taken from a document;
+  - `checkForUpdate({ kind, current, format })` — at most one request per
+    kind per day (recorded in `localStorage`), silent on any failure, semver
+    precedence, never a prerelease, only releases that read the document's
+    format, honouring `skipVersion(kind, version)`;
+  - `reassemble({ text, kind, release, delivery })` — transactional: verifies
+    the bundle's SHA-384 and that it is script-safe, runs the release's
+    `OrzCarrier.assemble` in a hidden `sandbox="allow-scripts"` iframe
+    (opaque origin; only that iframe's messages are read), accepts the file
+    only when `extract` gives back exactly the text, kind, version and
+    delivery, and removes the iframe in every outcome; `performUpdate`
+    composes check → reassemble → `createSaver().save` (the caller reloads);
+    `UpdateError` codes; `parseManifest`, `manifestUrl`, `bundleUrl`,
+    `isBundlePath`, `isScriptSafe`, `sha384Integrity`, `compareSemver`;
+  - `mountUpdateIndicator(anchor, info, { onUpdate, onLater, onSkip })` — a
+    small chip next to the brand with a non-modal, keyboard-operable popover
+    (Update now / Not now / Skip this version, "What's new"); no modal, no
+    `confirm()`, no banner.
+- **Shell chrome** (`spec/shell-runtime.md` §8): `CHROME_CSS` (OKLCH tokens,
+  light/dark by `prefers-color-scheme` and `data-chrome`, focus rings,
+  spacing/radius/type scales, reduced motion), `ICONS` (12 inline SVGs),
+  `createShadowRoot`, `showToast` (polite live region, stacking,
+  dismissible).
+- FC-19 §2: the standard bundle global `globalThis.OrzCarrier = { kind,
+  version, formats, assemble(text, { delivery, engineSource }), extract,
+  readDocument, mountEditor, … }`.
 
 ### Fixed
 
@@ -90,6 +122,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CR LF and CR end a line (a value holding them was silently dropped).
 - A nyml key named `__proto__` is kept as data (it was dropped).
 - `@types/markdown-it` is a dependency (the published types expose it).
+- The R.7 KaTeX-budget regression test bounds its time relative to a
+  baseline measured in the same run instead of an absolute 40 s (it flaked
+  under load).
+- `KIND_PACKAGE` lives in the parser-free `src/carrier/read.ts` (still
+  exported by `orz-markdown/carrier`; now also by `orz-markdown/carrier/read`).
 
 ## [2.0.0] - 2026-10-03
 

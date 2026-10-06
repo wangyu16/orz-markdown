@@ -59,12 +59,18 @@ describe('round 21 — half A: per-render budgets are measured, not estimated', 
 
   it('[R.7] KaTeX output per render is bounded (H7)', () => {
     const arr = '$\\begin{array}{c}' + 'a\\\\'.repeat(2400) + '\\end{array}$';
-    const src = Array.from({ length: 100 }, () => arr).join('\n\n');
-    const t0 = performance.now();
-    const html = md.render(src);
+    const doc = (n: number) => Array.from({ length: n }, () => arr).join('\n\n');
+    const time = (src: string) => { const t0 = performance.now(); const html = md.render(src); return { ms: performance.now() - t0, html }; };
+    // Baseline in the same run (so machine load scales both sides): the per-formula cost of a
+    // 5-formula document, best of two after a warm-up. 100 formulas must stay linear in it —
+    // a superlinear (per-render budget re-scan) regression is ≥ 20× at this size — and the
+    // output stays under the KaTeX output cap. (Was an absolute 40 s bound, flaky under load.)
+    time(doc(1));
+    const perFormula = Math.min(time(doc(5)).ms, time(doc(5)).ms) / 5;
+    const { ms, html } = time(doc(100));
     expect(html.length).toBeLessThan(80_000_000);
-    expect(performance.now() - t0).toBeLessThan(40_000);
-  }, 120_000);
+    expect(ms).toBeLessThan(100 * perFormula * 3);
+  }, 180_000);
 
   it('[M.18] a fetched citation of a host footnote label is refused (M1)', async () => {
     const h = 'Intro.\n\n{{md https://x.test/a.md}}\n\nHost cites first[^a] and second[^b].\n\n[^a]: A.\n[^b]: B.\n';
