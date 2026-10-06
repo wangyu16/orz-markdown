@@ -1,0 +1,266 @@
+/**
+ * The carrier conformance harness (`orz-markdown/carrier/conformance`,
+ * spec/conformance.md): claims H.1–H.5 in notes/CLAIMS.md.
+ *
+ * The harness runs here exactly as a carrier runs it: `registerConformance`
+ * registers one test per check against the stub carrier of
+ * tests/conformance-stub/ (kind md, built at test time from the kit: a
+ * script-safe browser bundle, its release.json, `mountEditor` = the editor
+ * shell + `renderMarkdownPreview`), with older and newer builds of the stub as
+ * `previous` and `next`. Then (H.5) deliberately broken builds of the stub
+ * (`__STUB_VARIANT__`) must FAIL the matching checks:
+ *
+ *   script-close    the bundle is not rewritten: it holds a literal </script
+ *   crlf            assemble normalises CR LF / CR to LF
+ *   accept-tampered the update trusts whatever bytes the CDN serves
+ *   live-dom        the save serialises the live DOM instead of assembling the text
+ *   steal-focus     the update indicator takes the focus when it appears
+ *
+ * One file, one Chrome, shared stub builds (the suite is heavy; a second
+ * file running in parallel pushed other suites' default timeouts over).
+ * The browser checks need the installed Chrome; they are reported skipped
+ * without it (and H.2 and the browser half of H.5 are then unverified).
+ */
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  CHECKS, CHECK_IDS, HAZARD_TEXTS, describeChecks, implementedChecks, registerConformance, runConformance, derivedParts, type ConformanceReport, type TestApi,
+} from '../src/carrier/conformance';
+import { assembleEnvelope, extract } from '../src/carrier';
+import { buildStub, cleanStubs, stubTarget } from './conformance-stub/build';
+import type { StubVariant } from './conformance-stub/assemble';
+
+type Browser = import('playwright-core').Browser;
+
+async function launch(): Promise<Browser | null> {
+  try {
+    const { chromium } = await import('playwright-core');
+    return await chromium.launch({ channel: 'chrome' });
+  } catch {
+    return null;
+  }
+}
+
+const browser = await launch();
+const statuses = new Map<string, string>();
+
+afterAll(async () => {
+  await browser?.close();
+  cleanStubs();
+});
+
+// ── H.2 the harness is green against the stub carrier ────────────────────
+
+registerConformance(
+  { describe, it, beforeAll, afterAll },
+  async () => {
+    const [previous, current, next] = await Promise.all([buildStub('1.0.0'), buildStub('1.1.0'), buildStub('1.2.0')]);
+    return stubTarget(current, { previous, next });
+  },
+  {
+    title: '[H.2] the stub carrier passes every conformance check',
+    ...(browser ? { browser } : { channel: 'no-chrome-installed' }),
+    log: (line) => { const m = /^(\w+)\s+(\S+)/.exec(line); if (m) statuses.set(m[2], m[1]); },
+  },
+);
+
+describe('the harness ran completely', () => {
+  it('[H.2] every check ran and passed against the stub (none skipped when Chrome is installed)', () => {
+    expect([...statuses.keys()].sort()).toEqual([...CHECK_IDS].sort());
+    const notPassed = [...statuses].filter(([, s]) => s !== 'passed');
+    if (browser) expect(notPassed).toEqual([]);
+    else expect(notPassed.every(([id, s]) => s === 'skipped' && CHECKS.find((c) => c.id === id)!.chrome)).toBe(true);
+  });
+});
+
+// ── H.1 the API ──────────────────────────────────────────────────────────
+
+describe('the harness API', () => {
+  it('[H.1] check ids are stable, unique C.<area>.<name> ids, each implemented, with a title and a spec reference; spec/conformance.md lists every one', () => {
+    expect(new Set(CHECK_IDS).size).toBe(CHECK_IDS.length);
+    for (const c of CHECKS) {
+      expect(c.id).toMatch(/^C\.(law|bundle|create|edit|save|update|host|prefs)\.[a-z]+(-[a-z]+)*$/);
+      expect(c.title.length).toBeGreaterThan(20);
+      expect(c.spec).toMatch(/FC-1[89]|shell-runtime|host-protocols|FD-0/);
+    }
+    expect(implementedChecks().sort()).toEqual([...CHECK_IDS].sort());
+    expect(describeChecks().map((c) => c.id)).toEqual(CHECK_IDS);
+    const doc = readFileSync('spec/conformance.md', 'utf8');
+    for (const id of CHECK_IDS) expect(doc, id).toContain(`\`${id}\``);
+    // the ids the brief and the claims name exist
+    for (const id of ['C.create.newest-shell', 'C.bundle.script-safe', 'C.update.tampered', 'C.save.download', 'C.update.indicator', 'C.law.eol-bom']) expect(CHECK_IDS).toContain(id);
+  });
+
+  it('[H.1] registerConformance registers one test per selected check, titled "[id] title", inside one describe with one beforeAll/afterAll; unknown ids are refused', () => {
+    const calls: string[] = [];
+    const api: TestApi = {
+      describe: (name, fn) => { calls.push(`describe ${name}`); fn(); },
+      it: (name) => { calls.push(`it ${name}`); },
+      beforeAll: () => { calls.push('beforeAll'); },
+      afterAll: () => { calls.push('afterAll'); },
+    };
+    registerConformance(api, () => { throw new Error('not opened'); }, { title: 'T', skip: ['C.host.no-ack'] });
+    expect(calls[0]).toBe('describe T');
+    expect(calls.filter((c) => c === 'beforeAll')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'afterAll')).toHaveLength(1);
+    const its = calls.filter((c) => c.startsWith('it '));
+    expect(its).toEqual(CHECKS.filter((c) => c.id !== 'C.host.no-ack').map((c) => `it [${c.id}] ${c.title}`));
+    expect(() => registerConformance(api, () => { throw new Error('x'); }, { only: ['C.nope'] })).toThrow(/unknown check C\.nope/);
+  });
+
+  it('[H.1] runConformance reports every selected check (passed, failed or skipped, with every failed expectation) and never throws for a failing check', async () => {
+    const stub = await buildStub('1.1.0');
+    const broken = { ...stubTarget(stub), version: '9.9.9', assemble: (t: string) => (t.includes('\r') || t.includes('\u0000') ? 'not a file' : stubTarget(stub).assemble(t)) };
+    const r = await runConformance(broken, { only: ['C.law.round-trip', 'C.bundle.release', 'C.law.refusals'], corpus: false });
+    expect(r).toMatchObject({ kind: 'md', version: '9.9.9', conformant: false, passed: 0, failed: 3, skipped: 0 });
+    expect(r.results.map((x) => x.id)).toEqual(['C.law.round-trip', 'C.law.refusals', 'C.bundle.release']);
+    const rt = r.results[0];
+    expect(rt.failures!.length).toBeGreaterThan(4); // every text that failed, both deliveries
+    expect(rt.message).toContain('hazard crlf-bom (inline): extract finds no #orz-src island');
+    expect(r.results[2].message).toContain('release.json version (= the target version): expected "9.9.9", got "1.1.0"');
+    expect(r.harness).toMatch(/^\d+\.\d+\.\d+/);
+  }, 120_000);
+});
+
+// ── H.3 self-skipping and the corpus ─────────────────────────────────────
+
+describe('without a browser, and the corpus', () => {
+  it('[H.3] when no browser can be launched the browser checks are skipped with the reason, Node checks still run, and the report is not conformant', async () => {
+    const stub = await buildStub('1.1.0');
+    const r = await runConformance(stubTarget(stub), { only: ['C.bundle.script-safe', 'C.edit.exact', 'C.update.indicator'], channel: 'no-such-channel', corpus: false });
+    expect(r.results.map((x) => [x.id, x.status])).toEqual([['C.bundle.script-safe', 'passed'], ['C.edit.exact', 'skipped'], ['C.update.indicator', 'skipped']]);
+    expect(r.results[1].message).toMatch(/^no browser: /);
+    expect(r.conformant).toBe(false);
+  }, 120_000);
+
+  it('[H.3] the update checks are skipped (not passed) without a next release, and from-previous without a previous one', async () => {
+    const stub = await buildStub('1.1.0');
+    const r = await runConformance(stubTarget(stub), { only: ['C.update.reassemble', 'C.update.from-previous'], channel: 'no-such-channel', corpus: false });
+    expect(r.results.map((x) => x.status)).toEqual(['skipped', 'skipped']);
+    if (browser) {
+      const r2 = await runConformance(stubTarget(stub), { only: ['C.update.reassemble', 'C.update.from-previous'], browser, corpus: false });
+      expect(r2.results.map((x) => x.message)).toEqual([expect.stringMatching(/no `next` release/), 'no `previous` release given']);
+    }
+  }, 120_000);
+
+  it('[H.3] the default corpus is the shipped tests/carrier-corpus of the kind (read as bytes, BOM kept), and the hazard texts cover CR LF, CR, a BOM, script closers, reserved ids, astral and separator characters, a very long line and the empty text', async () => {
+    const { loadCorpus } = await import('../src/carrier/conformance');
+    const md = loadCorpus('md');
+    expect(Object.keys(md)).toContain('md/bom.md');
+    expect(md['md/bom.md'].charCodeAt(0)).toBe(0xfeff);
+    expect(md['md/crlf.md']).toContain('\r\n');
+    expect(Object.keys(loadCorpus('paged')).every((k) => k.startsWith('paged/'))).toBe(true);
+    const all = Object.values(HAZARD_TEXTS).join('');
+    for (const s of ['\r\n', '﻿', '</script>', '<!--', 'id="orz-src"', '𝒳', ' ', ' ']) expect(all).toContain(s);
+    expect(HAZARD_TEXTS.empty).toBe('');
+    expect(Math.max(...Object.values(HAZARD_TEXTS).map((t) => Math.max(...t.split('\n').map((l) => l.length))))).toBeGreaterThan(100_000);
+    expect(HAZARD_TEXTS.cr.includes('\n')).toBe(false);
+    // derivedParts takes the text-derived parts of a kit envelope
+    const html = assembleEnvelope(HAZARD_TEXTS['crlf-bom'], { kind: 'md', shellVersion: '1.0.0', headHtml: '<style>x</style>', bodyHtml: '<p>shell</p>' });
+    const d = derivedParts(html);
+    expect(d.head).not.toContain('generator');
+    expect(d.head).toContain('<title>CR LF and a BOM</title>');
+    expect(d.island).toMatch(/^<script type="text\/markdown" id="orz-src" data-orz-format="1" data-orz-eol="crlf" data-orz-bom>/);
+    expect(extract(d.island)!.text).toBe(HAZARD_TEXTS['crlf-bom']);
+  }, 120_000);
+});
+
+// ── H.4 module and package boundaries ────────────────────────────────────
+
+function valueImports(entry: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [entry];
+  while (queue.length) {
+    const f = queue.pop()!;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    for (const m of readFileSync(f, 'utf8').matchAll(/^\s*(?:import|export)\s+(?!type\b)(?:[^'";]*?from\s*)?['"]([^'"]+)['"]/gm)) {
+      if (!m[1].startsWith('.')) continue;
+      const dir = f.slice(0, f.lastIndexOf('/'));
+      const parts: string[] = [];
+      for (const p of `${dir}/${m[1]}`.split('/')) { if (p === '..') parts.pop(); else if (p !== '.' && p) parts.push(p); }
+      const base = parts.join('/').replace(/\.js$/, '');
+      queue.push(existsSync(`${base}.ts`) ? `${base}.ts` : `${base}/index.ts`);
+    }
+  }
+  return seen;
+}
+
+describe('module and package boundaries', () => {
+  it('[H.4] no other entry imports the harness; the harness imports no Node built-in statically and playwright-core only lazily; the package exports ./carrier/conformance, ships the corpus and declares playwright-core an optional peer, not a dependency', () => {
+    for (const entry of ['src/index.ts', 'src/carrier.ts', 'src/carrier/read.ts', 'src/carrier/shell/index.ts', 'src/carrier/editor/index.ts']) {
+      expect([...valueImports(entry)].filter((f) => f.includes('carrier/conformance')), entry).toEqual([]);
+    }
+    const files = [...valueImports('src/carrier/conformance/index.ts')].filter((f) => f.includes('carrier/conformance'));
+    expect(files.sort()).toEqual(['catalog.ts', 'checks.ts', 'index.ts', 'node.ts', 'page.ts', 'session.ts', 'texts.ts'].map((f) => `src/carrier/conformance/${f}`));
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).not.toMatch(/^\s*import\s+(?!type\b)[^;]*from\s*['"](node:|fs|path|os|http|crypto|child_process)/m);
+      expect(src, f).not.toMatch(/\brequire\(/);
+      expect(src, f).not.toMatch(/^\s*import\s+(?!type\b)[^;]*from\s*['"]playwright-core['"]/m);
+    }
+    expect(readFileSync('src/carrier/conformance/node.ts', 'utf8')).toContain("import('playwright-core')");
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as Record<string, any>;
+    expect(pkg.exports['./carrier/conformance']).toBe('./dist/carrier/conformance/index.js');
+    expect(pkg.files).toContain('tests/carrier-corpus');
+    expect(pkg.dependencies['playwright-core']).toBeUndefined();
+    expect(pkg.peerDependencies['playwright-core']).toBeDefined();
+    expect(pkg.peerDependenciesMeta['playwright-core']).toEqual({ optional: true });
+  });
+
+  it('[H.4] the built module loads without loading playwright-core (it is required only when a browser check runs)', () => {
+    if (!existsSync('dist/carrier/conformance/index.js')) return;
+    const out = execFileSync(process.execPath, ['-e', "const h = require('./dist/carrier/conformance/index.js'); console.log(JSON.stringify({ ids: h.CHECK_IDS.length, pw: Object.keys(require.cache).filter((k) => k.includes('playwright')).length }));"], { encoding: 'utf8' });
+    expect(JSON.parse(out)).toEqual({ ids: CHECK_IDS.length, pw: 0 });
+  }, 120_000);
+});
+
+// ── H.5 the harness catches broken carriers ──────────────────────────────
+
+async function mutant(variant: StubVariant, only: string[]): Promise<ConformanceReport> {
+  const [previous, current, next] = await Promise.all([buildStub('1.0.0'), buildStub('1.1.0', variant), buildStub('1.2.0')]);
+  return runConformance(stubTarget(current, { previous, next }), { only, ...(browser ? { browser } : { channel: 'no-chrome-installed' }) });
+}
+
+const result = (r: ConformanceReport, id: string) => r.results.find((x) => x.id === id)!;
+const chrome = browser ? describe : describe.skip;
+
+describe('mutants the harness must catch in Node', () => {
+  it('[H.5] a bundle holding a literal </script fails C.bundle.script-safe', async () => {
+    const r = await mutant('script-close', ['C.bundle.script-safe']);
+    expect(result(r, 'C.bundle.script-safe').status).toBe('failed');
+    expect(result(r, 'C.bundle.script-safe').message).toMatch(/literal <script or <\/script/);
+    expect(r.conformant).toBe(false);
+  }, 120_000);
+
+  it('[H.5] an assemble that normalises CR LF fails C.law.round-trip and C.law.eol-bom', async () => {
+    const r = await mutant('crlf', ['C.law.round-trip', 'C.law.eol-bom']);
+    expect(result(r, 'C.law.round-trip').status).toBe('failed');
+    expect(result(r, 'C.law.round-trip').message).toMatch(/hazard crlf-bom \(inline\): extract\(assemble\(T\)\)\.text !== T/);
+    expect(result(r, 'C.law.eol-bom').status).toBe('failed');
+    expect(result(r, 'C.law.eol-bom').message).toContain('crlf-bom: data-orz-eol: expected "crlf", got "lf"');
+  }, 180_000);
+});
+
+chrome('mutants the harness must catch in Chrome', () => {
+  it('[H.5] an update that accepts a tampered bundle fails C.update.tampered', async () => {
+    const r = await mutant('accept-tampered', ['C.update.tampered']);
+    expect(result(r, 'C.update.tampered').status).toBe('failed');
+    expect(result(r, 'C.update.tampered').message).toContain('was accepted: the file was written or downloaded');
+  }, 240_000);
+
+  it('[H.5] a save that serialises the live DOM fails C.save.file-system-access, C.save.download and C.host.save', async () => {
+    const r = await mutant('live-dom', ['C.save.file-system-access', 'C.save.download', 'C.host.save']);
+    for (const id of ['C.save.file-system-access', 'C.save.download', 'C.host.save']) {
+      expect(result(r, id).status, id).toBe('failed');
+      expect(result(r, id).message, id).toMatch(/live DOM/);
+    }
+  }, 240_000);
+
+  it('[H.5] an indicator that takes the focus fails C.update.indicator', async () => {
+    const r = await mutant('steal-focus', ['C.update.indicator']);
+    expect(result(r, 'C.update.indicator').status).toBe('failed');
+    expect(result(r, 'C.update.indicator').message).toContain('focus must not move');
+  }, 240_000);
+});

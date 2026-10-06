@@ -139,6 +139,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Subresource Integrity. Per-package jsDelivr `+esm` URLs were rejected:
     they resolve `@codemirror/state` to different versions, which CodeMirror
     refuses.
+- **Conformance harness** `orz-markdown/carrier/conformance`
+  (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
+  each carrier runs against itself. `runConformance(target, options)` →
+  `ConformanceReport`, `registerConformance({ describe, it, beforeAll,
+  afterAll }, target, options)` (one test per check), `openConformance`,
+  `CHECKS` — 29 checks with stable ids (`C.law.*`, `C.bundle.*`,
+  `C.create.*`, `C.edit.*`, `C.save.*`, `C.update.*`, `C.host.*`,
+  `C.prefs.*`) over the FC-18 laws (the shipped corpus, hazard texts,
+  Node vs Chrome bytes), the bundle rule and `release.json`, create, edit,
+  the four save routes, the quiet update (indicator, verified re-assembly,
+  tampered and offline refusal, update from the previous release), the
+  three host handshakes and reader preferences — in real Chrome on closed
+  networks where only the release's jsDelivr URLs are answered.
+  `playwright-core` is an optional peer dependency, loaded only when a
+  browser check runs; the package now ships `tests/carrier-corpus/` (the
+  harness's default corpus).
 
 ### Fixed
 
@@ -158,6 +174,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The R.7 KaTeX-budget regression test bounds its time relative to a
   baseline measured in the same run instead of an absolute 40 s (it flaked
   under load).
+- Tests: `vitest.config.ts` defines two projects; the conformance harness
+  run (`tests/conformance.test.ts`, ~90 s of real Chrome) runs alone after
+  every other suite (`sequence.groupOrder`), because in parallel it starved
+  the ratio- and timeout-bounded perf and Chrome tests.
 - `KIND_PACKAGE` lives in the parser-free `src/carrier/read.ts` (still
   exported by `orz-markdown/carrier`; now also by `orz-markdown/carrier/read`).
 

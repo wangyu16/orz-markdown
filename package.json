@@ -15,13 +15,15 @@
     "./carrier/read": "./dist/carrier/read.js",
     "./carrier/shell": "./dist/carrier/shell/index.js",
     "./carrier/editor": "./dist/carrier/editor/index.js",
+    "./carrier/conformance": "./dist/carrier/conformance/index.js",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "themes",
     "vendor",
-    "orz-markdown-skills"
+    "orz-markdown-skills",
+    "tests/carrier-corpus"
   ],
   "scripts": {
     "prebuild": "tsx scripts/sync-version.ts && tsx scripts/build-skill-template.ts",
@@ -75,6 +77,14 @@
     "markdown-it-task-lists": "^2.1.1",
     "node-emoji": "^2.2.0",
     "qrcode-svg": "^1.1.0"
+  },
+  "peerDependencies": {
+    "playwright-core": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@codemirror/commands": "6.11.1",

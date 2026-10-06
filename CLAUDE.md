@@ -97,6 +97,18 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   SRI): the `@codemirror/*` devDependencies are pinned exactly; after changing
   one run `npm run build:codemirror` (E.11 fails otherwise). Never load
   per-package `+esm` URLs (they duplicate `@codemirror/state`).
+- `src/carrier/conformance/` — `orz-markdown/carrier/conformance`, the
+  Node-side conformance harness each carrier runs against itself
+  (spec/conformance.md): `runConformance` / `registerConformance` over the
+  `CHECKS` catalog (stable ids `C.<area>.<name>` that carrier claims cite —
+  never rename one; add new ones). Real Chrome via a lazily imported
+  `playwright-core` (optional peer, never a dependency), local origins, a
+  closed network where only the release's hard-coded jsDelivr URLs are
+  answered; page-side code is plain JS strings in `page.ts` (it must not
+  depend on how this file is compiled). No other entry may import it (H.4).
+  Proved against the stub carrier in `tests/conformance-stub/` (built at test
+  time; test scaffolding, not a product) and broken builds of it (H.5). Its
+  default corpus is the shipped `tests/carrier-corpus/` (in `files`).
 - `spec/` — binding carrier specs owned here: FC-18 (text form and assembly)
   and FC-19 (editor component), plus the canonical host protocols (FC-12)
   and the shell runtime (FC-11). Change them only through the family's
@@ -154,7 +166,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
   `tests/carrier-editor.test.ts` (E.13 and the Chrome halves of E.1, E.3–E.9,
-  E.11).
+  E.11) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;
