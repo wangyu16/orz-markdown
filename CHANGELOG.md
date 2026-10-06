@@ -52,6 +52,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already has.
 - `spec/`: the binding carrier specifications FC-18 (text form and assembly,
   format 1) and FC-19 (editor component API).
+- **Shell runtime** `orz-markdown/carrier/shell` (`src/carrier/shell/`): the
+  browser runtime every assembled file shares (parser-free, safe to import in
+  Node):
+  - `createSaver({ uid, suggestedName, kind, host })` — save in the order
+    connected host → served-page notice → File System Access (handle
+    remembered in IndexedDB `orz-carrier` under the header `uid`, else the
+    page URL; a second save overwrites without a prompt; a copy with another
+    file name does not reuse the original's handle) → download. It saves
+    the HTML the caller assembled and never serializes the live DOM. A
+    cancelled picker reports `cancelled` without a download.
+  - `createPreferenceStore(uid, storage)` — typed, validated reader
+    preferences (`splitRatio`, `scrollSync`, `viewMode`, `editorFontSize`,
+    `darkChrome`), namespaced by `uid`, failing closed to defaults.
+  - `connectHost` (file side) and `embedCarrierFrame` (host side, for apps
+    that embed an assembled file in an iframe) for `orz-host-save@1`,
+    `orz-host-ai@1` and `orz-host-include@1`, with the shared message
+    constants and types; wire-compatible with version 1.
+- `spec/host-protocols.md`: the canonical host-protocol spec (moved from
+  orz-mdhtml's `PROTOCOL.md`, FD-03), with the kind registry
+  (`md`/`slides`/`paged`/`poster`), the security rules for both sides, and
+  format-1 saves (`source` is the exact text twin; hosts persist the text).
+  `spec/shell-runtime.md`: the save order and reader preferences.
 
 ### Fixed
 

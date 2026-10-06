@@ -13,6 +13,7 @@
     "./version": "./dist/version.js",
     "./carrier": "./dist/carrier.js",
     "./carrier/read": "./dist/carrier/read.js",
+    "./carrier/shell": "./dist/carrier/shell/index.js",
     "./package.json": "./package.json"
   },
   "files": [
