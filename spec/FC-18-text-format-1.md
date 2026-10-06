@@ -46,7 +46,9 @@ text plus a regenerable **shell**. Converting is deterministic in one direction
 
 - The kind comes from the **file name** (swap the last extension). A
   `carrier` key in the header (§5) states it when the text travels without a
-  name (pasted, sent by an API); tools write it when they create a file.
+  name (pasted, sent by an API). **A tool that creates a document writes
+  `carrier: <kind>` in its new header** (with `uid`, §10); a file name, when
+  there is one, still decides the kind of an existing text.
 - **Any plain Markdown file is a valid `md` document** (no header needed), so
   existing `.md` files work unchanged.
 - Encoding: UTF-8. The envelope stores the text exactly as given; renderers

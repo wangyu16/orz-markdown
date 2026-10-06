@@ -389,13 +389,15 @@ export async function sha384Integrity(bytes: Uint8Array | ArrayBuffer): Promise<
 /**
  * True when the bundle can be inlined in a `<script>` exactly: the project's
  * script escaping (`escapeScriptText`) leaves it unchanged, i.e. it holds no
- * `<script` or `</script` (any case, after any backslashes). A carrier's
+ * `<script` or `</script` (any case, after any backslashes), and it holds no
+ * CR (an HTML parser rewrites CR in a `<script>`, so the inlined bytes would
+ * no longer match the integrity). A carrier's
  * release build writes such sequences as `\x3Cscript` (spec/shell-runtime.md
  * §6); a bundle that needs escaping is refused, because escaping code changes
  * what runs.
  */
 export function isScriptSafe(code: string): boolean {
-  return escapeScriptText(code) === code;
+  return !code.includes('\r') && escapeScriptText(code) === code;
 }
 
 const BOOT_REQUEST = 'orz-reassemble';
@@ -575,7 +577,7 @@ export async function reassemble(opts: ReassembleOptions): Promise<string> {
   } catch {
     throw new UpdateError('encoding', 'The update is not valid UTF-8; nothing was changed.');
   }
-  if (!isScriptSafe(bundle)) throw new UpdateError('unsafe-bundle', 'The update cannot be inlined safely (it holds "<script"); nothing was changed.');
+  if (!isScriptSafe(bundle)) throw new UpdateError('unsafe-bundle', 'The update cannot be inlined safely (it holds "<script" or a CR); nothing was changed.');
   const { html } = await runInSandbox(bundle, opts, delivery);
   const back = extract(html);
   if (!back || back.text !== opts.text) {

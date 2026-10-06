@@ -123,6 +123,13 @@ Phase 3 exit).
 
 ## 5. Assumptions the specs leave open (for review)
 
+Items 1, 3 and 4 were decided by the owner on 2026-10-06 and are now binding
+text: FC-19 §4 (standalone saves use the file's host connection), FC-18 §3
+(`carrier: <kind>` on creation), shell-runtime §6 (no CR in a bundle). Items
+2 and 5 stand as read here. Not yet driven: include and AI requests after the
+handshake (no specified UI triggers them); added when the carriers' editors
+do (Phase 3).
+
 1. **The file boots itself.** An opened assembled file, standalone, runs the
    update check and shows the indicator (shell-runtime §7); embedded, it
    answers host hellos (`connectHost`). Its `Editor` (from `target.editor`,

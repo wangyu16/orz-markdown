@@ -189,7 +189,9 @@ files never self-update: RULES §9).
 
 **The bundle** sets the standard global `globalThis.OrzCarrier` (FC-19 §2)
 and must be **script-safe**: it contains no `<script` or `</script` (any case,
-after any backslashes), so it can be inlined in a `<script>` — in the update
+after any backslashes) and **no CR** (U+000D; an HTML parser rewrites CR and
+CR LF in a `<script>` to LF, so inlined bytes would no longer match the
+integrity), so it can be inlined in a `<script>` — in the update
 sandbox and in an inline-delivery file — byte for byte, and the project's
 script escaping (`escapeScriptText`) leaves it unchanged. Bundlers emit such
 sequences inside strings (esbuild writes `"<script"` and `"<\/script>"` for

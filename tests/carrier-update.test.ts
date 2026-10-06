@@ -385,7 +385,7 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     const badUtf8 = new Uint8Array([0x61, 0xff, 0x62]);
     const m8 = manifest({ bundle: { path: 'orz-mdhtml.browser.js', integrity: sri(badUtf8) } });
     expect((await reassemble({ ...base, release: m8, fetch: fakeFetch({ [bundleUrl(m8)]: () => response(badUtf8) }).fetch }).catch((e) => e)).code).toBe('encoding');
-    for (const code of ['var s = "</script>";', 'var s = "<script>";', 'x = "<SCRIPT";', 'y = "<\\/script>"']) {
+    for (const code of ['var s = "</script>";', 'var s = "<script>";', 'x = "<SCRIPT";', 'y = "<\\/script>"', 'a = 1;\r\nb = 2;', 'c = 3;\r']) {
       expect(isScriptSafe(code)).toBe(false);
       const u = served(code);
       expect((await reassemble({ ...base, release: u.m, fetch: u.fetch }).catch((e) => e)).code).toBe('unsafe-bundle');

@@ -59,7 +59,7 @@ interface EditorOptions {
   kind?: Kind;                        // when it cannot come from a file name
   readOnly?: boolean;
   mode?: "split" | "editor" | "preview";
-  chrome?: "full" | "compact" | "none";   // how much toolbar the host wants
+  chrome?: "full" | "compact" | "none";   // labels / icon-only toolbar / none (the host drives the API)
   hooks?: EditorHooks;
   preferences?: PreferenceStore;      // reader preferences (FC-18 §6); default: localStorage
 }
@@ -68,10 +68,11 @@ interface EditorHooks {
   save?(text: string): Promise<void>;                      // absent → standalone file save
   ai?: { operations: AiOperation[];
          request(op: string, ctx: { text: string; selection?: Range }): Promise<{ proposed: string }> };
+                                                           // Range = { from, to }: offsets in the exact text
   fetchInclude?(target: string): Promise<string | null>;   // URL or path; host owns the trust policy
   resolveAsset?(path: string): string;                     // relative path → URL for preview
   uploadAsset?(file: File): Promise<string>;               // returns the relative path to insert
-  resolveLink?(href: string): string;                      // e.g. map twin links inside an app
+  resolveLink?(href: string): string;                      // e.g. map twin links inside an app; also preview link clicks
   mintUid?(): Promise<string>;                             // host-minted ids (FC-18 §10)
 }
 ```
@@ -80,17 +81,42 @@ interface EditorHooks {
 
 ```ts
 interface Editor {
-  getText(): string;
+  getText(): string;                     // exact (BOM, line endings as given)
   setText(text: string, options?: { resetHistory?: boolean }): void;
+                                         // one undoable edit unless resetHistory; does not mark saved
+  setHeader(changes: Record<string, HeaderChange>): void;   // FC-18 §9 via editHeader, one undoable edit
+  undo(): boolean;
+  redo(): boolean;
   isDirty(): boolean;
   markSaved(): void;
-  save(): Promise<void>;                 // calls hooks.save or the standalone save
-  setMode(mode: "split" | "editor" | "preview"): void;
+  save(): Promise<SaveOutcome>;          // hooks.save or the standalone save; never rejects
+  setMode(mode: "split" | "editor" | "preview"): void;     // Cmd/Ctrl+\ cycles the modes
   focus(): void;
-  on(event: "change" | "dirty" | "selection" | "save" | "error", fn: (e) => void): () => void;
+  on<E extends keyof EditorEvents>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
   destroy(): void;
 }
+
+type SaveVia = "hook" | "host" | "file" | "download";
+type SaveOutcome =
+  | { ok: true; via: SaveVia }
+  | { ok: false; via?: SaveVia | "served-notice"; error: string; cancelled?: boolean };
+
+interface EditorEvents {
+  change:    { text: string };
+  dirty:     { dirty: boolean };
+  selection: { from: number; to: number };   // offsets in the exact text (BOM, CR LF counted)
+  save:      { text: string; via: SaveVia };
+  error:     { source: "save" | "render" | "adapter"; message: string; error: unknown };
+}
 ```
+
+**Standalone saves and the host connection.** Without `hooks.save`, `save()`
+follows the standalone order of spec/shell-runtime.md §1, whose first step is
+a connected host. In an assembled file opened inside a host frame, the file's
+own runtime holds that connection (`connectHost`, spec/host-protocols.md);
+the carrier's `mountEditor` passes it to the saver, so a save goes to the
+host (`via: "host"`) and the dirty state is posted to it. A carrier never
+opens a second connection for its editor.
 
 ## 5. Invariants
 
@@ -295,18 +321,10 @@ interface TextEditorAdapter {
 - `textareaAdapter()` — a plain `<textarea>` with its own undo history; no
   network. Tests and offline files use it.
 
-### 8.7 Refinements proposed for §3–§4 (for review; not yet binding)
+### 8.7 Refinements (approved 2026-10-06)
 
-1. `Editor.save()` resolves a `SaveOutcome` (`{ ok, via, error?, cancelled? }`)
-   and never rejects (§4 says `Promise<void>`; a void promise cannot report a
-   cancelled picker or a served page without throwing).
-2. `Editor.setHeader(changes)` (FC-18 §9 as one undoable edit) and
-   `undo()` / `redo()` added to §4, so hosts edit header keys without
-   re-implementing §9.
-3. Event payloads bound: `change { text }`, `dirty { dirty }`, `selection
-   { from, to }` (exact-text offsets — also the `Range` of `hooks.ai`'s
-   `selection`), `save { text, via }`, `error { source, message, error }`.
-4. `setText` defaults to an undoable edit (`resetHistory: false`) and does not
-   mark the text saved.
-5. `chrome: 'compact'` = icon-only toolbar; Cmd/Ctrl+\ cycles the modes.
-6. `hooks.resolveLink` covers preview link clicks too (the shell's `onLink`).
+The refinements this note proposed — `save()` resolving a `SaveOutcome`;
+`setHeader`, `undo`, `redo`; bound event payloads; `setText` undoable by
+default; `compact` = icon-only with Cmd/Ctrl+\ cycling the modes;
+`resolveLink` covering preview clicks — and the host-connection rule for
+standalone saves are now binding in §3–§4.

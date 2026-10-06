@@ -122,7 +122,9 @@ export declare function sha384Integrity(bytes: Uint8Array | ArrayBuffer): Promis
 /**
  * True when the bundle can be inlined in a `<script>` exactly: the project's
  * script escaping (`escapeScriptText`) leaves it unchanged, i.e. it holds no
- * `<script` or `</script` (any case, after any backslashes). A carrier's
+ * `<script` or `</script` (any case, after any backslashes), and it holds no
+ * CR (an HTML parser rewrites CR in a `<script>`, so the inlined bytes would
+ * no longer match the integrity). A carrier's
  * release build writes such sequences as `\x3Cscript` (spec/shell-runtime.md
  * §6); a bundle that needs escaping is refused, because escaping code changes
  * what runs.

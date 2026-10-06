@@ -180,6 +180,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the ratio- and timeout-bounded perf and Chrome tests.
 - `KIND_PACKAGE` lives in the parser-free `src/carrier/read.ts` (still
   exported by `orz-markdown/carrier`; now also by `orz-markdown/carrier/read`).
+- Carrier specs amended (owner, 2026-10-06): FC-19 §3–4 take the editor
+  shell's refinements (`save()` resolves a `SaveOutcome`; `setHeader`,
+  `undo`, `redo`; bound event payloads; `setText` undoable by default;
+  `compact` toolbar; `resolveLink` for preview clicks) and say that a
+  standalone save goes through the file's own host connection; FC-18 §3
+  requires `carrier: <kind>` in a newly created header; shell-runtime §6
+  forbids CR in a bundle, and `isScriptSafe` / `reassemble` now refuse one.
 
 ## [2.0.0] - 2026-10-03
 
