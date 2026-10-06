@@ -625,17 +625,8 @@ async function performUpdate(opts) {
     catch (e) {
         save = { via: 'download', ok: false, confirmed: false, error: String(e?.message ?? e) };
     }
-    let opened = opts.openedName;
-    if (opened === undefined) {
-        try {
-            opened = (0, types_js_1.openedFileName)((0, types_js_1.globalWindow)()?.location);
-        }
-        catch {
-            opened = undefined;
-        }
-    }
-    const wroteOpened = save.via === 'host' ? save.ok
-        : save.via === 'file' ? save.ok && (!save.picked || (save.name !== undefined && save.name === opened))
+    const wroteOpened = save.via === 'host' ? save.ok === true
+        : save.via === 'file' ? save.ok === true && save.opened === true
             : false;
     return { status: 'updated', info, html, text, save, reload: wroteOpened && read() === text };
 }

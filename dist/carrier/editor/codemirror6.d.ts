@@ -52,6 +52,12 @@ export interface CodeMirror6Modules {
 export declare const CODEMIRROR6_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.0.0/vendor/codemirror6.js";
 /** How long the bundle may take to load before the textarea is kept. */
 export declare const CODEMIRROR6_TIMEOUT_MS = 20000;
+/**
+ * How many of the textarea's undo steps the upgrade replays into CodeMirror
+ * (CodeMirror's history keeps at least 100 by default). Replaying all 300 of a
+ * 1.25 MB document took 20 s and 590 MB (MED cost-2).
+ */
+export declare const CODEMIRROR6_HISTORY_STEPS = 100;
 export interface CodeMirror6Options {
     /** Supply the modules (an app that bundles CodeMirror 6); nothing is fetched. */
     loadModules?: () => CodeMirror6Modules | Promise<CodeMirror6Modules>;
@@ -62,6 +68,12 @@ export interface CodeMirror6Options {
      */
     url?: string;
     timeoutMs?: number;
+    /**
+     * A CSP nonce: stamped on the bundle's `<script>` (a page whose
+     * `script-src` is nonce-based) and given to CodeMirror for the `<style>` it
+     * adds (`EditorView.cspNonce`).
+     */
+    nonce?: string;
 }
 /** True when an object has the exports the adapter needs. */
 export declare function isCodeMirror6Modules(m: unknown): m is CodeMirror6Modules;
@@ -74,6 +86,7 @@ export declare function isCodeMirror6Modules(m: unknown): m is CodeMirror6Module
 export declare function loadCodeMirror6(doc: EdDocument, options?: {
     url?: string;
     timeoutMs?: number;
+    nonce?: string;
 }): Promise<CodeMirror6Modules>;
 /** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
 export declare function codemirror6Adapter(options?: CodeMirror6Options): TextEditorAdapter;

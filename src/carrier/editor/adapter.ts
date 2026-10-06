@@ -12,7 +12,7 @@
  * while CodeMirror loads, and keeps when it cannot load.
  */
 import type { EdElement, EdEvent, EdTextArea, ShadowRootLike } from './types.js';
-import { minimalChange } from './text-model.js';
+import { detachString, minimalChange } from './text-model.js';
 
 export interface Selection {
   from: number;
@@ -85,6 +85,8 @@ const applyPatch = (text: string, p: Patch): string => text.slice(0, p.from) + p
 interface History {
   /** The texts undo returns to, oldest first. */
   texts(): string[];
+  /** The newest `limit` undo steps as a start text and the forward changes from it to the current text. */
+  steps(limit: number): { base: string; changes: Patch[] };
   /** Characters the history holds (full texts and patches, both stacks). */
   retained(): number;
   /** Take in a change of the textarea whose `input` event has not been handled yet (one more undo step, `onChange`). */
@@ -95,6 +97,17 @@ const histories = new WeakMap<TextEditorAdapter, History>();
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 export function undoTexts(adapter: TextEditorAdapter): string[] | null {
   return histories.get(adapter)?.texts() ?? null;
+}
+
+/**
+ * The newest `limit` undo steps of a textarea adapter, for an engine that takes
+ * over (MED cost-2): the text `limit` undos back (`base`) and the forward
+ * changes, oldest first, that lead from it to the current text — one per undo
+ * step. Built from the stored patches, one text at a time (no list of whole
+ * texts). `null` for another engine.
+ */
+export function undoSteps(adapter: TextEditorAdapter, limit: number): { base: string; changes: Array<{ from: number; to: number; insert: string }> } | null {
+  return histories.get(adapter)?.steps(limit) ?? null;
 }
 
 /**
@@ -298,6 +311,21 @@ export function textareaAdapter(): TextEditorAdapter {
         out.push(text);
       }
       return out.reverse();
+    },
+    steps(limit) {
+      // walk down from the current text; each step back is undone forward by the inverse change
+      const n = Math.max(0, Math.min(undoStack.length, Math.floor(limit)));
+      const changes: Patch[] = [];
+      let text = last;
+      for (let i = undoStack.length - 1; i >= undoStack.length - n; i--) {
+        const e = undoStack[i];
+        const back = e.doc !== undefined ? e.doc : applyPatch(text, e.patch!);
+        // the newest entry holds its text: its change to the current text is computed once
+        const p = e.doc !== undefined ? minimalChange(back, text) : { from: e.patch!.from, to: e.patch!.from + e.patch!.insert.length, insert: detachString(text.slice(e.patch!.from, e.patch!.to)) };
+        if (p) changes.push(p);
+        text = back;
+      }
+      return { base: text, changes: changes.reverse() };
     },
     retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch!.insert.length), 0),
     sync() {

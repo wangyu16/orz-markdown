@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.undoTexts = undoTexts;
+exports.undoSteps = undoSteps;
 exports.syncTextarea = syncTextarea;
 exports.historyChars = historyChars;
 exports.textareaAdapter = textareaAdapter;
@@ -13,6 +14,16 @@ const histories = new WeakMap();
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 function undoTexts(adapter) {
     return histories.get(adapter)?.texts() ?? null;
+}
+/**
+ * The newest `limit` undo steps of a textarea adapter, for an engine that takes
+ * over (MED cost-2): the text `limit` undos back (`base`) and the forward
+ * changes, oldest first, that lead from it to the current text — one per undo
+ * step. Built from the stored patches, one text at a time (no list of whole
+ * texts). `null` for another engine.
+ */
+function undoSteps(adapter, limit) {
+    return histories.get(adapter)?.steps(limit) ?? null;
 }
 /**
  * Bring a textarea adapter's kept text up to the textarea's live value (E.21): `getDoc()` returns
@@ -250,6 +261,22 @@ function textareaAdapter() {
                 out.push(text);
             }
             return out.reverse();
+        },
+        steps(limit) {
+            // walk down from the current text; each step back is undone forward by the inverse change
+            const n = Math.max(0, Math.min(undoStack.length, Math.floor(limit)));
+            const changes = [];
+            let text = last;
+            for (let i = undoStack.length - 1; i >= undoStack.length - n; i--) {
+                const e = undoStack[i];
+                const back = e.doc !== undefined ? e.doc : applyPatch(text, e.patch);
+                // the newest entry holds its text: its change to the current text is computed once
+                const p = e.doc !== undefined ? (0, text_model_js_1.minimalChange)(back, text) : { from: e.patch.from, to: e.patch.from + e.patch.insert.length, insert: (0, text_model_js_1.detachString)(text.slice(e.patch.from, e.patch.to)) };
+                if (p)
+                    changes.push(p);
+                text = back;
+            }
+            return { base: text, changes: changes.reverse() };
         },
         retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch.insert.length), 0),
         sync() {

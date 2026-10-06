@@ -45,17 +45,20 @@ tracking, `setHeader`, save), `text-model.ts` (exact text behind an LF
 editor), `adapter.ts` (`TextEditorAdapter`, `textareaAdapter`),
 `codemirror6.ts` (`codemirror6Adapter`, `loadCodeMirror6`; the pinned bundle
 `vendor/codemirror6.js` described by the generated `codemirror-pin.ts`),
-`preview.ts` (the preview frame — sandbox from `previewSandbox()`,
-`allow-scripts` — its bridge and message protocol, asset rewriting, CSP
+`preview.ts` (the preview frame — sandbox from `previewSandbox()`:
+`allow-scripts`, plus `allow-same-origin` only for a standalone `file:` page,
+owner decision B-2, FC-19 §8.4 — its bridge and message protocol, asset rewriting, CSP
 nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
 E.1–E.22, tests in `tests/carrier-editor.test.ts` (real Chrome for
-CodeMirror in a shadow root, the opaque-origin preview, the split drag,
+CodeMirror in a shadow root, the opaque-origin preview and its standalone
+`file:` exception, the split drag,
 scroll sync and Subresource Integrity).
 
 The conformance harness is `src/carrier/conformance/` — `index.ts`
-(`runConformance`, `registerConformance`, `openConformance`), `catalog.ts`
+(`runConformance`, `registerConformance`, `openConformance`; checks run side
+by side in lanes, each in browser contexts of its own), `catalog.ts`
 (`CHECKS`: ids, titles, spec references), `checks.ts` (the checks),
 `session.ts` (local origins, browser contexts on a closed network, the
 jsDelivr routes), `page.ts` (page-side scripts: init script, editor driver,

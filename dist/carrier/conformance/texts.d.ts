@@ -21,4 +21,14 @@ export declare const LIVE_DOM_MARKER = "ORZ-CONFORMANCE-LIVE-DOM-MARKER";
 export declare const NEWER_TEXT = "{{nyml\nkind: document\nformat: 2\ntitle: From a newer release\nuid: doc-conformance5f6g7h\n}}\n\n# From a newer release\n\nWritten in a format this release does not write.\n";
 /** A long text the preview-isolation check types into (its end is far below the fold). */
 export declare const LONG_TEXT: string;
+/**
+ * A document script that steals the focus (ES5; no double quote, so it fits an HTML attribute): it
+ * puts an input in the preview and focuses it every 40 ms, posts a heartbeat
+ * (`orz-conformance-theft`) so the harness knows it runs, and on every key it receives reports it
+ * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, Escape, "active",
+ * a link — and a popup, all inside the user activation that key gives the frame.
+ */
+export declare const THEFT_SCRIPT: string;
+/** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
+export declare const THEFT_TEXT: string;
 //# sourceMappingURL=texts.d.ts.map

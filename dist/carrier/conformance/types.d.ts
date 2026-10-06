@@ -72,6 +72,12 @@ export interface ConformanceOptions {
     corpus?: string | false | Record<string, string>;
     /** Per-check time limit (ms). Default 120 000. */
     checkTimeoutMs?: number;
+    /**
+     * How many checks run side by side (each in its own browser contexts;
+     * the timing-sensitive `EXCLUSIVE_CHECKS` always run alone). Default 3;
+     * 1 runs them one after another.
+     */
+    lanes?: number;
     /** Progress lines. */
     log?(line: string): void;
     /**

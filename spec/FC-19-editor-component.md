@@ -94,7 +94,16 @@ interface Editor {
   focus(): void;
   on<E extends keyof EditorEvents>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
   destroy(): void;
+  // added 2026-10-06 (additive; see below)
+  requestAi(op: string, options?: { selection?: boolean }): Promise<AiOutcome>;   // hooks.ai, one undoable edit; never rejects
+  uploadAssets(files: ArrayLike<File>): Promise<UploadOutcome>;                  // hooks.uploadAsset, Markdown at the selection
+  ensureUid(): Promise<string>;                  // the header uid; minted (hooks.mintUid) and set as one undoable edit when absent
+  setReadOnly(readOnly: boolean): void;          // a newer text format stays read-only (§8.3)
+  isReadOnly(): boolean;
 }
+
+type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
+type UploadOutcome = { ok: true; inserted: string[] } | { ok: false; inserted: string[]; error: string };
 
 type SaveVia = "hook" | "host" | "file" | "download";
 type SaveOutcome =
@@ -114,6 +123,20 @@ interface EditorEvents {
 editor's, FC-18 §8.4: shown read-only, never saved) and `hook` (an upload, AI
 or uid hook failed) were added on 2026-10-06 (additive).
 
+`requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly` and `isReadOnly` were
+added on 2026-10-06 (additive, closed loop 2 round 2): the shell had them
+(§8.8), and an app host needs them to drive the §3 hooks from its own UI and
+to lock the editor (e.g. while it saves elsewhere). Each re-checks read-only
+and `destroy()` after every wait: a result arriving after either changes
+nothing. The preview channel (`shell.preview`, §8.4) is not part of `Editor`:
+it is a carrier's protocol with the frame document the carrier itself
+writes, not something an app host drives.
+
+After `destroy()`, `getText()` returns the text as it was; `setText`,
+`setHeader` and `markSaved` do nothing, `undo`/`redo` return false, `save()`
+resolves `{ ok: false }`, and work still in flight (a save hook, an upload, an
+AI request, a uid) changes nothing and posts nothing to a host.
+
 **Standalone saves and the host connection.** Without `hooks.save`, `save()`
 follows the standalone order of spec/shell-runtime.md §1, whose first step is
 a connected host. In an assembled file opened inside a host frame, the file's
@@ -132,8 +155,9 @@ opens a second connection for its editor.
    break it, and it cannot restyle the host); the document preview renders in
    a sandboxed frame (orz-markdown preview frame), so document content never
    runs in the host page. One exception (owner, 2026-10-06): a standalone
-   file opened from disk (`file:`) gives its preview frame the page's origin,
-   so relative local images show; the document already runs in that page.
+   file opened from disk (`file:`, the top-level window, no connected host)
+   gives its preview frame the page's origin, so relative local images show;
+   the document already runs in that page.
 4. **CSP-friendly:** no `eval`, no inline event handlers.
 5. **Text is the only output.** The component never changes text it was not
    asked to change: block IDs (FC-02), unknown and host header keys, and
@@ -188,19 +212,22 @@ Each carrier's `mountEditor` wraps one kind-independent base, exported by
 orz-markdown as `orz-markdown/carrier/editor` (`src/carrier/editor/`). The
 carrier adds its kind's tools (layout and template pickers, theme picker,
 lint) to the shell's toolbar slot and supplies its renderer and `assemble`.
-Claims E.1–E.22 (`notes/CLAIMS.md`), tests `tests/carrier-editor.test.ts`.
+Claims E.1–E.25 (`notes/CLAIMS.md`), tests `tests/carrier-editor.test.ts`.
 
 ### 8.1 Mounting
 
 ```ts
 const shell = createEditorShell(element, {
   text,                              // exact (FC-18)
-  render(text, ctx) { return html; },// the kind's preview renderer; md: renderMarkdownPreview (ctx: { fetchInclude?, resolveAsset? })
+  render(text, ctx) { return html; },// the kind's preview renderer; md: renderMarkdownPreview or renderMarkdownPreviewWithIncludes
+                                     //   (ctx: { fetchInclude?, resolveAsset?, twinLinks?, cache? })
   adapter?,                          // default codemirror6Adapter()
   mode?, readOnly?, chrome?,         // as FC-19 §3
   formats?,                          // text formats it reads and writes (default [1]; the carrier's OrzCarrier.formats)
   hooks?,                            // FC-19 §3 EditorHooks: save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid
   assemble?, fileName?, kind?, host?, saver?,   // standalone host: assemble(text) → html, then createSaver
+  openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text)
+  standalone?,                       // the assembled file's own boot passes true (§8.4 sandbox)
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
   preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, readyTimeoutMs?, nonce?,
               frameDocument?, bridge?, diff?, mode?, mapLine?, mapPosition? },
@@ -213,6 +240,7 @@ shell.setReadOnly(flag) / isReadOnly()    // run-time read-only (§8.3)
 shell.setMode(m) / getMode() / getView() / setSplitRatio(r) / getSplitRatio() / undo() / redo()
 shell.focus() / on(event, fn) → off / refreshPreview() / destroy()
 shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapter / shell.ready / shell.readOnly
+shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? })   // the frame channel (§8.4)
 ```
 
 ### 8.2 Layout, modes, keyboard
@@ -247,7 +275,13 @@ shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapte
   text keeps its own: undoing a `setText` of an LF text back to a BOM + CR LF
   document writes the next edit in CR LF with the BOM); other texts are
   written in the document's style. Selection offsets in a remembered text are
-  mapped on that exact string (mixed line endings exact).
+  mapped on that exact string (mixed line endings exact). The texts
+  remembered are the 16 most recent ones given plus, whatever that window
+  holds, the initial text and the saved one — so undoing any number of edits
+  back to either is exact and clean. A remembered text keeps its exact string
+  only when its editor form, BOM and line ending cannot rebuild it (mixed line
+  endings): a CR LF document costs one copy per remembered text, not two.
+  `destroy()` forgets them.
 - `setText(text)` is one undoable edit (the smallest replacement, so the
   caret survives) — also right after typing; `{ resetHistory: true }` starts
   the history over. It does not mark the text saved.
@@ -276,86 +310,194 @@ shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapte
 ### 8.4 Preview
 
 - An iframe whose `sandbox` is decided in one place,
-  `previewSandbox({ host, protocol })` — `allow-scripts` exactly in every
-  app host and on every served page (opaque origin: the document's scripts
-  run in it and cannot reach the host page, its storage or cookies). A
-  standalone `file:` page gets `allow-scripts allow-same-origin` (owner
-  decision 2026-10-06, finding B-2): an opaque frame is refused `file:`
-  subresources, so relative local images would never show; nothing is lost,
-  because the same document already runs in that page as its read view and
-  its raw HTML passes the strict allowlist. `srcdoc` = a fixed
-  bridge script, then the pinned preview libraries (`getPreviewFrameAssets`,
-  `__orzEnhance`) — the preview shows at once and is enhanced when the
-  libraries arrive. `preview.head` adds the carrier's theme stylesheet links
-  (shell markup, never document content).
+  `previewSandbox({ host, protocol, topLevel?, connected? })` — `allow-scripts`
+  exactly in every app host and on every served page (opaque origin: the
+  document's scripts run in it and cannot reach the host page, its storage or
+  cookies). A standalone `file:` page that is the top-level window with no
+  connected host gets `allow-scripts allow-same-origin` (owner decision
+  2026-10-06, finding B-2): an opaque frame is refused `file:` subresources,
+  so relative local images would never show. The document's own raw HTML is
+  not filtered (only fetched includes are, claims M.16/M.20); but in a
+  standalone `file:` page the same document already runs in that page as its
+  read view, so the same-origin frame gives it no reach it did not have — its
+  scripts can reach the editor and the page's storage there, which the owner
+  accepts for local files. The shell infers standalone (no `hooks.save`, an
+  `assemble`, no `host`, a top-level window) unless `standalone` says; the
+  assembled file's own boot passes `standalone: true`, and even then a framed
+  or hosted `file:` page keeps the opaque frame.
+- `srcdoc` = the default bridge script **first in `<head>`**, before any
+  stylesheet (a script after a pending stylesheet waits for it: a slow theme
+  would hold back the ready and every render), then the stylesheets
+  (`preview.head`: the carrier's theme links — shell markup, never document
+  content), `<article id="orz-doc">` and the pinned preview libraries
+  (`getPreviewFrameAssets`, `__orzEnhance`) — the preview shows at once and is
+  enhanced when they arrive. The default bridge finds `#orz-doc` when a render
+  arrives. A carrier's own `preview.bridge` keeps its place after the article.
 - The shell posts `{ type: 'orz-preview-render', id, html }` after the frame
   says `orz-preview-ready` (and again on a new ready). The bridge keeps every
   top-level node whose HTML is unchanged (common prefix and suffix), compared
   **without** `data-src-line` — the new line numbers are copied onto the kept
   nodes — so a line inserted above does not redraw the blocks below; drawn
   diagrams and the scroll position survive typing. It re-runs `__orzEnhance`
-  and reports the `data-src-line` anchors. Each side reads only messages from
-  the other's window; payloads are data.
-- **When renders run.** After a pause in typing of `max(debounceMs, 2 × the
-  last render's duration)` (`debounceMs` 150), never while one runs (another
-  is coalesced into one more render of the latest text), not while only the
-  editor shows. A failing `render` keeps the last preview (`error`).
+  and reports the `data-src-line` anchors with the render's `id`.
+- **The private channel.** The default bridge's ready carries a random
+  `channel` token; the shell answers `{ type: 'orz-preview-port', channel }`
+  with a MessageChannel port, which the bridge takes in a capture listener
+  registered before anything else in the frame (hidden from the frame's other
+  listeners) before any document content exists — that only arrives through
+  the port. From then on the shell's messages go through the port (so a shell
+  mounted into another window's document by that window's opener reaches its
+  frame: the frame no longer depends on which window posted), and the
+  bridge's reports come only through it: it sends them with `Reflect.apply`
+  and `MessagePort.prototype.postMessage` as they were when it started, and
+  only for trusted events (`isTrusted`) — keys, link clicks, pointer / wheel /
+  touch / key input, scrolls, and focus. The same report types posted on the
+  window are a document script's and are ignored. A carrier's own bridge
+  without a port speaks window messages, which the shell reads as before
+  (claims; the gates below).
+- **When renders run.** A render runs until the frame acknowledges it
+  (`orz-preview-rendered` with its `id`; a bridge that reports no id
+  acknowledges any render; one that never reports is not waited for after
+  its first render, and no render waits more than 10 s). The next one runs
+  after a pause in typing of `max(debounceMs, 2 × the last render and frame
+  time)` (`debounceMs` 150), never while one runs (another is coalesced into
+  one more render of the latest text), not while only the editor shows; while
+  edits continue it runs at least every `max(1000 ms, 4 × the last render and
+  frame time)`. A failing `render` keeps the last preview (`error`).
 - **Pluggable preview** (orz-slides, orz-paged): `preview.frameDocument(parts)`
   writes the whole frame document from `parts = { head, bridge, scripts,
-  scheme, articleClass, nonce? }` (the bridge and library `<script>`s, nonce-
-  stamped); `preview.bridge` replaces the bridge script (script-safe, speaking
-  the protocol below); `preview.diff: false` makes every render replace the
-  content whole, keeping the scroll position (a renderer that reflows nodes);
+  scheme, articleClass, nonce? }` (the bridge and library `<script>`s and the
+  stylesheet links, nonce-stamped; put `parts.bridge` before the stylesheets
+  and `parts.head` in `<head>`: while the document's scripts are paused it
+  starts with the pausing `<meta>` policy); `preview.bridge` replaces the
+  bridge script (script-safe, speaking the protocol below);
+  `preview.diff: false` makes every render replace the content whole, keeping
+  the scroll position (a renderer that reflows nodes);
   `preview.mapLine(line, { anchors, max })` / `mapPosition(top, ctx)` replace
   the anchor maths (return `null` for the default); `preview.mode:
   'navigate'` posts the source line instead of a top — the caret's line while
-  the editor has focus, else its top line — and reads a line back.
-  Protocol (shell → frame): `orz-preview-render { id, html, diff? }`,
-  `orz-preview-scroll { top }`, `orz-preview-navigate { line }`; (frame →
-  shell): `orz-preview-ready`, `orz-preview-rendered { id, anchors: [line,
-  top][], max }`, `orz-preview-scrolled { top, max }` or `{ line }`,
-  `orz-preview-key { key: 's' | '\\' | 'Escape' }`, `orz-preview-link { href
-  }`, `orz-preview-active`.
+  the editor has focus, else its top line; and the caret's line whenever a
+  view change shows the preview, again once it has rendered — and reads a
+  line back.
+- **Page hooks of the default bridge**, so a carrier's frame document can
+  customise it without its own bridge (keys, Escape, links, input, focus,
+  ready and the port stay the bridge's): `window.__orzPreviewApply(html,
+  msg)` replaces the DOM update (it may return a promise; the render is
+  acknowledged when it settles), `window.__orzPreviewNavigate(line)` gets
+  `orz-preview-navigate`, `window.__orzPreviewMessage(msg)` any other message
+  from the shell. `window.__orzPreview.report()` re-reports the anchors (after
+  an asynchronous layout); `window.__orzPreview.post(msg)` posts a carrier's
+  own message to the shell as a window message — a claim, like any. These
+  hooks share the frame with the document's scripts, which can define them
+  too: they gain nothing they could not do to the frame's DOM already.
+- **The channel API.** `shell.preview.post(msg)` posts a carrier's own
+  message to the bridge (false while the frame is not ready);
+  `shell.preview.on(type, fn) → off` hears the frame's messages of a type
+  (claims: data); `shell.preview.setOptions({ head?, scheme? })` rebuilds the
+  frame document (e.g. a theme change) and shows the last HTML again.
+- Protocol (shell → frame): `orz-preview-port { channel }` (with the port),
+  `orz-preview-render { id, html, diff? }`, `orz-preview-scroll { top }`,
+  `orz-preview-navigate { line }`, `orz-preview-ping { id }`, and a carrier's
+  own types; (frame →
+  shell): `orz-preview-ready { channel? }`, `orz-preview-rendered { id,
+  anchors: [line, top][], max }`, `orz-preview-scrolled { top, max }` or
+  `{ line }`, `orz-preview-key { key: 's' | '\\' | 'Escape' }`,
+  `orz-preview-link { href }`, `orz-preview-active { input? }`,
+  `orz-preview-focus { reader, late? }` and `orz-preview-pong { id, pointer }`
+  (port only), and a carrier's own types.
 - Scroll sync (a reader preference): positions map through the anchors (line
   ↔ top, linear between anchors), proportionally when there are none. Anchor
   lines are 0-based lines of the whole text (`renderMarkdownPreview` adds the
   header's lines). The editor leads unless the preview does: focus on the
-  preview iframe, or a recent `orz-preview-active` claim of the frame (it
-  posts one on wheel, pointer and touch input) while the editor has no focus
-  and was not touched in the host page (pointer, wheel, keys) in the last
-  300 ms. (The page sees no pointer events over the iframe, so "the pointer is
-  over the preview" is not observable.)
-- **Frame messages are claims of the document's scripts.** A save key, the
-  view key or a link reported by the frame acts only while focus is on the
-  preview iframe **and** the page has transient user activation
-  (`navigator.userActivation`); an Escape needs the focus only (a browser does
-  not count Escape as activation; all it does is move focus from the frame to
-  the toolbar). So a document script that floods these messages while the
-  reader types or scrolls in the editor moves nothing, saves nothing and opens
-  nothing.
-- Links clicked in the preview never navigate the frame: `#fragment` links
-  scroll it, others go through `hooks.resolveLink` (when given) to `onLink`
-  (default: `http(s):`/`mailto:` in a new tab with `noopener`).
-- **Known, accepted limit (finding B-15).** While the reader interacts with
-  the preview (focus on it, activation fresh), the document's own scripts can
-  post a link or save message and the shell acts on it — e.g. open an
-  `http(s):` tab. Documents are trusted sources (claim M.21), and the gate
-  still needs the reader's real input in the frame; this is not hardened
-  further.
-- **Content-Security-Policy.** A `srcdoc` frame inherits the page's policy.
-  `preview.nonce` stamps that nonce on every `<script>` and `<style>` of the
-  frame document; for a hash-based policy `PREVIEW_BRIDGE_HASH` is the
-  bridge's `'sha256-…'` and `previewScriptHashes(options)` lists every inline
-  script of the frame document (the libraries' setup and runtime with
-  `assets`). A frame that does not say ready within `preview.readyTimeoutMs`
-  (8 s) is an `error { source: 'render' }` and a quiet notice in the preview
-  pane instead of a blank pane (it goes when the frame starts after all).
+  preview iframe, or a recent `orz-preview-active` of the frame (wheel,
+  pointer, touch, keys) while the editor has no focus and was not touched in
+  the host page (pointer, wheel — also on an unfocused editor —, keys) in the
+  last 300 ms.
+- **What the frame reports.** Through the port, a key (save, view, Escape)
+  or a link is the reader's own input in the frame and acts. Without a port
+  (a carrier's own bridge) the frame's messages are claims of the document's
+  scripts: a save key, the view key or a link acts only while focus is on the
+  preview iframe **and** the page has transient user activation; an Escape
+  needs the focus only (all it does is move focus from the frame to the
+  toolbar). So a document script that floods these messages moves nothing,
+  saves nothing and opens nothing — with the default bridge, not even while
+  the reader is in the frame (finding B-15, accepted in round 1, is closed for
+  the default bridge; it stands for a carrier's own bridge).
+- **Focus theft** (finding F1). A document script can focus an element of
+  its frame at any time, and the reader's keys then go to the frame. The
+  default bridge reports, when the frame gains the focus, whether the
+  reader's own pointer or touch in the frame brought it there. Focus that
+  arrives otherwise — not by a Tab in the page, the shell's own `focus()`,
+  or a press on the preview pane in the page either (Chrome sends a click to
+  the iframe element itself while the frame cannot be hit yet, and that
+  click focuses the frame with no pointerdown inside it) — goes back at once to where the reader was (the page's element,
+  the shell's, else the shell's region when the reader was not in it; no key reaches the
+  frame meanwhile; the bridge's report can arrive before the page has seen
+  the focus leave, and a frame reloaded to pause its scripts may take the
+  focus when it commits, so a blur the page sees in the next second is undone
+  too, and a key that finds nothing focused then goes to the editor). Chrome may move the focus into the frame a moment before
+  the click's pointerdown reaches it, so the shell then asks the bridge
+  through the port (`orz-preview-ping { id }` → `orz-preview-pong { id,
+  pointer }`; input already queued in the frame is handled before the
+  question) whether the reader's pointerdown followed — as does a late report
+  of it (`{ reader: true, late: true }`). Yes: it was the reader, and the
+  frame gets the focus back. No (and no report of the reader's pointer in
+  the next 1.2 s, in which a loaded machine may still deliver it), the focus
+  taken again before the question is settled (a click does not do that, a
+  script does: then at once), or no answer within 1.5 s: theft — the
+  document's scripts are paused in the preview: a new frame replaces the old
+  one (removing it ends the document at once; a new `srcdoc` would keep it
+  running until the new one commits), built under a `<meta>`
+  policy `script-src 'nonce-…' 'strict-dynamic'` that runs only the frame's
+  own nonce-stamped scripts (and what they load), with a quiet note in the
+  pane and an `error { source: 'render' }` 0.5 s later; a late report of the
+  reader's pointer (within 1.5 s of the focus, or of the bridge starting in
+  a frame that has it) arriving within that time undoes the pause: the
+  document's scripts run again and the reader gets the frame. Limit: a key typed in the
+  moment of the first theft, before the focus is back, can reach the frame; a
+  carrier's own bridge gets no theft defence.
+- **Links** clicked in the preview never navigate the frame: `#fragment`
+  links scroll it; others go through `hooks.resolveLink` (when given; it gets
+  the source href — with it, the shell asks the renderer for links as written,
+  `ctx.twinLinks: false`) to `onLink` (the host decides). Without `onLink`
+  an `http(s):` or `mailto:` link is offered in a chip in the preview ("Open
+  <host>?"), opened in a new tab with `noopener` only when the reader clicks
+  Open: a frame never opens a window by itself.
+- **Content-Security-Policy.** A `srcdoc` frame inherits the policy of the
+  page that holds it, so an app's CSP applies inside the preview too, and
+  the preview needs from it: scripts — the bridge and the libraries' setup by
+  nonce (`preview.nonce`, stamped on every `<script>`, `<style>` and
+  stylesheet `<link>` of the frame document) or by hash (`PREVIEW_BRIDGE_HASH`,
+  `previewScriptHashes(options)`), and with `assets` the library hosts
+  (`cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `unpkg.com`) or
+  `'strict-dynamic'`; CodeMirror's bundle from `cdn.jsdelivr.net` (or the
+  `url` an app serves it from; `codemirror6Adapter({ nonce })` stamps the
+  nonce on its `<script>` and gives it to CodeMirror's `<style>`); styles —
+  the stylesheet hosts (KaTeX on `cdn.jsdelivr.net`, highlight.js on
+  `cdnjs.cloudflare.com`, the carrier's theme), `style-src-attr
+  'unsafe-inline'` (KaTeX and the diagram libraries write `style` attributes;
+  without it formulas lose their layout), and `<style>` elements that
+  libraries insert at run time (Mermaid, Paged.js) need `'unsafe-inline'` in
+  `style-src-elem` or a carrier that stamps them; fonts — KaTeX's font host;
+  images — wherever the document's images are (`resolveAsset` decides). A
+  frame that does not say ready within `preview.readyTimeoutMs` (8 s) is an
+  `error { source: 'render' }` and a quiet notice in the preview pane instead
+  of a blank pane (it goes when the frame starts after all); the message
+  suggests a policy that blocks the bridge, the usual cause — a slow
+  stylesheet no longer delays the ready.
 
 ### 8.5 Save
 
 - App host (`hooks.save`): `hooks.save(getText())`.
 - Standalone host: `assemble(getText())` → `createSaver({ uid, suggestedName:
-  fileName, kind, host }).save({ text, html })` (spec/shell-runtime.md §1). A
+  fileName, kind, host, openedHtml }).save({ text, html })`
+  (spec/shell-runtime.md §1). `openedHtml` — the bytes of the file the page
+  was opened from, which prove that a remembered file handle still points at
+  that file (shell-runtime §1, steps 3.1–3.3) — is the `openedHtml` option
+  (a string or a function; the assembled file's own HTML as loaded), else
+  `assemble` of the text the shell was mounted with, which reproduces an
+  assembled file (FC-18 law 3). Without it every reload would get the picker
+  and a quiet update would never reload. A
   served page shows the `#orz-served-note` notice — on Cmd/Ctrl+S only when
   there are unsaved edits (the Save button and `save()` always show it);
   "Download a copy" calls `saver.download`. A cancelled picker is not an
@@ -365,7 +507,9 @@ shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapte
   a download (the browser has it; it may not have finished; dirty clears),
   "Saved." otherwise; `save()` never rejects. With a connected host
   (`connectHost`), the dirty state is posted to it. A newer text format is
-  never saved (§8.3).
+  never saved (§8.3). A save started before `destroy()` starts nothing new
+  after it (no saver call after an `assemble` that finishes later) and posts
+  nothing to the host.
 
 ### 8.6 Engines (`TextEditorAdapter`)
 
@@ -380,15 +524,20 @@ interface TextEditorAdapter {
 }
 ```
 
-- `codemirror6Adapter({ loadModules?, url?, timeoutMs? })` — CodeMirror 6
+- `codemirror6Adapter({ loadModules?, url?, timeoutMs?, nonce? })` — CodeMirror 6
   with the Markdown language, line wrapping, history, search, bracket
   matching, the Markdown keymap (list continuation) and Tab indentation,
   styled with the chrome tokens, mounted in the shell's shadow root. It is a
   textarea at once and upgrades in place when CodeMirror arrives: from the
   textarea's **current** text (typed or set while loading), with its
-  selection, focus and scroll, and its undo steps (each textarea step becomes
-  one CodeMirror undo step). If CodeMirror cannot load it stays a textarea
-  and `ready()` reports the error (the shell warns once).
+  selection, focus and scroll, and its newest undo steps (each of the last
+  `CODEMIRROR6_HISTORY_STEPS` = 100 textarea steps becomes one CodeMirror undo
+  step, replayed from the stored patches — `undoSteps` — without a whole text
+  per step: 200 steps of a 1.25 MB document took 20.9 s and 586 MB before).
+  If CodeMirror cannot load it stays a textarea and `ready()` reports the
+  error (the shell warns once). `nonce` goes on the bundle's `<script>`
+  (`loadCodeMirror6(doc, { nonce })`) and to CodeMirror's `<style>`
+  (`EditorView.cspNonce`).
 - **Loading.** Default: ONE pinned bundle, `vendor/codemirror6.js` of the
   orz-markdown package (exact versions in `CODEMIRROR6_VERSIONS`; built by
   `npm run build:codemirror`), from
@@ -405,7 +554,10 @@ interface TextEditorAdapter {
 - `textareaAdapter()` — a plain `<textarea>` with its own undo history
   (typing and runs of deletions grouped; only the newest step of each stack
   holds a whole text, older steps hold patches, so a large document does not
-  cost a copy per step); no network. Tests and offline files use it.
+  cost a copy per step; a patch is a flat copy, `detachString`: V8 keeps a
+  slice of 13 or more characters as a view on the whole text it was cut
+  from, so slices kept a whole text alive per step); no network. Tests and
+  offline files use it.
 
 ### 8.7 Refinements (approved 2026-10-06)
 
@@ -421,12 +573,19 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
 `EditorHooks`; `hooks.save` as before):
 
 - `fetchInclude`, `resolveAsset` — passed to `render(text, ctx)` as `ctx`
-  (`renderMarkdownPreview` accepts and ignores it, so it can be passed as
-  `render` directly). The shell itself sends the rendered HTML through
+  (`renderMarkdownPreview` accepts it, so it can be passed as `render`
+  directly; `renderMarkdownPreviewWithIncludes` uses `ctx.fetchInclude` to
+  resolve URL includes with `prepareSources` first, each URL fetched once per
+  shell through `ctx.cache`, a per-shell map; anchors before the first
+  include and after the last stay exact, included text anchors at the
+  include). `ctx.twinLinks` is `false` when `hooks.resolveLink` is given
+  (links rendered as written). The shell itself sends the rendered HTML through
   `resolveAsset` before it enters the frame (`rewriteAssetUrls`): relative
   `src`, `poster`, every `srcset` URL and `href` on elements other than `<a>`
   / `<area>`; absolute, root (`/…`), fragment and `data:` references stay; a
-  throwing resolver leaves the reference. A renderer should not resolve these
+  throwing resolver leaves the reference; `srcset` is read as the HTML
+  standard reads it (`mapSrcset`: a URL runs to whitespace, trailing commas
+  end a candidate, descriptors run to a comma outside parentheses). A renderer should not resolve these
   attributes itself (the shell would see its relative results again).
 - `resolveLink` — preview link clicks (§8.4).
 - `uploadAsset` — a file pasted or dropped into the editor (capture phase,
@@ -442,12 +601,26 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   edit, written in the document's line endings (and BOM). Refused (`{ ok:
   false, error }`) when read-only, without a selection for a passage, when
   the hook fails (`error { source: 'hook' }`) or when the text changed while
-  the request ran. No UI: a carrier puts its AI menu in the toolbar slot.
+  the request ran, or when the shell became read-only or was destroyed while
+  it ran. No UI: a carrier puts its AI menu in the toolbar slot.
 - `mintUid` — `ensureUid()`: the header `uid`, or a new one (`hooks.mintUid`,
   else the kit's `mintUid`) set as one undoable header edit; a minted value
-  must match `UID_PATTERN`. The preference namespace stays the one read at
-  mount.
+  must match `UID_PATTERN`; a uid set while the host mints wins, and nothing
+  is set when the shell became read-only or was destroyed meanwhile. The
+  preference namespace stays the one read at mount.
 - Also: `formats` (§8.3), `setReadOnly` / `isReadOnly` / `readOnly` (§8.3),
   the preview options of §8.4, `setSelection` and `setReadOnly` on adapters, and exports `previewSandbox`,
   `previewFrameParts`, `rewriteAssetUrls`, `previewScriptHashes`,
   `PREVIEW_BRIDGE_HASH`, `PREVIEW_READY_TIMEOUT_MS`.
+- Round 2 of closed loop 2 (2026-10-06, additive): options `standalone`,
+  `openedHtml`, `preview.pauseScripts` (set by the shell), the render
+  context's `twinLinks` and `cache`; `shell.preview` (`post`, `on`,
+  `setOptions`); the bridge's port, page hooks and `orz-preview-focus`;
+  `codemirror6Adapter({ nonce })`; `PreviewController` `post`, `on`,
+  `setOptions`, `pauseScripts`, `resumeScripts`, `scriptsPaused`,
+  `acknowledges`, `authenticated`, `render()` resolving when the frame
+  acknowledges it, and `iframe` as a getter (pausing replaces the element);
+  `PreviewEvents.onFocus`, `onPong` (and `trusted` on `onKey` / `onLink` /
+  `onActive`);
+  exports `renderMarkdownPreviewWithIncludes`, `mapSrcset`, `undoSteps`,
+  `detachString`, `CODEMIRROR6_HISTORY_STEPS`.

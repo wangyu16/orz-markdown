@@ -5,10 +5,12 @@ exports.call = call;
 /**
  * A harness session: the target's releases read from disk, two local origins
  * (a host page origin and a file origin), a temporary directory for `file:`
- * pages, and the browser. Every browser check gets a fresh context whose
+ * pages, and the browser. Every browser check gets fresh contexts whose
  * network is closed except for the two local origins and the hard-coded
  * jsDelivr URLs of the releases (spec/shell-runtime.md §6), which the session
- * answers itself — so the update check runs against its real URLs.
+ * answers itself — so the update check runs against its real URLs. Each
+ * check runs in its own {@link Session.scope}: the contexts it opens are its
+ * own and closed when it ends, so checks can run side by side.
  */
 const read_js_1 = require("../read.js");
 const codemirror_pin_js_1 = require("../editor/codemirror-pin.js");
@@ -71,7 +73,14 @@ class Session {
         this.files = new Map();
         this.tmp = '';
         this.contexts = new Set();
+        /** chromeAssemble's page per release, within a scope. */
+        this.assemblers = new Map();
         this.memo = new Map();
+        /** `file:` URL → its path on disk (writeFile / rewriteFile). */
+        this.paths = new Map();
+        /** The session itself (a scope's `root`). */
+        this.root = this;
+        this.fileBrowserPromise = null;
         this.target = target;
         this.options = options;
         this.releases = {
@@ -140,18 +149,39 @@ class Session {
         const dir = (0, node_js_1.fs)().mkdtempSync((0, node_js_1.path)().join(this.tmp, 'f-'));
         const file = (0, node_js_1.path)().join(dir, name);
         (0, node_js_1.fs)().writeFileSync(file, html, 'utf8');
-        return `file://${file.split((0, node_js_1.path)().sep).map(encodeURIComponent).join('/')}`;
+        const url = `file://${file.split((0, node_js_1.path)().sep).map(encodeURIComponent).join('/')}`;
+        this.paths.set(url, file);
+        return url;
+    }
+    /** Replace the bytes of a file made by {@link writeFile} (what a save into it wrote): the next open of its URL reads them. */
+    rewriteFile(url, html) {
+        const file = this.paths.get(url);
+        if (!file)
+            throw new Error(`orz conformance: ${url} is not a file of this session`);
+        (0, node_js_1.fs)().writeFileSync(file, html, 'utf8');
+    }
+    /**
+     * A view of the session for one check: everything is shared (servers,
+     * files, memoised assemblies, the browser) except the contexts it opens
+     * (and their pages), which {@link closeContexts} closes when the check ends.
+     */
+    scope() {
+        const child = Object.create(this);
+        child.contexts = new Set();
+        child.assemblers = new Map();
+        return child;
     }
     /**
      * A release made from another: `append` is added to its bundle (a re-signed
-     * build of it), `version` replaces the manifest's version; the manifest's
-     * integrity is recomputed, so the bytes match what it announces.
+     * build of it), `version` replaces the manifest's version, `formats` its
+     * text formats; the manifest's integrity is recomputed, so the bytes match
+     * what it announces.
      */
     derive(base, o) {
         const code = o.append ? `${base.code}${o.append}` : base.code;
         const bytes = o.append ? new TextEncoder().encode(code) : base.bytes;
         const version = o.version ?? base.version;
-        const manifest = { ...(base.manifest ?? {}), version, bundle: { path: base.bundlePath, integrity: (0, node_js_1.sha384)(bytes) } };
+        const manifest = { ...(base.manifest ?? {}), version, ...(o.formats ? { formats: o.formats } : {}), bundle: { path: base.bundlePath, integrity: (0, node_js_1.sha384)(bytes) } };
         return { ...base, code, bytes, manifest, manifestText: JSON.stringify(manifest), version };
     }
     /** The target's Node `assemble`, memoised per text and options. */
@@ -210,6 +240,8 @@ class Session {
             for (const r of [o.cdn?.latest, this.releases.target, this.releases.next, this.releases.previous]) {
                 if (!r || url.split('?')[0] !== urls.bundle(r))
                     continue;
+                if (o.cdn?.holdBundle)
+                    await o.cdn.holdBundle;
                 const tampered = o.cdn?.tamper && o.cdn.latest === r;
                 const body = tampered ? Buffer.concat([Buffer.from(r.bytes), Buffer.from('\n/* tampered */\n')]) : Buffer.from(r.bytes);
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/javascript; charset=utf-8' }, body });
@@ -219,6 +251,8 @@ class Session {
         const watch = (page) => {
             page.on('dialog', (d) => { records.push({ type: 'dialog', data: { kind: d.type(), message: d.message() }, url: page.url() }); void d.dismiss().catch(() => undefined); });
             page.on('pageerror', (e) => { records.push({ type: 'pageerror', data: e.message, url: page.url() }); });
+            page.on('console', (m) => { if (m.type() === 'error')
+                records.push({ type: 'console-error', data: m.text(), url: page.url() }); });
             page.on('download', (d) => {
                 void d.path().then((file) => {
                     downloads.push({ name: d.suggestedFilename(), data: file ? (0, node_js_1.fs)().readFileSync(file, 'utf8') : '' });
@@ -237,6 +271,13 @@ class Session {
     }
     /** A browser whose `file:` pages have the origin-private file system ({@link FILE_ACCESS_FLAG}). */
     async browserForFiles() {
+        return this.root.fileBrowserOf();
+    }
+    fileBrowserOf() {
+        this.fileBrowserPromise ?? (this.fileBrowserPromise = this.launchFileBrowser());
+        return this.fileBrowserPromise;
+    }
+    async launchFileBrowser() {
         if (this.ownsBrowser)
             return this.browser;
         if (!this.fileBrowser) {
@@ -280,17 +321,31 @@ class Session {
         }
         return this.codemirror;
     }
-    /** Close the contexts a check opened. */
+    /** Close the contexts this scope opened. */
     async closeContexts() {
         const all = [...this.contexts];
         this.contexts.clear();
+        this.assemblers.clear();
         await Promise.all(all.map((c) => c.close().catch(() => undefined)));
+    }
+    /** A page of the harness origin that loaded a release's bundle by URL (one per release within a scope). */
+    bundlePage(r) {
+        let p = this.assemblers.get(r.label + r.version);
+        if (!p) {
+            p = (async () => {
+                const ctx = await this.context({ picker: 'none' });
+                const page = await ctx.newPage();
+                await page.goto(`${this.fileOrigin}/page/${r.label}.html`);
+                return page;
+            })();
+            p.catch(() => undefined);
+            this.assemblers.set(r.label + r.version, p);
+        }
+        return p;
     }
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
     async chromeAssemble(r, texts, delivery, hash = false) {
-        const ctx = await this.context({ picker: 'none' });
-        const page = await ctx.newPage();
-        await page.goto(`${this.fileOrigin}/page/${r.label}.html`);
+        const page = await this.bundlePage(r);
         return call(page, `async function (a) {
       var C = globalThis.OrzCarrier;
       if (!C) throw new Error('the bundle set no globalThis.OrzCarrier');
@@ -311,6 +366,8 @@ class Session {
         await this.closeContexts();
         if (this.ownsBrowser)
             await this.browser?.close().catch(() => undefined);
+        if (this.fileBrowserPromise)
+            await this.fileBrowserPromise.catch(() => undefined);
         if (this.ownsFileBrowser)
             await this.fileBrowser?.close().catch(() => undefined);
         for (const s of this.servers)

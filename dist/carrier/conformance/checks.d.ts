@@ -20,6 +20,12 @@ export declare function derivedParts(html: string): {
     island: string;
     includes: string;
 };
+/**
+ * The texts the law checks also run with inline delivery (an inline file carries the whole bundle, so
+ * every one is costly): the hazards, the samples and the first two corpus texts. The text-derived parts
+ * of a file do not depend on the delivery; every text runs with cdn delivery.
+ */
+export declare function inlineTexts(all: Array<[string, string]>): Array<[string, string]>;
 /** Every text the law checks run on: the corpus of the kind, the hazards and the target's samples. */
 export declare function lawTexts(s: Session, corpus: Record<string, string>): Array<[string, string]>;
 export declare const lawChecks: (corpus: () => Record<string, string>) => Record<string, CheckFn>;

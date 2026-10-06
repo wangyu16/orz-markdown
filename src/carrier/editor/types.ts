@@ -25,12 +25,17 @@ export interface EdEvent {
   readonly button?: number;
   readonly defaultPrevented?: boolean;
   readonly isComposing?: boolean;
+  readonly isTrusted?: boolean;
   readonly target?: unknown;
   readonly data?: unknown;
   readonly source?: unknown;
   readonly inputType?: string;
   /** `paste`: the clipboard (its files). */
   readonly clipboardData?: EdDataTransfer | null;
+  /** `blur` / `focusout`: where focus goes. */
+  readonly relatedTarget?: unknown;
+  readonly deltaY?: number;
+  composedPath?(): unknown[];
   /** `drop` / `dragover`: the dragged data (its files). */
   readonly dataTransfer?: EdDataTransfer | null;
   preventDefault(): void;
@@ -65,6 +70,7 @@ export interface EdElement {
   append(...nodes: unknown[]): void;
   appendChild(node: unknown): unknown;
   remove(): void;
+  replaceWith?(...nodes: unknown[]): void;
   addEventListener(type: string, listener: EdListener, options?: boolean | { capture?: boolean; passive?: boolean }): void;
   removeEventListener(type: string, listener: EdListener, options?: boolean | { capture?: boolean }): void;
   focus?(options?: { preventScroll?: boolean }): void;
@@ -98,7 +104,15 @@ export interface EdTextArea extends EdElement {
 /** `HTMLIFrameElement`. */
 export interface EdIframe extends EdElement {
   srcdoc: string;
-  readonly contentWindow: { postMessage(message: unknown, targetOrigin: string): void } | null;
+  inert?: boolean;
+  readonly contentWindow: { postMessage(message: unknown, targetOrigin: string, transfer?: unknown[]): void } | null;
+}
+
+/** A `MessagePort`. */
+export interface EdPort {
+  postMessage(message: unknown): void;
+  onmessage?: ((event: { data?: unknown }) => void) | null;
+  close?(): void;
 }
 
 /** `HTMLScriptElement`. */
@@ -128,11 +142,16 @@ export interface EdView {
   readonly navigator?: { readonly platform?: string; readonly userAgent?: string; readonly userActivation?: { readonly isActive?: boolean } };
   readonly location?: { readonly protocol?: string };
   readonly performance?: { now(): number };
+  readonly top?: unknown;
+  readonly crypto?: { getRandomValues?<T extends Uint8Array | Uint32Array>(array: T): T };
+  readonly MessageChannel?: new () => { port1: EdPort; port2: unknown };
   [key: string]: unknown;
 }
 
 export interface EdDocument {
   createElement(tag: string): EdElement;
+  addEventListener?(type: string, listener: EdListener, options?: boolean | { capture?: boolean }): void;
+  removeEventListener?(type: string, listener: EdListener, options?: boolean | { capture?: boolean }): void;
   createTextNode(text: string): { data: string };
   readonly head: EdElement | null;
   readonly body: EdElement | null;

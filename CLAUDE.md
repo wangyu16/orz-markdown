@@ -65,8 +65,10 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   every assembled file (spec/shell-runtime.md, spec/host-protocols.md):
   `createSaver` (host → served notice → File System Access with the handle in
   IndexedDB under the header `uid` + page location, reused only on that page
-  — every `file:` page shares one IndexedDB → download; it saves the HTML the
-  caller assembled, never the live DOM), `createPreferenceStore` (reader preferences
+  — every `file:` page shares one IndexedDB — and only when its file's
+  content proves it is the opened file (`openedHtml`, or what this page last
+  wrote through it): names prove nothing, a picker opens in the last folder
+  used → download; it saves the HTML the caller assembled, never the live DOM), `createPreferenceStore` (reader preferences
   by `uid`, fail closed), `connectHost` / `embedCarrierFrame` (file and host
   sides of `orz-host-save/-ai/-include@1`), the quiet update in `update.ts`
   (`checkForUpdate` once a day per kind, `reassemble` — SHA-384-verified,
@@ -95,11 +97,19 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (`codemirror6Adapter`: textarea first, upgraded when CodeMirror loads),
   `preview.ts` (the preview frame — its sandbox comes ONLY from
   `previewSandbox()`: `allow-scripts`, plus `allow-same-origin` only for a
-  standalone `file:` page (owner, B-2); never add it anywhere else — and its bridge, the message protocol a carrier's own bridge
+  standalone `file:` page that is top-level with no host (owner, B-2); never add it anywhere else — and its bridge, the message protocol a carrier's own bridge
   speaks). Frame messages are the document's claims: act on them only as
-  claim E.14 says (focus on the frame, plus user activation for effects).
-  `render-md.ts`
-  (`renderMarkdownPreview`, `data-src-line` anchors). It may import the
+  claim E.14 says — the default bridge's reports through its private port
+  come from trusted events and act; window messages need focus on the frame
+  plus user activation; focus a document script takes is given back and its
+  scripts paused. The bridge must keep taking the port first (a capture
+  listener registered before anything else) and send with the
+  `Reflect.apply`/`postMessage` it cached at start; recompute
+  `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. Patches and other
+  strings the editor keeps go through `detachString` (V8 slices keep the whole
+  text alive; E.21). `render-md.ts`
+  (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`,
+  `data-src-line` anchors). It may import the
   parser; `carrier/shell`, `carrier/read` and `carrier` must not import it
   (E.10). CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js`
   (shipped in the package, loaded from jsDelivr `orz-markdown@<VERSION>` with
@@ -110,7 +120,10 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   Node-side conformance harness each carrier runs against itself
   (spec/conformance.md): `runConformance` / `registerConformance` over the
   `CHECKS` catalog (stable ids `C.<area>.<name>` that carrier claims cite —
-  never rename one; add new ones). Real Chrome via a lazily imported
+  never rename one; add new ones). Checks run side by side in lanes, each in
+  browser contexts of its own (`Session.scope()`; never share a context or
+  patch a global across an `await`); timing-sensitive ones go in
+  `EXCLUSIVE_CHECKS`. Real Chrome via a lazily imported
   `playwright-core` (optional peer, never a dependency), local origins, a
   closed network where only the release's hard-coded jsDelivr URLs are
   answered; page-side code is plain JS strings in `page.ts` (it must not
@@ -174,8 +187,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `tests/carrier-kit.test.ts` (K.9, K.12), `tests/carrier-shell.test.ts`
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
-  `tests/carrier-editor.test.ts` (E.13, E.23 and the Chrome halves of E.1, E.3–E.9,
-  E.11, E.14, E.15, E.19, E.21, E.22) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
+  `tests/carrier-editor.test.ts` (E.13, E.23 and the Chrome halves of E.1, E.3–E.11,
+  E.14, E.15, E.19–E.22, E.25) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;

@@ -1,6 +1,13 @@
 type Eol = '\n' | '\r\n' | '\r';
 /** The editor (LF, no BOM) form of an exact text. */
 export declare function toEditorText(text: string): string;
+/**
+ * A copy of a string that shares no storage with the string it was cut
+ * from. V8 keeps a slice of 13 or more characters as a view on its parent,
+ * so a short patch cut from a 1 MB text would keep the whole text alive;
+ * concatenating and slicing again makes V8 flatten into a fresh string.
+ */
+export declare function detachString(s: string): string;
 export interface TextModel {
     /** Adopt an exact text: its BOM and line-ending style become the document's; returns its editor form. */
     adopt(text: string): string;
@@ -14,6 +21,14 @@ export interface TextModel {
     recall(editorText: string): void;
     /** An offset in the editor text → the offset in the exact text (BOM and CR LF counted). */
     toExactOffset(editorText: string, offset: number): number;
+    /** Remember `text` as the saved text (kept outside the window of recent texts). */
+    markSaved(text: string): void;
+    /** True when this editor text reads back as exactly the saved text (no style change). */
+    isSaved(editorText: string): boolean;
+    /** The saved text, exact. */
+    savedText(): string;
+    /** Forget every remembered text (the shell's `destroy`). */
+    clear(): void;
     /** The document's line ending and BOM. */
     readonly eol: Eol;
     readonly bom: boolean;

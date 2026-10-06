@@ -8,8 +8,10 @@
  *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
  *   3. File System Access (handle remembered in IndexedDB under the header
  *      `uid` + the page location, else the page URL; reused only on that
- *      page; a second save overwrites silently)
- *                                   → { via: 'file', ok, picked, name? }
+ *      page and only when the file it points at is proved by its CONTENT to
+ *      be the opened file — it holds the opened file's bytes, or what this
+ *      page last wrote through it; a second save then overwrites silently)
+ *                                   → { via: 'file', ok, picked, opened, name? }
  *   4. a download of `suggestedName`
  *                                   → { via: 'download', ok, confirmed: false, name }
  *
@@ -27,8 +29,12 @@ export declare const SHELL_UID_PATTERN: RegExp;
  * - `host`: the connected host acknowledged (`ok`) or refused / timed out.
  * - `file`: written through File System Access. `picked` — a picker was shown
  *   for this save, so the written file is the one the reader chose and may
- *   not be the file the page was opened from; `name` — the written file's
- *   name when the browser reports it.
+ *   not be the file the page was opened from; `opened` — the written file is
+ *   proved by its content to be the file this page was opened from (before
+ *   the first write of this page it held the opened file's bytes, and every
+ *   later write found what this page had written before); `name` — the
+ *   written file's name when the browser reports it. Names prove nothing: a
+ *   picker that opens in another folder offers the same name.
  * - `download`: a copy handed to the browser (`name` = the suggested name).
  *   `confirmed` is always `false`: the page cannot know whether the download
  *   landed (it may be blocked or cancelled); `ok` means it was started.
@@ -43,6 +49,7 @@ export type SaveResult = {
     ok: boolean;
     error?: string;
     picked: boolean;
+    opened: boolean;
     name?: string;
 } | {
     via: 'download';
@@ -71,6 +78,17 @@ export interface SaverOptions {
     window?: SaverWindow;
     /** Where handles are remembered (default: IndexedDB database `orz-carrier`, store `handles`). */
     handleStore?: HandleStore;
+    /**
+     * The bytes of the file this page was opened from, as text — for an
+     * assembled file, the carrier's `assemble` of the text the page loaded
+     * (`readIslandFromDom(#orz-src)` at boot), which reproduces the file
+     * (FC-18 law 3). A string, or a function (sync or async) read at most once,
+     * when a handle has to be proved. It is how a handle is proved to point at
+     * the opened file: without it a remembered handle is never reused across
+     * page loads (the picker opens), and no picked file counts as the opened
+     * one (`opened: false`, so an update never reloads).
+     */
+    openedHtml?: string | (() => string | undefined | null | Promise<string | undefined | null>);
 }
 export interface Saver {
     /** Save in the order above. Never rejects. */
@@ -91,6 +109,13 @@ export interface StoredHandle {
      * in another folder (same uid) must not write over the original.
      */
     location?: string;
+    /**
+     * SHA-256 (lowercase hex) of the bytes last written through the handle.
+     * When present, the file must still hold exactly them (and the opened
+     * file's bytes) for the handle to be reused: a file another tab or tool
+     * wrote since is never overwritten silently.
+     */
+    sha256?: string;
 }
 /** Best-effort by contract: every method resolves, never rejects. */
 export interface HandleStore {

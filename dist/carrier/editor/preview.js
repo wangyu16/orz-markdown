@@ -5,6 +5,7 @@ exports.previewSandbox = previewSandbox;
 exports.previewFrameParts = previewFrameParts;
 exports.previewFrameDocument = previewFrameDocument;
 exports.previewScriptHashes = previewScriptHashes;
+exports.mapSrcset = mapSrcset;
 exports.rewriteAssetUrls = rewriteAssetUrls;
 exports.createPreview = createPreview;
 exports.lineToTop = lineToTop;
@@ -13,24 +14,32 @@ exports.topToLine = topToLine;
  * The editor's live preview: a sandboxed iframe (FC-19 invariant 3) that
  * receives rendered HTML by `postMessage` and swaps it in.
  *
- * - `sandbox="allow-scripts"` exactly — an opaque origin: the document's
- *   scripts run in the frame and cannot reach the host page, its storage or
- *   its cookies (no `allow-same-origin`), open windows or navigate the top.
- * - The frame is `srcdoc`: a fixed bridge script, then the pinned preview
- *   libraries (`getPreviewFrameAssets`, `__orzEnhance`) — the preview shows
- *   before they load, and is enhanced when they arrive.
+ * - Its `sandbox` comes only from `previewSandbox()`: `allow-scripts` — an
+ *   opaque origin: the document's scripts run in the frame and cannot reach
+ *   the host page, its storage or its cookies, open windows or navigate the
+ *   top — except a standalone file opened from disk (top level, no host),
+ *   which also gets `allow-same-origin` (owner decision B-2, see there).
+ * - The frame is `srcdoc`: a fixed bridge script first (before any
+ *   stylesheet, so a slow stylesheet cannot hold it back), then the pinned
+ *   preview libraries (`getPreviewFrameAssets`, `__orzEnhance`) — the preview
+ *   shows before they load, and is enhanced when they arrive.
+ * - When the document's scripts take the keyboard focus, the shell pauses
+ *   them (`pauseScripts`): the frame is rebuilt under a CSP that runs only
+ *   the shell's nonce-stamped scripts.
  * - Updates are incremental: the bridge keeps every top-level node whose
  *   HTML did not change (common prefix and suffix), so drawn diagrams and the
  *   scroll position survive typing; it then re-runs `__orzEnhance` and reports
  *   the scroll anchors (`[data-src-line]` elements) for scroll sync.
  * - Messages are read only from that iframe's own window; the frame reads
- *   only messages from its parent. Payloads are data: the frame renders the
+ *   only messages from its parent, or from the private MessageChannel port the
+ *   shell hands it in answer to its ready (so a shell mounted from another
+ *   window's script still reaches it). Payloads are data: the frame renders the
  *   HTML the editor's own renderer produced, the parent reads numbers and a
  *   link href from the frame.
  */
 const html_js_1 = require("../../html.js");
 const preview_frame_js_1 = require("../../preview-frame.js");
-/** The preview iframe's sandbox: exactly this, never `allow-same-origin`. */
+/** The preview iframe's sandbox everywhere but a standalone `file:` page (see {@link previewSandbox}). */
 exports.PREVIEW_SANDBOX = 'allow-scripts';
 /**
  * The `sandbox` attribute of the preview iframe for a context — the ONE place
@@ -40,12 +49,17 @@ exports.PREVIEW_SANDBOX = 'allow-scripts';
  * Owner decision 2026-10-06 (finding B-2): in a standalone `file:` page an
  * opaque srcdoc frame is refused `file:` subresources, so the document's
  * relative local images would never show. There the frame also gets
- * `allow-same-origin`: nothing is lost, because the same document already runs
- * in that page (its read view) and raw HTML in it passes the strict allowlist.
- * App hosts and served pages keep the opaque frame. Change it only here.
+ * `allow-same-origin`. The document's own raw HTML is not filtered (only
+ * fetched includes are, M.16/M.20), but in a standalone `file:` page the same
+ * document already runs in that page as its read view, so the same-origin
+ * frame gives it no reach it did not have: its scripts can reach the editor
+ * and the page's storage there, which the owner accepts for local files.
+ * Only a top-level page without a connected host counts (F6): a file framed
+ * by an app keeps the opaque frame. App hosts and served pages keep it too.
+ * Change it only here.
  */
 function previewSandbox(context) {
-    if (context.host === 'standalone' && context.protocol === 'file:')
+    if (context.host === 'standalone' && context.protocol === 'file:' && context.topLevel !== false && context.connected !== true)
         return `${exports.PREVIEW_SANDBOX} allow-same-origin`;
     return exports.PREVIEW_SANDBOX;
 }
@@ -53,48 +67,102 @@ function previewSandbox(context) {
  * The bridge inside the frame (ES5, no `</script`). Swaps the article's
  * changed top-level nodes (compared without their `data-src-line`, whose new
  * values are copied onto the kept nodes, so a line inserted above does not
- * redraw everything below), enhances, reports anchors; forwards scroll, the
- * shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc) and link clicks.
+ * redraw everything below), enhances, reports anchors with the render's id;
+ * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc), link
+ * clicks and the reader's input (pointer, wheel, touch, keys).
+ *
+ * Authenticated channel (F1, B#10). Its ready carries a random `channel`;
+ * the shell answers with a MessageChannel port for it, which the bridge takes
+ * in a capture listener registered before anything else in the frame (and
+ * hides from the frame's other listeners) — before any document content
+ * exists, since that only arrives through the port. From then on the shell's
+ * messages come through the port, and the bridge sends its own reports
+ * through it with `Reflect.apply` and `MessagePort.prototype.postMessage` as
+ * they were when it started, so the document's scripts cannot send on it.
+ * It reports keys, link clicks, input and scrolls only for trusted events
+ * (`isTrusted`): what arrives on the port is the reader's own input in the
+ * frame, never a document script's. When the frame gains the focus it says
+ * whether the reader's own pointer or touch in the frame brought it there
+ * (`orz-preview-focus { reader }`): focus a document script takes says
+ * `reader: false`. Chrome may move the focus into the frame a moment before
+ * the click's pointerdown arrives there: a trusted pointerdown within 1.5 s
+ * of a focus reported without one — or of the bridge starting in a frame that
+ * already has the focus (a frame reloaded while focused) — sends
+ * `{ reader: true, late: true }`; and the shell's `orz-preview-ping { id }`
+ * gets `orz-preview-pong { id, pointer }`: whether a trusted pointerdown came
+ * after the last focus reported without one (input queued before the ping is
+ * handled first).
+ *
+ * It finds `#orz-doc` when a render arrives (so it may run before the
+ * article exists, in `<head>`). Page hooks a carrier's frame document may
+ * define: `window.__orzPreviewApply(html, msg)` replaces the DOM update (it
+ * may return a promise; the bridge reports when it settles),
+ * `window.__orzPreviewNavigate(line)` receives `orz-preview-navigate`, and
+ * `window.__orzPreviewMessage(msg)` any other message from the shell
+ * (`shell.preview.post`). `window.__orzPreview.report()` re-reports the
+ * anchors; `window.__orzPreview.post(msg)` posts a carrier's own message to
+ * the shell as a plain window message (a claim, like any other).
  */
 exports.PREVIEW_BRIDGE = [
     '(function(){',
-    'var P=window.parent,art=document.getElementById("orz-doc"),last=0,mute=0,queued=0,timer=0;',
+    'var P=window.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,chan=String(Math.random()).slice(2);',
+    'var RA=Reflect.apply,PM=typeof MessagePort==="function"?MessagePort.prototype.postMessage:null;',
+    'try{var rv=new Uint32Array(4);crypto.getRandomValues(rv);chan=Array.prototype.join.call(rv,"-")}catch(e){}',
+    'window.addEventListener("message",function(e){var d=e.data;',
+    'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){e.stopImmediatePropagation();if(!port&&d.channel===chan&&e.ports&&e.ports[0]){port=e.ports[0];port.onmessage=function(m){handle(m.data)}}return}',
+    'if(e.source===P)handle(d)},true);',
+    'var lastIn=-1e9,lastPtr=-1e9,bare=-1e9,bareAt=-1e9,has=false;try{has=document.hasFocus()}catch(e){}if(has)bare=bareAt=Date.now();function active(k){send({type:"orz-preview-active",input:k})}',
+    'function pointed(){lastIn=lastPtr=Date.now();if(lastIn-bare<1500){bare=-1e9;send({type:"orz-preview-focus",reader:true,late:true})}}',
+    'window.addEventListener("pointerdown",function(e){if(e.isTrusted){pointed();active("pointer")}},true);',
+    'window.addEventListener("wheel",function(e){if(e.isTrusted)active("wheel")},{passive:true,capture:true});',
+    'window.addEventListener("touchstart",function(e){if(e.isTrusted){pointed();active("touch")}},{passive:true,capture:true});',
+    'window.addEventListener("focus",function(e){if(e.target!==window||!e.isTrusted||has)return;has=true;var r=Date.now()-lastIn<1000;bare=r?-1e9:Date.now();if(!r)bareAt=bare;send({type:"orz-preview-focus",reader:r})},true);',
+    'window.addEventListener("blur",function(e){if(e.target===window){has=false;lastIn=-1e9}},true);',
     'var sch=document.documentElement.getAttribute("data-scheme");if(sch==="dark")window.__orzSmilesTheme="dark";',
+    'function A(){return art||(art=document.getElementById("orz-doc"))}',
     'function post(m){try{P.postMessage(m,"*")}catch(e){}}',
+    'function send(m){if(port&&PM){try{RA(PM,port,[m])}catch(e){}}else post(m)}',
     'function strip(h){return h.replace(/<[a-zA-Z][^>]*>/g,function(t){return t.replace(/ data-src-line="[^"]*"/g,"")})}',
     'function keyOf(n){return n.nodeType===1?strip(n.outerHTML):n.nodeType===3?"#"+n.data:n.nodeType===8?"!"+n.data:""}',
     'function lines(n){var l=[],q,i;if(n.nodeType!==1)return l;if(n.hasAttribute("data-src-line"))l.push(n);q=n.querySelectorAll("[data-src-line]");for(i=0;i<q.length;i++)l.push(q[i]);return l}',
     'function keep(o,n){if(o.__orzKey!==n.__orzKey)return false;var a=lines(o),b=lines(n),i;if(a.length!==b.length)return false;for(i=0;i<a.length;i++)a[i].setAttribute("data-src-line",b[i].getAttribute("data-src-line"));return true}',
-    'function apply(html){var t=document.createElement("template");t.innerHTML=html;var next=Array.prototype.slice.call(t.content.childNodes),old=Array.prototype.slice.call(art.childNodes),a=old.length,b=next.length,p=0,s=0,i;',
+    'function apply(html){var root=A(),t=document.createElement("template");t.innerHTML=html;var next=Array.prototype.slice.call(t.content.childNodes),old=Array.prototype.slice.call(root.childNodes),a=old.length,b=next.length,p=0,s=0,i;',
     'for(i=0;i<b;i++)next[i].__orzKey=keyOf(next[i]);',
     'while(p<a&&p<b&&keep(old[p],next[p]))p++;',
     'while(s<a-p&&s<b-p&&keep(old[a-1-s],next[b-1-s]))s++;',
-    'var ref=s>0?old[a-s]:null;for(i=p;i<a-s;i++)art.removeChild(old[i]);',
-    'for(i=p;i<b-s;i++)art.insertBefore(next[i],ref)}',
-    'function whole(html){var y=se().scrollTop;art.innerHTML=html;se().scrollTop=y}',
+    'var ref=s>0?old[a-s]:null;for(i=p;i<a-s;i++)root.removeChild(old[i]);',
+    'for(i=p;i<b-s;i++)root.insertBefore(next[i],ref)}',
+    'function whole(html){var y=se().scrollTop;A().innerHTML=html;se().scrollTop=y}',
     'function se(){return document.scrollingElement||document.documentElement}',
     'function max(){return Math.max(0,se().scrollHeight-window.innerHeight)}',
-    'function anchors(){var els=art.querySelectorAll("[data-src-line]"),out=[],y=se().scrollTop||0,i,l,r;',
+    'function anchors(){var root=A(),out=[];if(!root)return out;var els=root.querySelectorAll("[data-src-line]"),y=se().scrollTop||0,i,l,r;',
     'for(i=0;i<els.length;i++){l=parseInt(els[i].getAttribute("data-src-line"),10);if(isNaN(l))continue;r=els[i].getBoundingClientRect();if(!r.height&&!r.width)continue;out.push([l,r.top+y])}',
     'out.sort(function(x,z){return x[1]-z[1]});return out}',
-    'function report(){post({type:"orz-preview-rendered",id:last,anchors:anchors(),max:max()})}',
+    'function report(){send({type:"orz-preview-rendered",id:last,anchors:anchors(),max:max()})}',
     'function enhance(){try{if(typeof window.__orzEnhance==="function")window.__orzEnhance()}catch(e){}}',
     'function later(){clearTimeout(timer);timer=setTimeout(function(){enhance();report()},350)}',
-    'window.addEventListener("message",function(e){if(e.source!==P)return;var d=e.data;if(!d||typeof d!=="object")return;',
-    'if(d.type==="orz-preview-render"){last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}enhance();report();later()}',
-    'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=Date.now()+150;se().scrollTop=d.top}});',
-    'if(window.ResizeObserver)new ResizeObserver(later).observe(art);',
-    'window.addEventListener("scroll",function(){if(Date.now()<mute||queued)return;queued=1;requestAnimationFrame(function(){queued=0;post({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
-    'document.addEventListener("keydown",function(e){var k=e.key;active();',
-    'if((e.metaKey||e.ctrlKey)&&!e.altKey&&(k==="s"||k==="S"||k==="\\\\")){e.preventDefault();post({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
-    'else if(k==="Escape")post({type:"orz-preview-key",key:"Escape"})});',
-    'function active(){post({type:"orz-preview-active"})}',
-    'document.addEventListener("pointerdown",active,true);document.addEventListener("wheel",active,{passive:true,capture:true});document.addEventListener("touchstart",active,{passive:true,capture:true});',
+    'function done(){enhance();report();later()}',
+    'function render(d,n){var h=window.__orzPreviewApply,r;want=d.id;',
+    'if(typeof h==="function"){try{r=h(String(d.html),d)}catch(x){r=null}if(r&&typeof r.then==="function"){r.then(function(){if(want===d.id){last=d.id;done()}},function(){if(want===d.id){last=d.id;report()}})}else{last=d.id;done()}return}',
+    'if(!A()){if((n||0)<400)setTimeout(function(){if(want===d.id)render(d,(n||0)+1)},25);return}',
+    'last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}done()}',
+    'function handle(d){if(!d||typeof d!=="object")return;',
+    'if(d.type==="orz-preview-render")render(d,0);',
+    'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=Date.now()+150;se().scrollTop=d.top}',
+    'else if(d.type==="orz-preview-navigate"){if(typeof window.__orzPreviewNavigate==="function"&&typeof d.line==="number")try{window.__orzPreviewNavigate(d.line)}catch(x){}}',
+    'else if(d.type==="orz-preview-ping"){send({type:"orz-preview-pong",id:d.id,pointer:lastPtr>=bareAt})}',
+    'else if(typeof window.__orzPreviewMessage==="function")try{window.__orzPreviewMessage(d)}catch(x){}}',
+    'if(window.ResizeObserver)new ResizeObserver(later).observe(document.documentElement);',
+    'window.addEventListener("scroll",function(e){if(!e.isTrusted||Date.now()<mute||queued)return;queued=1;requestAnimationFrame(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
+    'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;var k=e.key;active("key");',
+    'if((e.metaKey||e.ctrlKey)&&!e.altKey&&(k==="s"||k==="S"||k==="\\\\")){e.preventDefault();send({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
+    'else if(k==="Escape")send({type:"orz-preview-key",key:"Escape"})});',
     'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||e.defaultPrevented)return;var h=a.getAttribute("href")||"";e.preventDefault();',
     'if(h.charAt(0)==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=document.getElementById(id);if(t)t.scrollIntoView();return}',
-    'post({type:"orz-preview-link",href:h})});',
+    'if(e.isTrusted)send({type:"orz-preview-link",href:h})});',
     'window.__orzLibsReady=function(){enhance();report()};',
-    'post({type:"orz-preview-ready"});',
+    'window.__orzPreview={report:report,post:post};',
+    'post({type:"orz-preview-ready",channel:chan});',
     '})();',
 ].join('');
 /**
@@ -102,24 +170,28 @@ exports.PREVIEW_BRIDGE = [
  * (`script-src 'sha256-…'`). A test recomputes it; with `assets` the frame has
  * more inline scripts — {@link previewScriptHashes} lists them all.
  */
-exports.PREVIEW_BRIDGE_HASH = 'sha256-vGxwt7AxICnk1qS6ExQKrJyNG3WKyC+TyCPieX6Xy8E=';
+exports.PREVIEW_BRIDGE_HASH = 'sha256-b5U0KPkMCBoiEeKodg9ElyhxwmpJaT6BdZ+gmcYdg28=';
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';
 const BASE_STYLE = 'html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}';
-/** Stamp a nonce on every `<script` and `<style` start tag of shell-built markup. */
+/** Stamp a nonce on every `<script`, `<style` and `<link` start tag of shell-built markup. */
 function stampNonce(markup, nonce) {
     if (!nonce)
         return markup;
     const attr = ` nonce="${(0, html_js_1.escapeAttr)(nonce)}"`;
-    return markup.replace(/<(script|style)(?=[\s>])/g, `<$1${attr}`);
+    return markup.replace(/<(script|style|link)(?=[\s>])/gi, `<$1${attr}`);
+}
+/** The `<meta>` Content-Security-Policy that pauses the document's scripts (only `nonce`-stamped scripts, and what they load, run). */
+function pauseMeta(nonce) {
+    return `<meta http-equiv="Content-Security-Policy" content="${(0, html_js_1.escapeAttr)(`script-src 'nonce-${nonce}' 'strict-dynamic'`)}">`;
 }
 /** The pieces of the frame document for these options. */
 function previewFrameParts(options = {}) {
     const scheme = options.scheme === 'dark' ? 'dark' : 'light';
     const assets = options.assets !== false ? (0, preview_frame_js_1.getPreviewFrameAssets)() : null;
-    const nonce = options.nonce || undefined;
+    const nonce = options.nonce || options.pauseScripts || undefined;
     return {
-        head: stampNonce(`${assets ? assets.headLinks(scheme) : ''}${options.head ?? ''}<style>${BASE_STYLE}</style>`, nonce),
+        head: (options.pauseScripts && nonce ? pauseMeta(nonce) : '') + stampNonce(`${assets ? assets.headLinks(scheme) : ''}${options.head ?? ''}<style>${BASE_STYLE}</style>`, nonce),
         bridge: stampNonce(`<script>${options.bridge ?? exports.PREVIEW_BRIDGE}</script>`, nonce),
         scripts: assets ? stampNonce(`${assets.bodyScripts()}<script>${LIBS_READY}</script>`, nonce) : '',
         scheme,
@@ -132,14 +204,23 @@ function previewFrameDocument(options = {}) {
     const parts = previewFrameParts(options);
     if (options.frameDocument)
         return String(options.frameDocument(parts));
+    // The default bridge goes before the stylesheets (B#2): a script after a pending stylesheet waits
+    // for it, so a slow theme or KaTeX stylesheet would hold back the ready and every render. A
+    // carrier's own bridge keeps its place after the article (it may look for it when it runs).
+    const early = options.bridge === undefined;
     return (`<!doctype html><html data-scheme="${parts.scheme}"><head><meta charset="utf-8">` +
         '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-        parts.head +
+        (early ? splitPause(parts.head, parts.bridge) : parts.head) +
         `</head><body><article class="${parts.articleClass}" id="orz-doc"></article>` +
-        // the bridge first: the preview shows at once; the libraries enhance it when they arrive (or never, offline)
-        parts.bridge +
+        (early ? '' : parts.bridge) +
+        // the libraries enhance the preview when they arrive (or never, offline)
         parts.scripts +
         '</body></html>');
+}
+/** The head with the bridge after the pausing `<meta>` (which must come first) and before everything else. */
+function splitPause(head, bridge) {
+    const m = /^<meta http-equiv="Content-Security-Policy"[^>]*>/.exec(head);
+    return m ? m[0] + bridge + head.slice(m[0].length) : bridge + head;
 }
 /**
  * `'sha256-…'` of every inline `<script>` in the frame document for these
@@ -177,10 +258,59 @@ function decodeAttr(v) {
 }
 /** A relative reference: no scheme, not `//host`, not `/path`, not `#fragment`, not empty. */
 const isRelative = (u) => u !== '' && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u) && !/^[/\\#?]/.test(u);
+const isSpace = (c) => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+/**
+ * Map every URL of a `srcset` value, keeping everything else as written. Parsed
+ * as the HTML standard does (F5): separators are whitespace and commas; a URL
+ * runs to the next whitespace (a comma inside it, as in a `data:` URL, is part
+ * of it) except trailing commas, which end the candidate; descriptors run to
+ * the next comma outside parentheses.
+ */
+function mapSrcset(value, map) {
+    let out = '';
+    let i = 0;
+    const n = value.length;
+    while (i < n) {
+        let j = i;
+        while (j < n && (isSpace(value[j]) || value[j] === ','))
+            j++;
+        out += value.slice(i, j);
+        i = j;
+        if (i >= n)
+            break;
+        while (j < n && !isSpace(value[j]))
+            j++;
+        let url = value.slice(i, j);
+        let trail = '';
+        const m = /,+$/.exec(url);
+        if (m) {
+            trail = m[0];
+            url = url.slice(0, -trail.length);
+        }
+        out += (url ? map(url) : '') + trail;
+        i = j;
+        if (trail)
+            continue;
+        let paren = false;
+        while (j < n) {
+            const c = value[j];
+            if (c === '(')
+                paren = true;
+            else if (c === ')')
+                paren = false;
+            else if (c === ',' && !paren)
+                break;
+            j++;
+        }
+        out += value.slice(i, j);
+        i = j;
+    }
+    return out;
+}
 /**
  * Rewrite the relative asset references of rendered HTML through `resolve`
  * (FC-19 `hooks.resolveAsset`) before it enters the preview: `src`,
- * `poster`, every URL of `srcset`, and `href` on elements other than `<a>` /
+ * `poster`, every URL of `srcset` (parsed as {@link mapSrcset}), and `href` on elements other than `<a>` /
  * `<area>` (links stay as written; a click goes to `resolveLink`). A resolver
  * that throws or returns a non-string leaves the reference as it was. Tags
  * the pattern cannot read are left unchanged.
@@ -209,15 +339,7 @@ function rewriteAssetUrls(html, resolve) {
             if (!set && a !== 'src' && a !== 'poster' && !((a === 'href' || a === 'xlink:href') && element !== 'a' && element !== 'area'))
                 return m;
             const raw = decodeAttr(dq ?? sq ?? uq ?? '');
-            const value = set
-                ? raw.split(',').map((part) => {
-                    const lead = part.match(/^\s*/)[0];
-                    const body = part.slice(lead.length);
-                    const cut = body.search(/\s/);
-                    const url = cut < 0 ? body : body.slice(0, cut);
-                    return lead + res(url) + (cut < 0 ? '' : body.slice(cut));
-                }).join(',')
-                : res(raw);
+            const value = set ? mapSrcset(raw, res) : res(raw);
             if (value === raw)
                 return m;
             changed = true;
@@ -232,44 +354,75 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 /** Create the sandboxed preview iframe in `parent` and talk to it. */
 function createPreview(doc, parent, options, events) {
     const win = doc.defaultView;
-    const iframe = doc.createElement('iframe');
-    iframe.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
-    iframe.setAttribute('title', options.title ?? 'Document preview');
-    iframe.className = 'orz-editor__frame';
-    iframe.srcdoc = previewFrameDocument(options);
+    let frameOptions = { ...options };
+    const makeFrame = () => {
+        const f = doc.createElement('iframe');
+        f.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
+        f.setAttribute('title', options.title ?? 'Document preview');
+        f.className = 'orz-editor__frame';
+        f.srcdoc = previewFrameDocument(frameOptions);
+        return f;
+    };
+    let iframe = makeFrame();
     const diff = options.diff !== false;
     let ready = false;
     let seq = 0;
     let pending = null;
     let anchors = [];
     let max = 0;
-    const send = (msg) => { try {
-        iframe.contentWindow?.postMessage(msg, '*');
+    let destroyed = false;
+    /** The private port the default bridge asked for (B#10): the shell's messages go through it. */
+    let port = null;
+    /** The render waiting for the frame's acknowledgement. */
+    let waiting = null;
+    let acknowledges = false;
+    /** The frame's bridge asked for a port once: its reports count only through a port from then on. */
+    let portBridge = false;
+    const subscribers = new Map();
+    const settle = (acked) => { const w = waiting; waiting = null; w?.resolve(acked); };
+    const send = (msg) => {
+        try {
+            if (port)
+                port.postMessage(msg);
+            else
+                iframe.contentWindow?.postMessage(msg, '*');
+        }
+        catch { /* detached */ }
+    };
+    const closeNow = (p) => { p.onmessage = null; try {
+        p.close?.();
     }
-    catch { /* detached */ } };
+    catch { /* closed */ } };
+    /** Ports replaced by a reload stay open a moment: a report the old document sent just before it went still arrives. */
+    const retired = new Set();
+    const closePort = (later = false) => {
+        const p = port;
+        port = null;
+        if (!p)
+            return;
+        if (!later || !win) {
+            closeNow(p);
+            return;
+        }
+        retired.add(p);
+        win.setTimeout(() => { if (retired.delete(p))
+            closeNow(p); }, 1000);
+    };
     const renderMessage = (html) => ({ type: 'orz-preview-render', id: ++seq, html, ...(diff ? {} : { diff: false }) });
-    const onMessage = (e) => {
-        if (!iframe.contentWindow || e.source !== iframe.contentWindow)
-            return;
-        const d = e.data;
-        if (!d || typeof d !== 'object')
-            return;
+    /** Bridge reports: through the port they are the bridge's own (trusted events); as window messages, claims. */
+    const BRIDGE_TYPES = new Set(['orz-preview-rendered', 'orz-preview-scrolled', 'orz-preview-key', 'orz-preview-link', 'orz-preview-active', 'orz-preview-focus', 'orz-preview-pong']);
+    const handle = (d, trusted) => {
         switch (d.type) {
-            case 'orz-preview-ready':
-                ready = true;
-                if (stall !== null) {
-                    win?.clearTimeout(stall);
-                    stall = null;
-                }
-                if (pending !== null)
-                    send(renderMessage(pending));
-                events.onReady?.();
-                break;
             case 'orz-preview-rendered':
                 if (Array.isArray(d.anchors))
                     anchors = d.anchors.filter((a) => Array.isArray(a) && num(a[0]) && num(a[1])).map((a) => [a[0], a[1]]);
                 if (num(d.max))
                     max = d.max;
+                // a bridge that reports ids paces the renders (B#3); one without ids acknowledges any render
+                if (waiting && (d.id === waiting.id || !num(d.id))) {
+                    acknowledges = true;
+                    settle(true);
+                }
                 events.onRendered?.(anchors, max);
                 break;
             case 'orz-preview-scrolled':
@@ -282,28 +435,132 @@ function createPreview(doc, parent, options, events) {
                 break;
             case 'orz-preview-key':
                 if (d.key === 's' || d.key === '\\' || d.key === 'Escape')
-                    events.onKey?.(d.key);
+                    events.onKey?.(d.key, trusted);
                 break;
             case 'orz-preview-link':
                 if (typeof d.href === 'string')
-                    events.onLink?.(d.href);
+                    events.onLink?.(d.href, trusted);
                 break;
             case 'orz-preview-active':
-                events.onActive?.();
+                events.onActive?.(typeof d.input === 'string' ? d.input : undefined, trusted);
+                break;
+            case 'orz-preview-focus':
+                if (trusted)
+                    events.onFocus?.(d.reader === true);
+                break;
+            case 'orz-preview-pong':
+                if (trusted && num(d.id))
+                    events.onPong?.(d.id, d.pointer === true);
                 break;
         }
+        const set = typeof d.type === 'string' ? subscribers.get(d.type) : undefined;
+        if (set)
+            for (const fn of [...set]) {
+                try {
+                    fn(d);
+                }
+                catch { /* the subscriber's own error */ }
+            }
+    };
+    const onPort = (e) => {
+        const d = e?.data;
+        if (!destroyed && d && typeof d === 'object')
+            handle(d, true);
+    };
+    const onMessage = (e) => {
+        if (!iframe.contentWindow || e.source !== iframe.contentWindow)
+            return;
+        const d = e.data;
+        if (!d || typeof d !== 'object')
+            return;
+        if (d.type === 'orz-preview-ready') {
+            ready = true;
+            acknowledges = false;
+            if (stall !== null) {
+                win?.clearTimeout(stall);
+                stall = null;
+            }
+            closePort();
+            // the default bridge asks for a private channel (its ready carries a random token)
+            if (typeof d.channel === 'string' && d.channel && win?.MessageChannel) {
+                portBridge = true;
+                try {
+                    const ch = new win.MessageChannel();
+                    ch.port1.onmessage = onPort;
+                    iframe.contentWindow.postMessage({ type: 'orz-preview-port', channel: d.channel }, '*', [ch.port2]);
+                    port = ch.port1;
+                }
+                catch {
+                    closePort();
+                }
+            }
+            settle(false);
+            if (pending !== null)
+                send(renderMessage(pending));
+            events.onReady?.();
+            const set = subscribers.get('orz-preview-ready');
+            if (set)
+                for (const fn of [...set]) {
+                    try {
+                        fn(d);
+                    }
+                    catch { /* the subscriber's own error */ }
+                }
+            return;
+        }
+        // with a port, the bridge's reports come only through it: the same types as window messages are a document script's
+        if (portBridge && typeof d.type === 'string' && BRIDGE_TYPES.has(d.type))
+            return;
+        handle(d, false);
     };
     win?.addEventListener('message', onMessage);
     // A moved or reloaded frame boots again and says ready again: the last HTML is re-sent then.
     parent.append(iframe);
-    let stall = win ? win.setTimeout(() => { stall = null; if (!ready)
-        events.onStall?.(); }, options.readyTimeoutMs ?? exports.PREVIEW_READY_TIMEOUT_MS) : null;
+    let stall = null;
+    const armStall = () => {
+        if (stall !== null)
+            win?.clearTimeout(stall);
+        stall = win ? win.setTimeout(() => { stall = null; if (!ready && !destroyed)
+            events.onStall?.(); }, options.readyTimeoutMs ?? exports.PREVIEW_READY_TIMEOUT_MS) : null;
+    };
+    armStall();
+    /**
+     * Rebuild the frame document. `replace`: a new iframe element takes the old one's place — removing
+     * the old element ends its document at once (a new `srcdoc` keeps the old document running until
+     * the new one commits, which is how long a paused document's scripts would go on).
+     */
+    const reload = (next, replace = false) => {
+        if (destroyed)
+            return;
+        frameOptions = next;
+        ready = false;
+        closePort(true);
+        settle(false);
+        if (replace) {
+            const old = iframe;
+            iframe = makeFrame();
+            if (typeof old.replaceWith === 'function')
+                old.replaceWith(iframe);
+            else {
+                parent.append(iframe);
+                old.remove();
+            }
+        }
+        else
+            iframe.srcdoc = previewFrameDocument(frameOptions);
+        armStall();
+    };
     return {
-        iframe,
+        get iframe() { return iframe; },
         render(html) {
             pending = html;
-            if (ready)
-                send(renderMessage(html));
+            settle(false);
+            if (!ready || destroyed)
+                return Promise.resolve(false);
+            const msg = renderMessage(html);
+            const p = new Promise((resolve) => { waiting = { id: msg.id, resolve }; });
+            send(msg);
+            return p;
         },
         scrollTo(top) {
             if (ready && num(top))
@@ -313,15 +570,53 @@ function createPreview(doc, parent, options, events) {
             if (ready && num(line))
                 send({ type: 'orz-preview-navigate', line });
         },
+        post(message) {
+            if (!ready || destroyed || !message || typeof message !== 'object')
+                return false;
+            send({ ...message });
+            return true;
+        },
+        on(type, fn) {
+            let set = subscribers.get(type);
+            if (!set)
+                subscribers.set(type, (set = new Set()));
+            set.add(fn);
+            return () => { set.delete(fn); };
+        },
+        setOptions(o) {
+            reload({ ...frameOptions, ...(o.head !== undefined ? { head: o.head } : {}), ...(o.scheme !== undefined ? { scheme: o.scheme } : {}) });
+        },
+        pauseScripts(nonce) {
+            if (frameOptions.pauseScripts || !nonce)
+                return;
+            reload({ ...frameOptions, pauseScripts: nonce }, true);
+        },
+        resumeScripts() {
+            if (!frameOptions.pauseScripts)
+                return;
+            const rest = { ...frameOptions };
+            delete rest.pauseScripts;
+            reload(rest, true);
+        },
+        get scriptsPaused() { return !!frameOptions.pauseScripts; },
+        get acknowledges() { return acknowledges; },
+        get authenticated() { return portBridge; },
         get anchors() { return anchors; },
         get max() { return max; },
         get ready() { return ready; },
         destroy() {
+            destroyed = true;
             win?.removeEventListener('message', onMessage);
             if (stall !== null) {
                 win?.clearTimeout(stall);
                 stall = null;
             }
+            closePort();
+            for (const p of retired)
+                closeNow(p);
+            retired.clear();
+            settle(false);
+            subscribers.clear();
             iframe.remove();
             pending = null;
         },

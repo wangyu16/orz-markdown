@@ -14,13 +14,14 @@
  *
  * While CodeMirror loads, the shell is already editable: the adapter starts
  * as a `<textarea>` and upgrades in place (its current text, selection, focus,
- * scroll and undo steps carried over: each textarea undo step becomes one
- * CodeMirror undo step). When CodeMirror cannot load (offline, blocked, wrong bytes), the
+ * scroll and its newest undo steps carried over: each of the last
+ * `CODEMIRROR6_HISTORY_STEPS` textarea undo steps becomes one CodeMirror undo
+ * step — CodeMirror's own history keeps at least that many). When CodeMirror cannot load (offline, blocked, wrong bytes), the
  * textarea stays and `ready()` reports the error.
  */
 import { VERSION } from '../../version.js';
 import { CODEMIRROR6_GLOBAL, CODEMIRROR6_INTEGRITY, CODEMIRROR6_PATH } from './codemirror-pin.js';
-import { syncTextarea, textareaAdapter, undoTexts, type AdapterMountOptions, type ScrollPosition, type Selection, type TextEditorAdapter } from './adapter.js';
+import { syncTextarea, textareaAdapter, undoSteps, type AdapterMountOptions, type ScrollPosition, type Selection, type TextEditorAdapter } from './adapter.js';
 import { minimalChange } from './text-model.js';
 import type { EdDocument, EdElement, EdScript } from './types.js';
 
@@ -49,6 +50,12 @@ export interface CodeMirror6Modules {
 export const CODEMIRROR6_URL = `https://cdn.jsdelivr.net/npm/orz-markdown@${VERSION}/${CODEMIRROR6_PATH}`;
 /** How long the bundle may take to load before the textarea is kept. */
 export const CODEMIRROR6_TIMEOUT_MS = 20_000;
+/**
+ * How many of the textarea's undo steps the upgrade replays into CodeMirror
+ * (CodeMirror's history keeps at least 100 by default). Replaying all 300 of a
+ * 1.25 MB document took 20 s and 590 MB (MED cost-2).
+ */
+export const CODEMIRROR6_HISTORY_STEPS = 100;
 
 export interface CodeMirror6Options {
   /** Supply the modules (an app that bundles CodeMirror 6); nothing is fetched. */
@@ -60,6 +67,12 @@ export interface CodeMirror6Options {
    */
   url?: string;
   timeoutMs?: number;
+  /**
+   * A CSP nonce: stamped on the bundle's `<script>` (a page whose
+   * `script-src` is nonce-based) and given to CodeMirror for the `<style>` it
+   * adds (`EditorView.cspNonce`).
+   */
+  nonce?: string;
 }
 
 /** True when an object has the exports the adapter needs. */
@@ -83,7 +96,7 @@ const loads = new WeakMap<object, Map<string, Promise<CodeMirror6Modules>>>();
  * global. Rejects on a network or integrity failure, a timeout or a bundle
  * without the expected exports (a later call tries again).
  */
-export function loadCodeMirror6(doc: EdDocument, options: { url?: string; timeoutMs?: number } = {}): Promise<CodeMirror6Modules> {
+export function loadCodeMirror6(doc: EdDocument, options: { url?: string; timeoutMs?: number; nonce?: string } = {}): Promise<CodeMirror6Modules> {
   const url = options.url ?? CODEMIRROR6_URL;
   const win = doc.defaultView;
   const present = win?.[CODEMIRROR6_GLOBAL];
@@ -113,6 +126,7 @@ export function loadCodeMirror6(doc: EdDocument, options: { url?: string; timeou
     script.async = true;
     script.crossOrigin = 'anonymous';
     script.integrity = CODEMIRROR6_INTEGRITY;
+    if (options.nonce) script.setAttribute('nonce', options.nonce);
     script.src = url;
     timer = win.setTimeout(() => done(new Error('CodeMirror took too long to load')), options.timeoutMs ?? CODEMIRROR6_TIMEOUT_MS);
     doc.head.append(script);
@@ -176,6 +190,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       roCompartment ? roCompartment.of(roExtensions(ro)) : roExtensions(ro),
       EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true' }),
       EditorView.theme(THEME),
+      options.nonce && EditorView.cspNonce ? EditorView.cspNonce.of(options.nonce) : undefined,
       EditorView.updateListener.of((u: Any) => {
         if (u.docChanged) o.onChange();
         if (u.selectionSet && o.onSelection) {
@@ -192,7 +207,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     // its live value first (a change whose input event has not run yet is one more step, reported to the shell; E.21)
     syncTextarea(f);
     const doc = f.getDoc();
-    const steps = undoTexts(f) ?? [];
+    const history = undoSteps(f, CODEMIRROR6_HISTORY_STEPS) ?? { base: doc, changes: [] };
     const sel = f.getSelection?.() ?? { from: 0, to: 0 };
     const focused = f.hasFocus?.() ?? false;
     const scroll = f.getScroll?.();
@@ -200,16 +215,14 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     extensions = build(m, o);
     const { EditorState } = m.state;
     const iso = m.commands.isolateHistory;
-    // Seed CodeMirror's history with the textarea's steps (A-6): start from the oldest text the
-    // textarea could undo to and replay every later text as its own isolated, undoable change.
-    // Built before the textarea goes, so a failure here leaves the textarea in place.
-    const texts = [...steps, doc];
-    let state = EditorState.create({ doc: texts[0], extensions });
-    for (let i = 1; i < texts.length; i++) {
-      const change = minimalChange(state.doc.toString(), texts[i]);
-      if (!change) continue;
-      state = state.update({ changes: change, ...(iso ? { annotations: iso.of('full') } : {}) }).state;
-    }
+    // Seed CodeMirror's history with the textarea's newest steps (A-6, MED cost-2): start from the
+    // text that many undos back and apply each step's change as its own isolated, undoable change
+    // (CodeMirror's text is a rope: no whole-text copy per step). Built before the textarea goes,
+    // so a failure here leaves the textarea in place.
+    let state = EditorState.create({ doc: history.base, extensions });
+    for (const change of history.changes) state = state.update({ changes: change, ...(iso ? { annotations: iso.of('full') } : {}) }).state;
+    // the replay must end at the textarea's text; if it does not, start from that text without history
+    if (state.doc.length !== doc.length || state.doc.toString() !== doc) state = EditorState.create({ doc, extensions });
     const len = doc.length;
     const clamp = (n: number): number => Math.max(0, Math.min(len, n));
     state = state.update({ selection: { anchor: clamp(sel.from), head: clamp(sel.to) } }).state;
@@ -263,7 +276,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       readyPromise = (async () => {
         let m: CodeMirror6Modules;
         try {
-          const got = options.loadModules ? await options.loadModules() : await loadCodeMirror6(doc!, { url: options.url, timeoutMs: options.timeoutMs });
+          const got = options.loadModules ? await options.loadModules() : await loadCodeMirror6(doc!, { url: options.url, timeoutMs: options.timeoutMs, nonce: options.nonce });
           if (!isCodeMirror6Modules(got)) throw new Error('loadModules did not provide the CodeMirror 6 exports the editor needs');
           m = got;
         } catch (error) {

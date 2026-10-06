@@ -25,6 +25,21 @@ export interface BuiltStub extends BundleSource {
   code: string;
 }
 
+/**
+ * One KaTeX in the bundle. The parser's source imports `katex/contrib/mhchem` as ESM (→ `katex.mjs`)
+ * while `@traptitech/markdown-it-katex` requires `katex` (→ `katex.js`): bundled from source, KaTeX
+ * would load twice and `\ce` would be registered on the copy the plugin does not render with. Both
+ * resolve here to the CommonJS build, as they do from the package's CommonJS `dist/`.
+ */
+const oneKatex = {
+  name: 'one-katex',
+  setup(b: { onResolve(o: { filter: RegExp }, f: (a: { path: string }) => { path: string }): void }): void {
+    const dir = join(process.cwd(), 'node_modules', 'katex', 'dist');
+    b.onResolve({ filter: /^katex$/ }, () => ({ path: join(dir, 'katex.js') }));
+    b.onResolve({ filter: /^katex\/contrib\/mhchem$/ }, () => ({ path: join(dir, 'contrib', 'mhchem.js') }));
+  },
+};
+
 let root: string | null = null;
 const built = new Map<string, Promise<BuiltStub>>();
 
@@ -43,7 +58,7 @@ export function buildStub(version: string, variant: StubVariant = 'good'): Promi
       const { build } = await import('esbuild');
       const out = await build({
         entryPoints: ['tests/conformance-stub/carrier.ts'], bundle: true, minify: true, platform: 'browser', format: 'iife', target: ['es2020'],
-        write: false, logLevel: 'silent', charset: 'utf8',
+        write: false, logLevel: 'silent', charset: 'utf8', plugins: [oneKatex],
         define: { __STUB_VERSION__: JSON.stringify(version), __STUB_VARIANT__: JSON.stringify(variant) },
       });
       const raw = out.outputFiles[0].text;

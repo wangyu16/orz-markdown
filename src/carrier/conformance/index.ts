@@ -27,6 +27,16 @@ export { derivedParts } from './checks.js';
 export type { AssembleOptions, BundleSource, CarrierTarget, CheckResult, CheckStatus, ConformanceOptions, ConformanceReport, TestApi, BrowserLike } from './types.js';
 
 const DEFAULT_TIMEOUT = 120_000;
+const DEFAULT_LANES = 3;
+
+/**
+ * Checks that run alone (no other check runs beside them): they time the
+ * reader's typing against a script that floods the page, and a loaded
+ * machine must not make them flaky.
+ */
+export const EXCLUSIVE_CHECKS: readonly string[] = ['C.edit.preview-isolation'];
+/** Started first: they mostly wait (a host that never acknowledges takes 10 s). */
+const FIRST: readonly string[] = ['C.host.no-ack', 'C.update.edit-during', 'C.update.resigned', 'C.save.save-as-elsewhere', 'C.save.copy-elsewhere', 'C.law.content-independence', 'C.law.determinism'];
 
 function selected(options: ConformanceOptions): string[] {
   for (const id of [...(options.only ?? []), ...(options.skip ?? [])]) checkInfo(id); // unknown ids throw
@@ -52,9 +62,16 @@ export function implementedChecks(): string[] {
   return Object.keys(implementations(() => ({})));
 }
 
-/** A harness session over one target: run checks one at a time, then close. */
+/** A harness session over one target, then close. */
 export interface ConformanceRunner {
+  /** Run one check (in its own scope: its contexts are closed when it ends). */
   run(id: string): Promise<CheckResult>;
+  /**
+   * Run checks side by side in `lanes` lanes (default `options.lanes`, else 3);
+   * the {@link EXCLUSIVE_CHECKS} among them run first, alone. Resolves one
+   * promise per id (in the order given).
+   */
+  schedule(ids: readonly string[], lanes?: number): Map<string, Promise<CheckResult>>;
   close(): Promise<void>;
 }
 
@@ -65,18 +82,18 @@ export async function openConformance(target: CarrierTarget, options: Conformanc
   const fns = implementations(corpusOf(target, options));
   const session = await Session.open(target, options, needsBrowser);
   const limit = options.checkTimeoutMs ?? DEFAULT_TIMEOUT;
-  return {
-    async run(id) {
+  const run = async (id: string): Promise<CheckResult> => {
       const info = checkInfo(id);
       const fn = fns[id];
       const t0 = Date.now();
       const p = new Probe();
+      const scope = session.scope();
       let status: CheckResult['status'] = 'passed';
       let message: string | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
-          fn(session, p),
+          fn(scope, p),
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limit} ms`)), limit); }),
         ]);
       } catch (e) {
@@ -85,15 +102,34 @@ export async function openConformance(target: CarrierTarget, options: Conformanc
         else p.fail(`error: ${String((e as Error)?.stack ?? e).split('\n').slice(0, 3).join(' | ')}`);
       } finally {
         if (timer) clearTimeout(timer);
-        await session.closeContexts();
+        await scope.closeContexts();
       }
       if (p.failures.length > 0) { status = 'failed'; message = p.failures.join('\n'); }
       const result: CheckResult = { id, title: info.title, status, ...(message ? { message } : {}), ...(p.failures.length ? { failures: [...p.failures] } : {}), durationMs: Date.now() - t0 };
       options.log?.(`${status.padEnd(7)} ${id} (${result.durationMs} ms)${status === 'passed' ? '' : `: ${message?.split('\n')[0]}`}`);
       return result;
-    },
-    close: () => session.close(),
   };
+  const schedule = (list: readonly string[], lanes = options.lanes ?? DEFAULT_LANES): Map<string, Promise<CheckResult>> => {
+    const settle = new Map<string, (r: CheckResult) => void>();
+    const out = new Map<string, Promise<CheckResult>>();
+    for (const id of list) out.set(id, new Promise<CheckResult>((resolve) => { settle.set(id, resolve); }));
+    const rank = (id: string): number => { const i = FIRST.indexOf(id); return i < 0 ? FIRST.length : i; };
+    const alone = list.filter((id) => EXCLUSIVE_CHECKS.includes(id));
+    const rest = list.filter((id) => !EXCLUSIVE_CHECKS.includes(id)).sort((x, y) => rank(x) - rank(y));
+    const go = async (id: string): Promise<void> => {
+      let r: CheckResult;
+      try { r = await run(id); } catch (e) { r = { id, title: checkInfo(id).title, status: 'failed', message: String((e as Error)?.message ?? e), failures: [String(e)], durationMs: 0 }; }
+      settle.get(id)!(r);
+    };
+    void (async () => {
+      for (const id of alone) await go(id);
+      let next = 0;
+      const lane = async (): Promise<void> => { while (next < rest.length) await go(rest[next++]); };
+      await Promise.all(Array.from({ length: Math.max(1, Math.floor(lanes)) }, lane));
+    })();
+    return out;
+  };
+  return { run, schedule, close: () => session.close() };
 }
 
 /** Run the selected checks against a carrier and report every result. Never throws for a failing check. */
@@ -101,7 +137,9 @@ export async function runConformance(target: CarrierTarget, options: Conformance
   const runner = await openConformance(target, options);
   const results: CheckResult[] = [];
   try {
-    for (const id of selected(options)) results.push(await runner.run(id));
+    const ids = selected(options);
+    const all = runner.schedule(ids);
+    for (const id of ids) results.push(await all.get(id)!);
   } finally {
     await runner.close();
   }
@@ -149,8 +187,10 @@ export function registerConformance(
 ): void {
   let runner: ConformanceRunner | null = null;
   let opening: unknown = null;
+  let scheduled: Map<string, Promise<CheckResult>> | null = null;
   const results = new Map<string, CheckResult>();
   const limit = options.checkTimeoutMs ?? DEFAULT_TIMEOUT;
+  const ids = selected(options);
   t.describe(options.title ?? 'orz carrier conformance', () => {
     t.beforeAll(async () => {
       try {
@@ -160,14 +200,15 @@ export function registerConformance(
       }
     }, 300_000);
     t.afterAll(async () => { await runner?.close(); }, 60_000);
-    for (const id of selected(options)) {
+    for (const id of ids) {
       t.it(`[${id}] ${checkInfo(id).title}`, async (ctx) => {
         if (!runner) throw new Error(`the conformance session did not open: ${String((opening as Error)?.message ?? opening)}`);
-        const r = await runner.run(id);
+        scheduled ??= runner.schedule(ids); // all checks start with the first test, side by side; each test awaits its own
+        const r = await scheduled.get(id)!;
         results.set(id, r);
         if (r.status === 'failed') throw new Error(`${id} failed:\n${r.message}`);
         if (r.status === 'skipped' && typeof ctx?.skip === 'function') ctx.skip(r.message);
-      }, limit + 30_000);
+      }, limit * 4 + 60_000); // its own run is bounded by the check limit; the rest is waiting for a lane
     }
     t.it(`${CONFORMANT_TITLE}${options.allowSkips ? ' (skips allowed)' : ''}`, async () => {
       const all = [...results.values()];

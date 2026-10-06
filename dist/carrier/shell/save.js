@@ -13,8 +13,10 @@ exports.createSaver = createSaver;
  *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
  *   3. File System Access (handle remembered in IndexedDB under the header
  *      `uid` + the page location, else the page URL; reused only on that
- *      page; a second save overwrites silently)
- *                                   → { via: 'file', ok, picked, name? }
+ *      page and only when the file it points at is proved by its CONTENT to
+ *      be the opened file — it holds the opened file's bytes, or what this
+ *      page last wrote through it; a second save then overwrites silently)
+ *                                   → { via: 'file', ok, picked, opened, name? }
  *   4. a download of `suggestedName`
  *                                   → { via: 'download', ok, confirmed: false, name }
  *
@@ -108,6 +110,38 @@ function message(e) {
         return e.message;
     return String(e);
 }
+/** A handle's file as text (exact: no BOM is stripped), or null when it cannot be read. */
+async function readText(h) {
+    try {
+        if (typeof h.getFile !== 'function')
+            return null;
+        const f = await h.getFile();
+        const Dec = globalThis.TextDecoder;
+        if (typeof f.arrayBuffer === 'function' && Dec)
+            return new Dec('utf-8', { ignoreBOM: true }).decode(new Uint8Array(await f.arrayBuffer()));
+        const t = await f.text();
+        return typeof t === 'string' ? t : null;
+    }
+    catch {
+        return null;
+    }
+}
+/** SHA-256 (hex) of a text's UTF-8 bytes, or undefined without SubtleCrypto. */
+async function sha256Hex(text) {
+    try {
+        const g = globalThis;
+        if (!g.crypto?.subtle || !g.TextEncoder)
+            return undefined;
+        const d = new Uint8Array(await g.crypto.subtle.digest('SHA-256', new g.TextEncoder().encode(text)));
+        let hex = '';
+        for (const b of d)
+            hex += (b < 16 ? '0' : '') + b.toString(16);
+        return hex;
+    }
+    catch {
+        return undefined;
+    }
+}
 const DESCRIPTIONS = {
     md: 'orz document',
     slides: 'orz slides',
@@ -126,7 +160,6 @@ function createSaver(opts) {
         catch { /* opaque origin: no IndexedDB */ }
         return createIndexedDbHandleStore(factory);
     };
-    let handle = null; // this session's handle: later saves never prompt
     const key = () => {
         const loc = winOf().location;
         if (typeof opts.uid === 'string' && exports.SHELL_UID_PATTERN.test(opts.uid)) {
@@ -164,7 +197,25 @@ function createSaver(opts) {
             return { via: 'download', ok: false, confirmed: false, error: message(e) };
         }
     };
-    /** A remembered handle we may write without a picker, or null. */
+    // ── proving which file a handle points at (content, never names) ──────
+    let openedMemo = null;
+    /** The opened file's bytes as text, or undefined when the caller did not say. */
+    const openedBytes = () => {
+        openedMemo ?? (openedMemo = (async () => {
+            const src = opts.openedHtml;
+            try {
+                const v = typeof src === 'function' ? await src() : src;
+                return typeof v === 'string' ? v : undefined;
+            }
+            catch {
+                return undefined;
+            }
+        })());
+        return openedMemo;
+    };
+    /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
+    let session = null;
+    /** A remembered handle proved to be the opened file, or null. */
     const remembered = async (k, win) => {
         const stored = await store().get(k);
         if (!stored || typeof stored.handle.createWritable !== 'function')
@@ -179,19 +230,33 @@ function createSaver(opts) {
         const name = stored.handle.name ?? stored.name;
         if (opened !== undefined && name !== undefined && name !== opened)
             return null;
+        // A name proves nothing (a save-as into another folder keeps it): the file must hold
+        // the opened file's bytes — and, when the record says, what was last written through it.
+        const mine = await openedBytes();
+        if (mine === undefined)
+            return null;
         const h = stored.handle;
         try {
-            if (!h.queryPermission)
-                return h;
-            if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted')
-                return h;
-            if (h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) === 'granted')
-                return h;
+            let granted = !h.queryPermission;
+            if (!granted && (await h.queryPermission({ mode: 'readwrite' })) === 'granted')
+                granted = true;
+            if (!granted && h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) === 'granted')
+                granted = true;
+            if (!granted)
+                return null;
         }
         catch {
-            /* no user activation, or the entry is gone: fall through to the picker */
+            return null; // no user activation, or the entry is gone: the picker
         }
-        return null;
+        const now = await readText(h);
+        if (now === null || now !== mine)
+            return null;
+        if (typeof stored.sha256 === 'string') {
+            const sum = await sha256Hex(now);
+            if (sum !== undefined && sum !== stored.sha256)
+                return null;
+        }
+        return h;
     };
     const write = async (h, html) => {
         const w = await h.createWritable();
@@ -209,10 +274,28 @@ function createSaver(opts) {
     };
     const saveToFile = async (html, win) => {
         const k = key();
-        let h = handle;
+        let h = null;
+        let opened = false;
         let picked = false;
-        if (!h && k)
+        if (session) {
+            // this page's handle, if the file still holds what this page wrote last (or the opened bytes)
+            const now = await readText(session.handle);
+            if (now !== null && now === session.last) {
+                h = session.handle;
+                opened = session.opened;
+            }
+            else if (now !== null && now === (await openedBytes())) {
+                h = session.handle;
+                opened = true;
+            }
+            else
+                session = null; // written by someone else since, or unreadable: ask again
+        }
+        if (!h && k) {
             h = await remembered(k, win);
+            if (h)
+                opened = true;
+        }
         if (!h) {
             picked = true;
             const ext = protocol_js_1.KIND_EXTENSIONS[opts.kind] ?? '.html';
@@ -224,21 +307,34 @@ function createSaver(opts) {
             }
             catch (e) {
                 if (errorName(e) === 'AbortError')
-                    return { via: 'file', ok: false, error: 'cancelled', picked: true };
+                    return { via: 'file', ok: false, error: 'cancelled', picked: true, opened: false };
                 return download(html); // the picker is unusable here (no user activation, policy): download
             }
-            const location = (0, types_js_1.pageLocation)(win.location);
-            if (k)
-                await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}), ...(location !== undefined ? { location } : {}) });
+            // the picked file is the opened one only if it holds the opened file's bytes
+            const mine = await openedBytes();
+            const before = mine === undefined ? null : await readText(h);
+            opened = before !== null && before === mine;
         }
-        handle = h;
         try {
             await write(h, html);
-            return { via: 'file', ok: true, picked, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
         }
         catch {
+            session = null;
             return download(html); // the write failed: keep the user's work as a download
         }
+        session = { handle: h, opened, last: html };
+        if (k && opened) {
+            // remember only a handle proved to be this page's file, with what was written through it
+            const location = (0, types_js_1.pageLocation)(win.location);
+            const sum = await sha256Hex(html);
+            await store().put(k, {
+                handle: h,
+                ...(typeof h.name === 'string' ? { name: h.name } : {}),
+                ...(location !== undefined ? { location } : {}),
+                ...(sum !== undefined ? { sha256: sum } : {}),
+            });
+        }
+        return { via: 'file', ok: true, picked, opened, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
     };
     return {
         async save(input) {
@@ -249,7 +345,7 @@ function createSaver(opts) {
                 return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };
             }
             const win = winOf();
-            if (isServed(win) && !handle)
+            if (isServed(win) && !session)
                 return { via: 'served-notice' };
             if (typeof win.showSaveFilePicker === 'function')
                 return saveToFile(input.html, win);

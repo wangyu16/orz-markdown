@@ -212,7 +212,12 @@ export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'curre
     getText?(): string;
     /** The text to carry over, exact, when there is no `getText` (read once). */
     text?: string;
-    /** The name of the file the page was opened from (default: the last segment of a `file:` page URL). */
+    /**
+     * Ignored (kept so older callers compile). A name proves nothing — a
+     * picker that opens in another folder offers the same name — so the reload
+     * rests on the save's `opened` (the written file proved by its content to
+     * be the opened file; `createSaver`'s `openedHtml`).
+     */
     openedName?: string;
     /** Saves the new file (`createSaver(...)`). */
     saver: Pick<Saver, 'save'>;
@@ -236,11 +241,12 @@ export type PerformUpdateResult = {
     text: string;
     save: SaveResult;
     /**
-     * Reload now: the save wrote the opened file (a host, or File System
-     * Access without a picker or to a file of the opened name) and the
-     * current text is still the saved text. Otherwise keep the page: the
-     * new file is a copy (download, a picked file of another name) or the
-     * text moved on.
+     * Reload now: the save wrote the opened file — an acknowledged host
+     * save, or File System Access to a file proved by its content to be the
+     * opened one (`opened: true`) — and the current text is still the saved
+     * text. Otherwise keep the page: the new file is a copy (a download, a
+     * picked or session file not proved to be the opened one, whatever its
+     * name) or the text moved on.
      */
     reload: boolean;
 };

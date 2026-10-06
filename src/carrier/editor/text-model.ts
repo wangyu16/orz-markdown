@@ -21,13 +21,20 @@
  * exact string (a mixed CR LF / LF / CR text maps exactly); otherwise by the
  * document's style.
  *
+ * Memory (F4, MED3): the initial text and the saved text are remembered
+ * outside the window of the 16 most recent texts, so undoing any number of
+ * edits back to either is exact. A remembered text keeps its editor form and
+ * its style; its exact string is kept only when the editor form, BOM and
+ * line ending cannot rebuild it (mixed line endings), so a CR LF document
+ * costs one copy per remembered text, not two. `clear()` forgets all of it.
+ *
  * Pure and deterministic; no browser API.
  */
 import { eolStyle } from '../text.js';
 
-const BOM = '﻿';
+const BOM = '\ufeff';
 const EOLS = { lf: '\n', crlf: '\r\n', cr: '\r' } as const;
-/** How many exact texts are remembered for exact read-back (most recent first). */
+/** How many exact texts are remembered for exact read-back (most recent first), besides the initial and the saved one. */
 const REMEMBERED = 16;
 
 type Eol = '\n' | '\r\n' | '\r';
@@ -36,6 +43,16 @@ type Eol = '\n' | '\r\n' | '\r';
 export function toEditorText(text: string): string {
   const body = text.startsWith(BOM) ? text.slice(1) : text;
   return body.indexOf('\r') < 0 ? body : body.replace(/\r\n?/g, '\n');
+}
+
+/**
+ * A copy of a string that shares no storage with the string it was cut
+ * from. V8 keeps a slice of 13 or more characters as a view on its parent,
+ * so a short patch cut from a 1 MB text would keep the whole text alive;
+ * concatenating and slicing again makes V8 flatten into a fresh string.
+ */
+export function detachString(s: string): string {
+  return s.length < 13 ? s : (' ' + s).slice(1);
 }
 
 export interface TextModel {
@@ -51,6 +68,14 @@ export interface TextModel {
   recall(editorText: string): void;
   /** An offset in the editor text → the offset in the exact text (BOM and CR LF counted). */
   toExactOffset(editorText: string, offset: number): number;
+  /** Remember `text` as the saved text (kept outside the window of recent texts). */
+  markSaved(text: string): void;
+  /** True when this editor text reads back as exactly the saved text (no style change). */
+  isSaved(editorText: string): boolean;
+  /** The saved text, exact. */
+  savedText(): string;
+  /** Forget every remembered text (the shell's `destroy`). */
+  clear(): void;
   /** The document's line ending and BOM. */
   readonly eol: Eol;
   readonly bom: boolean;
@@ -58,9 +83,23 @@ export interface TextModel {
 
 interface Known {
   editor: string;
-  exact: string;
   bom: boolean;
   eol: Eol;
+  /** Only when `editor`, `bom` and `eol` do not rebuild the text (mixed line endings). */
+  exact?: string;
+}
+
+const rebuild = (editor: string, bom: boolean, eol: Eol): string => (bom ? BOM : '') + (eol === '\n' ? editor : editor.replace(/\n/g, eol));
+const exactOf = (k: Known): string => k.exact ?? rebuild(k.editor, k.bom, k.eol);
+
+/** What the model keeps of an exact text. */
+function know(text: string): Known {
+  const bom = text.startsWith(BOM);
+  const eol = EOLS[eolStyle(text)];
+  const editor = toEditorText(text);
+  const k: Known = { editor, bom, eol };
+  if (rebuild(editor, bom, eol) !== text) k.exact = text;
+  return k;
 }
 
 export function createTextModel(initial: string): TextModel {
@@ -68,8 +107,13 @@ export function createTextModel(initial: string): TextModel {
   let eol: Eol = '\n';
   /** Remembered texts, most recent first. */
   let known: Known[] = [];
+  /** The initial and the saved text: remembered whatever the window holds. */
+  let first: Known | null = null;
+  let saved: Known | null = null;
   const find = (editorText: string): Known | undefined => {
     for (const k of known) if (k.editor === editorText) return k;
+    if (saved && saved.editor === editorText) return saved;
+    if (first && first.editor === editorText) return first;
     return undefined;
   };
   /** Walk an exact text to the exact offset of an editor offset. */
@@ -80,11 +124,11 @@ export function createTextModel(initial: string): TextModel {
   };
   const model: TextModel = {
     adopt(text) {
-      bom = text.startsWith(BOM);
-      eol = EOLS[eolStyle(text)];
-      const editor = toEditorText(text);
-      known = [{ editor, exact: text, bom, eol }, ...known.filter((k) => k.editor !== editor)].slice(0, REMEMBERED);
-      return editor;
+      const k = know(text);
+      bom = k.bom;
+      eol = k.eol;
+      known = [k, ...known.filter((x) => x.editor !== k.editor)].slice(0, REMEMBERED);
+      return k.editor;
     },
     toExact(editorText) {
       const k = find(editorText);
@@ -92,10 +136,9 @@ export function createTextModel(initial: string): TextModel {
         // back at a remembered text: its style is the document's again (A-3)
         bom = k.bom;
         eol = k.eol;
-        return k.exact;
+        return exactOf(k);
       }
-      const body = eol === '\n' ? editorText : editorText.replace(/\n/g, eol);
-      return bom ? BOM + body : body;
+      return rebuild(editorText, bom, eol);
     },
     recall(editorText) {
       const k = find(editorText);
@@ -104,16 +147,40 @@ export function createTextModel(initial: string): TextModel {
     toExactOffset(editorText, offset) {
       const at = Math.max(0, Math.min(offset, editorText.length));
       const k = find(editorText);
-      if (k) return walk(k.exact, at);
-      let shift = bom ? 1 : 0;
-      if (eol === '\r\n') for (let i = editorText.indexOf('\n'); i >= 0 && i < at; i = editorText.indexOf('\n', i + 1)) shift++;
-      return at + shift;
+      if (k) {
+        if (k.exact !== undefined) return walk(k.exact, at);
+        return at + (k.bom ? 1 : 0) + (k.eol === '\r\n' ? countLf(editorText, at) : 0);
+      }
+      return at + (bom ? 1 : 0) + (eol === '\r\n' ? countLf(editorText, at) : 0);
+    },
+    markSaved(text) {
+      // the same text as one already known costs nothing more
+      const k = find(toEditorText(text));
+      saved = k && exactOf(k) === text ? k : know(text);
+    },
+    isSaved(editorText) {
+      if (!saved || editorText !== saved.editor) return false;
+      const k = find(editorText)!;
+      return k === saved || exactOf(k) === exactOf(saved);
+    },
+    savedText: () => (saved ? exactOf(saved) : ''),
+    clear() {
+      known = [];
+      first = null;
+      saved = null;
     },
     get eol() { return eol; },
     get bom() { return bom; },
   };
   model.adopt(initial);
+  first = saved = known[0];
   return model;
+}
+
+function countLf(text: string, before: number): number {
+  let n = 0;
+  for (let i = text.indexOf('\n'); i >= 0 && i < before; i = text.indexOf('\n', i + 1)) n++;
+  return n;
 }
 
 /** The smallest single replacement turning `a` into `b` (common prefix and suffix kept). */
@@ -128,7 +195,7 @@ export function minimalChange(a: string, b: string): { from: number; to: number;
   let endB = b.length;
   while (endA > start && endB > start && a.charCodeAt(endA - 1) === b.charCodeAt(endB - 1)) { endA--; endB--; }
   if (endA < a.length && endA > start && isLow(a.charCodeAt(endA))) { endA++; endB++; }
-  return { from: start, to: endA, insert: b.slice(start, endB) };
+  return { from: start, to: endA, insert: detachString(b.slice(start, endB)) };
 }
 
 const isHigh = (c: number): boolean => c >= 0xd800 && c <= 0xdbff;

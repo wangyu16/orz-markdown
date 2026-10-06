@@ -70,6 +70,21 @@ export interface TextEditorAdapter {
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 export declare function undoTexts(adapter: TextEditorAdapter): string[] | null;
 /**
+ * The newest `limit` undo steps of a textarea adapter, for an engine that takes
+ * over (MED cost-2): the text `limit` undos back (`base`) and the forward
+ * changes, oldest first, that lead from it to the current text — one per undo
+ * step. Built from the stored patches, one text at a time (no list of whole
+ * texts). `null` for another engine.
+ */
+export declare function undoSteps(adapter: TextEditorAdapter, limit: number): {
+    base: string;
+    changes: Array<{
+        from: number;
+        to: number;
+        insert: string;
+    }>;
+} | null;
+/**
  * Bring a textarea adapter's kept text up to the textarea's live value (E.21): `getDoc()` returns
  * the text as of the last `input` event (reading `value` of a large textarea is not free), so an
  * engine taking over calls this first and loses no character typed just before. No-op for another engine.

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CONFORMANT_TITLE = exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
+exports.CONFORMANT_TITLE = exports.EXCLUSIVE_CHECKS = exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
 exports.implementedChecks = implementedChecks;
 exports.openConformance = openConformance;
 exports.runConformance = runConformance;
@@ -38,6 +38,15 @@ Object.defineProperty(exports, "loadCorpus", { enumerable: true, get: function (
 var checks_js_2 = require("./checks.js");
 Object.defineProperty(exports, "derivedParts", { enumerable: true, get: function () { return checks_js_2.derivedParts; } });
 const DEFAULT_TIMEOUT = 120000;
+const DEFAULT_LANES = 3;
+/**
+ * Checks that run alone (no other check runs beside them): they time the
+ * reader's typing against a script that floods the page, and a loaded
+ * machine must not make them flaky.
+ */
+exports.EXCLUSIVE_CHECKS = ['C.edit.preview-isolation'];
+/** Started first: they mostly wait (a host that never acknowledges takes 10 s). */
+const FIRST = ['C.host.no-ack', 'C.update.edit-during', 'C.update.resigned', 'C.save.save-as-elsewhere', 'C.save.copy-elsewhere', 'C.law.content-independence', 'C.law.determinism'];
 function selected(options) {
     for (const id of [...(options.only ?? []), ...(options.skip ?? [])])
         (0, catalog_js_1.checkInfo)(id); // unknown ids throw
@@ -67,56 +76,85 @@ async function openConformance(target, options = {}) {
     const fns = implementations(corpusOf(target, options));
     const session = await session_js_1.Session.open(target, options, needsBrowser);
     const limit = options.checkTimeoutMs ?? DEFAULT_TIMEOUT;
-    return {
-        async run(id) {
-            const info = (0, catalog_js_1.checkInfo)(id);
-            const fn = fns[id];
-            const t0 = Date.now();
-            const p = new checks_js_1.Probe();
-            let status = 'passed';
-            let message;
-            let timer;
+    const run = async (id) => {
+        const info = (0, catalog_js_1.checkInfo)(id);
+        const fn = fns[id];
+        const t0 = Date.now();
+        const p = new checks_js_1.Probe();
+        const scope = session.scope();
+        let status = 'passed';
+        let message;
+        let timer;
+        try {
+            await Promise.race([
+                fn(scope, p),
+                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limit} ms`)), limit); }),
+            ]);
+        }
+        catch (e) {
+            if (e instanceof checks_js_1.NotApplicable) {
+                status = 'not-applicable';
+                message = e.message;
+            }
+            else if (e instanceof checks_js_1.Skip) {
+                status = 'skipped';
+                message = e.message;
+            }
+            else
+                p.fail(`error: ${String(e?.stack ?? e).split('\n').slice(0, 3).join(' | ')}`);
+        }
+        finally {
+            if (timer)
+                clearTimeout(timer);
+            await scope.closeContexts();
+        }
+        if (p.failures.length > 0) {
+            status = 'failed';
+            message = p.failures.join('\n');
+        }
+        const result = { id, title: info.title, status, ...(message ? { message } : {}), ...(p.failures.length ? { failures: [...p.failures] } : {}), durationMs: Date.now() - t0 };
+        options.log?.(`${status.padEnd(7)} ${id} (${result.durationMs} ms)${status === 'passed' ? '' : `: ${message?.split('\n')[0]}`}`);
+        return result;
+    };
+    const schedule = (list, lanes = options.lanes ?? DEFAULT_LANES) => {
+        const settle = new Map();
+        const out = new Map();
+        for (const id of list)
+            out.set(id, new Promise((resolve) => { settle.set(id, resolve); }));
+        const rank = (id) => { const i = FIRST.indexOf(id); return i < 0 ? FIRST.length : i; };
+        const alone = list.filter((id) => exports.EXCLUSIVE_CHECKS.includes(id));
+        const rest = list.filter((id) => !exports.EXCLUSIVE_CHECKS.includes(id)).sort((x, y) => rank(x) - rank(y));
+        const go = async (id) => {
+            let r;
             try {
-                await Promise.race([
-                    fn(session, p),
-                    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limit} ms`)), limit); }),
-                ]);
+                r = await run(id);
             }
             catch (e) {
-                if (e instanceof checks_js_1.NotApplicable) {
-                    status = 'not-applicable';
-                    message = e.message;
-                }
-                else if (e instanceof checks_js_1.Skip) {
-                    status = 'skipped';
-                    message = e.message;
-                }
-                else
-                    p.fail(`error: ${String(e?.stack ?? e).split('\n').slice(0, 3).join(' | ')}`);
+                r = { id, title: (0, catalog_js_1.checkInfo)(id).title, status: 'failed', message: String(e?.message ?? e), failures: [String(e)], durationMs: 0 };
             }
-            finally {
-                if (timer)
-                    clearTimeout(timer);
-                await session.closeContexts();
-            }
-            if (p.failures.length > 0) {
-                status = 'failed';
-                message = p.failures.join('\n');
-            }
-            const result = { id, title: info.title, status, ...(message ? { message } : {}), ...(p.failures.length ? { failures: [...p.failures] } : {}), durationMs: Date.now() - t0 };
-            options.log?.(`${status.padEnd(7)} ${id} (${result.durationMs} ms)${status === 'passed' ? '' : `: ${message?.split('\n')[0]}`}`);
-            return result;
-        },
-        close: () => session.close(),
+            settle.get(id)(r);
+        };
+        void (async () => {
+            for (const id of alone)
+                await go(id);
+            let next = 0;
+            const lane = async () => { while (next < rest.length)
+                await go(rest[next++]); };
+            await Promise.all(Array.from({ length: Math.max(1, Math.floor(lanes)) }, lane));
+        })();
+        return out;
     };
+    return { run, schedule, close: () => session.close() };
 }
 /** Run the selected checks against a carrier and report every result. Never throws for a failing check. */
 async function runConformance(target, options = {}) {
     const runner = await openConformance(target, options);
     const results = [];
     try {
-        for (const id of selected(options))
-            results.push(await runner.run(id));
+        const ids = selected(options);
+        const all = runner.schedule(ids);
+        for (const id of ids)
+            results.push(await all.get(id));
     }
     finally {
         await runner.close();
@@ -158,8 +196,10 @@ function report(target, results) {
 function registerConformance(t, target, options = {}) {
     let runner = null;
     let opening = null;
+    let scheduled = null;
     const results = new Map();
     const limit = options.checkTimeoutMs ?? DEFAULT_TIMEOUT;
+    const ids = selected(options);
     t.describe(options.title ?? 'orz carrier conformance', () => {
         t.beforeAll(async () => {
             try {
@@ -170,17 +210,18 @@ function registerConformance(t, target, options = {}) {
             }
         }, 300000);
         t.afterAll(async () => { await runner?.close(); }, 60000);
-        for (const id of selected(options)) {
+        for (const id of ids) {
             t.it(`[${id}] ${(0, catalog_js_1.checkInfo)(id).title}`, async (ctx) => {
                 if (!runner)
                     throw new Error(`the conformance session did not open: ${String(opening?.message ?? opening)}`);
-                const r = await runner.run(id);
+                scheduled ?? (scheduled = runner.schedule(ids)); // all checks start with the first test, side by side; each test awaits its own
+                const r = await scheduled.get(id);
                 results.set(id, r);
                 if (r.status === 'failed')
                     throw new Error(`${id} failed:\n${r.message}`);
                 if (r.status === 'skipped' && typeof ctx?.skip === 'function')
                     ctx.skip(r.message);
-            }, limit + 30000);
+            }, limit * 4 + 60000); // its own run is bounded by the check limit; the rest is waiting for a lane
         }
         t.it(`${exports.CONFORMANT_TITLE}${options.allowSkips ? ' (skips allowed)' : ''}`, async () => {
             const all = [...results.values()];

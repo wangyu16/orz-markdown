@@ -187,3 +187,45 @@ infrastructure: real-Chrome suites run in their own vitest group after the
 timing-bounded unit tests, then the harness alone; default timeouts raised.
 Open into round 2: a full run showed one keystroke reordered while CodeMirror
 replaced the textarea (`Seond linec`) — a data-integrity bug, being fixed.
+
+### Round 2 — 2026-10-06
+
+Fresh adversaries on `@7567455`: A against the claims (49 mutations, 43 of 48
+real ones caught), B against the design with two sub-probes (cost; the
+conformance harness: 22 broken stubs, 15 passed as conformant). A bug found
+between rounds (a typed key reordered under load) was fixed first
+(`@d18ef20`, E.23): CodeMirror 6.43's scroll handler flushed a pending DOM
+change with the cached selection; the adapter now flushes with the live one.
+
+**3 HIGH ORZ/ISOLATION, ~20 MEDIUM, ~15 LOW.** Held: the round-1 fixes (A-1
+copy overwrite, frame gating without theft, per-entry BOM/EOL, the `changed`
+re-read, history replay, B-4/5/8/11/16/18); B-2 unreachable from http(s)
+app hosts or served pages; Phase 3 fitness — a fake paged preview (real
+Paged.js 0.4.3, `diff: false`, own frame document and bridge) and a slides
+preview (`mode: 'navigate'`) built only from the documented protocol worked;
+an Alembic-like page (two editors, nonce CSP with `'strict-dynamic'`,
+CodeMirror via `loadModules`, all seven hooks) worked end to end; no leaks
+over 200 cycles with every option.
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| A-F1 a document script in the (opaque) preview steals focus while the reader types; each stolen key is real activation in the frame, so the E.14 gate let forged saves and popups through | ISOLATION | HIGH | fix — the default bridge reports through a private MessagePort, only trusted events; forged window messages never act; focus the reader did not bring is returned, a repeat pauses the document's scripts (frame replaced under a nonce-only CSP); links open only from a host-side "Open …?" chip; harness check (focus theft) in `C.edit.preview-isolation` |
+| A-F2 save-as to another folder (the picker opens in the last-used folder) was treated as the opened file: the page reloaded the stale original and the remembered handle later overwrote the copy, losing the session's edits | ORZ | HIGH | fix — a handle is proved by content (`getFile()` equals the opened bytes or this page's last write), never by name; `openedHtml`; `reload` only for a proved file or an acknowledged host save; limit (byte-identical copies) in the spec; `C.save.save-as-elsewhere` |
+| Cost-1 the textarea undo history kept a whole old text per patch (V8 slices of ≥ 13 characters keep the parent alive): 716 MB at 300 steps on 1.25 MB, invisible to the character counter | ORZ | HIGH | fix — patches stored as flat copies (`detachString`); a heap-measuring test (E.21) |
+| Harness: 15 broken carriers passed as conformant (hook save altered or skipped, edit lost during an update, shared undo, update check in an app host, CSS leak, …) | ORZ | HIGH/MED | fix — `C.edit.app-host`, `C.update.edit-during`, `C.update.other-format` and stricter checks; 30 new broken stubs, each failing a named check (H.5); lanes: 117 s → 78 s |
+| B#1 a session handle from an earlier save-as yielded `reload: true` | ORZ | MED | fix (with A-F2) |
+| A-F3 / B#11 / Cost-7 AI, uploads and uid minting checked read-only only before awaiting; in-flight work after `destroy()` | ORZ | MED/LOW | fix — re-check after every await |
+| Cost-2 the CodeMirror upgrade replayed every step (4–21 s, +0.5 GB at 200 steps on 1.25 MB) | ORZ | MED | fix — newest 100 steps from the patches (0.36 s) |
+| Cost-3 the text model kept 16 full texts (× 2 for CR LF) | ORZ | MED | fix — initial and saved texts pinned, exact copies only for mixed endings, cleared on destroy (E.24) |
+| Cost-4 size bounds measured on `src`, but CommonJS `dist` ships (shell 58.9 KB vs 52 KB) | ORZ | MED | fix — S.11/U.10/V.5/K.20/E.10 measure `dist`; shell 56.4 KB under 62 KB; bounds explained |
+| B#2 preview blank until stylesheets load (false CSP notice after 8 s); B#3 Paged.js reflow not counted in pacing; B#4 navigate mode ignored view changes; B#8/#9 carriers could not talk to their bridge; B#10 a shell mounted into a popup never rendered | ORZ | MED/LOW | fix — bridge first; frame-acknowledged pacing; navigate on view change; `shell.preview` channel and page hooks (E.25); port-based bridge |
+| B#6 a nonce is not enough for a strict CSP (KaTeX inline styles, Paged.js `<style>`, CDN stylesheets) | SPEC/UPSTREAM | MED | fix — nonce on stylesheet links and the CodeMirror loader; FC-19 §8.4 states what an app's CSP needs |
+| B#7 FC-19 §4 lacked the shell's app-facing methods | SPEC | MED | fix — `requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly`, `isReadOnly` (additive) |
+| B#5 a paged preview cannot print (`print()` needs `allow-modals`) | SPEC | MED | owner's call at orz-paged; recommended: print from the read view |
+| A-F4 more than 16 header edits lost the exact text on undo; A-F5 `srcset` with `data:` URLs; A-F6 standalone inference could reach a framed/host `file:` page; B#12/#13 resolveLink got the twin-rewritten href, no include-aware md render; Cost-5 KaTeX bundled twice from `src` (`\ce` broken); Cost-6 no preview update during steady typing; T1–T3 test gaps; docs drift (B-2 rationale wrongly cited the include allowlist) | ORZ | LOW | fix |
+
+**After round 2:** claims E.24, E.25 added; S.3, S.11–S.13, U.10, U.12, V.5,
+K.20, E.5, E.7, E.8, E.10, E.12–E.16, E.18–E.21, E.23, H.1, H.2, H.5
+reworded. Limits stated: a key typed at the very instant of the first
+theft can still reach the frame; a carrier's own bridge (no port) gets the
+older focus-plus-activation gate.

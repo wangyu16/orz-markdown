@@ -31,6 +31,11 @@
  *   cdn-to-inline        a cdn file's update is written inline
  *   update-in-frame      a file in an app host's frame checks for updates
  *
+ * and, from round 2 of closed loop 2, the carriers that passed the whole
+ * harness as conformant (the audit's 16 and 6 more of the sub-probe), plus
+ * the round-2 audit mutants that were already caught — each fails a named
+ * check (the table `caught` below says which and why).
+ *
  * One file, one Chrome, shared stub builds (the suite is heavy; a second
  * file running in parallel pushed other suites' default timeouts over).
  * The browser checks need the installed Chrome; they are reported skipped
@@ -40,7 +45,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import {
-  CHECKS, CHECK_IDS, CONFORMANT_TITLE, HAZARD_TEXTS, describeChecks, implementedChecks, isConformant, registerConformance, runConformance, derivedParts,
+  CHECKS, CHECK_IDS, CONFORMANT_TITLE, EXCLUSIVE_CHECKS, HAZARD_TEXTS, describeChecks, implementedChecks, isConformant, registerConformance, runConformance, derivedParts,
   type CheckResult, type ConformanceReport, type TestApi,
 } from '../src/carrier/conformance';
 import { assembleEnvelope, extract } from '../src/carrier';
@@ -82,6 +87,24 @@ registerConformance(
   },
 );
 
+describe('the stub bundle', () => {
+  it('[H.2] holds one KaTeX (the stub build resolves katex and its mhchem to one build): \\ce renders in Chrome from the bundle', async () => {
+    const stub = await buildStub('1.1.0');
+    if (!browser) return;
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
+      await page.addScriptTag({ content: stub.code });
+      const html = await page.evaluate(() => (globalThis as unknown as { OrzCarrier: { renderPreview(t: string): Promise<string> } }).OrzCarrier.renderPreview('$\\ce{H2O}$'));
+      expect(html).not.toContain('katex-error');
+      expect(html).toMatch(/<msub>[\s\S]*<mn>2<\/mn>/);
+    } finally {
+      await page.close();
+    }
+    expect(stub.code.split('KaTeX parse error').length - 1).toBe(1);
+  }, 120_000);
+});
+
 describe('the harness ran completely', () => {
   it('[H.2] every check ran and passed against the stub (none skipped when Chrome is installed)', () => {
     expect([...statuses.keys()].sort()).toEqual([...CHECK_IDS].sort());
@@ -107,6 +130,8 @@ describe('the harness API', () => {
     for (const id of CHECK_IDS) expect(doc, id).toContain(`\`${id}\``);
     // the ids the brief and the claims name exist
     for (const id of ['C.create.newest-shell', 'C.bundle.script-safe', 'C.update.tampered', 'C.save.download', 'C.update.indicator', 'C.law.eol-bom']) expect(CHECK_IDS).toContain(id);
+    // the checks that run alone are checks of the catalog
+    expect(EXCLUSIVE_CHECKS.filter((id) => !CHECK_IDS.includes(id))).toEqual([]);
   });
 
   it('[H.1] registerConformance registers one test per selected check, titled "[id] title", then the final [conformant] test, inside one describe with one beforeAll/afterAll; unknown ids are refused', () => {
@@ -129,7 +154,7 @@ describe('the harness API', () => {
   it('[H.1] runConformance reports every selected check (passed, failed or skipped, with every failed expectation) and never throws for a failing check', async () => {
     const stub = await buildStub('1.1.0');
     const broken = { ...stubTarget(stub), version: '9.9.9', assemble: (t: string) => (t.includes('\r') || t.includes('\u0000') ? 'not a file' : stubTarget(stub).assemble(t)) };
-    const r = await runConformance(broken, { only: ['C.law.round-trip', 'C.bundle.release', 'C.law.refusals'], corpus: false });
+    const r = await runConformance(broken, { only: ['C.law.round-trip', 'C.bundle.release', 'C.law.refusals'], corpus: false, lanes: 3, ...(browser ? { browser } : {}) });
     expect(r).toMatchObject({ kind: 'md', version: '9.9.9', conformant: false, partial: true, passed: 0, failed: 3, skipped: 0, notApplicable: 0 });
     expect(r.results.map((x) => x.id)).toEqual(['C.law.round-trip', 'C.law.refusals', 'C.bundle.release']);
     const rt = r.results[0];
@@ -325,6 +350,38 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['shared-prefs', 'C.prefs.local', /shared orz-pref:_: namespace/],
     ['cdn-to-inline', 'C.update.cdn-delivery', /a cdn file stays cdn/],
     ['update-in-frame', 'C.update.hosted', /manifest requests from a file in an app host's frame/],
+    // round 2 of closed loop 2: carriers that passed the whole harness as conformant
+    ['hook-save-lf', 'C.edit.app-host', /hooks\.save did not get the exact text/],
+    ['ignore-hook-save', 'C.edit.app-host', /via "hook"[\s\S]*hooks\.save was called 0 times/],
+    ['shared-undo', 'C.edit.app-host', /undo on the first editor does not return to its own text/],
+    ['indicator-in-app', 'C.edit.app-host', /manifest requests from an editor in an app host/],
+    ['css-leak', 'C.edit.app-host', /computed styles of the page's own elements/],
+    ['readonly-ignored', 'C.edit.app-host', /typing changed an editor mounted with readOnly: true/],
+    ['update-stale-text', 'C.update.edit-during', /files written or downloaded by an update that read the text before the edit/],
+    ['frame-silent-update', 'C.host.silent', /manifest requests from a framed file whose parent never said hello/],
+    ['standalone-same-origin', 'C.save.served-notice', /the preview iframe sandbox on a served \(http\) page/],
+    ['prefs-in-file', 'C.prefs.local', /the file saved after a view change is not assemble\(text\)/],
+    ['global-mode-key', 'C.prefs.local', /storage keys outside orz-pref:<uid>:/],
+    ['update-download', 'C.update.reassemble', /writes and downloads of the update/],
+    ['date-stamp', 'C.law.determinism', /under a clock moved by 7 years differs/],
+    ['formats-wrong', 'C.bundle.global', /OrzCarrier\.formats \(= release\.json formats/],
+    ['browser-no-refusal', 'C.law.refusals', /the browser bundle's assemble did not refuse the text/],
+    ['download-fixed-name', 'C.save.download', /not the opened file's name/],
+    // round 2 sub-probe: more subtly non-conformant carriers
+    ['meta-from-body', 'C.create.meta', /after a header edit \(title, author, keywords\) the head metadata and #orz-meta are not the kit's/],
+    ['no-eol-attr', 'C.create.island', /data-orz-eol: expected "lf", got undefined/],
+    ['no-generator', 'C.create.newest-shell', /no generator meta/],
+    ['update-any-format', 'C.update.other-format', /update indicators for [\d.]+, whose formats \[987\]/],
+    ['note-when-hosted', 'C.host.save', /served-page notices in a file whose host saves it/],
+    ['prefs-in-text', 'C.prefs.local', /a preference changed the text/],
+    ['name-handle', 'C.save.save-as-elsewhere', /pickers after reopening the original[\s\S]*overwrote the Downloads file/],
+    // round 2 audit mutants the harness already caught (kept, so a later change cannot lose them)
+    ['browser-shell-lie', 'C.bundle.global', /the sandboxed assemble differs from Node's/],
+    ['crlf-after-edit', 'C.edit.exact', /typing "Zq1" did not insert exactly it/],
+    ['extract-strip-bom', 'C.bundle.global', /OrzCarrier\.extract agrees with the kit/],
+    ['no-dirty-post', 'C.host.save', /no orz-host-dirty \{ dirty: true \}/],
+    ['setheader-two-steps', 'C.edit.set-header', /one undo does not restore the exact text/],
+    ['silent-refusal', 'C.update.tampered', /the refusal is not announced/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5] the ${variant} mutant fails ${id}`, async () => {

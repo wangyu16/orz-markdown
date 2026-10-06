@@ -41,6 +41,8 @@ export interface CdnPlan {
     tamper?: boolean;
     /** Hold the manifest response until this resolves. */
     hold?: Promise<void>;
+    /** Hold every bundle response until this resolves (an update that is still downloading). */
+    holdBundle?: Promise<void>;
 }
 export interface CheckContext {
     context: BrowserContext;
@@ -72,8 +74,14 @@ export declare class Session {
     private files;
     private tmp;
     private contexts;
+    /** chromeAssemble's page per release, within a scope. */
+    private assemblers;
     private memo;
     private codemirror;
+    /** `file:` URL → its path on disk (writeFile / rewriteFile). */
+    private paths;
+    /** The session itself (a scope's `root`). */
+    private root;
     private constructor();
     static open(target: CarrierTarget, options: ConformanceOptions, needsBrowser: boolean): Promise<Session>;
     private listen;
@@ -81,14 +89,24 @@ export declare class Session {
     serve(name: string, html: string): string;
     /** Write an assembled file to the temporary directory; returns its `file:` URL. */
     writeFile(name: string, html: string): string;
+    /** Replace the bytes of a file made by {@link writeFile} (what a save into it wrote): the next open of its URL reads them. */
+    rewriteFile(url: string, html: string): void;
+    /**
+     * A view of the session for one check: everything is shared (servers,
+     * files, memoised assemblies, the browser) except the contexts it opens
+     * (and their pages), which {@link closeContexts} closes when the check ends.
+     */
+    scope(): Session;
     /**
      * A release made from another: `append` is added to its bundle (a re-signed
-     * build of it), `version` replaces the manifest's version; the manifest's
-     * integrity is recomputed, so the bytes match what it announces.
+     * build of it), `version` replaces the manifest's version, `formats` its
+     * text formats; the manifest's integrity is recomputed, so the bytes match
+     * what it announces.
      */
     derive(base: Release, o: {
         version?: string;
         append?: string;
+        formats?: number[];
     }): Release;
     /** The target's Node `assemble`, memoised per text and options. */
     assemble(text: string, o?: AssembleOptions): Promise<string>;
@@ -102,10 +120,15 @@ export declare class Session {
     }): Promise<CheckContext>;
     /** A browser whose `file:` pages have the origin-private file system ({@link FILE_ACCESS_FLAG}). */
     private browserForFiles;
+    private fileBrowserPromise;
+    private fileBrowserOf;
+    private launchFileBrowser;
     /** This package's `vendor/codemirror6.js` (null when it is not shipped). */
     private codemirrorBytes;
-    /** Close the contexts a check opened. */
+    /** Close the contexts this scope opened. */
     closeContexts(): Promise<void>;
+    /** A page of the harness origin that loaded a release's bundle by URL (one per release within a scope). */
+    bundlePage(r: Release): Promise<Page>;
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
     chromeAssemble(r: Release, texts: string[], delivery: 'inline' | 'cdn', hash?: boolean): Promise<string[]>;
     close(): Promise<void>;

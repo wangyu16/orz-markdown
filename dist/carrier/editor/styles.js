@@ -54,6 +54,14 @@ exports.EDITOR_CSS = `
   font-size: var(--orz-chrome-text-sm); color: var(--orz-chrome-muted); background: var(--orz-chrome-surface-2);
   border: 1px solid var(--orz-chrome-border); border-radius: 6px;
 }
+.orz-editor__preview-note--top { inset: var(--orz-chrome-space-3) var(--orz-chrome-space-3) auto; }
+.orz-editor__link-chip {
+  position: absolute; inset: auto var(--orz-chrome-space-3) var(--orz-chrome-space-3) auto; max-width: calc(100% - 2 * var(--orz-chrome-space-3));
+  display: flex; align-items: center; gap: var(--orz-chrome-space-2); padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3);
+  font-size: var(--orz-chrome-text-sm); color: var(--orz-chrome-fg); background: var(--orz-chrome-surface);
+  border: 1px solid var(--orz-chrome-border); border-radius: 6px; box-shadow: 0 2px 10px oklch(0% 0 0 / 0.12);
+}
+.orz-editor__link-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orz-editor__panes { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
 .orz-editor__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .orz-editor__pane--editor { flex: 0 0 calc(var(--orz-split, 0.5) * 100% - 3px); background: var(--orz-chrome-surface); }

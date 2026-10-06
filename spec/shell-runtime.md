@@ -33,13 +33,13 @@ and the shell chrome (§8). Claims S.1–S.13, U.1–U.13 and V.1–V.5 in
 ## 1. Save
 
 ```ts
-const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore? });
+const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml? });
 saver.save({ text, html, theme? }): Promise<SaveResult>   // never rejects
 saver.download({ html }): Promise<SaveResult>             // Export / the notice's "download a copy"
 
 type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; name?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 ```
@@ -47,7 +47,11 @@ type SaveResult =
 **What was written.** A `file` result says whether a picker was shown for
 this save (`picked`: the written file is then the one the reader chose, which
 may not be the file the page was opened from; also `true` on a cancelled
-picker) and the written handle's `name` when the browser reports it. A
+picker), whether the written file is **proved by its content** to be the file
+the page was opened from (`opened`, step 3 below) and the written handle's
+`name` when the browser reports it. A name proves nothing: the real picker
+opens in the last folder used and offers `suggestedName` there, so a reader
+who accepts it writes a same-named file elsewhere. A
 `download` result is a copy handed to the browser: `ok: true` means the
 download was **started**, and `confirmed` is always `false` — the page cannot
 know whether it landed (a blocked or cancelled download looks the same), so a
@@ -58,6 +62,12 @@ caller words it "Download started", never "Saved". Its `name` is
   file's name, i.e. the twin name of the text (`twinName('week3.md')` =
   `week3.md.html`). `kind` — `md`, `slides`, `paged` or `poster`.
 - `text` — the text twin, exact; `html` — the assembled file.
+- `openedHtml` — the bytes of the file the page was opened from, as text: a
+  string, or a function (sync or async, read at most once, when a handle has
+  to be proved). For an assembled file the carrier passes its `assemble` of
+  the text the page loaded (`readIslandFromDom(#orz-src)` at boot), which
+  reproduces the file (FC-18 law 3). Without it no remembered handle is reused
+  across page loads and no picked file counts as the opened one.
 
 **Order** (the first that applies):
 
@@ -71,28 +81,47 @@ caller words it "Download started", never "Saved". Its `name` is
    server's bytes; the caller shows its dismissible notice (element id
    `orz-served-note`) offering `download()`, and should show it only when the
    document has unsaved edits. No picker opens and no IndexedDB lookup runs.
-3. **File System Access** (`showSaveFilePicker` exists):
-   1. the session's handle, if any (a second save never prompts);
+3. **File System Access** (`showSaveFilePicker` exists). **A handle's
+   identity is proved by content, never by names:** before a handle is
+   reused, its file is read (`getFile()`) and must hold what this page last
+   wrote through it in this page load, or the opened file's own bytes
+   (`openedHtml`); a handle that cannot be read proves nothing.
+   1. the session's handle, if any, while its file still holds what this
+      page last wrote to it (or the opened bytes): a second save never
+      prompts. Its `opened` is that of its first save. A file someone else
+      wrote since (another tab, another tool) gets the picker;
    2. else the handle remembered under the handle key (below), used only
       when **the record's page location equals this page's** (the URL
       without query and fragment — for a `file:` page, the file's own path),
       only if its name matches the opened file when the page is a `file:`
-      URL, and only if `queryPermission({ mode: 'readwrite' })` is `granted`
-      or `requestPermission` grants it (Chrome's one-click prompt naming the
-      file). Every `file:` page shares one IndexedDB, and a copy of a file
-      carries the same `uid` and often the same name: a copy in another
-      folder must get the picker and never write over the original. A record
-      without a location (written before this rule) is not reused;
+      URL, only with `openedHtml` given, only if `queryPermission({ mode:
+      'readwrite' })` is `granted` or `requestPermission` grants it (Chrome's
+      one-click prompt naming the file), and only if its file holds exactly
+      the opened bytes — and, when the record has a `sha256`, exactly the
+      bytes last written through it. Every `file:` page shares one IndexedDB,
+      and a copy of a file carries the same `uid` and often the same name: a
+      copy in another folder must get the picker and never write over the
+      original. A record without a location (written before this rule) is
+      not reused. Its `opened` is `true`;
    3. else the picker, offered `suggestedName` and the kind's extension
       (`.md.html`, `.slides.html`, `.paged.html`, `.poster.html`, plus
-      `.html`); the picked handle is remembered under the handle key with
-      this page's location.
+      `.html`). The picked file is the opened one (`opened: true`) only if,
+      before the write, it holds the opened bytes — a new file, or a
+      same-named file in the folder the picker opened in, is not.
 
    Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok:
-   true, picked, name }`. A cancelled picker (`AbortError`) → `{ via: 'file',
-   ok: false, error: 'cancelled', picked: true }`, with no fallback. Any other picker error (no user
+   true, picked, opened, name }`, and a handle proved to be the opened file
+   is remembered under the handle key with this page's location and the
+   SHA-256 of what was written (a handle that is not the opened file is used
+   for the rest of this page load but never remembered for this page). A
+   cancelled picker (`AbortError`) → `{ via: 'file', ok: false, error:
+   'cancelled', picked: true, opened: false }`, with no fallback. Any other picker error (no user
    activation, policy) or a failed write falls back to step 4, so the work is
    never lost.
+
+   *Limit.* Content cannot tell two files with identical bytes apart: a
+   byte-identical copy of the opened file can still be taken for it (the
+   picker then shows the reader which file they chose).
 4. **Download:** a `Blob` of `html` (`text/html;charset=utf-8`, so the bytes
    are the UTF-8 of `html`) through an `<a download="{suggestedName}">`; the
    object URL is revoked after a second → `{ via: 'download', ok: true,
@@ -105,7 +134,7 @@ the kit's `UID_PATTERN`) followed by a space and the page location
 location); else the page URL without its fragment (FC-18 §10). So the
 original and a copy elsewhere keep separate records, and saving the copy does
 not cost the original its handle. Handles are stored in IndexedDB database
-`orz-carrier`, object store `handles`, value `{ handle, name, location }` (a
+`orz-carrier`, object store `handles`, value `{ handle, name, location, sha256 }` (a
 `FileSystemFileHandle` is structured-cloneable). The store is best-effort: when IndexedDB is unavailable (opaque
 origins, private modes) every lookup misses and the session handle still
 spares the second prompt. Today's per-carrier databases (`orz-mdhtml`,
@@ -304,7 +333,7 @@ Failures reject with `UpdateError` and a `code`: `manifest`, `download`,
 
 The **caller** then saves the returned html through `createSaver` (§1) and
 reloads the page so the new shell runs — but only when that is safe.
-`performUpdate({ …, getText, saver, openedName?, info? })` composes check →
+`performUpdate({ …, getText, saver, info? })` composes check →
 `reassemble` → re-read the text → `saver.save({ text, html, theme })` and
 resolves `{ status: 'up-to-date' }`, `{ status: 'failed', info, code, error }`
 (nothing saved) or `{ status: 'updated', info, html, text, save, reload }`; it
@@ -317,14 +346,17 @@ never rejects and never reloads.
   (the re-check is the guard if it does not), so nothing typed then can be
   lost by the reload.
 - **Reload only when** `reload` is `true`: the save wrote the opened file —
-  `via: 'host'` with `ok`, or `via: 'file'` with `ok` and either `picked:
-  false` (the remembered handle of this very page) or a picked file whose
-  `name` equals the opened file's (`openedName`, default the last segment of
-  a `file:` page URL) — **and** the current text still equals the saved
-  text. A download (`confirmed: false`: a copy), the served notice (offer
-  `saver.download`), a picked file of another name, a failed save or a text
-  that moved on during the save leave the page as it is; the carrier says
-  where the new file went.
+  `via: 'host'` with `ok`, or `via: 'file'` with `ok` and `opened: true`
+  (the written file proved by its content to be the opened one, §1 step 3;
+  the saver needs `openedHtml`) — **and** the current text still equals the
+  saved text. Names prove nothing (closed loop 2 round 2, F2): a picked file
+  of the opened name — the picker may have opened in another folder — and a
+  later save of the same page load to a file picked earlier are not the
+  opened file unless their content proved it. A download (`confirmed:
+  false`: a copy), the served notice (offer `saver.download`), a picked or
+  session file not proved to be the opened one, a failed save or a text that
+  moved on during the save leave the page as it is; the carrier says where
+  the new file went. (`openedName` is still accepted and ignored.)
 
 The text passed in is the editor's current text, unsaved edits included; a
 text that cannot round-trip (mixed line endings, FC-18 law 1) is refused by

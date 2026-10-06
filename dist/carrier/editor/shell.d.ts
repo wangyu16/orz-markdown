@@ -14,24 +14,30 @@
  *   pause that grows with the render time, never two at once; scroll sync on
  *   `data-src-line` anchors (or the carrier's mapping / navigation).
  * - Frame messages are claims of the document's scripts: the shell acts on
- *   them only while the reader is in the frame (focus on it; for actions with
- *   effects, also transient user activation).
+ *   them only while the reader is in the frame (focus that entered it with the
+ *   reader's pointer, a Tab or the shell's own `focus()`; for actions with
+ *   effects, also transient user activation). Focus that a document script
+ *   takes is given back at once and the document's scripts are paused in the
+ *   preview; links from the frame open only through the host (`onLink`) or a
+ *   click on the shell's own "Open" chip.
  * - Text formats: a header `format` newer than `formats` opens read-only and
  *   is never saved over (FC-18 §8.4).
  * - Reader preferences (FC-18 §6): split ratio, view mode, scroll sync, editor
  *   font size, dark chrome — through a `PreferenceStore` namespaced by the
  *   document `uid`, never in the text.
  * - Instances: no global state; `destroy()` removes everything it added
- *   (listeners, timers, the iframe, the engine, its element).
+ *   (listeners, timers, the iframe, the engine, its element); work in flight
+ *   (a save, an upload, an AI request, a uid) changes nothing afterwards.
  */
 import { type HeaderChange } from '../header.js';
 import { type PreferenceStore } from '../shell/preferences.js';
-import { type Saver } from '../shell/save.js';
+import { type Saver, type SaverOptions } from '../shell/save.js';
 import { type AiOperation, type HostKind } from '../shell/protocol.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike } from '../shell/types.js';
 import type { TextEditorAdapter } from './adapter.js';
-import { type PreviewFrameOptions } from './preview.js';
+import { type PreviewFrameOptions, type PreviewMessage } from './preview.js';
+import type { ColorScheme } from '../../preview-frame.js';
 import type { EdElement, EdFile, ShadowRootLike } from './types.js';
 export type EditorMode = 'split' | 'editor' | 'preview';
 export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error';
@@ -104,6 +110,26 @@ export interface EditorHooks {
 export interface RenderContext {
     fetchInclude?(target: string): Promise<string | null>;
     resolveAsset?(path: string): string;
+    /**
+     * `false` when the host resolves links itself (`hooks.resolveLink`): render
+     * links as written (no twin rewrite), so `resolveLink` gets the source href.
+     * `renderMarkdownPreview` reads it.
+     */
+    twinLinks?: boolean;
+    /** A scratch map that lives as long as the shell (e.g. fetched includes; `renderMarkdownPreviewWithIncludes`). */
+    cache?: Map<string, unknown>;
+}
+/** The shell's channel to the preview frame's bridge (FC-19 §8.4), for a carrier's own frame protocol. */
+export interface EditorPreviewChannel {
+    /** Post a message to the frame (the carrier's own types). False while the frame is not ready. */
+    post(message: Readonly<Record<string, unknown>>): boolean;
+    /** Listen to the frame's messages of one type — claims of the document's scripts, data only. Returns the unsubscribe. */
+    on(type: string, fn: (message: PreviewMessage) => void): () => void;
+    /** Rebuild the frame document with another `head` and/or `scheme` (e.g. a theme change); the preview shows again. */
+    setOptions(options: {
+        head?: string;
+        scheme?: ColorScheme;
+    }): void;
 }
 /** The preview's scroll mapping context (`preview.mapLine` / `mapPosition`). */
 export interface PreviewMapContext {
@@ -158,13 +184,31 @@ export interface EditorShellOptions {
     assemble?(text: string): string | Promise<string>;
     /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
     fileName?: string;
-    /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host })`. */
+    /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml })`. */
     saver?: Saver;
+    /**
+     * The bytes of the file this page was opened from (`createSaver`'s
+     * `openedHtml`: how a remembered file handle is proved to be that file).
+     * Default: `assemble(text)` of the text the shell was mounted with, which
+     * reproduces an assembled file (FC-18 law 3).
+     */
+    openedHtml?: SaverOptions['openedHtml'];
     /** A connected app host (`connectHost`): saves go to it, and the dirty state is posted to it. */
     host?: HostConnection;
+    /**
+     * The shell runs in the assembled file itself (the file's own boot passes
+     * `true`). Default: inferred — no `hooks.save`, an `assemble`, no `host`, and
+     * a top-level window. It decides the preview's sandbox, where a standalone
+     * `file:` page also needs a top-level window and no host (previewSandbox).
+     */
+    standalone?: boolean;
     /** The preview frame (theme links, scheme, article class, libraries, nonce, the carrier's frame/bridge/mapping) and its timing. */
     preview?: EditorPreviewOptions;
-    /** A link clicked in the preview, after `hooks.resolveLink` (default: open `http(s):`/`mailto:` links in a new tab). */
+    /**
+     * A link clicked in the preview, after `hooks.resolveLink`. Default: an
+     * `http(s):` / `mailto:` link is offered in a chip in the preview ("Open
+     * <host>"), opened in a new tab when the reader clicks it.
+     */
     onLink?(href: string): void;
     /** Accessible name of the editor region. Default `Document editor`. */
     label?: string;
@@ -246,6 +290,14 @@ export interface EditorShell {
         engine: string;
         error?: unknown;
     }>;
+    /** The channel to the preview frame's bridge (a carrier's own messages, theme changes). */
+    readonly preview: EditorPreviewChannel;
+    /**
+     * Remove everything the shell added. Afterwards `getText()` returns the text
+     * as it was, `isDirty()` the state then; `setText`, `setHeader`, `markSaved`
+     * and `setReadOnly` do nothing, `undo`/`redo` return false, `save()` and
+     * the hooks refuse, and work still in flight changes nothing.
+     */
     destroy(): void;
 }
 /** Mount the editor shell in `element`. */

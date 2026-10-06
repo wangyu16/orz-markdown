@@ -33,10 +33,18 @@ export interface WritableLike {
   close(): Promise<void>;
 }
 
+/** What `FileSystemFileHandle.getFile()` gives: the file's current bytes (a `File`). */
+export interface FileLike {
+  arrayBuffer?(): Promise<ArrayBuffer>;
+  text(): Promise<string>;
+}
+
 /** The part of `FileSystemFileHandle` the save uses. */
 export interface FileHandleLike {
   readonly name?: string;
   createWritable(options?: { keepExistingData?: boolean }): Promise<WritableLike>;
+  /** The file's current contents: how the save proves which file a handle points at (spec/shell-runtime.md §1 step 3). */
+  getFile?(): Promise<FileLike>;
   queryPermission?(descriptor: { mode: 'read' | 'readwrite' }): Promise<string>;
   requestPermission?(descriptor: { mode: 'read' | 'readwrite' }): Promise<string>;
 }

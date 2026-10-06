@@ -25,7 +25,7 @@ import {
   CHROME_CSS, ICONS, createShadowRoot, showToast,
   UPDATE_CHECK_INTERVAL_MS, UPDATE_CACHE_PREFIX, UPDATE_SKIP_PREFIX, RELEASE_CDN_BASE, MANIFEST_TIMEOUT_MS, REASSEMBLE_TIMEOUT_MS,
   type ReleaseManifest, type FetchLike, type ResponseLike, type StorageLike, type UpdateInfo, type MessageListener, type UiDocument, type UiElement,
-  type SaveResult,
+  type SaveResult, createSaver, type FileHandleLike, type HandleStore, type StoredHandle,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, KIND_PACKAGE, type ShellParts } from '../src/carrier';
 import { escapeScriptText } from '../src/html';
@@ -528,12 +528,12 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     const s = served(BUNDLE);
     const routes = { [MD_MANIFEST_URL]: () => response(JSON.stringify(s.m)), [s.url]: () => response(BUNDLE) };
     const saves: Array<{ text: string; html: string; theme?: string }> = [];
-    const saver = { save: async (i: { text: string; html: string; theme?: string }): Promise<SaveResult> => { saves.push(i); return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } };
+    const saver = { save: async (i: { text: string; html: string; theme?: string }): Promise<SaveResult> => { saves.push(i); return { via: 'file', ok: true, picked: false, opened: true, name: 'week3.md.html' }; } };
     const page = fakePage(goodAssemble());
     const r = await performUpdate({ kind: 'md', current: '1.0.0', text: TEXTS[1], saver, theme: 'paper', fetch: fakeFetch(routes).fetch, storage: memoryStorage(), now: T0, document: page.document, window: page.window });
     expect(r.status).toBe('updated');
     if (r.status !== 'updated') throw new Error('unreachable');
-    expect([r.info.latest, r.save, r.text, r.reload]).toEqual(['1.1.0', { via: 'file', ok: true, picked: false, name: 'week3.md.html' }, TEXTS[1], true]);
+    expect([r.info.latest, r.save, r.text, r.reload]).toEqual(['1.1.0', { via: 'file', ok: true, picked: false, opened: true, name: 'week3.md.html' }, TEXTS[1], true]);
     expect(saves).toEqual([{ text: TEXTS[1], html: r.html, theme: 'paper' }]);
     expect(extract(saves[0].html)!.text).toBe(TEXTS[1]);
     // up to date: nothing assembled or saved
@@ -558,7 +558,7 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     const s = served(BUNDLE);
     const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
     const saves: string[] = [];
-    const saver = { save: async (i: { text: string; html: string }): Promise<SaveResult> => { saves.push(i.text); return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } };
+    const saver = { save: async (i: { text: string; html: string }): Promise<SaveResult> => { saves.push(i.text); return { via: 'file', ok: true, picked: false, opened: true, name: 'week3.md.html' }; } };
     let text = 'before\n';
     // the reader types while the sandbox assembles
     const typing = fakePage((t, o) => { text = 'before\ntyped during Updating…\n'; return assembleEnvelope(t, PARTS('1.1.0', { delivery: o.delivery as 'inline' })); });
@@ -576,17 +576,23 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => { throw new Error('gone'); }, saver, fetch: s.fetch, document: p3.document, window: p3.window })).toMatchObject({ status: 'failed', code: 'roundtrip' });
   });
 
-  it('[U.12] reload only when the saved file is the opened one and the text did not move on: a host or an unpicked file — or a picked file of the opened name — yes; a download, a served notice, a picked file of another name or a text changed during the save, no', async () => {
+  it('[U.12] reload only when the saved file is the opened one and the text did not move on: an acknowledged host save or a file proved by its content to be the opened one (opened: true) — yes; a picked or session file not proved to be it (whatever its name), a download, a served notice, a failed save or a text changed during the save, no', async () => {
     const s = served(BUNDLE);
     const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
     const cases: Array<[SaveResult, boolean]> = [
       [{ via: 'host', ok: true }, true],
       [{ via: 'host', ok: false, error: 'quota' }, false],
-      [{ via: 'file', ok: true, picked: false, name: 'week3.md.html' }, true],
-      [{ via: 'file', ok: true, picked: true, name: 'week3.md.html' }, true],
-      [{ via: 'file', ok: true, picked: true, name: 'week3 (1).md.html' }, false],
-      [{ via: 'file', ok: true, picked: true }, false],
-      [{ via: 'file', ok: false, error: 'cancelled', picked: true }, false],
+      [{ via: 'file', ok: true, picked: false, opened: true, name: 'week3.md.html' }, true],
+      [{ via: 'file', ok: true, picked: true, opened: true, name: 'week3.md.html' }, true],
+      // F2: the picker opened in Downloads and the reader accepted the same name there — not the opened file
+      [{ via: 'file', ok: true, picked: true, opened: false, name: 'week3.md.html' }, false],
+      // B#1: a later save of the same session to that file (no picker this time) — still not the opened file
+      [{ via: 'file', ok: true, picked: false, opened: false, name: 'week3.md.html' }, false],
+      [{ via: 'file', ok: true, picked: true, opened: false, name: 'week3 (1).md.html' }, false],
+      [{ via: 'file', ok: true, picked: true, opened: false }, false],
+      [{ via: 'file', ok: false, error: 'cancelled', picked: true, opened: false }, false],
+      // a saver of an older shell that does not say `opened`: never a reload
+      [{ via: 'file', ok: true, picked: false, name: 'week3.md.html' } as unknown as SaveResult, false],
       [{ via: 'download', ok: true, confirmed: false, name: 'week3.md.html' }, false],
       [{ via: 'served-notice' }, false],
     ];
@@ -598,8 +604,43 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     // a text that changes while the save runs (a picker is open): saved, but no reload
     let text = 'a\n';
     const page = fakePage(goodAssemble());
-    const moved = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => text, saver: { save: async () => { text = 'a\nb\n'; return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } }, fetch: s.fetch, document: page.document, window: page.window, openedName: 'week3.md.html' });
+    const moved = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => text, saver: { save: async () => { text = 'a\nb\n'; return { via: 'file', ok: true, picked: false, opened: true, name: 'week3.md.html' }; } }, fetch: s.fetch, document: page.document, window: page.window, openedName: 'week3.md.html' });
     expect(moved).toMatchObject({ status: 'updated', text: 'a\n', reload: false });
+  });
+
+  it('[U.12] [S.13] with the real saver (F2, B#1): an update saved into a same-named file the picker offered in another folder, or into the session\'s earlier save-as file, never reloads; written into the opened file — proved by its content — it does', async () => {
+    const s = served(BUNDLE);
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const file = (name: string, content: string) => {
+      const h: FileHandleLike & { content: string } = {
+        name, content,
+        async createWritable() { let next = ''; return { write: async (d: unknown) => { next += String(d); }, close: async () => { h.content = next; } }; },
+        getFile: async () => ({ text: async () => h.content }),
+        queryPermission: async () => 'granted',
+      };
+      return h;
+    };
+    const map = new Map<string, StoredHandle>();
+    const store: HandleStore = { get: async (k) => map.get(k), put: async (k, v) => { map.set(k, v); }, delete: async (k) => { map.delete(k); } };
+    const win = (pick: () => FileHandleLike) => ({ location: { protocol: 'file:', href: 'file:///Users/me/Docs/notes.md.html', pathname: '/Users/me/Docs/notes.md.html' }, showSaveFilePicker: async () => pick() });
+    const docs = file('notes.md.html', 'OPENED');
+    const downloads = file('notes.md.html', '');
+    const update = async (saver: Pick<ReturnType<typeof createSaver>, 'save'>) => {
+      const page = fakePage(goodAssemble());
+      return performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'same\n', saver, fetch: s.fetch, document: page.document, window: page.window, openedName: 'notes.md.html' });
+    };
+    // the picker offers notes.md.html in Downloads; the page is Docs/notes.md.html
+    const elsewhere = createSaver({ uid: 'doc-abcdefghij123456', suggestedName: 'notes.md.html', kind: 'md', window: win(() => downloads), handleStore: store, openedHtml: 'OPENED' });
+    expect(await update(elsewhere)).toMatchObject({ status: 'updated', save: { via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' }, reload: false });
+    // B#1: the same session saves again (its handle, no picker): still not the opened file, still no reload
+    expect(await update(elsewhere)).toMatchObject({ save: { picked: false, opened: false }, reload: false });
+    expect(docs.content).toBe('OPENED');
+    // the reader picks the opened file itself: proved by its bytes, so the reload is safe
+    const home = createSaver({ uid: 'doc-abcdefghij123456', suggestedName: 'notes.md.html', kind: 'md', window: win(() => docs), handleStore: store, openedHtml: 'OPENED' });
+    expect(await update(home)).toMatchObject({ save: { picked: true, opened: true }, reload: true });
+    // a carrier that does not give the opened bytes: a picked file is never the opened one
+    const blind = createSaver({ uid: 'doc-abcdefghij123456', suggestedName: 'notes.md.html', kind: 'md', window: win(() => file('notes.md.html', 'OPENED')), handleStore: { get: async () => undefined, put: async () => undefined, delete: async () => undefined } });
+    expect(await update(blind)).toMatchObject({ save: { picked: true, opened: false }, reload: false });
   });
 
   it('[U.13] performUpdate refuses in a framed page or with a connected host (code hosted): the app owns the version; nothing is fetched or saved', async () => {
@@ -861,36 +902,41 @@ function valueImports(entry: string): Set<string> {
 }
 
 /**
- * Re-measured 2026-10-06 (esbuild, ESM, browser, minified — exactly the build below): update 15,482 B;
- * update + indicator + chrome 31,671 B; chrome 12,285 B (at 2600cdf: 14,353 B and 30,542 B — the
- * earlier "13.8 KB / 25.6 KB" notes were stale). Bounds: ~16 %, ~20 % and ~30 % above the measurement,
- * so one more round of guards fits and a real jump in size fails.
+ * What ships: the CommonJS `dist/` a carrier bundles, bundled exactly as below (esbuild, ESM output,
+ * browser, minified). Re-measured 2026-10-06 after closed loop 2 round 2: update 19,860 B; update +
+ * indicator + chrome 36,469 B; chrome 13,019 B (the TypeScript source measured 15,482 B, 31,671 B and
+ * 12,285 B — CommonJS keeps export names and cannot drop unused exports of `read.js`; S.11 says why
+ * no ESM build ships). Bounds ~11 %, ~10 % and ~23 % above the measurement: one more round of guards
+ * fits, a real jump in size fails.
  */
-const UPDATE_LIMIT = 18_000;
-const UPDATE_UI_LIMIT = 38_000;
+const UPDATE_LIMIT = 22_000;
+const UPDATE_UI_LIMIT = 40_000;
 const CHROME_LIMIT = 16_000;
+/** Bundle `contents` (JS importing from `dist/`) as a carrier would. */
+async function shippedSize(contents: string): Promise<{ bytes: number; inputs: string[] }> {
+  expect(existsSync('dist/carrier/shell/update.js'), 'dist/ is missing: run npm run build').toBe(true);
+  const { build } = await import('esbuild');
+  const out = await build({ stdin: { contents, resolveDir: '.', loader: 'js' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
+  return { bytes: out.outputFiles[0].contents.byteLength, inputs: Object.keys(out.metafile!.inputs) };
+}
 
 describe('module boundaries', () => {
-  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; it bundles under 18 KB (with indicator and chrome under 38 KB)', async () => {
+  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 22 KB (with indicator and chrome under 40 KB)', async () => {
     expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
     expect([...valueImports('src/carrier/shell/indicator.ts')].sort()).toEqual(['src/carrier/shell/chrome.ts', 'src/carrier/shell/indicator.ts']);
-    const { build } = await import('esbuild');
-    const size = async (contents: string) => {
-      const out = await build({ stdin: { contents, resolveDir: '.', loader: 'ts' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
-      return { bytes: out.outputFiles[0].contents.byteLength, inputs: Object.keys(out.metafile!.inputs) };
-    };
-    const u = await size("export * from './src/carrier/shell/update';");
+    const u = await shippedSize("export * from './dist/carrier/shell/update.js';");
     expect(u.bytes).toBeLessThan(UPDATE_LIMIT);
-    expect(u.inputs.filter((f) => /markdown-it|katex|src\/index|header|document\.ts|parser/.test(f))).toEqual([]);
-    const ui = await size("export * from './src/carrier/shell/update'; export * from './src/carrier/shell/indicator'; export * from './src/carrier/shell/chrome';");
+    expect(u.inputs.sort()).toEqual(['dist/ascii.js', 'dist/carrier/read.js', 'dist/carrier/shell/types.js', 'dist/carrier/shell/update.js', 'dist/carrier/text.js', 'dist/html.js', '<stdin>'].sort());
+    const ui = await shippedSize("export * from './dist/carrier/shell/update.js'; export * from './dist/carrier/shell/indicator.js'; export * from './dist/carrier/shell/chrome.js';");
     expect(ui.bytes).toBeLessThan(UPDATE_UI_LIMIT);
+    expect(ui.inputs.filter((f) => /markdown-it|katex|dist\/index|header|document\.js|parser/.test(f))).toEqual([]);
   });
 
-  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and bundles under 16 KB', async () => {
+  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and what ships (dist/carrier/shell/chrome.js) bundles under 16 KB', async () => {
     expect([...valueImports('src/carrier/shell/chrome.ts')]).toEqual(['src/carrier/shell/chrome.ts']);
-    const { build } = await import('esbuild');
-    const out = await build({ stdin: { contents: "export * from './src/carrier/shell/chrome';", resolveDir: '.', loader: 'ts' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent' });
-    expect(out.outputFiles[0].contents.byteLength).toBeLessThan(CHROME_LIMIT);
+    const c = await shippedSize("export * from './dist/carrier/shell/chrome.js';");
+    expect(c.bytes).toBeLessThan(CHROME_LIMIT);
+    expect(c.inputs.sort()).toEqual(['<stdin>', 'dist/carrier/shell/chrome.js']);
   });
 
   it('[U.10] [V.5] loading the update, the indicator and the chrome touches no browser global; calls then degrade (null, refusal) instead of throwing', async () => {

@@ -7,16 +7,18 @@
  * runs inside an assembled file (an `#orz-src` island is present), it boots
  * the file: connects to an embedding host (`connectHost`, all three
  * protocols) and, standalone, runs the quiet update check with the indicator.
+ * Its saver gets `openedHtml` — this bundle's `assemble` of the text the page
+ * loaded — so a handle is proved by its content (spec/shell-runtime.md §1).
  *
  * Built by build.ts with esbuild; `__STUB_VERSION__` and `__STUB_VARIANT__`
  * are compile-time constants. Variants other than `good` are deliberate bugs
  * for the harness's mutation tests (each marked `BUG (mutation)`).
  */
-import { extract, readDocument, readIslandFromDom } from '../../src/carrier';
+import { editHeader, extract, readDocument, readIslandFromDom } from '../../src/carrier';
 import {
   bundleUrl, checkForUpdate, compareSemver, connectHost, createPreferenceStore, createSaver, manifestUrl, mountUpdateIndicator, parseManifest,
   parseSemver, performUpdate, reassemble, sandboxDocument, sha384Integrity, skipVersion,
-  type HostConnection, type PerformUpdateResult, type SaveResult, type UiElement, type UpdateInfo,
+  type HostConnection, type PerformUpdateResult, type SaveResult, type Saver, type UiElement, type UpdateInfo,
 } from '../../src/carrier/shell';
 import { createEditorShell, renderMarkdownPreview, type EditorShell } from '../../src/carrier/editor';
 import { stubAssemble, type StubVariant } from './assemble';
@@ -41,17 +43,72 @@ interface AssembleOptions { delivery?: 'inline' | 'cdn'; engineSource?: string }
 
 function assemble(text: string, o: AssembleOptions = {}): Promise<string> {
   try {
-    return Promise.resolve(stubAssemble(text, { version: VERSION, variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? SELF }));
+    // BUG (mutation) browser-shell-lie: the browser bundle writes a stale shell version
+    return Promise.resolve(stubAssemble(text, { version: VARIANT === 'browser-shell-lie' ? '1.0.0' : VERSION, variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? SELF }));
   } catch (e) {
+    // BUG (mutation) browser-no-refusal: the browser bundle writes texts the Node assemble refuses
+    if (VARIANT === 'browser-no-refusal') return Promise.resolve(`<!doctype html>\n<script type="application/json" id="orz-shell">{"kind":"md","format":1,"shell":"${VERSION}","delivery":"inline"}</script>\n<script type="text/markdown" id="orz-src" data-orz-format="1" data-orz-eol="lf">${text}</script>\n`);
     return Promise.reject(e);
   }
 }
 
 let host: HostConnection | undefined;
 let current: EditorShell | null = null;
+/**
+ * The opened file's bytes, for the saver's content proof (spec/shell-runtime.md §1 step 3): this
+ * bundle's `assemble` of the text the page loaded, which reproduces the file (FC-18 law 3). Set at boot.
+ */
+let openedHtml: (() => Promise<string>) | undefined;
+
+/** The standalone saver of this file: the opened file's name, the connected host, the opened bytes. */
+function fileSaver(uid: string | undefined): Saver {
+  if (VARIANT === 'name-handle') return nameProvedSaver(uid, location.href.replace(/[?#].*$/s, ''));
+  if (VARIANT === 'copy-overwrite') return nameProvedSaver(uid, `file:///orz-stub/${fileName()}`); // BUG (mutation): every copy is told one page location
+  return createSaver({ ...(uid ? { uid } : {}), suggestedName: fileName(), kind: 'md', ...(host ? { host } : {}), ...(openedHtml ? { openedHtml } : {}) });
+}
+
+/**
+ * BUG (mutation) `name-handle`: the save of closed loop 2 round 2's F2 — a remembered handle is
+ * reused when its NAME matches the opened file's, so a "save as" that landed in another folder is
+ * overwritten by every later page load, and it counts as the opened file (an update reloads).
+ */
+function nameProvedSaver(uid: string | undefined, page: string): Saver {
+  const base = createSaver({ ...(uid ? { uid } : {}), suggestedName: fileName(), kind: 'md' });
+  const key = `${uid ?? ''} ${page}`;
+  type H = { name: string; createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }>; queryPermission?(o: unknown): Promise<string> };
+  const db = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+    const r = indexedDB.open('orz-stub-handles', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('h'); };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  const get = async (): Promise<H | undefined> => { const d = await db(); return new Promise((resolve) => { const g = d.transaction('h').objectStore('h').get(key); g.onsuccess = () => resolve(g.result as H | undefined); g.onerror = () => resolve(undefined); }); };
+  const put = async (h: H): Promise<void> => { const d = await db(); await new Promise<void>((resolve) => { const t = d.transaction('h', 'readwrite'); t.objectStore('h').put(h, key); t.oncomplete = () => resolve(); t.onerror = () => resolve(); }); };
+  let handle: H | null = null;
+  return {
+    ...base,
+    async save({ html }): Promise<SaveResult> {
+      let picked = false;
+      if (!handle) {
+        const h = await get();
+        if (h && h.name === fileName() && (!h.queryPermission || (await h.queryPermission({ mode: 'readwrite' })) === 'granted')) handle = h;
+      }
+      if (!handle) {
+        picked = true;
+        handle = await (window as unknown as { showSaveFilePicker(o: unknown): Promise<H> }).showSaveFilePicker({ suggestedName: fileName() });
+        await put(handle);
+      }
+      const w = await handle.createWritable();
+      await w.write(html);
+      await w.close();
+      return { via: 'file', ok: true, picked, opened: !picked || handle.name === fileName(), name: handle.name };
+    },
+  };
+}
 
 /** The opened file's name when it is an assembled md file, else a default. */
 function fileName(): string {
+  if (VARIANT === 'download-fixed-name') return 'document.md.html'; // BUG (mutation): ignores the opened file's name
   try {
     const last = decodeURIComponent(location.pathname.split('/').pop() ?? '');
     if (/.\.md\.html$/.test(last)) return last;
@@ -78,38 +135,43 @@ interface MountOptions {
   hooks?: { save?(text: string): Promise<void> };
 }
 
-/** BUG (mutation) `copy-overwrite`: a saver told the wrong page location, so every copy matches the remembered handle. */
-function wrongLocationSaver(uid: string | undefined) {
-  const fake = { protocol: 'file:', href: `file:///orz-stub/${fileName()}`, pathname: `/orz-stub/${fileName()}` };
-  const w = window as unknown as Record<string, unknown>;
-  return createSaver({
-    ...(uid ? { uid } : {}), suggestedName: fileName(), kind: 'md',
-    window: {
-      location: fake, document: document as never, indexedDB: indexedDB as never, Blob: Blob as never, URL: URL as never,
-      setTimeout: (f: () => void, ms: number) => setTimeout(f, ms),
-      ...(typeof w.showSaveFilePicker === 'function' ? { showSaveFilePicker: (o: unknown) => (w.showSaveFilePicker as (x: unknown) => Promise<never>)(o) } : {}),
-    },
-  });
-}
-
 function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
-  const app = !!options.hooks?.save;
+  const app = !!options.hooks?.save && VARIANT !== 'ignore-hook-save'; // BUG (mutation) ignore-hook-save
   const uid = readDocument(options.text, { kind: 'md' }).meta.uid;
+  const hookSave = VARIANT === 'hook-save-lf' // BUG (mutation): the app gets a normalised text
+    ? (t: string) => options.hooks!.save!(t.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'))
+    : options.hooks?.save;
+  if (VARIANT === 'css-leak') {
+    // BUG (mutation): the carrier's chrome stylesheet goes into the page, not a shadow root
+    const st = document.createElement('style');
+    st.textContent = 'body, button, input, p { font: 19px/1.2 Georgia, serif !important; color: #135 !important; } [data-orz-conformance] { outline: 3px solid red; }';
+    document.head.appendChild(st);
+  }
+  const plainAssemble = (t: string) => assemble(t);
   const shell = createEditorShell(element as never, {
     text: options.text,
     render: (t) => renderMarkdownPreview(t),
     ...(options.mode ? { mode: options.mode } : {}),
-    ...(options.readOnly ? { readOnly: true } : {}),
+    ...(options.readOnly && VARIANT !== 'readonly-ignored' ? { readOnly: true } : {}),
     ...(options.chrome ? { chrome: options.chrome } : {}),
     ...(VARIANT === 'shared-prefs' ? { preferences: createPreferenceStore(undefined) } : {}), // BUG (mutation): one namespace for every document
-    ...(app ? { hooks: { save: options.hooks!.save! } } : {
+    ...(app ? { hooks: { save: hookSave! } } : {
       kind: 'md' as const,
       fileName: fileName(),
       assemble: VARIANT === 'live-dom'
         ? () => `<!doctype html>\n${document.documentElement.outerHTML}` // BUG (mutation): serialises the live DOM
-        : (t: string) => assemble(t),
-      ...(host ? { host } : {}),
-      ...(VARIANT === 'copy-overwrite' ? { saver: wrongLocationSaver(uid) } : {}),
+        : VARIANT === 'prefs-in-file'
+          ? async (t: string) => { // BUG (mutation): the reader's view mode is baked into the saved file
+            const h = await plainAssemble(t);
+            let m: string | null = null;
+            try { m = localStorage.getItem(`orz-pref:${uid}:viewMode`); } catch { /* none */ }
+            return m ? h.replace('<main id="orz-app"></main>', `<main id="orz-app" data-view=${m}></main>`) : h;
+          }
+          : plainAssemble,
+      ...(host ? { host: VARIANT === 'no-dirty-post' ? { ...host, setDirty() { /* BUG (mutation): dirty never posted */ } } : host } : {}),
+      saver: fileSaver(uid),
+      // the file's own boot says the page is this standalone file (an assembled file: its island was read at boot)
+      ...(openedHtml && !host ? { standalone: true } : {}),
     }),
     preview: { assets: false },
   });
@@ -119,6 +181,25 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     const f = (shell.root as unknown as ShadowRoot).querySelector('iframe');
     if (f) { f.setAttribute('sandbox', 'allow-scripts allow-same-origin'); f.srcdoc = f.srcdoc; }
   }
+  if (VARIANT === 'standalone-same-origin' && !app) {
+    // BUG (mutation): a standalone file served over http gives its preview the page's origin (the exception is file: only)
+    const f = (shell.root as unknown as ShadowRoot).querySelector('iframe');
+    if (f) { f.setAttribute('sandbox', 'allow-scripts allow-same-origin'); f.srcdoc = f.srcdoc; }
+  }
+  if (VARIANT === 'indicator-in-app' && app) {
+    // BUG (mutation): the editor in an app host runs the quiet update check and shows the indicator
+    void checkForUpdate({ kind: 'md', current: VERSION, servedPages: true, page: { location: { protocol: 'file:' } } } as never).then((info) => {
+      if (info) mountUpdateIndicator(element as unknown as UiElement, info, { onUpdate: () => Promise.resolve() });
+    });
+  }
+  if (VARIANT === 'global-mode-key') {
+    try { const g = localStorage.getItem('orz-stub-mode'); if (g) shell.setMode(g as 'split'); } catch { /* none */ }
+  }
+  if (VARIANT === 'prefs-in-text') {
+    // BUG (mutation): the reader's view mode is kept in the document's header (and the edit hidden from dirty)
+    const setMode = shell.setMode.bind(shell);
+    shell.setMode = (m) => { setMode(m); shell.setHeader({ x_view_mode: m }); shell.markSaved(); };
+  }
   if (VARIANT === 'ungated-keys') {
     // BUG (mutation): the preview's key and link messages act without the reader's gesture
     window.addEventListener('message', (e) => {
@@ -126,6 +207,18 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
       if (d?.type === 'orz-preview-key' && d.key === 's') void shell.save();
       if (d?.type === 'orz-preview-link' && typeof d.href === 'string') window.open(d.href, '_blank');
     });
+  }
+  if (['crlf-after-edit', 'setheader-two-steps', 'shared-undo', 'global-mode-key'].includes(VARIANT)) {
+    const out = Object.create(shell) as EditorShell & Record<string, unknown>;
+    if (VARIANT === 'crlf-after-edit') out.getText = () => { const t = shell.getText(); return shell.isDirty() ? t.replace(/\r\n/g, '\n') : t; }; // BUG (mutation)
+    if (VARIANT === 'setheader-two-steps') out.setHeader = (ch) => { const [k] = Object.keys(ch); shell.setHeader({ [k]: ch[k] }); shell.setHeader(ch); }; // BUG (mutation): two undo steps
+    if (VARIANT === 'shared-undo') out.undo = () => (current ?? shell).undo(); // BUG (mutation): undo acts on the last mounted instance
+    if (VARIANT === 'global-mode-key') { // BUG (mutation): the view mode is one global key, and getMode is not exposed
+      out.getMode = undefined;
+      out.setMode = (m) => { try { localStorage.setItem('orz-stub-mode', m); } catch { /* none */ } shell.setMode(m); };
+    }
+    void editHeader;
+    return out;
   }
   return shell;
 }
@@ -162,7 +255,8 @@ async function partlyVerified(info: UpdateInfo, text: string, delivery: 'inline'
 }
 
 async function update(info: UpdateInfo, island: Element, uid: string | undefined): Promise<void> {
-  const saver = createSaver({ ...(uid ? { uid } : {}), suggestedName: fileName(), kind: 'md' });
+  const base = fileSaver(uid);
+  const saver = VARIANT === 'update-download' ? { ...base, save: (x: { html: string }) => base.download({ html: x.html }) } : base; // BUG (mutation): the update is always a downloaded copy
   const delivery = fileDelivery();
   let r: PerformUpdateResult;
   if (VARIANT === 'accept-tampered' || VARIANT === 'no-roundtrip' || VARIANT === 'no-version-check') {
@@ -178,10 +272,12 @@ async function update(info: UpdateInfo, island: Element, uid: string | undefined
       html = await partlyVerified(info, text, delivery);
     }
     const save: SaveResult = await saver.save({ text, html });
-    r = { status: 'updated', info, html, text, save, reload: save.via === 'file' && save.ok && !save.picked };
+    r = { status: 'updated', info, html, text, save, reload: save.via === 'file' && save.ok && save.opened };
   } else {
     // The text is read when the update starts and again before the save (spec/shell-runtime.md §7.2).
-    r = await performUpdate({ info, kind: 'md', current: VERSION, getText: () => currentText(island), saver, delivery, openedName: fileName() });
+    r = VARIANT === 'update-stale-text'
+      ? await performUpdate({ info, kind: 'md', current: VERSION, text: currentText(island), saver: saver as never, delivery, openedName: fileName() } as never) // BUG (mutation): the text read once
+      : await performUpdate({ info, kind: 'md', current: VERSION, getText: () => currentText(island), saver: saver as never, delivery, openedName: fileName() });
   }
   if (r.status === 'failed') throw new Error(r.error);
   if (r.status !== 'updated') return;
@@ -194,7 +290,7 @@ async function update(info: UpdateInfo, island: Element, uid: string | undefined
   if (r.reload) location.reload(); // only when the opened file itself was written and the text did not move on
 }
 
-/** BUG (mutation) `offer-prerelease` / `no-once-a-day`: a carrier's own update check. */
+/** BUG (mutation) `offer-prerelease` / `no-once-a-day` / `update-any-format`: a carrier's own update check. */
 async function ownCheck(format: number): Promise<UpdateInfo | null> {
   const key = 'orz-stub-checked';
   if (VARIANT === 'offer-prerelease' && localStorage.getItem(key)) return null;
@@ -202,7 +298,8 @@ async function ownCheck(format: number): Promise<UpdateInfo | null> {
   try {
     const res = await fetch(manifestUrl('md'), { credentials: 'omit', cache: 'no-cache' });
     const m = parseManifest(JSON.parse(await res.text()), 'md');
-    if (!m || compareSemver(m.version, VERSION) !== 1 || !m.formats.includes(format)) return null;
+    if (!m || compareSemver(m.version, VERSION) !== 1) return null;
+    if (VARIANT !== 'update-any-format' && !m.formats.includes(format)) return null; // BUG (mutation) update-any-format: offered whatever text formats the release writes
     if (VARIANT === 'no-once-a-day' && (parseSemver(m.version)?.prerelease.length ?? 1) > 0) return null;
     return { kind: 'md', current: VERSION, latest: m.version, notes: m.notes, manifest: m };
   } catch {
@@ -213,8 +310,12 @@ async function ownCheck(format: number): Promise<UpdateInfo | null> {
 function boot(): void {
   const island = document.getElementById('orz-src');
   if (!island) return; // not an assembled file (a harness page, the update sandbox)
-  const doc = readDocument(readIslandFromDom(island), { kind: 'md' });
+  const loaded = readIslandFromDom(island);
+  const doc = readDocument(loaded, { kind: 'md' });
   const uid = doc.meta.uid;
+  const delivery = fileDelivery();
+  let opened: Promise<string> | null = null;
+  openedHtml = () => (opened ??= assemble(loaded, { delivery }));
   const framed = window.parent !== window;
   if (framed) {
     let win: Window | undefined;
@@ -228,20 +329,36 @@ function boot(): void {
       } as unknown as Window;
     }
     host = connectHost({ kind: 'md', ...(win ? { window: win as never } : {}), ai: { onOperations() { /* the stub has no assistant UI */ } }, include: { onAvailable() { current?.refreshPreview(); } } });
+    if (VARIANT === 'note-when-hosted') {
+      // BUG (mutation): an embedded file shows the served-page notice although its host saves it
+      const note = document.createElement('div');
+      note.id = 'orz-served-note';
+      note.textContent = 'This page is served from the web, so it cannot be saved in place.';
+      document.body.appendChild(note);
+    }
+    if (VARIANT === 'frame-silent-update') {
+      // BUG (mutation): a framed file whose parent never says hello decides it is standalone and checks for updates
+      setTimeout(() => { if (!host?.connected()) startCheck(doc, island, uid, true); }, 1500);
+      return;
+    }
     if (VARIANT !== 'update-in-frame') return; // embedded: the app host owns updates
   }
-  const check = VARIANT === 'offer-prerelease' || VARIANT === 'no-once-a-day'
+  startCheck(doc, island, uid, false);
+}
+
+function startCheck(doc: { format: number }, island: HTMLElement, uid: string | undefined, fake: boolean): void {
+  const check = VARIANT === 'offer-prerelease' || VARIANT === 'no-once-a-day' || VARIANT === 'update-any-format'
     ? ownCheck(doc.format)
     : checkForUpdate({
-      kind: 'md', current: VERSION, format: doc.format, ...(host ? { host } : {}),
-      ...(VARIANT === 'update-in-frame' ? { page: { location: { protocol: 'file:' } } } : {}), // BUG (mutation): claims to be a top-level file
+      kind: 'md', current: VERSION, format: doc.format, ...(host && !fake ? { host } : {}),
+      ...(VARIANT === 'update-in-frame' || fake ? { page: { location: { protocol: 'file:' } } } : {}), // BUG (mutation): claims to be a top-level file
     });
   void check.then((info) => {
     if (!info) return;
     const brand = document.getElementById('orz-brand');
     if (!brand) return;
     const ind = mountUpdateIndicator(brand as unknown as UiElement, info, {
-      onUpdate: (i) => update(i, island, uid),
+      onUpdate: (i) => (VARIANT === 'silent-refusal' ? update(i, island, uid).catch(() => undefined) : update(i, island, uid)), // BUG (mutation) silent-refusal: a refused update is swallowed, never shown
       onSkip: (i) => { skipVersion(i.kind, i.latest); },
     });
     if (VARIANT === 'steal-focus') (ind.root as unknown as ShadowRoot).querySelector('button')?.focus(); // BUG (mutation)
@@ -251,9 +368,11 @@ function boot(): void {
 (globalThis as Record<string, unknown>).OrzCarrier = {
   kind: 'md',
   version: VERSION,
-  formats: [1],
+  formats: VARIANT === 'formats-wrong' ? [1, 2] : [1], // BUG (mutation) formats-wrong: claims a format it refuses
   assemble,
-  extract,
+  extract: VARIANT === 'extract-strip-bom'
+    ? (html: string) => { const x = extract(html); return x && x.text.charCodeAt(0) === 0xfeff ? { ...x, text: x.text.slice(1) } : x; } // BUG (mutation)
+    : extract,
   readDocument: (text: string) => readDocument(text, { kind: 'md' }),
   mountEditor,
   renderPreview: (text: string) => Promise.resolve(renderMarkdownPreview(text)),

@@ -4,7 +4,7 @@
  * Chrome, never in Node, and must not depend on how this file is compiled).
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HOST_PAGE = exports.DEFAULT_EDITOR_DRIVER = exports.PAGE_HELPERS = exports.READ_OPFS = exports.OPFS_FOLDER = exports.RECORD_BINDING = void 0;
+exports.HOST_PAGE = exports.DEFAULT_EDITOR_DRIVER = exports.PAGE_HELPERS = exports.WRITE_OPFS = exports.READ_OPFS = exports.OPFS_FOLDER = exports.RECORD_BINDING = void 0;
 exports.initScript = initScript;
 exports.mountEditorScript = mountEditorScript;
 exports.bundlePage = bundlePage;
@@ -22,11 +22,16 @@ exports.OPFS_FOLDER = `function (pathname) {
 /**
  * Init script for every frame of a check's context: dialogs are recorded
  * (and never block), uncaught errors are recorded, and the File System Access
- * picker is a recording stub (`stub`), absent (`none`), the browser's
- * (`native`), or (`opfs`) a recording function that returns a REAL
- * `FileSystemFileHandle` from the origin-private file system, in a folder of
- * the page's path — so IndexedDB, the handle's structured clone, permission
- * checks and the writes are real (the native picker cannot be automated).
+ * picker is a recording stub (`stub`: an in-memory file per picked name —
+ * `getFile()` gives what was written last, a new file is empty), absent
+ * (`none`), the browser's (`native`), or (`opfs`) a recording function that
+ * returns a REAL `FileSystemFileHandle` from the origin-private file system,
+ * in a folder of the page's path — so IndexedDB, the handle's structured
+ * clone, permission checks, reads and writes are real (the native picker
+ * cannot be automated). The `opfs` picker opens where the real one would
+ * default to when the page sets `window.__orzConformancePickIn` to a folder
+ * name (`{ folder, name? }`, read once): a picker that remembers the last
+ * folder (Downloads) and offers the suggested name there.
  */
 function initScript(picker) {
     return `(() => {
@@ -46,18 +51,21 @@ function initScript(picker) {
   if (picker === 'none') {
     try { Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, writable: true, value: undefined }); } catch (e) {}
   } else if (picker === 'stub') {
+    var files = {};
     var pick = function (opts) {
       var name = (opts && opts.suggestedName) || 'picked.html';
       rec('picker', { suggestedName: opts && opts.suggestedName, types: opts && opts.types ? JSON.parse(JSON.stringify(opts.types)) : null });
+      if (!(name in files)) files[name] = '';
       var handle = {
         kind: 'file', name: name,
         queryPermission: function () { return Promise.resolve('granted'); },
         requestPermission: function () { return Promise.resolve('granted'); },
+        getFile: function () { return Promise.resolve(new File([files[name]], name, { type: 'text/html' })); },
         createWritable: function () {
           var parts = [];
           return Promise.resolve({
             write: function (d) { return (typeof d === 'string' ? Promise.resolve(d) : new Blob([d]).text()).then(function (s) { parts.push(s); }); },
-            close: function () { rec('write', { name: name, data: parts.join('') }); return Promise.resolve(); },
+            close: function () { files[name] = parts.join(''); rec('write', { name: name, data: files[name] }); return Promise.resolve(); },
             abort: function () { return Promise.resolve(); },
           });
         },
@@ -69,23 +77,40 @@ function initScript(picker) {
     var folder = ${exports.OPFS_FOLDER};
     var pickReal = function (opts) {
       var name = (opts && opts.suggestedName) || 'picked.html';
-      rec('picker', { suggestedName: opts && opts.suggestedName, page: String(location.pathname) });
+      var elsewhere = window.__orzConformancePickIn;
+      window.__orzConformancePickIn = undefined;
+      var dirName = elsewhere && elsewhere.folder ? String(elsewhere.folder) : folder(String(location.pathname));
+      if (elsewhere && elsewhere.name) name = String(elsewhere.name);
+      rec('picker', { suggestedName: opts && opts.suggestedName, page: String(location.pathname), folder: dirName, name: name });
       return navigator.storage.getDirectory()
-        .then(function (root) { return root.getDirectoryHandle(folder(String(location.pathname)), { create: true }); })
+        .then(function (root) { return root.getDirectoryHandle(dirName, { create: true }); })
         .then(function (dir) { return dir.getFileHandle(name, { create: true }); });
     };
     try { Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, writable: true, value: pickReal }); } catch (e) {}
   }
 })();`;
 }
-/** Page-side: the text of the file the `opfs` picker made for a page path and name (null when there is none). */
+/** Page-side: the text of the file the `opfs` picker made for a page path (or in `a.folder`) and name (null when there is none). */
 exports.READ_OPFS = `async function (a) {
   var folder = ${exports.OPFS_FOLDER};
   try {
     var root = await navigator.storage.getDirectory();
-    var dir = await root.getDirectoryHandle(folder(a.pathname));
+    var dir = await root.getDirectoryHandle(a.folder || folder(a.pathname));
     return await (await (await dir.getFileHandle(a.name)).getFile()).text();
   } catch (e) { return null; }
+}`;
+/**
+ * Page-side: write a file where the `opfs` picker finds it — the page's own folder (`a.pathname`) or
+ * `a.folder` — so the file the page was opened from exists "on disk" with the bytes the page loaded.
+ */
+exports.WRITE_OPFS = `async function (a) {
+  var folder = ${exports.OPFS_FOLDER};
+  var root = await navigator.storage.getDirectory();
+  var dir = await root.getDirectoryHandle(a.folder || folder(a.pathname), { create: true });
+  var w = await (await dir.getFileHandle(a.name, { create: true })).createWritable();
+  await w.write(a.data);
+  await w.close();
+  return true;
 }`;
 /** Page-side helpers installed by the harness in a page it drives (deep queries, the island text, the editor). */
 exports.PAGE_HELPERS = `(() => {

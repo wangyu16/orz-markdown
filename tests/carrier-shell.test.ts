@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import vm from 'node:vm';
 import type { AddressInfo } from 'node:net';
@@ -137,17 +138,24 @@ function memoryHandleStore(initial: Record<string, StoredHandle> = {}) {
   return { store, map };
 }
 
-function fakeHandle(name = 'notes.md.html', perm: { query?: string; request?: string } = {}) {
+/**
+ * A file handle over an in-memory file: `content` is the file's text (a new file is empty), every
+ * write replaces it, and `getFile()` reads it — unless `unreadable` (a handle whose file cannot be read).
+ */
+function fakeHandle(name = 'notes.md.html', perm: { query?: string; request?: string } = {}, content = '', unreadable = false) {
   const writes: unknown[] = [];
   const calls = { query: 0, request: 0 };
-  const handle: FileHandleLike & { writes: unknown[]; calls: typeof calls; fail?: boolean } = {
+  const handle: FileHandleLike & { writes: unknown[]; calls: typeof calls; fail?: boolean; content: string } = {
     name,
     writes,
     calls,
+    content,
     async createWritable() {
       if (handle.fail) throw new Error('disk full');
-      return { write: async (d: unknown) => { writes.push(d); }, close: async () => undefined };
+      let next = '';
+      return { write: async (d: unknown) => { writes.push(d); next += String(d); }, close: async () => { handle.content = next; } };
     },
+    ...(unreadable ? {} : { getFile: async () => ({ text: async () => handle.content }) }),
     ...(perm.query ? { queryPermission: async () => { calls.query++; return perm.query!; } } : {}),
     ...(perm.request ? { requestPermission: async () => { calls.request++; return perm.request!; } } : {}),
   };
@@ -214,7 +222,7 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     }
     const h = fakeHandle();
     const f = fakeSaverWindow({ picker: async () => h });
-    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', host: off.conn, window: f.win, handleStore: memoryHandleStore().store }).save(input)).toEqual({ via: 'file', ok: true, picked: true, name: 'notes.md.html' });
+    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', host: off.conn, window: f.win, handleStore: memoryHandleStore().store }).save(input)).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
     expect(h.writes).toEqual(['<!doctype html>X']);
     const d = fakeSaverWindow();
     expect(await createSaver({ suggestedName: 'notes.md.html', kind: 'md', window: d.win }).save(input)).toEqual({ via: 'download', ok: true, confirmed: false, name: 'notes.md.html' });
@@ -238,7 +246,7 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     }
     expect(KIND_EXTENSIONS).toEqual({ md: '.md.html', slides: '.slides.html', paged: '.paged.html', poster: '.poster.html' });
     const a = fakeSaverWindow({ picker: async () => { throw abort(); } });
-    expect(await createSaver({ suggestedName: 'n.md.html', kind: 'md', window: a.win, handleStore: memoryHandleStore().store }).save(input)).toEqual({ via: 'file', ok: false, error: 'cancelled', picked: true });
+    expect(await createSaver({ suggestedName: 'n.md.html', kind: 'md', window: a.win, handleStore: memoryHandleStore().store }).save(input)).toEqual({ via: 'file', ok: false, error: 'cancelled', picked: true, opened: false });
     expect(a.downloads).toEqual([]);
     const n = fakeSaverWindow({ picker: async () => { throw Object.assign(new Error('no gesture'), { name: 'SecurityError' }); } });
     expect(await createSaver({ suggestedName: 'n.md.html', kind: 'md', window: n.win, handleStore: memoryHandleStore().store }).save(input)).toEqual({ via: 'download', ok: true, confirmed: false, name: 'n.md.html' });
@@ -257,11 +265,11 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
       [{ query: 'denied' }, 1],
     ];
     for (const [perm, picks] of cases) {
-      const old = fakeHandle('notes.md.html', perm);
+      const old = fakeHandle('notes.md.html', perm, 'OPENED');
       const fresh = fakeHandle();
       const f = fakeSaverWindow({ picker: async () => fresh });
-      const r = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: memoryHandleStore({ [`${UID} file:///Users/me/notes.md.html`]: { handle: old, name: 'notes.md.html', location: 'file:///Users/me/notes.md.html' } }).store }).save(input);
-      expect(r, JSON.stringify(perm)).toEqual({ via: 'file', ok: true, picked: picks === 1, name: 'notes.md.html' });
+      const r = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, openedHtml: 'OPENED', handleStore: memoryHandleStore({ [`${UID} file:///Users/me/notes.md.html`]: { handle: old, name: 'notes.md.html', location: 'file:///Users/me/notes.md.html' } }).store }).save(input);
+      expect(r, JSON.stringify(perm)).toEqual({ via: 'file', ok: true, picked: picks === 1, opened: picks === 0, name: 'notes.md.html' });
       expect(f.picks.length, JSON.stringify(perm)).toBe(picks);
       expect((picks ? fresh : old).writes, JSON.stringify(perm)).toEqual(['<!doctype html>X']);
     }
@@ -270,11 +278,12 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
   it('[S.3] the handle key is the header uid (well-formed) with the page location, else the page URL without its fragment; the picked handle is stored under it with that location', async () => {
     expect(SHELL_UID_PATTERN.source).toBe(UID_PATTERN.source);
     const mem = memoryHandleStore();
-    const f = fakeSaverWindow({ picker: async () => fakeHandle() });
-    const s1 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store });
+    // the reader picks the opened file itself (it holds the opened bytes): it is remembered, with the hash of what was written
+    const f = fakeSaverWindow({ picker: async () => fakeHandle('notes.md.html', {}, 'OPENED') });
+    const s1 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store, openedHtml: 'OPENED' });
     expect(s1.handleKey()).toBe(`${UID} file:///Users/me/notes.md.html`);
-    await s1.save(input);
-    expect(mem.map.get(`${UID} file:///Users/me/notes.md.html`)).toMatchObject({ name: 'notes.md.html', location: 'file:///Users/me/notes.md.html' });
+    expect(await s1.save(input)).toMatchObject({ via: 'file', picked: true, opened: true });
+    expect(mem.map.get(`${UID} file:///Users/me/notes.md.html`)).toMatchObject({ name: 'notes.md.html', location: 'file:///Users/me/notes.md.html', sha256: createHash('sha256').update(input.html).digest('hex') });
     // a query or fragment is not part of the location
     const q = fakeSaverWindow({ href: 'file:///Users/me/notes.md.html?x=1#y' });
     expect(createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: q.win }).handleKey()).toBe(`${UID} file:///Users/me/notes.md.html`);
@@ -283,40 +292,44 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
       const s = createSaver({ uid, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store });
       expect(s.handleKey()).toBe('file:///Users/me/notes.md.html');
     }
-    await createSaver({ suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store }).save(input);
+    await createSaver({ suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store, openedHtml: () => Promise.resolve('OPENED') }).save(input);
     expect([...mem.map.keys()]).toEqual([`${UID} file:///Users/me/notes.md.html`, 'file:///Users/me/notes.md.html']);
+    // a picked file that is not the opened one (a new file, another file) is written but never remembered for this page
+    const other = memoryHandleStore();
+    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: fakeSaverWindow({ picker: async () => fakeHandle() }).win, handleStore: other.store, openedHtml: 'OPENED' }).save(input);
+    expect(other.map.size).toBe(0);
   });
 
-  it('[S.3] a second save overwrites without prompting — in the same session and in a new one (remembered handle) — and a remembered handle for another file name (a copy carrying the same uid) is not used', async () => {
+  it('[S.3] a second save overwrites without prompting — in the same session and in a new one (remembered handle proved by content) — and a remembered handle for another file name (a copy carrying the same uid) is not used', async () => {
     const mem = memoryHandleStore();
-    const h = fakeHandle('notes.md.html', { query: 'granted' });
+    const h = fakeHandle('notes.md.html', { query: 'granted' }, 'zero'); // the opened file: it holds what the page loaded
     const f = fakeSaverWindow({ picker: async () => h });
-    const s = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store });
-    await s.save({ text: 'a', html: 'one' });
-    await s.save({ text: 'b', html: 'two' });
+    const s = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: mem.store, openedHtml: 'zero' });
+    expect(await s.save({ text: 'a', html: 'one' })).toEqual({ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' });
+    expect(await s.save({ text: 'b', html: 'two' })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
     expect([f.picks.length, h.writes]).toEqual([1, ['one', 'two']]);
-    // a new session (fresh saver, same store)
+    // a new session (fresh saver, same store) of the page that loaded "two"
     const f2 = fakeSaverWindow({ picker: async () => fakeHandle() });
-    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f2.win, handleStore: mem.store }).save({ text: 'c', html: 'three' });
+    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f2.win, handleStore: mem.store, openedHtml: 'two' }).save({ text: 'c', html: 'three' })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
     expect([f2.picks.length, h.writes]).toEqual([0, ['one', 'two', 'three']]);
     // a copy opened as copy.md.html with the same uid
     const other = fakeHandle('copy.md.html');
     const f3 = fakeSaverWindow({ href: 'file:///Users/me/copy.md.html', picker: async () => other });
-    await createSaver({ uid: UID, suggestedName: 'copy.md.html', kind: 'md', window: f3.win, handleStore: mem.store }).save({ text: 'd', html: 'four' });
+    await createSaver({ uid: UID, suggestedName: 'copy.md.html', kind: 'md', window: f3.win, handleStore: mem.store, openedHtml: 'three' }).save({ text: 'd', html: 'four' });
     expect([f3.picks.length, h.writes.length, other.writes]).toEqual([1, 3, ['four']]);
     // [A-1] a same-named copy in ANOTHER folder (same uid, same name: every file: page shares one IndexedDB) gets the picker
-    const copy = fakeHandle('notes.md.html');
+    const copy = fakeHandle('notes.md.html', {}, 'three');
     const f5 = fakeSaverWindow({ href: 'file:///Users/me/Downloads/notes.md.html', picker: async () => copy });
-    const r5 = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f5.win, handleStore: mem.store }).save({ text: 'e', html: 'copy' });
-    expect([r5, f5.picks.length, h.writes.length, copy.writes]).toEqual([{ via: 'file', ok: true, picked: true, name: 'notes.md.html' }, 1, 3, ['copy']]);
-    // ... and the original, reopened, still reuses its own handle (its record is not the copy's)
+    const r5 = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f5.win, handleStore: mem.store, openedHtml: 'three' }).save({ text: 'e', html: 'copy' });
+    expect([r5, f5.picks.length, h.writes.length, copy.writes]).toEqual([{ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' }, 1, 3, ['copy']]);
+    // ... and the original, reopened (it loaded "three"), still reuses its own handle (its record is not the copy's)
     const f6 = fakeSaverWindow({ picker: async () => fakeHandle() });
-    const r6 = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f6.win, handleStore: mem.store }).save({ text: 'f', html: 'five' });
-    expect([r6, f6.picks.length, h.writes]).toEqual([{ via: 'file', ok: true, picked: false, name: 'notes.md.html' }, 0, ['one', 'two', 'three', 'five']]);
+    const r6 = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f6.win, handleStore: mem.store, openedHtml: 'three' }).save({ text: 'f', html: 'five' });
+    expect([r6, f6.picks.length, h.writes]).toEqual([{ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' }, 0, ['one', 'two', 'three', 'five']]);
     // a record without a location (stored before this rule) or a page without one is not reused
-    const legacy = fakeHandle('notes.md.html', { query: 'granted' });
+    const legacy = fakeHandle('notes.md.html', { query: 'granted' }, 'six?');
     const f7 = fakeSaverWindow({ picker: async () => fakeHandle() });
-    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f7.win, handleStore: memoryHandleStore({ [`${UID} file:///Users/me/notes.md.html`]: { handle: legacy, name: 'notes.md.html' } }).store }).save({ text: 'g', html: 'six' });
+    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f7.win, openedHtml: 'six?', handleStore: memoryHandleStore({ [`${UID} file:///Users/me/notes.md.html`]: { handle: legacy, name: 'notes.md.html' } }).store }).save({ text: 'g', html: 'six' });
     expect([f7.picks.length, legacy.writes]).toEqual([1, []]);
     // IndexedDB unavailable (a store that keeps nothing): the session still remembers its handle
     const forgetful: HandleStore = { get: async () => undefined, put: async () => undefined, delete: async () => undefined };
@@ -326,6 +339,53 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     await s4.save({ text: 'a', html: '1' });
     await s4.save({ text: 'b', html: '2' });
     expect([f4.picks.length, h4.writes]).toEqual([1, ['1', '2']]);
+  });
+
+  it('[S.3] [S.13] a handle is proved by its content, never by its name (F2): a save-as that landed in another folder is never reused after a reload and never counts as the opened file; without the opened bytes no remembered handle is reused', async () => {
+    const PAGE = 'file:///Users/me/Docs/notes.md.html';
+    const mem = memoryHandleStore();
+    // session 1: the page is Docs/notes.md.html (it loaded "v0"); the picker opens in Downloads and the reader accepts the same name there
+    const downloads = fakeHandle('notes.md.html', { query: 'granted' });
+    const docs = fakeHandle('notes.md.html', { query: 'granted' }, 'v0');
+    const f1 = fakeSaverWindow({ href: PAGE, picker: async () => downloads });
+    const s1 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f1.win, handleStore: mem.store, openedHtml: 'v0' });
+    expect(await s1.save({ text: 't1', html: 'v1' })).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
+    // later saves of session 1 keep writing the file the reader chose — and still say it is not the opened file (B#1)
+    expect(await s1.save({ text: 't1b', html: 'v1b' })).toEqual({ via: 'file', ok: true, picked: false, opened: false, name: 'notes.md.html' });
+    expect(mem.map.size).toBe(0);
+    // session 2: the reader reopens Docs/notes.md.html (still v0) and saves: the picker, never the Downloads file
+    const f2 = fakeSaverWindow({ href: PAGE, picker: async () => docs });
+    const r2 = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f2.win, handleStore: mem.store, openedHtml: 'v0' }).save({ text: 't2', html: 'v0+2' });
+    expect([r2, f2.picks.length, downloads.content, docs.content]).toEqual([{ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' }, 1, 'v1b', 'v0+2']);
+    // even a record that names the Downloads file (stored by an older shell, no hash) is refused: its bytes are not the opened file's
+    const stale = memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: downloads, name: 'notes.md.html', location: PAGE } });
+    const f3 = fakeSaverWindow({ href: PAGE, picker: async () => docs });
+    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f3.win, handleStore: stale.store, openedHtml: 'v0+2' }).save({ text: 't3', html: 'v3' })).toMatchObject({ picked: true, opened: true });
+    expect(downloads.content).toBe('v1b');
+    // a remembered handle whose file another tab or tool wrote since (hash differs) is not reused, even when it equals the opened bytes
+    const shared = fakeHandle('notes.md.html', { query: 'granted' }, 'external');
+    const hashed = memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: shared, name: 'notes.md.html', location: PAGE, sha256: createHash('sha256').update('what this page wrote').digest('hex') } });
+    const f4 = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
+    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f4.win, handleStore: hashed.store, openedHtml: 'external' }).save({ text: 't4', html: 'v4' });
+    expect([f4.picks.length, shared.content]).toEqual([1, 'external']);
+    // no opened bytes (the carrier did not say): a remembered handle is never reused across page loads; no permission is asked
+    const proven = fakeHandle('notes.md.html', { query: 'prompt', request: 'granted' }, 'v0');
+    const f5 = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
+    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f5.win, handleStore: memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: proven, name: 'notes.md.html', location: PAGE } }).store }).save({ text: 't5', html: 'v5' })).toMatchObject({ picked: true, opened: false });
+    expect([f5.picks.length, proven.writes, proven.calls]).toEqual([1, [], { query: 0, request: 0 }]);
+    // an unreadable handle (no getFile) proves nothing: the picker
+    const blind = fakeHandle('notes.md.html', { query: 'granted' }, 'v0', true);
+    const f6 = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
+    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f6.win, handleStore: memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: blind, name: 'notes.md.html', location: PAGE } }).store, openedHtml: 'v0' }).save({ text: 't6', html: 'v6' });
+    expect([f6.picks.length, blind.writes]).toEqual([1, []]);
+    // in one session: a file written by someone else since this page's last save gets the picker (not silently overwritten)
+    const mine = fakeHandle('notes.md.html', {}, 'v0');
+    const f7 = fakeSaverWindow({ href: PAGE, picker: async () => mine });
+    const s7 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f7.win, handleStore: memoryHandleStore().store, openedHtml: 'v0' });
+    await s7.save({ text: 'a', html: 'A' });
+    mine.content = 'changed by another tab';
+    await s7.save({ text: 'b', html: 'B' });
+    expect(f7.picks.length).toBe(2);
   });
 
   it('[S.4] the save never reads the live DOM: no shell module names a DOM-reading or serializing API, and save writes exactly the html it is given', async () => {
@@ -751,18 +811,26 @@ function valueImports(entry: string): Set<string> {
 }
 
 /**
- * Re-measured 2026-10-06 with exactly the build below (esbuild, `src/carrier/shell/index.ts`, ESM,
- * browser, minified): 45,746 bytes (44,362 at 2600cdf; 14,407 for save/preferences/protocols alone).
- * Unminified the same bundle is ~72 KB, which is not what this bound measures. Bound 52 KB ≈
- * measurement + 14 %: the shell runs in every assembled file, so growth should be noticed early,
- * with room for one more round of guards.
+ * What ships: the package's CommonJS `dist/` is what a carrier bundles (`orz-markdown/carrier/shell`
+ * → `dist/carrier/shell/index.js`), so the bound measures that — esbuild, browser, minified, ESM
+ * output — not the TypeScript source (closed loop 2 round 2: the source measured 45.7 KB while the
+ * dist bundled to 58.9 KB). Re-measured 2026-10-06 after round 2: 56,429 bytes (the source: ~47.5 KB).
+ * CommonJS costs ~9 KB here: export names stay unminified and esbuild cannot drop the unused exports
+ * of a CommonJS module (all of `read.js`). The shell index re-exports with `export *` where every
+ * export of a module is public (−4.1 KB of per-name getters). An ESM build was weighed and not
+ * shipped: carriers bundle the editor (CommonJS, which requires the shell's CommonJS modules) with the
+ * shell, so a shell-only ESM entry would put two copies of save/preferences/chrome in a carrier's
+ * bundle, and an ESM build of the editor goes through the parser's ESM path, which loads KaTeX twice.
+ * Bound 62 KB ≈ measurement + 10 %: the shell runs in every assembled file.
  */
-const SHELL_BUNDLE_LIMIT = 52_000;
+const SHELL_BUNDLE_LIMIT = 62_000;
+/** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
+const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
 const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
-  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, it bundles for the browser under 52 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
+  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 62 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
     const graph = [...valueImports('src/carrier/shell/index.ts')].sort();
     expect(graph).toEqual([
       ...READER_GRAPH,
@@ -770,10 +838,15 @@ describe('module boundaries', () => {
       'src/carrier/shell/preferences.ts', 'src/carrier/shell/protocol.ts', 'src/carrier/shell/save.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts',
     ].sort());
     const { build } = await import('esbuild');
-    const out = await build({ entryPoints: ['src/carrier/shell/index.ts'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
+    // what ships: the CommonJS dist a carrier bundles (build first: `npm run build`)
+    expect(existsSync('dist/carrier/shell/index.js'), 'dist/ is missing: run npm run build').toBe(true);
+    const out = await build({ entryPoints: ['dist/carrier/shell/index.js'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
     const size = out.outputFiles[0].contents.byteLength;
     expect(size).toBeLessThan(SHELL_BUNDLE_LIMIT);
-    expect(Object.keys(out.metafile!.inputs).filter((f) => !f.startsWith('src/carrier/shell/')).sort()).toEqual(READER_GRAPH);
+    expect(Object.keys(out.metafile!.inputs).filter((f) => !f.startsWith('dist/carrier/shell/')).sort()).toEqual(READER_GRAPH.map((f) => f.replace(/^src\//, 'dist/').replace(/\.ts$/, '.js')));
+    // the source bundles smaller (tree-shaken ESM); the dist is the bound because it is what ships
+    const src = await build({ entryPoints: ['src/carrier/shell/index.ts'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent' });
+    expect(src.outputFiles[0].contents.byteLength).toBeLessThan(size);
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { exports: Record<string, string> };
     expect(pkg.exports['./carrier/shell']).toBe('./dist/carrier/shell/index.js');
     const carrierGraph = [...valueImports('src/carrier.ts')];
@@ -782,6 +855,14 @@ describe('module boundaries', () => {
       const dist = (await import('../dist/carrier/shell/index.js')) as Record<string, unknown>;
       expect(typeof dist.createSaver).toBe('function');
     }
+  });
+
+  it('[K.20] [S.11] what ships: dist/carrier/read.js (the parser-free reader the shell and the update verify with) bundles under 30 KB minified with no parser module', async () => {
+    expect(existsSync('dist/carrier/read.js'), 'dist/ is missing: run npm run build').toBe(true);
+    const { build } = await import('esbuild');
+    const out = await build({ entryPoints: ['dist/carrier/read.js'], bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
+    expect(out.outputFiles[0].contents.byteLength).toBeLessThan(READ_BUNDLE_LIMIT);
+    expect(Object.keys(out.metafile!.inputs).sort()).toEqual(READER_GRAPH.map((f) => f.replace(/^src\//, 'dist/').replace(/\.ts$/, '.js')));
   });
 
   it('[S.11] importing the shell touches no window, document, storage, IndexedDB, navigator or location: the bundle loads in a context where each of them throws', async () => {
@@ -1041,7 +1122,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 60_000 }, () 
     page.on('download', () => { downloads++; });
     await page.evaluate(() => { Object.defineProperty(window, 'showSaveFilePicker', { value: async () => { throw new DOMException('cancelled', 'AbortError'); }, configurable: true }); });
     const cancelled = await page.evaluate(() => (window as unknown as { OrzShell: { createSaver(o: unknown): { save(i: unknown): Promise<unknown> } } }).OrzShell.createSaver({ suggestedName: 'c.md.html', kind: 'md' }).save({ text: 't', html: 'C' }));
-    expect(cancelled).toEqual({ via: 'file', ok: false, error: 'cancelled', picked: true });
+    expect(cancelled).toEqual({ via: 'file', ok: false, error: 'cancelled', picked: true, opened: false });
     // served over http: the notice, no picker, no download
     await page.goto(`${A}/blank.html`);
     const served = await page.evaluate(() => (window as unknown as { OrzShell: { createSaver(o: unknown): { save(i: unknown): Promise<unknown> } } }).OrzShell.createSaver({ suggestedName: 'd.md.html', kind: 'md' }).save({ text: 't', html: 'D' }));
@@ -1051,56 +1132,93 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 60_000 }, () 
     await page.close();
   });
 
-  it('[S.12] [S.3] in Chrome: a real FileSystemFileHandle round-trips through IndexedDB under the uid and page location (else the page URL); after a reload the second save writes the file without the picker; a copy with another name, or with the same name in another folder, gets the picker and the original keeps its handle', async () => {
+  /**
+   * Drives `createSaver` in a page with REAL handles: the picker cannot be automated, so it is replaced by a
+   * function returning a real `FileSystemFileHandle` from the origin-private file system — by default the
+   * file of the page's own folder (`folder`), else `pick` (`{ folder, name }`: a picker that opened in
+   * another folder, or a file of another name). IndexedDB, structured clone of the handle, queryPermission,
+   * getFile and the writes are real; only `location` is presented as file:// (a served page would get the
+   * notice) — one origin, as every file: page shares one IndexedDB. `seed` writes files first (the opened
+   * file on "disk"); `opened` is the saver's `openedHtml` (the bytes the page loaded).
+   */
+  const fsaRun = (page: import('playwright-core').Page, args: { uid?: string; name: string; html: string; folder?: string; opened?: string; seed?: Array<[string, string, string]>; pick?: { folder: string; name: string } }) => page.evaluate(async ({ uid, name, html, folder, opened, seed, pick }) => {
+    const w = window as unknown as Record<string, any>;
+    w.__picks = w.__picks ?? 0;
+    const root = await navigator.storage.getDirectory();
+    const fileIn = async (d: string, n: string) => (await root.getDirectoryHandle(d, { create: true })).getFileHandle(n, { create: true });
+    for (const [d, n, data] of seed ?? []) { const wr = await (await fileIn(d, n)).createWritable(); await wr.write(data); await wr.close(); }
+    const fileWin = {
+      location: { protocol: 'file:', href: `file:///Users/me/${folder}/${name}#x`, pathname: `/Users/me/${folder}/${name}` },
+      document, indexedDB, Blob, URL, setTimeout: setTimeout.bind(window),
+      showSaveFilePicker: async (o: { suggestedName: string }) => { w.__picks++; return fileIn(pick ? pick.folder : folder!, pick ? pick.name : o.suggestedName); },
+    };
+    const saver = w.OrzShell.createSaver({ uid, suggestedName: name, kind: 'md', window: fileWin, ...(opened !== undefined ? { openedHtml: opened } : {}) });
+    const result = await saver.save({ text: 't', html });
+    const read = async (f: string, n = name): Promise<string | null> => {
+      try { return await (await (await (await root.getDirectoryHandle(f)).getFileHandle(n)).getFile()).text(); } catch { return null; }
+    };
+    const keys = await new Promise<string[]>((res) => {
+      const r = indexedDB.open('orz-carrier', 1);
+      r.onsuccess = () => { const g = r.result.transaction('handles').objectStore('handles').getAllKeys(); g.onsuccess = () => { res(g.result as string[]); r.result.close(); }; };
+      r.onerror = () => res([]);
+    });
+    const stored = await new Promise<boolean>((res) => {
+      const r = indexedDB.open('orz-carrier', 1);
+      r.onsuccess = () => { const g = r.result.transaction('handles').objectStore('handles').get(saver.handleKey()); g.onsuccess = () => { res(g.result?.handle instanceof FileSystemFileHandle && typeof g.result?.sha256 === 'string'); r.result.close(); }; };
+      r.onerror = () => res(false);
+    });
+    return { result, picks: w.__picks, content: await read(folder!), docs: await read('Docs'), downloads: await read('Downloads'), other: pick ? await read(pick.folder, pick.name) : null, keys: keys.sort(), stored, key: saver.handleKey() };
+  }, { folder: 'Docs', ...args });
+
+  it('[S.12] [S.3] in Chrome: a real FileSystemFileHandle round-trips through IndexedDB under the uid and page location (else the page URL) with the hash of what was written; after a reload the second save writes the opened file without the picker; a copy with another name, or with the same name in another folder, gets the picker and the original keeps its handle', async () => {
     const ctx = await browser!.newContext();
     const page = await ctx.newPage();
     await page.goto(`${A}/blank.html`);
-    // The picker cannot be automated: it is replaced by a function returning a REAL handle from the
-    // origin-private file system (one folder per page folder). IndexedDB, structured clone of the handle,
-    // queryPermission and the writes are real; only `location` is presented as file:// (a served page would
-    // get the notice) — one origin, as every file: page shares one IndexedDB.
-    const run = (args: { uid?: string; name: string; html: string; folder?: string }) => page.evaluate(async ({ uid, name, html, folder }) => {
-      const w = window as unknown as Record<string, any>;
-      w.__picks = w.__picks ?? 0;
-      const fileWin = {
-        location: { protocol: 'file:', href: `file:///Users/me/${folder}/${name}#x`, pathname: `/Users/me/${folder}/${name}` },
-        document, indexedDB, Blob, URL, setTimeout: setTimeout.bind(window),
-        showSaveFilePicker: async (o: { suggestedName: string }) => { w.__picks++; const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folder, { create: true }); return dir.getFileHandle(o.suggestedName, { create: true }); },
-      };
-      const saver = w.OrzShell.createSaver({ uid, suggestedName: name, kind: 'md', window: fileWin });
-      const result = await saver.save({ text: 't', html });
-      const read = async (f: string): Promise<string | null> => {
-        try { return await (await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle(f)).getFileHandle(name)).getFile()).text(); } catch { return null; }
-      };
-      const keys = await new Promise<string[]>((res) => {
-        const r = indexedDB.open('orz-carrier', 1);
-        r.onsuccess = () => { const g = r.result.transaction('handles').objectStore('handles').getAllKeys(); g.onsuccess = () => { res(g.result as string[]); r.result.close(); }; };
-        r.onerror = () => res([]);
-      });
-      const stored = await new Promise<boolean>((res) => {
-        const r = indexedDB.open('orz-carrier', 1);
-        r.onsuccess = () => { const g = r.result.transaction('handles').objectStore('handles').get(saver.handleKey()); g.onsuccess = () => { res(g.result?.handle instanceof FileSystemFileHandle); r.result.close(); }; };
-        r.onerror = () => res(false);
-      });
-      return { result, picks: w.__picks, content: await read(folder), docs: await read('Docs'), keys: keys.sort(), stored, key: saver.handleKey() };
-    }, { folder: 'Docs', ...args });
-    const r1 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>one' });
-    expect(r1).toEqual({ result: { via: 'file', ok: true, picked: true, name: 'notes.md.html' }, picks: 1, content: '<!doctype html>one', docs: '<!doctype html>one', keys: [`${UID} file:///Users/me/Docs/notes.md.html`], stored: true, key: `${UID} file:///Users/me/Docs/notes.md.html` });
-    const r2 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>two' });
-    expect([r2.picks, r2.content, r2.result]).toEqual([1, '<!doctype html>two', { via: 'file', ok: true, picked: false, name: 'notes.md.html' }]); // a new saver, same page: the remembered handle, no picker
+    const run = (args: Parameters<typeof fsaRun>[1]) => fsaRun(page, args);
+    const r1 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>one', opened: 'v0', seed: [['Docs', 'notes.md.html', 'v0']] });
+    expect(r1).toEqual({ result: { via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' }, picks: 1, content: '<!doctype html>one', docs: '<!doctype html>one', downloads: null, other: null, keys: [`${UID} file:///Users/me/Docs/notes.md.html`], stored: true, key: `${UID} file:///Users/me/Docs/notes.md.html` });
+    const r2 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>two', opened: '<!doctype html>one' });
+    expect([r2.picks, r2.content, r2.result]).toEqual([1, '<!doctype html>two', { via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' }]); // a new saver of the page that loaded "one": the remembered handle, no picker
     await page.reload();
-    const r3 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>three — 漢字\r\n' });
-    expect(r3).toMatchObject({ result: { via: 'file', ok: true, picked: false }, picks: 0, content: '<!doctype html>three — 漢字\r\n' });
-    const r4 = await run({ uid: UID, name: 'copy.md.html', html: 'copy' });
+    const r3 = await run({ uid: UID, name: 'notes.md.html', html: '<!doctype html>three — 漢字\r\n', opened: '<!doctype html>two' });
+    expect(r3).toMatchObject({ result: { via: 'file', ok: true, picked: false, opened: true }, picks: 0, content: '<!doctype html>three — 漢字\r\n' });
+    const r4 = await run({ uid: UID, name: 'copy.md.html', html: 'copy', opened: 'copy0', seed: [['Docs', 'copy.md.html', 'copy0']] });
     expect([r4.picks, r4.content]).toEqual([1, 'copy']);
     // [A-1] the same name and uid in another folder: the picker, never the original's handle
-    const r5 = await run({ uid: UID, name: 'notes.md.html', html: 'COPY in Downloads', folder: 'Downloads' });
-    expect([r5.result, r5.picks, r5.content, r5.docs]).toEqual([{ via: 'file', ok: true, picked: true, name: 'notes.md.html' }, 2, 'COPY in Downloads', '<!doctype html>three — 漢字\r\n']);
-    const r6 = await run({ uid: UID, name: 'notes.md.html', html: 'original again' });
+    const r5 = await run({ uid: UID, name: 'notes.md.html', html: 'COPY in Downloads', folder: 'Downloads', opened: 'copied', seed: [['Downloads', 'notes.md.html', 'copied']] });
+    expect([r5.result, r5.picks, r5.content, r5.docs]).toEqual([{ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' }, 2, 'COPY in Downloads', '<!doctype html>three — 漢字\r\n']);
+    const r6 = await run({ uid: UID, name: 'notes.md.html', html: 'original again', opened: '<!doctype html>three — 漢字\r\n' });
     expect([r6.result.picked, r6.picks, r6.docs]).toEqual([false, 2, 'original again']);
-    const r7 = await run({ name: 'plain.md.html', html: 'plain' });
+    const r7 = await run({ name: 'plain.md.html', html: 'plain', opened: 'p0', seed: [['Docs', 'plain.md.html', 'p0']] });
     expect(r7.keys).toEqual(['file:///Users/me/Docs/plain.md.html', `${UID} file:///Users/me/Docs/copy.md.html`, `${UID} file:///Users/me/Docs/notes.md.html`, `${UID} file:///Users/me/Downloads/notes.md.html`].sort());
     expect(r7.stored).toBe(true);
+    await ctx.close();
+  });
+
+  it('[S.12] [S.3] [S.13] in Chrome (F2): the picker opens in Downloads and the reader accepts notes.md.html there while the page is Docs/notes.md.html — the result says picked, not the opened file; after a reload the page that reopened the Docs file gets the picker and the Downloads file is never overwritten; a picked file of another name in the page\'s own folder is not reused after a reload either', async () => {
+    const ctx = await browser!.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${A}/blank.html`);
+    const run = (args: Parameters<typeof fsaRun>[1]) => fsaRun(page, args);
+    const seed: Array<[string, string, string]> = [['Docs', 'notes.md.html', 'v0 (the opened file)']];
+    const r1 = await run({ uid: UID, name: 'notes.md.html', html: 'v1: edits of session 1', opened: 'v0 (the opened file)', seed, pick: { folder: 'Downloads', name: 'notes.md.html' } });
+    expect([r1.result, r1.picks, r1.docs, r1.downloads, r1.keys]).toEqual([{ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' }, 1, 'v0 (the opened file)', 'v1: edits of session 1', []]);
+    await page.reload(); // (the picker count is per page load)
+    // the reader reopens Docs/notes.md.html (v0), edits it and saves: the picker (never the remembered Downloads file); this time they choose the Docs file
+    const r2 = await run({ uid: UID, name: 'notes.md.html', html: 'v0 + edits of session 2', opened: 'v0 (the opened file)' });
+    expect([r2.result, r2.picks, r2.docs, r2.downloads]).toEqual([{ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' }, 1, 'v0 + edits of session 2', 'v1: edits of session 1']);
+    // ... and from now on the Docs file is remembered (proved by content): the next load writes it without the picker
+    await page.reload();
+    const r3 = await run({ uid: UID, name: 'notes.md.html', html: 'session 3', opened: 'v0 + edits of session 2' });
+    expect([r3.result.picked, r3.result.opened, r3.picks, r3.docs, r3.downloads]).toEqual([false, true, 0, 'session 3', 'v1: edits of session 1']);
+    // T1: same location, a picked file of another name ("Save as" notes copy.md.html beside it), then a reload: the picker
+    await page.reload();
+    const t1 = await run({ uid: UID, name: 'other.md.html', html: 'other v1', opened: 'o0', seed: [['Docs', 'other.md.html', 'o0']], pick: { folder: 'Docs', name: 'other copy.md.html' } });
+    expect([t1.result, t1.other]).toEqual([{ via: 'file', ok: true, picked: true, opened: false, name: 'other copy.md.html' }, 'other v1']);
+    await page.reload();
+    const t2 = await run({ uid: UID, name: 'other.md.html', html: 'other v2', opened: 'o0' });
+    expect([t2.result, t2.picks, t2.content]).toEqual([{ via: 'file', ok: true, picked: true, opened: true, name: 'other.md.html' }, 1, 'other v2']);
+    expect(await page.evaluate(async () => (await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('Docs')).getFileHandle('other copy.md.html')).getFile()).text())).toBe('other v1');
     await ctx.close();
   });
 });

@@ -20,7 +20,7 @@
  */
 import { escapeScriptText, extract, KIND_PACKAGE } from '../read.js';
 import type { SaveResult, Saver } from './save.js';
-import { globalWindow, openedFileName, type MessageEventLike, type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
+import { globalWindow, type MessageEventLike, type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
 
 /** The kinds that publish releases (FC-17 minus poster, which never self-updates: RULES §9). */
 export type ReleaseKind = 'md' | 'slides' | 'paged';
@@ -643,7 +643,12 @@ export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'curre
   getText?(): string;
   /** The text to carry over, exact, when there is no `getText` (read once). */
   text?: string;
-  /** The name of the file the page was opened from (default: the last segment of a `file:` page URL). */
+  /**
+   * Ignored (kept so older callers compile). A name proves nothing — a
+   * picker that opens in another folder offers the same name — so the reload
+   * rests on the save's `opened` (the written file proved by its content to
+   * be the opened file; `createSaver`'s `openedHtml`).
+   */
   openedName?: string;
   /** Saves the new file (`createSaver(...)`). */
   saver: Pick<Saver, 'save'>;
@@ -662,11 +667,12 @@ export type PerformUpdateResult =
       text: string;
       save: SaveResult;
       /**
-       * Reload now: the save wrote the opened file (a host, or File System
-       * Access without a picker or to a file of the opened name) and the
-       * current text is still the saved text. Otherwise keep the page: the
-       * new file is a copy (download, a picked file of another name) or the
-       * text moved on.
+       * Reload now: the save wrote the opened file — an acknowledged host
+       * save, or File System Access to a file proved by its content to be the
+       * opened one (`opened: true`) — and the current text is still the saved
+       * text. Otherwise keep the page: the new file is a copy (a download, a
+       * picked or session file not proved to be the opened one, whatever its
+       * name) or the text moved on.
        */
       reload: boolean;
     };
@@ -710,12 +716,8 @@ export async function performUpdate(opts: PerformUpdateOptions): Promise<Perform
   } catch (e) {
     save = { via: 'download', ok: false, confirmed: false, error: String((e as Error)?.message ?? e) };
   }
-  let opened = opts.openedName;
-  if (opened === undefined) {
-    try { opened = openedFileName(globalWindow<{ location?: { protocol?: string; pathname?: string } }>()?.location); } catch { opened = undefined; }
-  }
-  const wroteOpened = save.via === 'host' ? save.ok
-    : save.via === 'file' ? save.ok && (!save.picked || (save.name !== undefined && save.name === opened))
+  const wroteOpened = save.via === 'host' ? save.ok === true
+    : save.via === 'file' ? save.ok === true && save.opened === true
     : false;
   return { status: 'updated', info, html, text, save, reload: wroteOpened && read() === text };
 }

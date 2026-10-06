@@ -101,8 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     composes check → reassemble → `createSaver().save`, reading the text
     through `getText()` before and after the re-assembly (an edit meanwhile
     refuses with `changed`), and says whether the caller may reload
-    (`reload`: only when the opened file itself was written and the text did
-    not move on);
+    (`reload`: only when the save wrote a file proved by its content to be
+    the opened one, or the host acknowledged, and the text did not move on);
     `UpdateError` codes; `parseManifest`, `manifestUrl`, `bundleUrl`,
     `isBundlePath`, `isScriptSafe`, `sha384Integrity`, `compareSemver`;
   - `mountUpdateIndicator(anchor, info, { onUpdate, onLater, onSkip })` — a
@@ -130,9 +130,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     §9 `editHeader` as one undoable edit), `isDirty` / `markSaved`, events
     `change` / `dirty` / `selection` / `save` / `error`, `undo` / `redo`;
   - the preview: the carrier's `render(text)` (md: `renderMarkdownPreview`,
-    which stamps `data-src-line` and rewrites twin links) into an iframe with
-    `sandbox="allow-scripts"` (opaque origin), incremental (unchanged blocks
-    and drawings kept), debounced, with scroll sync on the line anchors;
+    which stamps `data-src-line` and rewrites twin links) into a sandboxed
+    iframe (`previewSandbox()`: `allow-scripts`, an opaque origin, except a
+    standalone file opened from disk — see round 1), incremental (unchanged
+    blocks and drawings kept), debounced, with scroll sync on the line anchors;
   - save: `hooks.save(text)` in an app, else `assemble(text)` + `createSaver`
     (host, served-page notice, File System Access, download); dirty clears
     only on success; never rejects;
@@ -178,6 +179,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     change with the selection from before the key: "Second line" became
     "Seond linec"; claim E.23); the CodeMirror upgrade read the textarea's
     text as of its last `input` event, not its live value.
+  - closed loop 2, round 2 (claims E.24, E.25; FC-19 §4 and §8): the
+    preview bridge takes a private MessageChannel port from the shell and
+    reports keys, links, input, scrolls and focus only through it and only
+    for trusted events, so a document script's forged save, view, Escape and
+    link messages do nothing even while the reader is in the preview, and a
+    shell mounted into a popup by its opener reaches its frame; a document
+    script that takes the keyboard focus gets it back taken at once and its
+    scripts paused in the preview (a `<meta>` CSP that runs only the frame's
+    nonce-stamped scripts); a link from the preview opens through `onLink`
+    or, by default, from a chip the reader clicks ("Open <host>?"), never by
+    itself; `shell.preview` (`post`, `on`, `setOptions({ head, scheme })`)
+    and page hooks for a carrier's frame document (`__orzPreviewApply`,
+    `__orzPreviewNavigate`, `__orzPreviewMessage`, `__orzPreview.report`);
+    renders wait for the frame's acknowledgement and count its time, and run
+    at least every `max(1 s, 4 × render)` while typing continues; navigate
+    mode follows the caret when a view change shows the preview;
+    `renderMarkdownPreviewWithIncludes` (URL includes through
+    `ctx.fetchInclude`, cached per shell); with `hooks.resolveLink` links
+    render as written (`ctx.twinLinks: false`); `codemirror6Adapter({ nonce
+    })`, and the nonce on stylesheet links; options `standalone` and
+    `openedHtml` (the standalone saver gets the opened file's bytes, by
+    default `assemble` of the mounted text); `Editor` in FC-19 §4 lists
+    `requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly`, `isReadOnly`.
+  - Fixed (round 2): a document script in the preview could take the focus
+    while the reader typed, receive the keys and forge saves and popups with
+    their activation; the preview stayed blank until slow stylesheets loaded
+    (the bridge waited behind them) and then claimed a CSP problem; a slow
+    frame (a paged renderer) was sent renders as fast as the renderer made
+    them; continuous typing held the preview back until it paused; navigate
+    mode did not follow a view change; a framed or hosted `file:` page got
+    the same-origin preview frame; `srcset` was split on every comma (a
+    `data:` URL broke); `resolveLink` got the twin-rewritten href; an AI
+    proposal, an upload or a uid arriving after `setReadOnly(true)` or
+    `destroy()` still changed the text; a save finishing after `destroy()`
+    posted the dirty state to the host; `getText()` after `destroy()` was
+    empty with CodeMirror; the initial and saved texts fell out of the text
+    model's 16-text window (17 header edits undone back were no longer exact
+    or clean); a CR LF document cost two copies per remembered text; the
+    textarea history's patches, cut from whole texts, kept every whole text
+    alive (V8 slices: 300 steps of a 1.25 MB text held 716 MB, now 6 MB);
+    CodeMirror's arrival replayed every textarea step through whole-text
+    copies (200 steps of 1.25 MB: 4.0 s and +542 MB here, 20.9 s in the
+    finding; now the newest 100 from the patches, 0.36 s and +91 MB); the
+    E.10 size bound measured the source (the shipped CommonJS bundle of the
+    editor's own code is 64.9 KB; bound 70 KB), and the tests' ESM bundle of
+    the source loaded KaTeX twice, so `\ce` failed in it.
 - **Conformance harness** `orz-markdown/carrier/conformance`
   (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
   each carrier runs against itself. `runConformance(target, options)` →
@@ -185,7 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   afterAll }, target, options)` (one test per check, then a final
   `[conformant]` test that fails on any skipped or deselected check unless
   `allowSkips`), `openConformance`, `isConformant`,
-  `CHECKS` — 38 checks with stable ids (`C.law.*`, `C.bundle.*`,
+  `CHECKS` — 42 checks with stable ids (`C.law.*`, `C.bundle.*`,
   `C.create.*`, `C.edit.*`, `C.save.*`, `C.update.*`, `C.host.*`,
   `C.prefs.*`) over the FC-18 laws (the shipped corpus, hazard texts,
   Node vs Chrome bytes), the bundle rule and `release.json`, create, edit
@@ -203,8 +250,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `playwright-core` is an optional peer dependency, loaded only when a
   browser check runs; the package now ships `tests/carrier-corpus/` (the
   harness's default corpus).
+  - closed loop 2, round 2: checks run side by side (`lanes`, default 3;
+    each check in browser contexts of its own; `C.edit.preview-isolation`
+    alone), and four checks are new — `C.edit.app-host` (the hook save's
+    exact text, `readOnly`, separate undo, no style leak, no update check in
+    an app), `C.save.save-as-elsewhere`, `C.update.edit-during` (an edit
+    while the update downloads is never lost) and `C.update.other-format`;
+    existing checks got stricter (a focus-stealing preview script, a moved
+    clock, refusals and `formats` in the browser bundle, one in-place write
+    per update, the downloaded name, no update check in a silent host's
+    frame, no style or storage key outside the document's namespace, no
+    preference in a saved file, the updated file edits and saves, no console
+    error offline). The 16 broken carriers that passed the whole harness as
+    conformant in the round-2 audit, and 7 more from its sub-probe, each
+    fail a named check now.
 
 ### Fixed
+
+- The standalone save took a remembered handle for the opened file by its
+  page location and name. The real picker opens in the last folder used and
+  offers the same name there, so after a "save as" into Downloads the page
+  reopened from its own folder silently overwrote the Downloads file, and an
+  update saved there reloaded the stale original. A handle is now proved by
+  its content: before reuse its file must hold what this page last wrote
+  through it or the opened file's bytes (`createSaver`'s new `openedHtml`,
+  the carrier's `assemble` of the text the page loaded; without it nothing
+  is reused across page loads), the record keeps the SHA-256 of the last
+  write, and only handles proved to be the opened file are remembered. A
+  `file` save result says `opened`; `performUpdate`'s `reload` rests on it
+  (`openedName` is ignored).
+- Size bounds of the shell measured the TypeScript source while carriers
+  bundle the CommonJS `dist/` (S.11 said 45.7 KB; what ships was 58.9 KB).
+  The bounds now measure the dist (shell 62 KB, update 22 KB, update + UI
+  40 KB, chrome 16 KB, reader 30 KB), and the shell index re-exports with
+  `export *` (−4.1 KB of CommonJS getters).
+- The stub carrier's bundle loaded KaTeX twice (the parser's ESM `mhchem`
+  import and the plugin's `require` resolve to two builds) and `\ce` did not
+  render from it; its build now resolves both to one.
 
 - HTML scanners lowered a whole document with `toLowerCase()` and used its
   offsets on the original: a `İ` (or another length-changing case mapping)

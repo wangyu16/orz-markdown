@@ -5,11 +5,24 @@ export { HAZARD_TEXTS, REFUSED_TEXTS, EDIT_TEXT } from './texts.js';
 export { loadCorpus } from './node.js';
 export { derivedParts } from './checks.js';
 export type { AssembleOptions, BundleSource, CarrierTarget, CheckResult, CheckStatus, ConformanceOptions, ConformanceReport, TestApi, BrowserLike } from './types.js';
+/**
+ * Checks that run alone (no other check runs beside them): they time the
+ * reader's typing against a script that floods the page, and a loaded
+ * machine must not make them flaky.
+ */
+export declare const EXCLUSIVE_CHECKS: readonly string[];
 /** @internal The ids that have an implementation (equal to `CHECK_IDS`; tested). */
 export declare function implementedChecks(): string[];
-/** A harness session over one target: run checks one at a time, then close. */
+/** A harness session over one target, then close. */
 export interface ConformanceRunner {
+    /** Run one check (in its own scope: its contexts are closed when it ends). */
     run(id: string): Promise<CheckResult>;
+    /**
+     * Run checks side by side in `lanes` lanes (default `options.lanes`, else 3);
+     * the {@link EXCLUSIVE_CHECKS} among them run first, alone. Resolves one
+     * promise per id (in the order given).
+     */
+    schedule(ids: readonly string[], lanes?: number): Map<string, Promise<CheckResult>>;
     close(): Promise<void>;
 }
 /** Open a session (servers, browser) for the selected checks. */
