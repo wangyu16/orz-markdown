@@ -4,13 +4,24 @@
  */
 /** The binding every frame reports through (`context.exposeBinding`). */
 export declare const RECORD_BINDING = "__orzConformanceRecord";
-export type PickerMode = 'stub' | 'none' | 'native';
+export type PickerMode = 'stub' | 'none' | 'native' | 'opfs';
+/**
+ * The origin-private folder the `opfs` picker uses for a page path (one folder
+ * per page, so two same-named files in two folders stay two files). ES5 source.
+ */
+export declare const OPFS_FOLDER = "function (pathname) {\n  var h = 5381;\n  for (var i = 0; i < pathname.length; i++) h = ((h * 33) ^ pathname.charCodeAt(i)) >>> 0;\n  return 'orz-conformance-' + h.toString(36);\n}";
 /**
  * Init script for every frame of a check's context: dialogs are recorded
  * (and never block), uncaught errors are recorded, and the File System Access
- * picker is a recording stub (`stub`), absent (`none`) or the browser's.
+ * picker is a recording stub (`stub`), absent (`none`), the browser's
+ * (`native`), or (`opfs`) a recording function that returns a REAL
+ * `FileSystemFileHandle` from the origin-private file system, in a folder of
+ * the page's path — so IndexedDB, the handle's structured clone, permission
+ * checks and the writes are real (the native picker cannot be automated).
  */
 export declare function initScript(picker: PickerMode): string;
+/** Page-side: the text of the file the `opfs` picker made for a page path and name (null when there is none). */
+export declare const READ_OPFS = "async function (a) {\n  var folder = function (pathname) {\n  var h = 5381;\n  for (var i = 0; i < pathname.length; i++) h = ((h * 33) ^ pathname.charCodeAt(i)) >>> 0;\n  return 'orz-conformance-' + h.toString(36);\n};\n  try {\n    var root = await navigator.storage.getDirectory();\n    var dir = await root.getDirectoryHandle(folder(a.pathname));\n    return await (await (await dir.getFileHandle(a.name)).getFile()).text();\n  } catch (e) { return null; }\n}";
 /** Page-side helpers installed by the harness in a page it drives (deep queries, the island text, the editor). */
 export declare const PAGE_HELPERS = "(() => {\n  if (window.__orzC) return;\n  var deepAll = function (root, sel, out) {\n    out = out || [];\n    root.querySelectorAll(sel).forEach(function (n) { out.push(n); });\n    root.querySelectorAll('*').forEach(function (n) { if (n.shadowRoot) deepAll(n.shadowRoot, sel, out); });\n    return out;\n  };\n  window.__orzC = {\n    deepAll: deepAll,\n    fileText: function () {\n      var C = globalThis.OrzCarrier;\n      if (!C || typeof C.extract !== 'function') throw new Error('no globalThis.OrzCarrier.extract in the opened file');\n      var x = C.extract('<!doctype html>\\n' + document.documentElement.outerHTML);\n      if (!x) throw new Error('OrzCarrier.extract found no #orz-src island in the opened file');\n      return x.text;\n    },\n    islandRaw: function () { var el = document.getElementById('orz-src'); return el ? [el.textContent, el.getAttribute('data-orz-eol'), el.hasAttribute('data-orz-bom'), el.getAttribute('data-orz-format')] : null; },\n    marker: function (m) { var p = document.createElement('p'); p.setAttribute('data-orz-conformance', m); p.textContent = m; document.body.appendChild(p); document.title = document.title + ' ' + m; },\n    modal: function () {\n      return deepAll(document, '[aria-modal=\"true\"], dialog').filter(function (n) { return n.getAttribute('aria-modal') === 'true' || (n.matches && n.matches(':modal')); }).length\n        + deepAll(document, '[inert]').length;\n    },\n  };\n})();";
 /** Default editor driver: mount `OrzCarrier.mountEditor` on a new element. */

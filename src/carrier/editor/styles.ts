@@ -45,6 +45,12 @@ export const EDITOR_CSS = `
   border-bottom: 1px solid var(--orz-chrome-border);
 }
 .orz-editor__notice-text { flex: 1 1 16em; }
+.orz-editor__notice--quiet { background: var(--orz-chrome-surface-2); color: var(--orz-chrome-muted); }
+.orz-editor__preview-note {
+  position: absolute; inset: auto var(--orz-chrome-space-3) var(--orz-chrome-space-3); padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3);
+  font-size: var(--orz-chrome-text-sm); color: var(--orz-chrome-muted); background: var(--orz-chrome-surface-2);
+  border: 1px solid var(--orz-chrome-border); border-radius: 6px;
+}
 .orz-editor__panes { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
 .orz-editor__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .orz-editor__pane--editor { flex: 0 0 calc(var(--orz-split, 0.5) * 100% - 3px); background: var(--orz-chrome-surface); }

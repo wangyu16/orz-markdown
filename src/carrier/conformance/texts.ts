@@ -40,3 +40,9 @@ export const OTHER_TEXT = `{{nyml\nkind: document\ntitle: Other\nuid: ${UID_B}\n
 
 /** A marker the harness puts in the live DOM; a saved file must never contain it. */
 export const LIVE_DOM_MARKER = 'ORZ-CONFORMANCE-LIVE-DOM-MARKER';
+
+/** A text in a newer format (header `format: 2`): opened, it must be read-only and never saved over (FC-18 §8.4, D7). */
+export const NEWER_TEXT = '{{nyml\nkind: document\nformat: 2\ntitle: From a newer release\nuid: doc-conformance5f6g7h\n}}\n\n# From a newer release\n\nWritten in a format this release does not write.\n';
+
+/** A long text the preview-isolation check types into (its end is far below the fold). */
+export const LONG_TEXT = `{{nyml\nkind: document\ntitle: Preview isolation\nuid: doc-conformance3p4q5r\n}}\n\n# Preview isolation\n\n${Array.from({ length: 160 }, (_, i) => `Paragraph ${i + 1} of a long document.\n`).join('\n')}`;

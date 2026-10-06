@@ -16,6 +16,21 @@
  *   live-dom        the save serialises the live DOM instead of assembling the text
  *   steal-focus     the update indicator takes the focus when it appears
  *
+ * and the kit mutants that survived round 1 of closed loop 2, re-made as
+ * carrier bugs the harness can observe (each must fail a named check):
+ *
+ *   preview-same-origin  the preview frame gets allow-same-origin
+ *   ungated-keys         preview save keys and links act without a gesture
+ *   no-roundtrip         the update does not compare the re-assembled text
+ *   no-version-check     the update does not compare the written version
+ *   any-source           the file side reads messages from any window
+ *   copy-overwrite       a same-named copy elsewhere reuses the original's handle
+ *   offer-prerelease     a prerelease is offered
+ *   no-once-a-day        the manifest is fetched on every open
+ *   shared-prefs         preferences go to the shared orz-pref:_: namespace
+ *   cdn-to-inline        a cdn file's update is written inline
+ *   update-in-frame      a file in an app host's frame checks for updates
+ *
  * One file, one Chrome, shared stub builds (the suite is heavy; a second
  * file running in parallel pushed other suites' default timeouts over).
  * The browser checks need the installed Chrome; they are reported skipped
@@ -25,7 +40,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import {
-  CHECKS, CHECK_IDS, HAZARD_TEXTS, describeChecks, implementedChecks, registerConformance, runConformance, derivedParts, type ConformanceReport, type TestApi,
+  CHECKS, CHECK_IDS, CONFORMANT_TITLE, HAZARD_TEXTS, describeChecks, implementedChecks, isConformant, registerConformance, runConformance, derivedParts,
+  type CheckResult, type ConformanceReport, type TestApi,
 } from '../src/carrier/conformance';
 import { assembleEnvelope, extract } from '../src/carrier';
 import { buildStub, cleanStubs, stubTarget } from './conformance-stub/build';
@@ -36,7 +52,8 @@ type Browser = import('playwright-core').Browser;
 async function launch(): Promise<Browser | null> {
   try {
     const { chromium } = await import('playwright-core');
-    return await chromium.launch({ channel: 'chrome' });
+    // --allow-file-access-from-files: the origin-private file system on file: pages (real handles, C.save.copy-elsewhere)
+    return await chromium.launch({ channel: 'chrome', args: ['--allow-file-access-from-files'] });
   } catch {
     return null;
   }
@@ -60,8 +77,8 @@ registerConformance(
   },
   {
     title: '[H.2] the stub carrier passes every conformance check',
-    ...(browser ? { browser } : { channel: 'no-chrome-installed' }),
-    log: (line) => { const m = /^(\w+)\s+(\S+)/.exec(line); if (m) statuses.set(m[2], m[1]); },
+    ...(browser ? { browser } : { channel: 'no-chrome-installed', allowSkips: true }),
+    log: (line) => { const m = /^([\w-]+)\s+(\S+)/.exec(line); if (m) statuses.set(m[2], m[1]); },
   },
 );
 
@@ -92,7 +109,7 @@ describe('the harness API', () => {
     for (const id of ['C.create.newest-shell', 'C.bundle.script-safe', 'C.update.tampered', 'C.save.download', 'C.update.indicator', 'C.law.eol-bom']) expect(CHECK_IDS).toContain(id);
   });
 
-  it('[H.1] registerConformance registers one test per selected check, titled "[id] title", inside one describe with one beforeAll/afterAll; unknown ids are refused', () => {
+  it('[H.1] registerConformance registers one test per selected check, titled "[id] title", then the final [conformant] test, inside one describe with one beforeAll/afterAll; unknown ids are refused', () => {
     const calls: string[] = [];
     const api: TestApi = {
       describe: (name, fn) => { calls.push(`describe ${name}`); fn(); },
@@ -105,7 +122,7 @@ describe('the harness API', () => {
     expect(calls.filter((c) => c === 'beforeAll')).toHaveLength(1);
     expect(calls.filter((c) => c === 'afterAll')).toHaveLength(1);
     const its = calls.filter((c) => c.startsWith('it '));
-    expect(its).toEqual(CHECKS.filter((c) => c.id !== 'C.host.no-ack').map((c) => `it [${c.id}] ${c.title}`));
+    expect(its).toEqual([...CHECKS.filter((c) => c.id !== 'C.host.no-ack').map((c) => `it [${c.id}] ${c.title}`), `it ${CONFORMANT_TITLE}`]);
     expect(() => registerConformance(api, () => { throw new Error('x'); }, { only: ['C.nope'] })).toThrow(/unknown check C\.nope/);
   });
 
@@ -113,7 +130,7 @@ describe('the harness API', () => {
     const stub = await buildStub('1.1.0');
     const broken = { ...stubTarget(stub), version: '9.9.9', assemble: (t: string) => (t.includes('\r') || t.includes('\u0000') ? 'not a file' : stubTarget(stub).assemble(t)) };
     const r = await runConformance(broken, { only: ['C.law.round-trip', 'C.bundle.release', 'C.law.refusals'], corpus: false });
-    expect(r).toMatchObject({ kind: 'md', version: '9.9.9', conformant: false, passed: 0, failed: 3, skipped: 0 });
+    expect(r).toMatchObject({ kind: 'md', version: '9.9.9', conformant: false, partial: true, passed: 0, failed: 3, skipped: 0, notApplicable: 0 });
     expect(r.results.map((x) => x.id)).toEqual(['C.law.round-trip', 'C.law.refusals', 'C.bundle.release']);
     const rt = r.results[0];
     expect(rt.failures!.length).toBeGreaterThan(4); // every text that failed, both deliveries
@@ -134,14 +151,45 @@ describe('without a browser, and the corpus', () => {
     expect(r.conformant).toBe(false);
   }, 120_000);
 
-  it('[H.3] the update checks are skipped (not passed) without a next release, and from-previous without a previous one', async () => {
+  it('[H.3] the update checks are skipped (not passed) without a next release, and from-previous without a previous one — unless the target declares firstRelease, which makes from-previous not-applicable (satisfied) with its reason', async () => {
     const stub = await buildStub('1.1.0');
     const r = await runConformance(stubTarget(stub), { only: ['C.update.reassemble', 'C.update.from-previous'], channel: 'no-such-channel', corpus: false });
     expect(r.results.map((x) => x.status)).toEqual(['skipped', 'skipped']);
     if (browser) {
       const r2 = await runConformance(stubTarget(stub), { only: ['C.update.reassemble', 'C.update.from-previous'], browser, corpus: false });
-      expect(r2.results.map((x) => x.message)).toEqual([expect.stringMatching(/no `next` release/), 'no `previous` release given']);
+      expect(r2.results.map((x) => x.message)).toEqual([expect.stringMatching(/no `next` release/), expect.stringMatching(/^no `previous` release given/)]);
     }
+    const first = await runConformance({ ...stubTarget(stub), firstRelease: true }, { only: ['C.update.from-previous'], channel: 'no-such-channel', corpus: false });
+    expect(first.results.map((x) => [x.status, x.message])).toEqual([['not-applicable', expect.stringMatching(/firstRelease/)]]);
+    expect(first).toMatchObject({ notApplicable: 1, partial: true, conformant: false });
+  }, 120_000);
+
+  it('[H.3] conformant means every check of CHECK_IDS ran and passed: a partial run (only/skip) is partial and never conformant; not-applicable counts as satisfied; a skip, a failure or a missing check does not', async () => {
+    const ok = (id: string, status: CheckResult['status'] = 'passed'): CheckResult => ({ id, title: id, status, durationMs: 0 });
+    expect(isConformant(CHECK_IDS.map((id) => ok(id)))).toBe(true);
+    expect(isConformant(CHECK_IDS.map((id) => ok(id, id === 'C.update.from-previous' ? 'not-applicable' : 'passed')))).toBe(true);
+    expect(isConformant(CHECK_IDS.map((id) => ok(id, id === 'C.host.ai' ? 'skipped' : 'passed')))).toBe(false);
+    expect(isConformant(CHECK_IDS.map((id) => ok(id, id === 'C.host.ai' ? 'failed' : 'passed')))).toBe(false);
+    expect(isConformant(CHECK_IDS.slice(1).map((id) => ok(id)))).toBe(false);
+    const stub = await buildStub('1.1.0');
+    const r = await runConformance(stubTarget(stub), { only: ['C.bundle.script-safe', 'C.bundle.release'], corpus: false });
+    expect(r).toMatchObject({ passed: 2, failed: 0, skipped: 0, partial: true, conformant: false });
+    // the final [conformant] test of registerConformance fails on a skip unless allowSkips
+    const run = async (allowSkips: boolean, status: CheckResult['status']) => {
+      const tests: Array<[string, () => Promise<void>]> = [];
+      const before: Array<() => Promise<void>> = [];
+      const after: Array<() => Promise<void>> = [];
+      const api: TestApi = { describe: (_n, fn) => { fn(); }, it: (n, fn) => { tests.push([n, () => fn()]); }, beforeAll: (fn) => { before.push(fn); }, afterAll: (fn) => { after.push(fn); } };
+      const fake = { ...stubTarget(stub), assemble: () => { throw new Error('unused'); } };
+      registerConformance(api, fake, { only: ['C.law.refusals'], corpus: false, allowSkips });
+      await before[0]();
+      if (status === 'passed') await tests[0][1]().catch(() => undefined);
+      const verdict = await tests[tests.length - 1][1]().then(() => 'pass', (e: Error) => e.message);
+      await after[0]();
+      return verdict;
+    };
+    expect(await run(false, 'passed')).toMatch(/^not conformant: \d+ check\(s\) did not run and pass/);
+    expect(await run(true, 'passed')).toBe('pass');
   }, 120_000);
 
   it('[H.3] the default corpus is the shipped tests/carrier-corpus of the kind (read as bytes, BOM kept), and the hazard texts cover CR LF, CR, a BOM, script closers, reserved ids, astral and separator characters, a very long line and the empty text', async () => {
@@ -263,4 +311,26 @@ chrome('mutants the harness must catch in Chrome', () => {
     expect(result(r, 'C.update.indicator').status).toBe('failed');
     expect(result(r, 'C.update.indicator').message).toContain('focus must not move');
   }, 240_000);
+
+  // round 1 of closed loop 2: each kit mutant that survived, re-made as a carrier bug, fails a named check
+  const caught: Array<[StubVariant, string, RegExp]> = [
+    ['preview-same-origin', 'C.edit.preview-isolation', /exactly "allow-scripts", never allow-same-origin/],
+    ['ungated-keys', 'C.edit.preview-isolation', /saves triggered by a forged save key[\s\S]*pages opened by forged links/],
+    ['no-roundtrip', 'C.update.resigned', /alters the text was accepted/],
+    ['no-version-check', 'C.update.resigned', /names a version its bundle does not write was accepted/],
+    ['any-source', 'C.host.foreign-hello', /not the standalone one|messages the file posted to its parent/],
+    ['copy-overwrite', 'C.save.copy-elsewhere', /saving the copy wrote over the original/],
+    ['offer-prerelease', 'C.update.prerelease', /update indicators for the prerelease/],
+    ['no-once-a-day', 'C.update.once-a-day', /manifest requests for one open, one reload and a second file/],
+    ['shared-prefs', 'C.prefs.local', /shared orz-pref:_: namespace/],
+    ['cdn-to-inline', 'C.update.cdn-delivery', /a cdn file stays cdn/],
+    ['update-in-frame', 'C.update.hosted', /manifest requests from a file in an app host's frame/],
+  ];
+  for (const [variant, id, why] of caught) {
+    it(`[H.5] the ${variant} mutant fails ${id}`, async () => {
+      const r = await mutant(variant, [id]);
+      expect(result(r, id).status).toBe('failed');
+      expect(result(r, id).message).toMatch(why);
+    }, 240_000);
+  }
 });

@@ -12,7 +12,7 @@
  * an editor mounts.
  */
 export { createEditorShell } from './shell.js';
-export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome } from './shell.js';
+export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext, EditorPreviewOptions, PreviewMapContext, AiOutcome, UploadOutcome, TextRange, } from './shell.js';
 export { textareaAdapter } from './adapter.js';
 export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition } from './adapter.js';
 export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS } from './codemirror6.js';
@@ -20,10 +20,10 @@ export type { CodeMirror6Modules, CodeMirror6Options } from './codemirror6.js';
 export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_GLOBAL } from './codemirror-pin.js';
 export { createTextModel, toEditorText, minimalChange } from './text-model.js';
 export type { TextModel } from './text-model.js';
-export { previewFrameDocument, createPreview, lineToTop, topToLine, PREVIEW_SANDBOX, PREVIEW_BRIDGE } from './preview.js';
-export type { PreviewFrameOptions, PreviewController, PreviewEvents } from './preview.js';
+export { previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, previewScriptHashes, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_READY_TIMEOUT_MS, } from './preview.js';
+export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents } from './preview.js';
 export { renderMarkdownPreview } from './render-md.js';
 export type { MarkdownPreviewOptions } from './render-md.js';
 export { EDITOR_CSS } from './styles.js';
-export type { EdElement, EdDocument, EdView, EdEvent } from './types.js';
+export type { EdElement, EdDocument, EdView, EdEvent, EdFile, EdDataTransfer } from './types.js';
 //# sourceMappingURL=index.d.ts.map

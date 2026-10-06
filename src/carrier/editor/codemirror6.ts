@@ -13,13 +13,14 @@
  * CodeMirror itself passes `loadModules` and nothing is fetched.
  *
  * While CodeMirror loads, the shell is already editable: the adapter starts
- * as a `<textarea>` and upgrades in place (text, selection and focus carried
- * over). When CodeMirror cannot load (offline, blocked, wrong bytes), the
+ * as a `<textarea>` and upgrades in place (its current text, selection, focus,
+ * scroll and undo steps carried over: each textarea undo step becomes one
+ * CodeMirror undo step). When CodeMirror cannot load (offline, blocked, wrong bytes), the
  * textarea stays and `ready()` reports the error.
  */
 import { VERSION } from '../../version.js';
 import { CODEMIRROR6_GLOBAL, CODEMIRROR6_INTEGRITY, CODEMIRROR6_PATH } from './codemirror-pin.js';
-import { textareaAdapter, type AdapterMountOptions, type ScrollPosition, type Selection, type TextEditorAdapter } from './adapter.js';
+import { textareaAdapter, undoTexts, type AdapterMountOptions, type ScrollPosition, type Selection, type TextEditorAdapter } from './adapter.js';
 import { minimalChange } from './text-model.js';
 import type { EdDocument, EdElement, EdScript } from './types.js';
 
@@ -146,13 +147,18 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
   let readyPromise: Promise<{ engine: string; error?: unknown }> = Promise.resolve({ engine: 'textarea' });
   let scrollOff: (() => void) | null = null;
   let mountOptions: AdapterMountOptions | null = null;
+  /** Read-only now (mount option, then `setReadOnly`); a Compartment switches it in CodeMirror at run time. */
+  let readOnlyNow = false;
+  let roCompartment: Any = null;
 
   const build = (m: CodeMirror6Modules, o: AdapterMountOptions): Any[] => {
     const { EditorState } = m.state;
     const { EditorView, keymap } = m.view;
     const c = m.commands;
     const l = m.language;
-    const ro = o.readOnly === true;
+    const ro = readOnlyNow;
+    const roExtensions = (flag: boolean): Any[] => [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+    roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
     const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
     return [
       m.view.highlightSpecialChars?.(),
@@ -167,8 +173,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       m.search?.highlightSelectionMatches?.(),
       EditorView.lineWrapping,
       keymap.of(keys),
-      EditorState.readOnly.of(ro),
-      EditorView.editable.of(!ro),
+      roCompartment ? roCompartment.of(roExtensions(ro)) : roExtensions(ro),
       EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true' }),
       EditorView.theme(THEME),
       EditorView.updateListener.of((u: Any) => {
@@ -183,21 +188,32 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
 
   const upgrade = (m: CodeMirror6Modules, el: EdElement, o: AdapterMountOptions): void => {
     const f = fallback!;
+    // the textarea's CURRENT text (typed or set while CodeMirror loaded), its selection, focus, scroll and undo steps
     const doc = f.getDoc();
+    const steps = undoTexts(f) ?? [];
     const sel = f.getSelection?.() ?? { from: 0, to: 0 };
     const focused = f.hasFocus?.() ?? false;
     const scroll = f.getScroll?.();
-    f.destroy();
-    fallback = null;
     cm = m;
     extensions = build(m, o);
+    const { EditorState } = m.state;
+    const iso = m.commands.isolateHistory;
+    // Seed CodeMirror's history with the textarea's steps (A-6): start from the oldest text the
+    // textarea could undo to and replay every later text as its own isolated, undoable change.
+    // Built before the textarea goes, so a failure here leaves the textarea in place.
+    const texts = [...steps, doc];
+    let state = EditorState.create({ doc: texts[0], extensions });
+    for (let i = 1; i < texts.length; i++) {
+      const change = minimalChange(state.doc.toString(), texts[i]);
+      if (!change) continue;
+      state = state.update({ changes: change, ...(iso ? { annotations: iso.of('full') } : {}) }).state;
+    }
     const len = doc.length;
     const clamp = (n: number): number => Math.max(0, Math.min(len, n));
-    view = new m.view.EditorView({
-      state: m.state.EditorState.create({ doc, extensions, selection: { anchor: clamp(sel.from), head: clamp(sel.to) } }),
-      parent: el,
-      ...(o.root ? { root: o.root } : {}),
-    });
+    state = state.update({ selection: { anchor: clamp(sel.from), head: clamp(sel.to) } }).state;
+    f.destroy();
+    fallback = null;
+    view = new m.view.EditorView({ state, parent: el, ...(o.root ? { root: o.root } : {}) });
     const onScroll = (): void => o.onScroll?.();
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
     scrollOff = () => view?.scrollDOM.removeEventListener('scroll', onScroll);
@@ -209,6 +225,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     get name() { return view ? 'codemirror6' : 'textarea'; },
     mount(el, o) {
       mountOptions = o;
+      readOnlyNow = o.readOnly === true;
       fallback!.mount(el, o);
       const doc = el.ownerDocument;
       readyPromise = (async () => {
@@ -269,6 +286,24 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       if (!view) return fallback?.getSelection?.() ?? { from: 0, to: 0 };
       const r = view.state.selection.main;
       return { from: r.from, to: r.to };
+    },
+    setReadOnly(flag) {
+      readOnlyNow = flag;
+      if (!view) { fallback?.setReadOnly?.(flag); return; }
+      const { EditorState } = cm!.state;
+      const { EditorView } = cm!.view;
+      const ext = [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+      if (roCompartment) { view.dispatch({ effects: roCompartment.reconfigure(ext) }); return; }
+      // modules without Compartment: rebuild the state (text and selection kept; the history starts over)
+      extensions = build(cm!, mountOptions ?? { doc: '', onChange() {} });
+      const sel = view.state.selection.main;
+      view.setState(EditorState.create({ doc: view.state.doc.toString(), extensions, selection: { anchor: sel.anchor, head: sel.head } }));
+    },
+    setSelection(s) {
+      if (!view) { fallback?.setSelection?.(s); return; }
+      const len: number = view.state.doc.length;
+      const clamp = (n: number): number => Math.max(0, Math.min(len, n));
+      view.dispatch({ selection: { anchor: clamp(s.from), head: clamp(s.to) }, scrollIntoView: true });
     },
     hasFocus() {
       return view ? view.hasFocus === true : fallback?.hasFocus?.() ?? false;

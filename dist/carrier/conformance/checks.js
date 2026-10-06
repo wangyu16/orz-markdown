@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.prefChecks = exports.hostChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.Skip = void 0;
+exports.prefChecks = exports.hostChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.NotApplicable = exports.Skip = void 0;
 exports.firstDiff = firstDiff;
 exports.derivedParts = derivedParts;
 exports.lawTexts = lawTexts;
@@ -23,6 +23,10 @@ const texts_js_1 = require("./texts.js");
 class Skip extends Error {
 }
 exports.Skip = Skip;
+/** The check does not apply to this target, for a reason the target declared (e.g. `firstRelease`). Counts as satisfied. */
+class NotApplicable extends Error {
+}
+exports.NotApplicable = NotApplicable;
 /** Collects failed expectations. */
 class Probe {
     constructor() {
@@ -460,30 +464,37 @@ exports.createChecks = {
 exports.editChecks = {
     async 'C.edit.exact'(s, p) {
         needBrowser(s);
-        const ctx = await s.context({ picker: 'stub' });
-        const page = await ctx.newPage();
-        const url = s.serve(fileName(s, 'edit'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' }));
-        const read = await openEditor(s, page, url);
-        p.check(read === texts_js_1.EDIT_TEXT, `the opened file does not give back its text — ${firstDiff(read, texts_js_1.EDIT_TEXT)}`);
-        p.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.EDIT_TEXT, 'getText() of the mounted editor is not the exact text');
-        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() right after mounting');
-        await ed(page, 'window.__orzEditor.focus()');
-        await page.keyboard.type('Zq1');
-        let t = await ed(page, 'window.__orzEditor.getText()');
-        p.check(t.includes('Zq1') && t.replace('Zq1', '') === texts_js_1.EDIT_TEXT, `typing "Zq1" did not insert exactly it — ${firstDiff(t.replace('Zq1', ''), texts_js_1.EDIT_TEXT)}`);
-        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after typing');
-        await page.keyboard.press('Enter');
-        t = await ed(page, 'window.__orzEditor.getText()');
-        p.check(t.startsWith('﻿'), 'the BOM was lost after typing');
-        p.check(!/(^|[^\r])\n/.test(t) && !/\r(?!\n)/.test(t), 'a typed line break is not written in the document\'s CR LF style');
-        p.check(t.replace('Zq1\r\n', '') === texts_js_1.EDIT_TEXT, `the typed line break is not exactly one CR LF after "Zq1" — ${firstDiff(t.replace('Zq1\r\n', ''), texts_js_1.EDIT_TEXT)}`);
-        p.check(await undoTo(page, page, texts_js_1.EDIT_TEXT), 'undo does not return to the exact original text');
-        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after undoing back to the saved text');
-        await ed(page, `window.__orzEditor.setText(${JSON.stringify(`${texts_js_1.EDIT_TEXT}More.\r\n`)})`);
-        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after setText');
-        await ed(page, 'window.__orzEditor.markSaved()');
-        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after markSaved()');
-        p.check((await ed(page, 'window.__orzEditor.getText()')) === `${texts_js_1.EDIT_TEXT}More.\r\n`, 'setText did not adopt the text exactly');
+        // with the pinned CodeMirror 6 served at its jsDelivr URL, then with it unreachable (the textarea fallback)
+        for (const [label, codemirror] of [['CodeMirror served', true], ['CodeMirror unreachable (fallback)', false]]) {
+            const ctx = await s.context({ picker: 'stub', codemirror });
+            const page = await ctx.newPage();
+            const url = s.serve(fileName(s, codemirror ? 'edit' : 'edit-fallback'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' }));
+            const q = new Probe();
+            const read = await openEditor(s, page, url);
+            q.check(read === texts_js_1.EDIT_TEXT, `the opened file does not give back its text — ${firstDiff(read, texts_js_1.EDIT_TEXT)}`);
+            q.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.EDIT_TEXT, 'getText() of the mounted editor is not the exact text');
+            q.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() right after mounting');
+            await ed(page, 'window.__orzEditor.focus()');
+            await page.keyboard.type('Zq1');
+            let t = await ed(page, 'window.__orzEditor.getText()');
+            q.check(t.includes('Zq1') && t.replace('Zq1', '') === texts_js_1.EDIT_TEXT, `typing "Zq1" did not insert exactly it — ${firstDiff(t.replace('Zq1', ''), texts_js_1.EDIT_TEXT)}`);
+            q.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after typing');
+            await page.keyboard.press('Enter');
+            t = await ed(page, 'window.__orzEditor.getText()');
+            q.check(t.startsWith('\uFEFF'), 'the BOM was lost after typing');
+            q.check(!/(^|[^\r])\n/.test(t) && !/\r(?!\n)/.test(t), 'a typed line break is not written in the document\'s CR LF style');
+            q.check(t.replace('Zq1\r\n', '') === texts_js_1.EDIT_TEXT, `the typed line break is not exactly one CR LF after "Zq1" — ${firstDiff(t.replace('Zq1\r\n', ''), texts_js_1.EDIT_TEXT)}`);
+            q.check(await undoTo(page, page, texts_js_1.EDIT_TEXT), 'undo does not return to the exact original text');
+            q.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after undoing back to the saved text');
+            await ed(page, `window.__orzEditor.setText(${JSON.stringify(`${texts_js_1.EDIT_TEXT}More.\r\n`)})`);
+            q.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after setText');
+            await ed(page, 'window.__orzEditor.markSaved()');
+            q.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after markSaved()');
+            q.check((await ed(page, 'window.__orzEditor.getText()')) === `${texts_js_1.EDIT_TEXT}More.\r\n`, 'setText did not adopt the text exactly');
+            for (const f of q.failures)
+                p.fail(`${label}: ${f}`);
+            await ctx.context.close();
+        }
     },
     async 'C.edit.set-header'(s, p) {
         needBrowser(s);
@@ -491,15 +502,17 @@ exports.editChecks = {
         const page = await ctx.newPage();
         const url = s.serve(fileName(s, 'header'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' }));
         await openEditor(s, page, url);
-        if (!(await ed(page, 'typeof window.__orzEditor.setHeader === "function"')))
-            throw new Skip('the editor has no setHeader (FC-19 §8.7 refinement 2, not yet binding)');
+        // FC-19 §4 binds setHeader and undo: their absence is a failure, not a skip
+        const api = await ed(page, '({ setHeader: typeof window.__orzEditor.setHeader, undo: typeof window.__orzEditor.undo })');
+        p.eq(api, { setHeader: 'function', undo: 'function' }, 'the Editor\'s setHeader and undo (FC-19 §4)');
+        if (api.setHeader !== 'function')
+            return;
         await ed(page, 'window.__orzEditor.setHeader({ title: "Renamed by conformance", x_new_key: "added" })');
         const after = await ed(page, 'window.__orzEditor.getText()');
         const want = (0, header_js_1.editHeader)(texts_js_1.EDIT_TEXT, { title: 'Renamed by conformance', x_new_key: 'added' });
         p.check(after === want, `setHeader is not the kit's editHeader — ${firstDiff(after, want)}`);
         p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after setHeader');
-        const api = await ed(page, 'typeof window.__orzEditor.undo === "function"');
-        if (api)
+        if (api.undo === 'function')
             await ed(page, 'window.__orzEditor.undo()');
         else {
             await ed(page, 'window.__orzEditor.focus()');
@@ -510,6 +523,119 @@ exports.editChecks = {
         const refused = await ed(page, '(function () { try { window.__orzEditor.setHeader({ title: "a }} b" }); return false; } catch (e) { return true; } })()');
         p.check(refused, 'setHeader accepted a value holding "}}"');
         p.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.EDIT_TEXT, 'a refused setHeader changed the text');
+    },
+    async 'C.edit.newer-format'(s, p) {
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'stub' });
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'newer-format'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
+        await page.evaluate(page_js_1.PAGE_HELPERS);
+        // the target's own editor driver, given a text whose header says format: 2
+        await (0, session_js_1.call)(page, `async function (text) {
+      var e = await (${s.target.editor ?? page_js_1.DEFAULT_EDITOR_DRIVER})(text);
+      window.__orzEditor = e;
+      if (e && e.ready && typeof e.ready.then === 'function') { try { await e.ready; } catch (x) {} }
+      return true;
+    }`, texts_js_1.NEWER_TEXT);
+        p.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.NEWER_TEXT, 'the newer-format text is not shown exactly');
+        await ed(page, 'window.__orzEditor.focus()');
+        await page.keyboard.type('Zq1');
+        await page.keyboard.press('Enter');
+        p.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.NEWER_TEXT, 'typing changed a newer-format text (it must open read-only, FC-18 §8.4)');
+        p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after typing into a read-only newer-format text');
+        await ed(page, 'window.__orzEditor.save()');
+        await page.keyboard.press('ControlOrMeta+s');
+        // an app's setText cannot make it writable either: the save still writes nothing
+        await ed(page, `(function () { try { window.__orzEditor.setText(${JSON.stringify(`${texts_js_1.NEWER_TEXT}Changed.
+`)}); } catch (e) {} })()`);
+        await ed(page, 'window.__orzEditor.save()');
+        await page.waitForTimeout(800);
+        p.eq(ctx.of('picker').length + ctx.of('write').length + ctx.downloads.length, 0, 'pickers, writes or downloads for a newer-format text (it must never be saved over)');
+        p.eq(ctx.of('dialog').length, 0, 'dialogs');
+    },
+    async 'C.edit.preview-isolation'(s, p) {
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'stub' });
+        const page = await ctx.newPage();
+        // an app host: a page of its own origin that loaded the bundle and mounts the editor with hooks.save
+        await page.goto(`${s.fileOrigin}/page/target.html`);
+        await page.evaluate(page_js_1.PAGE_HELPERS);
+        await (0, session_js_1.call)(page, `async function (text) {
+      localStorage.setItem('orz-conformance-secret', 'S3CRET');
+      document.cookie = 'orzconformance=S3CRET';
+      window.__hookSaves = 0;
+      var el = document.createElement('div');
+      el.style.cssText = 'width: 1100px; height: 640px;';
+      document.body.appendChild(el);
+      var e = await globalThis.OrzCarrier.mountEditor(el, { text: text, mode: 'split', hooks: { save: function () { window.__hookSaves++; return Promise.resolve(); } } });
+      window.__orzEditor = e;
+      if (e && e.ready && typeof e.ready.then === 'function') { try { await e.ready; } catch (x) {} }
+      return true;
+    }`, texts_js_1.LONG_TEXT);
+        const sandboxes = await ed(page, 'window.__orzC.deepAll(document, "iframe").map(function (f) { return f.getAttribute("sandbox"); })');
+        if (!p.check(sandboxes.length > 0, 'no preview iframe in split mode'))
+            return;
+        p.eq(sandboxes, sandboxes.map(() => 'allow-scripts'), 'the preview iframe sandbox in an app host (exactly "allow-scripts", never allow-same-origin)');
+        let frames = [];
+        await until(() => (frames = page.frames().filter((f) => f !== page.mainFrame())).length > 0, 10000);
+        // what a document script in the preview can reach (Playwright's evaluation is a page script: no user activation)
+        const PROBE = `function (ms) {
+      var r = {};
+      try { r.parentDoc = String(parent.document.title); } catch (e) { r.parentDoc = null; }
+      try { r.storage = localStorage.getItem('orz-conformance-secret'); } catch (e) { r.storage = null; }
+      try { r.cookie = document.cookie; } catch (e) { r.cookie = null; }
+      r.origin = String(location.origin);
+      var n = 0, end = Date.now() + ms;
+      var t = setInterval(function () {
+        var P = parent;
+        P.postMessage({ type: 'orz-preview-key', key: 's' }, '*');
+        P.postMessage({ type: 'orz-preview-key', key: 'Escape' }, '*');
+        P.postMessage({ type: 'orz-preview-active' }, '*');
+        P.postMessage({ type: 'orz-preview-scrolled', top: 0, max: 100000 }, '*');
+        P.postMessage({ type: 'orz-preview-link', href: 'https://example.org/forged-' + (n++) }, '*');
+        var a = document.createElement('a'); a.href = 'https://example.org/clicked'; (document.body || document.documentElement).appendChild(a); a.click(); a.remove();
+        try { window.open('https://example.org/popup'); } catch (e) {}
+        if (Date.now() > end) clearInterval(t);
+      }, 120);
+      return r;
+    }`;
+        const probes = [];
+        for (const f of frames) {
+            try {
+                probes.push(await (0, session_js_1.call)(f, PROBE, 9000));
+            }
+            catch (e) {
+                p.fail(`the probe could not run in the preview frame: ${msg(e)}`);
+            }
+        }
+        for (const r of probes) {
+            p.eq(r.parentDoc, null, 'a preview script read the host page\'s document');
+            p.check(r.storage !== 'S3CRET', 'a preview script read the host page\'s localStorage');
+            p.check(typeof r.cookie !== 'string' || !r.cookie.includes('S3CRET'), 'a preview script read the host page\'s cookies');
+            p.eq(r.origin, 'null', 'the preview\'s origin (opaque)');
+        }
+        // phase 1: nobody touches the page; the forgeries must do nothing
+        await page.waitForTimeout(2000);
+        p.eq(await ed(page, 'window.__hookSaves'), 0, 'saves triggered by a forged save key (no user activation, focus not in the preview)');
+        // phase 2: the reader types at the end while the forgeries go on
+        await ed(page, 'window.__orzEditor.focus()');
+        await page.keyboard.press('ControlOrMeta+End');
+        const typed = 'typed while the preview forges messages';
+        for (const ch of typed) {
+            await page.keyboard.type(ch);
+            await page.waitForTimeout(25);
+        }
+        await page.waitForTimeout(500);
+        const got = await ed(page, 'window.__orzEditor.getText()');
+        p.check(got === `${texts_js_1.LONG_TEXT}${typed}`, `forged Escape / focus messages took the reader's keystrokes — ${firstDiff(got, `${texts_js_1.LONG_TEXT}${typed}`)}`);
+        const scrolled = await ed(page, `Math.max.apply(null, [0].concat(window.__orzC.deepAll(document, '*').filter(function (el) {
+      return el.tagName !== 'IFRAME' && el !== document.scrollingElement && el !== document.body && el.scrollHeight > el.clientHeight + 20;
+    }).map(function (el) { return el.scrollTop; })))`);
+        p.check(scrolled > 0, 'forged scroll messages pulled the editor back to the top while the reader typed at the end (scroll sync followed a pane the reader does not drive)');
+        p.eq(await ed(page, 'window.__hookSaves'), 0, 'saves triggered by a forged save key while the reader typed in the editor');
+        p.eq(ctx.context.pages().length, 1, 'pages opened by forged links, synthetic clicks or window.open (no user activation)');
+        p.eq(ctx.requests.filter((u) => u.startsWith('https://example.org/')), [], 'requests to forged link targets');
+        p.eq(ctx.of('dialog').length, 0, 'dialogs');
     },
 };
 // ── save ─────────────────────────────────────────────────────────────────
@@ -578,6 +704,38 @@ exports.saveChecks = {
             p.check(ctx.downloads[0].name.endsWith(ext(s)), `the download is named "${ctx.downloads[0].name}", not a ${ext(s)} name`);
         }
         p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after a successful download');
+    },
+    async 'C.save.copy-elsewhere'(s, p) {
+        needBrowser(s);
+        // real FileSystemFileHandles (origin-private file system) stored in the one IndexedDB every file: page shares
+        const ctx = await s.context({ picker: 'opfs' });
+        const name = fileName(s, 'copy');
+        const html = await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' });
+        const [urlA, urlB] = [s.writeFile(name, html), s.writeFile(name, html)]; // one name, one uid, two folders
+        const saveAs = async (url, text) => {
+            const page = await ctx.newPage();
+            await openEditor(s, page, url);
+            await ed(page, `window.__orzEditor.setText(${JSON.stringify(text)})`);
+            const before = ctx.of('picker').length;
+            await ed(page, 'window.__orzEditor.save()');
+            await until(async () => ctx.of('picker').length > before || !(await ed(page, 'window.__orzEditor.isDirty()')), 10000);
+            return { page, pathname: await ed(page, 'location.pathname') };
+        };
+        const read = (page, pathname) => (0, session_js_1.call)(page, page_js_1.READ_OPFS, { pathname, name });
+        const textA = `${texts_js_1.EDIT_TEXT}Saved in folder A.\r\n`;
+        const a = await saveAs(urlA, textA);
+        p.eq(ctx.of('picker').length, 1, 'pickers after the first save of the original');
+        p.check((await read(a.page, a.pathname)) === (await s.assemble(textA)), 'the original\'s first save did not write assemble(text) to the picked file');
+        const textB = `${texts_js_1.EDIT_TEXT}Saved in the copy (folder B).\r\n`;
+        const b = await saveAs(urlB, textB);
+        p.eq(ctx.of('picker').length, 2, 'pickers after saving the same-named copy in another folder (the copy must get the picker, not the original\'s handle)');
+        p.check((await read(b.page, a.pathname)) === (await s.assemble(textA)), 'saving the copy wrote over the original in another folder');
+        p.check((await read(b.page, b.pathname)) === (await s.assemble(textB)), 'the copy\'s save did not write assemble(text) to its own picked file');
+        const textA2 = `${texts_js_1.EDIT_TEXT}Saved in folder A again.\r\n`;
+        const a2 = await saveAs(urlA, textA2);
+        p.eq(ctx.of('picker').length, 2, 'pickers after reopening the original (its remembered handle must be reused)');
+        p.check((await read(a2.page, a.pathname)) === (await s.assemble(textA2)), 'the reopened original did not write its own file');
+        p.check((await read(a2.page, b.pathname)) === (await s.assemble(textB)), 'the reopened original wrote over the copy');
     },
 };
 // ── update ───────────────────────────────────────────────────────────────
@@ -731,10 +889,12 @@ exports.updateChecks = {
         p.eq(await ed(page, 'window.__orzC.modal()'), 0, 'modal dialogs / inert elements');
     },
     async 'C.update.from-previous'(s, p) {
-        needBrowser(s);
         const prev = s.releases.previous;
+        if (!prev && s.target.firstRelease)
+            throw new NotApplicable('the target declares firstRelease: there is no previous release to update from');
         if (!prev)
-            throw new Skip('no `previous` release given');
+            throw new Skip('no `previous` release given (a first release declares firstRelease: true)');
+        needBrowser(s);
         const [old] = await s.chromeAssemble(prev, [texts_js_1.EDIT_TEXT], 'inline');
         const ctx = await s.context({ picker: 'stub', cdn: { latest: s.releases.target } });
         const page = await ctx.newPage();
@@ -748,7 +908,104 @@ exports.updateChecks = {
         const expected = await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline', engineSource: s.releases.target.code });
         p.check(saved === expected, `the updated file is not this release's assemble(text) — ${firstDiff(saved, expected)}`);
     },
+    async 'C.update.resigned'(s, p) {
+        const next = needNext(s);
+        const cases = [
+            ['a re-signed `next` whose assemble alters the text', s.derive(next, { append: ALTER_TEXT })],
+            ['a release whose manifest names a version its bundle does not write', s.derive(next, { version: bumpPatch(next.version) })],
+        ];
+        for (const [what, rel] of cases) {
+            const ctx = await s.context({ picker: 'stub', cdn: { latest: rel } });
+            const page = await ctx.newPage();
+            await page.goto(s.writeFile(fileName(s, 'resigned'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
+            await page.evaluate(page_js_1.PAGE_HELPERS);
+            const island = await ed(page, 'window.__orzC.islandRaw()');
+            if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(rel.version) }).count()) > 0, 20000), `${what}: no update indicator for ${rel.version}`))
+                continue;
+            const r = await runUpdate(page, ctx, rel.version);
+            p.check(r !== 'saved', `${what} was accepted: the file was written or downloaded`);
+            p.check(r !== 'stuck', `${what}: the update did not settle within 60 s`);
+            if (r === 'settled') {
+                p.eq(await ed(page, 'window.__orzC.islandRaw()'), island, `${what}: the source island after the refusal`);
+                const shown = await ed(page, 'window.__orzC.deepAll(document, "[aria-live]").filter(function (n) { return n.textContent.trim() && !n.hidden; }).length');
+                p.check(shown > 0, `${what}: the refusal is not announced (aria-live)`);
+            }
+            p.eq(ctx.of('dialog').length, 0, `${what}: dialogs`);
+            await ctx.context.close();
+        }
+    },
+    async 'C.update.prerelease'(s, p) {
+        const next = needNext(s);
+        const pre = s.derive(next, { version: `${next.version.replace(/-.*$/, '')}-rc.1` });
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: pre } });
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'prerelease'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
+        p.check(await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 10000), 'the file never asked for release.json');
+        await page.waitForTimeout(2000);
+        p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, `update indicators for the prerelease ${pre.version} (never offered)`);
+        p.eq(ctx.requests.filter((u) => !u.endsWith('/release.json')), [], 'bundle requests');
+    },
+    async 'C.update.once-a-day'(s, p) {
+        const next = needNext(s);
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+        const html = await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' });
+        const chip = (page) => until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000);
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'daily'), html));
+        if (!p.check(await chip(page), 'no update indicator on the first open'))
+            return;
+        await page.reload();
+        p.check(await chip(page), 'no update indicator after a reload (the stored manifest offers it again the same day)');
+        const other = await ctx.newPage();
+        await other.goto(s.writeFile(fileName(s, 'daily-other'), await s.assemble(texts_js_1.OTHER_TEXT, { delivery: 'inline' })));
+        p.check(await chip(other), 'no update indicator in a second file of the kind');
+        await page.waitForTimeout(500);
+        p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 1, 'manifest requests for one open, one reload and a second file on the same day (at most one per kind per day)');
+    },
+    async 'C.update.hosted'(s, p) {
+        const next = needNext(s);
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+        const h = await hostPage(s, ctx, fileName(s, 'hosted-update'), { save: true, ai: false, include: false, ack: true });
+        if (!p.check(await until(async () => !!(await h.state()).readies.save, 20000), 'no orz-host-ready within 20 s'))
+            return;
+        const f = await h.frame();
+        await f.waitForTimeout(2500);
+        p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 0, 'manifest requests from a file in an app host\'s frame (the app owns the version)');
+        p.eq(await f.getByRole('button', { name: /^Update available/ }).count(), 0, 'update indicators in an app host\'s frame');
+    },
+    async 'C.update.cdn-delivery'(s, p) {
+        const next = needNext(s);
+        const [expected] = await s.chromeAssemble(next, [texts_js_1.EDIT_TEXT], 'cdn');
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'cdn-update'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'cdn' })));
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'a cdn-delivery file shows no update indicator'))
+            return;
+        const r = await runUpdate(page, ctx, next.version);
+        if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
+            return;
+        const saved = firstSaved(ctx);
+        const x = (0, read_js_1.extract)(saved);
+        p.eq(x && [x.text === texts_js_1.EDIT_TEXT, x.shell, x.delivery], [true, next.version, 'cdn'], 'the updated file\'s text exact, shell, delivery (a cdn file stays cdn, FC-18 §8.2)');
+        p.check(saved === expected, `the updated file is not the new release's assemble(text, { delivery: 'cdn' }) — ${firstDiff(saved, expected)}`);
+    },
 };
+/** Appended to a release's bundle: its `assemble` alters the text (then the release is re-signed). Script-safe, no CR. */
+const ALTER_TEXT = `
+;(function () {
+  var C = globalThis.OrzCarrier;
+  if (!C || typeof C.assemble !== 'function') return;
+  var a = C.assemble;
+  var altered = function (t, o) { return a.call(C, String(t) + '\\n[altered by a re-signed release]\\n', o); };
+  try { C.assemble = altered; } catch (e) {}
+  if (C.assemble !== altered) { try { globalThis.OrzCarrier = Object.assign({}, C, { assemble: altered }); } catch (e) {} }
+})();
+`;
+/** `x.y.z` → `x.y.(z+1)` (prerelease dropped). */
+function bumpPatch(v) {
+    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
+    return m ? `${m[1]}.${m[2]}.${BigInt(m[3]) + 1n}` : v;
+}
 async function hostPage(s, ctx, name, cfg) {
     const src = s.serve(name, await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' }));
     const page = await ctx.newPage();
@@ -856,6 +1113,34 @@ exports.hostChecks = {
         p.eq(await ed(f, 'window.__orzEditor.isDirty()'), true, 'isDirty() after an unacknowledged save');
         p.eq((await h.state()).msgs.filter((m) => m.type === 'orz-host-save').length, 1, 'saves sent to the host');
         p.eq(ctx.of('picker').length + ctx.of('write').length + ctx.downloads.length, 0, 'fallback pickers, writes or downloads (the host owns persistence)');
+        p.eq(await ed(f, 'window.__orzC.deepAll(document, "#orz-served-note").length'), 0, 'the served-page notice after an unacknowledged host save (no standalone fallback)');
+    },
+    async 'C.host.foreign-hello'(s, p) {
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'stub' });
+        const h = await hostPage(s, ctx, fileName(s, 'foreign'), { save: false, ai: false, include: false, ack: false });
+        const f = await h.frame();
+        const HELLOS = JSON.stringify([
+            { type: 'orz-host-hello', protocol: 'orz-host-save', version: 1 },
+            { type: 'orz-host-ai-hello', protocol: 'orz-host-ai', version: 1, operations: [{ id: 'x', title: 'X' }] },
+            { type: 'orz-host-include-hello', protocol: 'orz-host-include', version: 1 },
+        ]);
+        // a sibling frame (the host page's origin) and the file's own window say hello; only window.parent may
+        await (0, session_js_1.call)(h.page, `function () {
+      var sib = document.createElement('iframe');
+      sib.srcdoc = '<!doctype html><meta charset="utf-8"><script>var F = parent.frames[0], n = 0; var t = setInterval(function () { ${HELLOS}.forEach(function (m) { F.postMessage(m, "*"); }); if (++n > 15) clearInterval(t); }, 200);<' + '/script>';
+      document.body.appendChild(sib);
+      return true;
+    }`);
+        await (0, session_js_1.call)(f, `function () { ${HELLOS}.forEach(function (m) { window.postMessage(m, '*'); }); return true; }`);
+        await f.waitForTimeout(3500);
+        p.eq(orzMsgs(await h.state()).map((m) => m.type), [], 'messages the file posted to its parent after hellos from a sibling frame and from itself');
+        await openEditor(s, f);
+        await ed(f, `window.__orzEditor.setText(${JSON.stringify(EDITED)})`);
+        await ed(f, 'window.__orzEditor.save()');
+        await f.waitForTimeout(400);
+        p.eq((await h.state()).msgs.filter((m) => m.type === 'orz-host-save').length, 0, 'saves sent to the parent (no hello came from it)');
+        p.check((await ed(f, 'window.__orzC.deepAll(document, "#orz-served-note").length')) > 0, 'the save is not the standalone one (served-page notice)');
     },
 };
 // ── reader preferences ───────────────────────────────────────────────────
@@ -874,6 +1159,7 @@ exports.prefChecks = {
         const mine = keys.filter((k) => k.includes(texts_js_1.UID_A));
         p.check(mine.length > 0, `no reader preference stored under the uid (keys: ${clip(JSON.stringify(keys))})`);
         p.eq(mine.filter((k) => !k.startsWith(`orz-pref:${texts_js_1.UID_A}:`)), [], 'uid keys outside the orz-pref:<uid>: namespace');
+        p.eq(keys.filter((k) => k.startsWith('orz-pref:_:')), [], 'preferences of a document with a uid written to the shared orz-pref:_: namespace');
         p.check((await ed(page, 'window.__orzEditor.getText()')) === texts_js_1.EDIT_TEXT, 'a preference changed the text');
         p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after preference changes');
         p.eq(await ed(page, 'window.__orzC.fileText() === ' + JSON.stringify(texts_js_1.EDIT_TEXT)), true, 'the file\'s island after preference changes');

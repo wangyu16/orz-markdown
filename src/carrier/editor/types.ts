@@ -29,10 +29,27 @@ export interface EdEvent {
   readonly data?: unknown;
   readonly source?: unknown;
   readonly inputType?: string;
+  /** `paste`: the clipboard (its files). */
+  readonly clipboardData?: EdDataTransfer | null;
+  /** `drop` / `dragover`: the dragged data (its files). */
+  readonly dataTransfer?: EdDataTransfer | null;
   preventDefault(): void;
   stopPropagation?(): void;
 }
 export type EdListener = (event: EdEvent) => void;
+
+/** A `File` (name, MIME type, size); a DOM `File` satisfies it. */
+export interface EdFile {
+  readonly name: string;
+  readonly type: string;
+  readonly size: number;
+}
+
+/** `DataTransfer`: the files of a paste or a drop, and the dragged types. */
+export interface EdDataTransfer {
+  readonly files?: ArrayLike<EdFile> | null;
+  readonly types?: ArrayLike<string> | null;
+}
 
 export interface EdRect {
   readonly left: number;
@@ -108,7 +125,9 @@ export interface EdView {
   open?(url: string, target?: string, features?: string): unknown;
   readonly ResizeObserver?: new (cb: () => void) => EdResizeObserver;
   readonly CSSStyleSheet?: new () => { replaceSync(css: string): void };
-  readonly navigator?: { readonly platform?: string; readonly userAgent?: string };
+  readonly navigator?: { readonly platform?: string; readonly userAgent?: string; readonly userActivation?: { readonly isActive?: boolean } };
+  readonly location?: { readonly protocol?: string };
+  readonly performance?: { now(): number };
   [key: string]: unknown;
 }
 

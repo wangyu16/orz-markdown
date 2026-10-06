@@ -12,9 +12,11 @@ exports.createSaver = createSaver;
  *   1. a connected host (`orz-host-save@1`)        → { via: 'host', ok }
  *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
  *   3. File System Access (handle remembered in IndexedDB under the header
- *      `uid`, else the page URL; a second save overwrites silently)
- *                                                   → { via: 'file', ok }
- *   4. a download of `suggestedName`               → { via: 'download', ok }
+ *      `uid` + the page location, else the page URL; reused only on that
+ *      page; a second save overwrites silently)
+ *                                   → { via: 'file', ok, picked, name? }
+ *   4. a download of `suggestedName`
+ *                                   → { via: 'download', ok, confirmed: false, name }
  *
  * Every browser feature is detected when `save` is called, never at module
  * load, so the module imports safely in Node.
@@ -94,21 +96,6 @@ function createIndexedDbHandleStore(factory) {
         async delete(key) { await run('readwrite', (s) => s.delete(key)); },
     };
 }
-/** The file name the page was opened from (file: URLs only). */
-function openedFileName(win) {
-    const loc = win.location;
-    if (!loc || loc.protocol !== 'file:')
-        return undefined;
-    const last = loc.pathname.split('/').pop();
-    if (!last)
-        return undefined;
-    try {
-        return decodeURIComponent(last);
-    }
-    catch {
-        return last;
-    }
-}
 function isServed(win) {
     const p = win.location?.protocol;
     return p === 'http:' || p === 'https:';
@@ -141,9 +128,13 @@ function createSaver(opts) {
     };
     let handle = null; // this session's handle: later saves never prompt
     const key = () => {
-        if (typeof opts.uid === 'string' && exports.SHELL_UID_PATTERN.test(opts.uid))
-            return opts.uid;
-        const href = winOf().location?.href;
+        const loc = winOf().location;
+        if (typeof opts.uid === 'string' && exports.SHELL_UID_PATTERN.test(opts.uid)) {
+            // one record per document AND page: a copy elsewhere (same uid) keeps its own record
+            const here = (0, types_js_1.pageLocation)(loc);
+            return here === undefined ? opts.uid : `${opts.uid} ${here}`;
+        }
+        const href = loc?.href;
         return href ? href.replace(/#.*$/s, '') : null;
     };
     const download = async (html) => {
@@ -153,7 +144,7 @@ function createSaver(opts) {
             const BlobCtor = win.Blob ?? globalThis.Blob;
             const urls = win.URL ?? globalThis.URL;
             if (!doc || !doc.body || !BlobCtor || !urls?.createObjectURL)
-                return { via: 'download', ok: false, error: 'Downloads are not available here.' };
+                return { via: 'download', ok: false, confirmed: false, error: 'Downloads are not available here.' };
             const url = urls.createObjectURL(new BlobCtor([html], { type: 'text/html;charset=utf-8' }));
             const a = doc.createElement('a');
             a.href = url;
@@ -167,10 +158,10 @@ function createSaver(opts) {
                 urls.revokeObjectURL(url);
             }
             catch { /* ignore */ } }, 1000);
-            return { via: 'download', ok: true };
+            return { via: 'download', ok: true, confirmed: false, name: opts.suggestedName };
         }
         catch (e) {
-            return { via: 'download', ok: false, error: message(e) };
+            return { via: 'download', ok: false, confirmed: false, error: message(e) };
         }
     };
     /** A remembered handle we may write without a picker, or null. */
@@ -178,8 +169,13 @@ function createSaver(opts) {
         const stored = await store().get(k);
         if (!stored || typeof stored.handle.createWritable !== 'function')
             return null;
-        // A copy of the file carries the same uid: never write over a file with another name.
-        const opened = openedFileName(win);
+        // A copy of the file carries the same uid, and every file: page shares one IndexedDB:
+        // reuse a handle only on the page it was picked on (a record without a location, or a
+        // page without one, gets the picker), and never write over a file with another name.
+        const here = (0, types_js_1.pageLocation)(win.location);
+        if (here === undefined || stored.location !== here)
+            return null;
+        const opened = (0, types_js_1.openedFileName)(win.location);
         const name = stored.handle.name ?? stored.name;
         if (opened !== undefined && name !== undefined && name !== opened)
             return null;
@@ -214,9 +210,11 @@ function createSaver(opts) {
     const saveToFile = async (html, win) => {
         const k = key();
         let h = handle;
+        let picked = false;
         if (!h && k)
             h = await remembered(k, win);
         if (!h) {
+            picked = true;
             const ext = protocol_js_1.KIND_EXTENSIONS[opts.kind] ?? '.html';
             try {
                 h = await win.showSaveFilePicker({
@@ -226,16 +224,17 @@ function createSaver(opts) {
             }
             catch (e) {
                 if (errorName(e) === 'AbortError')
-                    return { via: 'file', ok: false, error: 'cancelled' };
+                    return { via: 'file', ok: false, error: 'cancelled', picked: true };
                 return download(html); // the picker is unusable here (no user activation, policy): download
             }
+            const location = (0, types_js_1.pageLocation)(win.location);
             if (k)
-                await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}) });
+                await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}), ...(location !== undefined ? { location } : {}) });
         }
         handle = h;
         try {
             await write(h, html);
-            return { via: 'file', ok: true };
+            return { via: 'file', ok: true, picked, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
         }
         catch {
             return download(html); // the write failed: keep the user's work as a download
@@ -244,7 +243,7 @@ function createSaver(opts) {
     return {
         async save(input) {
             if (typeof input?.html !== 'string' || typeof input.text !== 'string')
-                return { via: 'download', ok: false, error: 'text and html must be strings.' };
+                return { via: 'download', ok: false, confirmed: false, error: 'text and html must be strings.' };
             if (opts.host && opts.host.connected()) {
                 const ack = await opts.host.save({ source: input.text, html: input.html, ...(typeof input.theme === 'string' ? { theme: input.theme } : {}) });
                 return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };

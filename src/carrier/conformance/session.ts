@@ -7,8 +7,10 @@
  * answers itself — so the update check runs against its real URLs.
  */
 import { KIND_PACKAGE } from '../read.js';
+import { CODEMIRROR6_PATH } from '../editor/codemirror-pin.js';
+import { VERSION } from '../../version.js';
 import { RECORD_BINDING, HOST_PAGE, bundlePage, initScript, type PickerMode } from './page.js';
-import { callAssemble, decodeStrict, fs, http, os, path, playwright, readBytes, sha256hex } from './node.js';
+import { callAssemble, decodeStrict, fs, http, os, packageRoot, path, playwright, readBytes, sha256hex, sha384 } from './node.js';
 import type { AssembleOptions, BrowserLike, BundleSource, CarrierTarget, ConformanceOptions } from './types.js';
 
 type BrowserContext = import('playwright-core').BrowserContext;
@@ -36,8 +38,23 @@ export interface Record_ {
   url: string;
 }
 
+/**
+ * The pinned CodeMirror 6 bundle's jsDelivr URL (the editor's
+ * `CODEMIRROR6_URL`): answered inside the closed network from this package's
+ * own `vendor/codemirror6.js`, so the edit checks run with CodeMirror loaded.
+ */
+export const CODEMIRROR_URL = `https://cdn.jsdelivr.net/npm/orz-markdown@${VERSION}/${CODEMIRROR6_PATH}`;
+
+/**
+ * Chrome refuses the origin-private file system on `file:` pages unless it was
+ * launched with this flag; the `opfs` picker (real handles for
+ * `C.save.copy-elsewhere`) needs it. The harness's own browser has it; for a
+ * browser passed in without it, that check launches one of its own.
+ */
+export const FILE_ACCESS_FLAG = '--allow-file-access-from-files';
+
 export interface CdnPlan {
-  /** The release whose manifest answers `<pkg>-browser@latest/release.json` (none: the manifest request fails — offline). */
+  /** The release whose manifest answers `<pkg>-browser@latest/release.json` (none: the manifest request fails — offline). Its bundle URL is answered first. */
   latest?: Release;
   /** Serve `latest`'s bundle with one byte more than its integrity covers. */
   tamper?: boolean;
@@ -87,11 +104,14 @@ export class Session {
   hostOrigin = '';
   fileOrigin = '';
   private ownsBrowser = false;
+  private fileBrowser: BrowserLike | null = null;
+  private ownsFileBrowser = false;
   private servers: Array<import('node:http').Server> = [];
   private files = new Map<string, string>();
   private tmp = '';
   private contexts = new Set<BrowserContext>();
   private memo = new Map<string, Promise<string>>();
+  private codemirror: Uint8Array | null | undefined;
 
   private constructor(target: CarrierTarget, options: ConformanceOptions) {
     this.target = target;
@@ -112,7 +132,7 @@ export class Session {
       else {
         try {
           const { chromium } = await playwright();
-          s.browser = await chromium.launch({ channel: options.channel ?? 'chrome' });
+          s.browser = await chromium.launch({ channel: options.channel ?? 'chrome', args: [FILE_ACCESS_FLAG] });
           s.ownsBrowser = true;
         } catch (e) {
           s.browserError = `no browser: ${(e as Error)?.message?.split('\n')[0] ?? String(e)}`;
@@ -162,6 +182,19 @@ export class Session {
     return `file://${file.split(path().sep).map(encodeURIComponent).join('/')}`;
   }
 
+  /**
+   * A release made from another: `append` is added to its bundle (a re-signed
+   * build of it), `version` replaces the manifest's version; the manifest's
+   * integrity is recomputed, so the bytes match what it announces.
+   */
+  derive(base: Release, o: { version?: string; append?: string }): Release {
+    const code = o.append ? `${base.code}${o.append}` : base.code;
+    const bytes = o.append ? new TextEncoder().encode(code) : base.bytes;
+    const version = o.version ?? base.version;
+    const manifest: Record<string, unknown> = { ...(base.manifest ?? {}), version, bundle: { path: base.bundlePath, integrity: sha384(bytes) } };
+    return { ...base, code, bytes, manifest, manifestText: JSON.stringify(manifest), version };
+  }
+
   /** The target's Node `assemble`, memoised per text and options. */
   assemble(text: string, o: AssembleOptions = {}): Promise<string> {
     const engine = o.engineSource === undefined ? '-' : o.engineSource === this.releases.target.code ? 'own' : `sha256:${sha256hex(o.engineSource)}`;
@@ -185,9 +218,10 @@ export class Session {
   }
 
   /** A fresh browser context for one check: recorded dialogs, errors, picker writes, downloads and requests; closed network. */
-  async context(o: { picker: PickerMode; cdn?: CdnPlan }): Promise<CheckContext> {
+  async context(o: { picker: PickerMode; cdn?: CdnPlan; codemirror?: boolean }): Promise<CheckContext> {
     if (!this.browser) throw new Error(this.browserError || 'no browser');
-    const context = await this.browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
+    const browser = o.picker === 'opfs' ? await this.browserForFiles() : this.browser;
+    const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
     this.contexts.add(context);
     const records: Record_[] = [];
     const requests: string[] = [];
@@ -206,7 +240,12 @@ export class Session {
         if (o.cdn?.latest) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: o.cdn.latest.manifestText });
         return route.abort('internetdisconnected');
       }
-      for (const r of [this.releases.target, this.releases.next, this.releases.previous]) {
+      if (url.split('?')[0] === CODEMIRROR_URL) {
+        const cm = o.codemirror === false ? null : this.codemirrorBytes();
+        if (cm) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/javascript; charset=utf-8' }, body: Buffer.from(cm) });
+        return route.abort('internetdisconnected'); // the textarea fallback case
+      }
+      for (const r of [o.cdn?.latest, this.releases.target, this.releases.next, this.releases.previous]) {
         if (!r || url.split('?')[0] !== urls.bundle(r)) continue;
         const tampered = o.cdn?.tamper && o.cdn.latest === r;
         const body = tampered ? Buffer.concat([Buffer.from(r.bytes), Buffer.from('\n/* tampered */\n')]) : Buffer.from(r.bytes);
@@ -232,6 +271,37 @@ export class Session {
       newPage: async () => context.newPage(),
       of: (type) => records.filter((r) => r.type === type),
     };
+  }
+
+  /** A browser whose `file:` pages have the origin-private file system ({@link FILE_ACCESS_FLAG}). */
+  private async browserForFiles(): Promise<BrowserLike> {
+    if (this.ownsBrowser) return this.browser!;
+    if (!this.fileBrowser) {
+      const probe = await this.browser!.newContext();
+      let ok = false;
+      try {
+        const page = await probe.newPage();
+        await page.goto(this.writeFile('opfs-probe.html', '<!doctype html><meta charset="utf-8"><title>probe</title>'));
+        ok = await page.evaluate('navigator.storage.getDirectory().then(function () { return true; }, function () { return false; })') as boolean;
+      } catch { ok = false; } finally { await probe.close().catch(() => undefined); }
+      if (ok) this.fileBrowser = this.browser;
+      else {
+        try {
+          const { chromium } = await playwright();
+          this.fileBrowser = await chromium.launch({ channel: this.options.channel ?? 'chrome', args: [FILE_ACCESS_FLAG] });
+          this.ownsFileBrowser = true;
+        } catch { this.fileBrowser = this.browser; }
+      }
+    }
+    return this.fileBrowser!;
+  }
+
+  /** This package's `vendor/codemirror6.js` (null when it is not shipped). */
+  private codemirrorBytes(): Uint8Array | null {
+    if (this.codemirror === undefined) {
+      try { this.codemirror = readBytes(path().join(packageRoot(), CODEMIRROR6_PATH)); } catch { this.codemirror = null; }
+    }
+    return this.codemirror;
   }
 
   /** Close the contexts a check opened. */
@@ -266,6 +336,7 @@ export class Session {
   async close(): Promise<void> {
     await this.closeContexts();
     if (this.ownsBrowser) await this.browser?.close().catch(() => undefined);
+    if (this.ownsFileBrowser) await this.fileBrowser?.close().catch(() => undefined);
     for (const s of this.servers) s.close();
     this.servers = [];
     if (this.tmp) fs().rmSync(this.tmp, { recursive: true, force: true });

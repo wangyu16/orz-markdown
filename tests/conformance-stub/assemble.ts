@@ -6,14 +6,19 @@
  * engine — inlined (`delivery: "inline"`, the bundle's exact text) or loaded
  * from the hard-coded jsDelivr URL (`cdn`).
  *
- * `variant` exists for the harness's mutation tests (tests/conformance-
- * mutations.test.ts): `crlf` normalises line endings before assembling — the
- * bug the round-trip law must catch.
+ * `variant` exists for the harness's mutation tests (H.5 in
+ * tests/conformance.test.ts): `crlf` normalises line endings before
+ * assembling — the bug the round-trip law must catch; the other variants are
+ * bugs of the bundle (carrier.ts).
  */
 import { assembleEnvelope } from '../../src/carrier';
 import { bundleUrl } from '../../src/carrier/shell/update';
 
-export type StubVariant = 'good' | 'script-close' | 'crlf' | 'accept-tampered' | 'live-dom' | 'steal-focus';
+export type StubVariant =
+  | 'good' | 'script-close' | 'crlf' | 'accept-tampered' | 'live-dom' | 'steal-focus'
+  // round 1 of closed loop 2: the kit mutants that survived the harness, re-made as carrier bugs
+  | 'preview-same-origin' | 'ungated-keys' | 'no-roundtrip' | 'no-version-check' | 'any-source' | 'copy-overwrite'
+  | 'offer-prerelease' | 'no-once-a-day' | 'shared-prefs' | 'cdn-to-inline' | 'update-in-frame';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 

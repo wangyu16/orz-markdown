@@ -25,7 +25,9 @@ exports.performUpdate = performUpdate;
  * the result is accepted only when the parser-free `extract` gives back
  * exactly the same text, the same kind and the release's version. Nothing in
  * the live page changes; the caller saves the returned HTML through
- * `createSaver` and reloads.
+ * `createSaver` and reloads only when `performUpdate` says it is safe
+ * (`reload`). Only a top-level standalone file checks: never a framed page,
+ * a page with a connected host, or (by default) a served page.
  *
  * Sources are hard-coded (RULES §5.4): the manifest URL and the bundle URL
  * are built here from `KIND_PACKAGE` and the jsDelivr base; a document's text
@@ -237,6 +239,24 @@ function skippedVersion(kind, storage) {
         return null;
     }
 }
+/**
+ * Why this page must not check, or null: a connected host, a framed page, or
+ * a served page without `servedPages` (spec/shell-runtime.md §7.1).
+ */
+function notChecked(opts) {
+    if (opts.host && opts.host.connected())
+        return 'hosted';
+    const page = opts.page ?? (0, types_js_1.globalWindow)();
+    if (!page)
+        return null; // not a browser page (Node, a worker): nothing to embed or serve
+    const parent = page.parent;
+    if (parent != null && parent !== page)
+        return 'framed';
+    const protocol = page.location?.protocol;
+    if (!opts.servedPages && (protocol === 'http:' || protocol === 'https:'))
+        return 'served';
+    return null;
+}
 function withTimeout(p, ms, fallback) {
     return new Promise((resolve) => {
         const t = setTimeout(() => resolve(fallback), ms);
@@ -275,7 +295,9 @@ function offer(manifest, opts, skipped) {
     return { kind: opts.kind, current: opts.current, latest: manifest.version, notes: manifest.notes, manifest };
 }
 /**
- * Is a newer release of this kind available for this document? At most one
+ * Is a newer release of this kind available for this document? Never on a
+ * page embedded in a frame or with a connected host (the app owns the
+ * version), nor on a served page unless `servedPages`. At most one
  * network request per kind per {@link UPDATE_CHECK_INTERVAL_MS} (the last
  * check — success or failure — is recorded in storage; within the interval
  * the recorded manifest is used); without usable storage nothing is fetched.
@@ -288,6 +310,8 @@ async function checkForUpdate(opts) {
     try {
         if (!isReleaseKind(opts.kind) || !parseSemver(opts.current))
             return null;
+        if (notChecked(opts))
+            return null; // before storage and network: a hosted file makes no request
         if (opts.cdnBase !== undefined)
             base(opts.cdnBase); // validate early (throws → null)
         const storage = resolveStorage(opts.storage);
@@ -546,31 +570,73 @@ async function reassemble(opts) {
         throw new UpdateError('delivery', `The new version wrote delivery "${back.delivery}" instead of "${delivery}"; nothing was changed.`);
     return html;
 }
+const CHANGED = 'The document changed while the update ran, so nothing was saved; try again.';
 /**
- * check → reassemble → `saver.save({ text, html })`. Never rejects. The page
- * is not reloaded here: on `updated` with `save.ok` the caller reloads (the
- * saved file now runs the new shell); on `served-notice` it offers
- * `saver.download`; on `failed` nothing was changed.
+ * check → reassemble → re-read the text → `saver.save({ text, html })`.
+ * Never rejects and never reloads; `reload` says whether the caller may.
+ * Refused (`failed`, nothing saved) when the page is framed or hosted
+ * (`hosted`), the update is refused (an {@link UpdateError} code), or the
+ * text changed while it ran (`changed`). On `served-notice` the caller
+ * offers `saver.download`.
  */
 async function performUpdate(opts) {
     const info = opts.info ?? (await checkForUpdate(opts));
     if (!info)
         return { status: 'up-to-date' };
+    const fail = (code, error) => ({ status: 'failed', info, code, error });
+    let hosted;
+    try {
+        hosted = notChecked({ ...opts, servedPages: true });
+    }
+    catch {
+        hosted = null;
+    }
+    if (hosted)
+        return fail('hosted', 'This document is embedded in an app, which updates it; nothing was changed.');
+    const read = () => {
+        if (typeof opts.getText === 'function') {
+            try {
+                const t = opts.getText();
+                return typeof t === 'string' ? t : undefined;
+            }
+            catch {
+                return undefined;
+            }
+        }
+        return opts.text;
+    };
+    const text = read();
+    if (typeof text !== 'string')
+        return fail('roundtrip', 'The document text is missing; nothing was changed.');
     let html;
     try {
-        html = await reassemble({ ...opts, release: info.manifest, kind: info.kind });
+        html = await reassemble({ ...opts, text, release: info.manifest, kind: info.kind });
     }
     catch (e) {
         const code = e instanceof UpdateError ? e.code : 'bundle';
-        return { status: 'failed', info, code, error: String(e?.message ?? e) };
+        return fail(code, String(e?.message ?? e));
     }
+    if (read() !== text)
+        return fail('changed', CHANGED);
     let save;
     try {
-        save = await opts.saver.save({ text: opts.text, html, ...(typeof opts.theme === 'string' ? { theme: opts.theme } : {}) });
+        save = await opts.saver.save({ text, html, ...(typeof opts.theme === 'string' ? { theme: opts.theme } : {}) });
     }
     catch (e) {
-        save = { via: 'download', ok: false, error: String(e?.message ?? e) };
+        save = { via: 'download', ok: false, confirmed: false, error: String(e?.message ?? e) };
     }
-    return { status: 'updated', info, html, save };
+    let opened = opts.openedName;
+    if (opened === undefined) {
+        try {
+            opened = (0, types_js_1.openedFileName)((0, types_js_1.globalWindow)()?.location);
+        }
+        catch {
+            opened = undefined;
+        }
+    }
+    const wroteOpened = save.via === 'host' ? save.ok
+        : save.via === 'file' ? save.ok && (!save.picked || (save.name !== undefined && save.name === opened))
+            : false;
+    return { status: 'updated', info, html, text, save, reload: wroteOpened && read() === text };
 }
 //# sourceMappingURL=update.js.map

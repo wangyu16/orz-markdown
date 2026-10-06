@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
+exports.CONFORMANT_TITLE = exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
 exports.implementedChecks = implementedChecks;
 exports.openConformance = openConformance;
 exports.runConformance = runConformance;
+exports.isConformant = isConformant;
 exports.registerConformance = registerConformance;
 exports.describeChecks = describeChecks;
 /**
@@ -82,7 +83,11 @@ async function openConformance(target, options = {}) {
                 ]);
             }
             catch (e) {
-                if (e instanceof checks_js_1.Skip) {
+                if (e instanceof checks_js_1.NotApplicable) {
+                    status = 'not-applicable';
+                    message = e.message;
+                }
+                else if (e instanceof checks_js_1.Skip) {
                     status = 'skipped';
                     message = e.message;
                 }
@@ -116,22 +121,36 @@ async function runConformance(target, options = {}) {
     finally {
         await runner.close();
     }
+    return report(target, results);
+}
+/** Every check of `CHECK_IDS` has a result that passed or is not applicable. */
+function isConformant(results) {
+    return catalog_js_1.CHECK_IDS.every((id) => results.some((r) => r.id === id && (r.status === 'passed' || r.status === 'not-applicable')));
+}
+function report(target, results) {
     const count = (s) => results.filter((r) => r.status === s).length;
     return {
         kind: target.kind,
         version: target.version,
         harness: version_js_1.VERSION,
-        conformant: count('failed') === 0 && count('skipped') === 0,
+        conformant: isConformant(results),
+        partial: !catalog_js_1.CHECK_IDS.every((id) => results.some((r) => r.id === id)),
         passed: count('passed'),
         failed: count('failed'),
         skipped: count('skipped'),
+        notApplicable: count('not-applicable'),
         results,
     };
 }
 /**
  * Register the harness with a test framework: one test per check, titled
- * `[<check id>] <title>`, sharing one session. A skipped check is reported
- * through the test context's `skip()` when the framework offers it (vitest).
+ * `[<check id>] <title>`, sharing one session, then a final test titled
+ * `[conformant] …` that fails unless every check of `CHECK_IDS` ran and passed
+ * (or is not applicable) — so a skipped check (no Chrome, no `next`) or a
+ * partial selection (`only`/`skip`) cannot pass as conformance. With
+ * `allowSkips: true` the final test tolerates skips and deselection (it
+ * still fails on a failed check). A skipped check is reported through the
+ * test context's `skip()` when the framework offers it (vitest).
  *
  *     import { describe, it, beforeAll, afterAll } from 'vitest';
  *     registerConformance({ describe, it, beforeAll, afterAll }, () => myTarget(), { title: 'orz-mdhtml conformance' });
@@ -139,6 +158,7 @@ async function runConformance(target, options = {}) {
 function registerConformance(t, target, options = {}) {
     let runner = null;
     let opening = null;
+    const results = new Map();
     const limit = options.checkTimeoutMs ?? DEFAULT_TIMEOUT;
     t.describe(options.title ?? 'orz carrier conformance', () => {
         t.beforeAll(async () => {
@@ -155,14 +175,29 @@ function registerConformance(t, target, options = {}) {
                 if (!runner)
                     throw new Error(`the conformance session did not open: ${String(opening?.message ?? opening)}`);
                 const r = await runner.run(id);
+                results.set(id, r);
                 if (r.status === 'failed')
                     throw new Error(`${id} failed:\n${r.message}`);
                 if (r.status === 'skipped' && typeof ctx?.skip === 'function')
                     ctx.skip(r.message);
             }, limit + 30000);
         }
+        t.it(`${exports.CONFORMANT_TITLE}${options.allowSkips ? ' (skips allowed)' : ''}`, async () => {
+            const all = [...results.values()];
+            const failed = all.filter((r) => r.status === 'failed').map((r) => r.id);
+            if (failed.length)
+                throw new Error(`not conformant: failed ${failed.join(', ')}`);
+            if (options.allowSkips)
+                return;
+            const missing = catalog_js_1.CHECK_IDS.filter((id) => !all.some((r) => r.id === id && (r.status === 'passed' || r.status === 'not-applicable')));
+            if (missing.length) {
+                throw new Error(`not conformant: ${missing.length} check(s) did not run and pass — ${missing.map((id) => `${id} (${results.get(id)?.status ?? 'not run'})`).join(', ')}; pass allowSkips: true for a partial or browserless run`);
+            }
+        }, 10000);
     });
 }
+/** The title of the final test `registerConformance` registers. */
+exports.CONFORMANT_TITLE = '[conformant] every check of CHECK_IDS ran and passed (or is not applicable)';
 /** Every check id with its title and spec reference (for docs and claims). */
 function describeChecks() {
     return catalog_js_1.CHECKS.map((c) => ({ ...c }));

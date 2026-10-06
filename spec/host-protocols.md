@@ -127,8 +127,10 @@ A host replies `ok: false` with an `error` to a save whose `html` is empty.
   directive is left in place.
 - **A standalone file never resolves and never fetches** an include URL
   (RULES §5.3). A format-1 file reads includes resolved at assembly from its
-  `#orz-includes` island (FC-18 §8.3). (Which of the two a hosted format-1
-  preview prefers when both exist is left open; see spec/shell-runtime.md §5.)
+  `#orz-includes` island (FC-18 §8.3). When both exist, a hosted format-1
+  preview prefers the **host's** resolution (fresher; the host owns the
+  trust policy) and falls back to `#orz-includes` when no host answers —
+  decided 2026-10-05, spec/shell-runtime.md §5.
 - A file may decline includes (poster does, by design): it never answers the
   hello.
 

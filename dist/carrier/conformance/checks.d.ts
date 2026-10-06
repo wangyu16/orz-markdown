@@ -1,6 +1,9 @@
 import { type Session } from './session.js';
 export declare class Skip extends Error {
 }
+/** The check does not apply to this target, for a reason the target declared (e.g. `firstRelease`). Counts as satisfied. */
+export declare class NotApplicable extends Error {
+}
 /** Collects failed expectations. */
 export declare class Probe {
     readonly failures: string[];

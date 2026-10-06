@@ -1,6 +1,6 @@
 /**
  * Quiet updates and the shell chrome (`orz-markdown/carrier/shell`:
- * src/carrier/shell/update.ts, indicator.ts, chrome.ts): claims U.1–U.11 and
+ * src/carrier/shell/update.ts, indicator.ts, chrome.ts): claims U.1–U.13 and
  * V.1–V.5 in notes/CLAIMS.md; spec/shell-runtime.md §6–§8.
  *
  * Three substrates. Decision logic (manifest, URLs, caching, semver, the
@@ -96,7 +96,7 @@ type Assemble = (text: string, o: { delivery: string; engineSource: string }) =>
  * posts ready from the iframe, then answers requests with `assemble`.
  * `log` records every DOM operation on the page.
  */
-function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: boolean } = {}) {
+function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: boolean; stale?: boolean } = {}) {
   const listeners = new Set<MessageListener>();
   const log: string[] = [];
   const posted: unknown[] = [];
@@ -134,6 +134,8 @@ function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: b
           if (opts.silent) return;
           // a forger that knows the live request id, posting from another window, and with no source
           if (opts.forge) { emit({ type: 'orz-reassembled', id: msg.id, ok: true, html: 'FORGED' }, stranger); emit({ type: 'orz-reassembled', id: msg.id, ok: true, html: 'FORGED' }, null); }
+          // the RIGHT source with a stale or foreign request id (an earlier request's answer, a replay)
+          if (opts.stale) for (const id of ['u0', `${msg.id}x`, 'x', '']) emit({ type: 'orz-reassembled', id, ok: true, html: 'STALE' }, contentWindow);
           setTimeout(async () => {
             try {
               const html = await assemble!(msg.text, { delivery: msg.delivery, engineSource: msg.engineSource });
@@ -357,6 +359,33 @@ describe('checkForUpdate (spec/shell-runtime.md §7)', () => {
   });
 });
 
+// ── U.13 who checks ──────────────────────────────────────────────────────
+
+describe('which pages check (spec/shell-runtime.md §7.1)', () => {
+  it('[U.13] a framed page (an app host\'s iframe, connected or not yet), a page with a connected host and a served page (unless servedPages) make no check — no storage, no request; a top-level file: page checks', async () => {
+    const m = manifest();
+    const { fetch, calls } = fakeFetch({ [MD_MANIFEST_URL]: () => response(JSON.stringify(m)) });
+    const storage = memoryStorage();
+    const base = { kind: 'md' as const, current: '1.0.0', fetch, storage, now: T0 };
+    const fileTop: { location: { protocol: string }; parent?: unknown } = { location: { protocol: 'file:' } };
+    fileTop.parent = fileTop;
+    expect(await checkForUpdate({ ...base, page: { location: { protocol: 'file:' }, parent: {} } })).toBeNull();
+    expect(await checkForUpdate({ ...base, page: fileTop, host: { connected: () => true } })).toBeNull();
+    for (const protocol of ['http:', 'https:']) {
+      const served: { location: { protocol: string }; parent?: unknown } = { location: { protocol } };
+      served.parent = served;
+      expect(await checkForUpdate({ ...base, page: served })).toBeNull();
+    }
+    expect([calls, storage.map.size]).toEqual([[], 0]);
+    const servedOk: { location: { protocol: string }; parent?: unknown } = { location: { protocol: 'https:' } };
+    servedOk.parent = servedOk;
+    expect((await checkForUpdate({ ...base, page: servedOk, servedPages: true }))?.latest).toBe('1.1.0');
+    expect(calls).toEqual([MD_MANIFEST_URL]);
+    expect((await checkForUpdate({ ...base, now: T0 + 1, page: fileTop, host: { connected: () => false } }))?.latest).toBe('1.1.0');
+    expect(calls).toHaveLength(1); // the same day
+  });
+});
+
 // ── U.5–U.8 reassemble ───────────────────────────────────────────────────
 
 const BUNDLE = 'globalThis.OrzCarrier = { kind: "md", version: "1.1.0" }; // "\\x3Cscript" is how a release writes it\n';
@@ -417,12 +446,16 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     expect(seen).toEqual([{ text: TEXTS[0], delivery: 'inline', engineSource: BUNDLE }]);
   });
 
-  it('[U.6] only messages whose source is the iframe\'s own window are read: a forged result from another source is ignored', async () => {
+  it('[U.6] only messages whose source is the iframe\'s own window are read: a forged result from another source is ignored, and so is a result from the iframe with a stale or foreign request id', async () => {
     const s = served(BUNDLE);
     const page = fakePage(goodAssemble(), { forge: true });
     const html = await reassemble({ text: 'real text\n', kind: 'md', release: s.m, fetch: s.fetch, document: page.document, window: page.window });
     expect(html).not.toBe('FORGED');
     expect(extract(html)!.text).toBe('real text\n');
+    const st = fakePage(goodAssemble(), { stale: true });
+    const fresh = await reassemble({ text: 'fresh text\n', kind: 'md', release: s.m, fetch: s.fetch, document: st.document, window: st.window });
+    expect(fresh).not.toBe('STALE');
+    expect(extract(fresh)!.text).toBe('fresh text\n');
     // and a message from the page itself (source = the page window) is ignored too
     const p2 = fakePage(null, { silent: true });
     const pending = reassemble({ text: 't', kind: 'md', release: s.m, fetch: s.fetch, document: p2.document, window: p2.window, timeoutMs: 200 });
@@ -495,12 +528,12 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     const s = served(BUNDLE);
     const routes = { [MD_MANIFEST_URL]: () => response(JSON.stringify(s.m)), [s.url]: () => response(BUNDLE) };
     const saves: Array<{ text: string; html: string; theme?: string }> = [];
-    const saver = { save: async (i: { text: string; html: string; theme?: string }): Promise<SaveResult> => { saves.push(i); return { via: 'file', ok: true }; } };
+    const saver = { save: async (i: { text: string; html: string; theme?: string }): Promise<SaveResult> => { saves.push(i); return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } };
     const page = fakePage(goodAssemble());
     const r = await performUpdate({ kind: 'md', current: '1.0.0', text: TEXTS[1], saver, theme: 'paper', fetch: fakeFetch(routes).fetch, storage: memoryStorage(), now: T0, document: page.document, window: page.window });
     expect(r.status).toBe('updated');
     if (r.status !== 'updated') throw new Error('unreachable');
-    expect([r.info.latest, r.save]).toEqual(['1.1.0', { via: 'file', ok: true }]);
+    expect([r.info.latest, r.save, r.text, r.reload]).toEqual(['1.1.0', { via: 'file', ok: true, picked: false, name: 'week3.md.html' }, TEXTS[1], true]);
     expect(saves).toEqual([{ text: TEXTS[1], html: r.html, theme: 'paper' }]);
     expect(extract(saves[0].html)!.text).toBe(TEXTS[1]);
     // up to date: nothing assembled or saved
@@ -519,6 +552,66 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     expect(r3).toMatchObject({ status: 'updated', save: { via: 'download', ok: false, error: 'disk gone' } });
     const src = readFileSync('src/carrier/shell/update.ts', 'utf8');
     expect(src).not.toMatch(/location\.reload|\.reload\(/);
+  });
+
+  it('[U.12] performUpdate reads the text through getText when the update starts and again before the save: an edit made meanwhile refuses the update (code changed, nothing saved); the old text option still works', async () => {
+    const s = served(BUNDLE);
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const saves: string[] = [];
+    const saver = { save: async (i: { text: string; html: string }): Promise<SaveResult> => { saves.push(i.text); return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } };
+    let text = 'before\n';
+    // the reader types while the sandbox assembles
+    const typing = fakePage((t, o) => { text = 'before\ntyped during Updating…\n'; return assembleEnvelope(t, PARTS('1.1.0', { delivery: o.delivery as 'inline' })); });
+    const changed = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => text, saver, fetch: s.fetch, document: typing.document, window: typing.window, openedName: 'week3.md.html' });
+    expect(changed).toMatchObject({ status: 'failed', code: 'changed' });
+    expect(saves).toEqual([]);
+    // unchanged: saved, and the reload is allowed
+    text = 'steady\r\n';
+    const p2 = fakePage(goodAssemble());
+    const ok = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => text, saver, fetch: s.fetch, document: p2.document, window: p2.window, openedName: 'week3.md.html' });
+    expect(ok).toMatchObject({ status: 'updated', text: 'steady\r\n', reload: true });
+    expect(saves).toEqual(['steady\r\n']);
+    // a getText that throws or returns no string is a missing text
+    const p3 = fakePage(goodAssemble());
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => { throw new Error('gone'); }, saver, fetch: s.fetch, document: p3.document, window: p3.window })).toMatchObject({ status: 'failed', code: 'roundtrip' });
+  });
+
+  it('[U.12] reload only when the saved file is the opened one and the text did not move on: a host or an unpicked file — or a picked file of the opened name — yes; a download, a served notice, a picked file of another name or a text changed during the save, no', async () => {
+    const s = served(BUNDLE);
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const cases: Array<[SaveResult, boolean]> = [
+      [{ via: 'host', ok: true }, true],
+      [{ via: 'host', ok: false, error: 'quota' }, false],
+      [{ via: 'file', ok: true, picked: false, name: 'week3.md.html' }, true],
+      [{ via: 'file', ok: true, picked: true, name: 'week3.md.html' }, true],
+      [{ via: 'file', ok: true, picked: true, name: 'week3 (1).md.html' }, false],
+      [{ via: 'file', ok: true, picked: true }, false],
+      [{ via: 'file', ok: false, error: 'cancelled', picked: true }, false],
+      [{ via: 'download', ok: true, confirmed: false, name: 'week3.md.html' }, false],
+      [{ via: 'served-notice' }, false],
+    ];
+    for (const [result, reload] of cases) {
+      const page = fakePage(goodAssemble());
+      const r = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'same\n', saver: { save: async () => result }, fetch: s.fetch, document: page.document, window: page.window, openedName: 'week3.md.html' });
+      expect(r, JSON.stringify(result)).toMatchObject({ status: 'updated', reload });
+    }
+    // a text that changes while the save runs (a picker is open): saved, but no reload
+    let text = 'a\n';
+    const page = fakePage(goodAssemble());
+    const moved = await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => text, saver: { save: async () => { text = 'a\nb\n'; return { via: 'file', ok: true, picked: false, name: 'week3.md.html' }; } }, fetch: s.fetch, document: page.document, window: page.window, openedName: 'week3.md.html' });
+    expect(moved).toMatchObject({ status: 'updated', text: 'a\n', reload: false });
+  });
+
+  it('[U.13] performUpdate refuses in a framed page or with a connected host (code hosted): the app owns the version; nothing is fetched or saved', async () => {
+    const s = served(BUNDLE);
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const saves: unknown[] = [];
+    const saver = { save: async (i: unknown): Promise<SaveResult> => { saves.push(i); return { via: 'host', ok: true }; } };
+    const page = fakePage(goodAssemble());
+    const top = {};
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', text: 'x', saver, fetch: s.fetch, document: page.document, window: page.window, page: { parent: {} } })).toMatchObject({ status: 'failed', code: 'hosted' });
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', text: 'x', saver, fetch: s.fetch, document: page.document, window: page.window, host: { connected: () => true }, page: { parent: top } as never })).toMatchObject({ status: 'failed', code: 'hosted' });
+    expect([saves, s.calls, page.frames.length]).toEqual([[], [], 0]);
   });
 });
 
@@ -767,13 +860,18 @@ function valueImports(entry: string): Set<string> {
   return seen;
 }
 
-/** Measured 2026-10-05 (esbuild, ESM, browser, minified): update 13,841 B; update + indicator + chrome 25.6 KB; chrome 12,223 B. Bounds ≈ +30 %. */
+/**
+ * Re-measured 2026-10-06 (esbuild, ESM, browser, minified — exactly the build below): update 15,482 B;
+ * update + indicator + chrome 31,671 B; chrome 12,285 B (at 2600cdf: 14,353 B and 30,542 B — the
+ * earlier "13.8 KB / 25.6 KB" notes were stale). Bounds: ~16 %, ~20 % and ~30 % above the measurement,
+ * so one more round of guards fits and a real jump in size fails.
+ */
 const UPDATE_LIMIT = 18_000;
-const UPDATE_UI_LIMIT = 34_000;
+const UPDATE_UI_LIMIT = 38_000;
 const CHROME_LIMIT = 16_000;
 
 describe('module boundaries', () => {
-  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; it bundles under 18 KB (with indicator and chrome under 34 KB)', async () => {
+  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; it bundles under 18 KB (with indicator and chrome under 38 KB)', async () => {
     expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
     expect([...valueImports('src/carrier/shell/indicator.ts')].sort()).toEqual(['src/carrier/shell/chrome.ts', 'src/carrier/shell/indicator.ts']);
     const { build } = await import('esbuild');
@@ -931,7 +1029,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 90_000 }, () 
     const w = window as unknown as Record<string, any>;
     const S = w.OrzShell;
     localStorage.clear();
-    const info = await S.checkForUpdate({ kind: 'md', current: '1.0.0', cdnBase });
+    const info = await S.checkForUpdate({ kind: 'md', current: '1.0.0', cdnBase, servedPages: true }); // the test page is served over http
     if (!info) return null;
     w.__results = [];
     // a download-only window: no picker, presented as a file: page (a served page would get the notice)
@@ -955,7 +1053,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 90_000 }, () 
     expect(info).toMatchObject({ kind: 'md', current: '1.0.0', latest: '1.1.0', notes: 'https://example.test/changelog#110' });
     expect(requests.filter((r) => r.startsWith('/good/'))).toEqual(['/good/orz-mdhtml-browser@latest/release.json']);
     // a second check the same day makes no request
-    await page.evaluate((cdnBase) => (window as unknown as { OrzShell: { checkForUpdate(o: unknown): Promise<unknown> } }).OrzShell.checkForUpdate({ kind: 'md', current: '1.0.0', cdnBase }), `${CDN}/good/`);
+    await page.evaluate((cdnBase) => (window as unknown as { OrzShell: { checkForUpdate(o: unknown): Promise<unknown> } }).OrzShell.checkForUpdate({ kind: 'md', current: '1.0.0', cdnBase, servedPages: true }), `${CDN}/good/`);
     expect(requests.filter((r) => r.endsWith('release.json') && r.startsWith('/good/'))).toHaveLength(1);
     const chip = page.locator('button.orz-chip');
     await expect.poll(() => chip.getAttribute('aria-label')).toBe('Update available: 1.1.0');
@@ -984,7 +1082,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 90_000 }, () 
     const bytes = readFileSync((await download.path())!);
     const result = await page.evaluate(() => (window as unknown as { __results: Array<{ status: string; save: unknown; html: string }> }).__results[0]);
     expect(result.status).toBe('updated');
-    expect(result.save).toEqual({ via: 'download', ok: true });
+    expect(result.save).toEqual({ via: 'download', ok: true, confirmed: false, name: 'week3.md.html' });
     expect(bytes.equals(Buffer.from(result.html, 'utf8'))).toBe(true);
     const back = extract(bytes.toString('utf8'))!;
     expect(back).toMatchObject({ text: TEXT, kind: 'md', shell: '1.1.0', delivery: 'inline' });

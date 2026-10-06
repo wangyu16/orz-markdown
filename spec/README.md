@@ -33,9 +33,9 @@ URL helpers, semver), `indicator.ts` (`mountUpdateIndicator`), `chrome.ts`
 (`CHROME_CSS`, `ICONS`, `createShadowRoot`, `showToast`), `types.ts`
 (structural browser types) — exported as `orz-markdown/carrier/shell`
 (parser-free — the update verifies with the parser-free `extract` — and
-Node-safe; not re-exported by `orz-markdown/carrier`). Claims S.1–S.12, tests
+Node-safe; not re-exported by `orz-markdown/carrier`). Claims S.1–S.13, tests
 in `tests/carrier-shell.test.ts` (real Chrome for the cross-origin handshake,
-downloads and IndexedDB); claims U.1–U.11 and V.1–V.5, tests in
+downloads and IndexedDB); claims U.1–U.13 and V.1–V.5, tests in
 `tests/carrier-update.test.ts` (real Chrome for the sandboxed update against a
 fake CDN, downloads and CSS isolation).
 
@@ -45,11 +45,12 @@ tracking, `setHeader`, save), `text-model.ts` (exact text behind an LF
 editor), `adapter.ts` (`TextEditorAdapter`, `textareaAdapter`),
 `codemirror6.ts` (`codemirror6Adapter`, `loadCodeMirror6`; the pinned bundle
 `vendor/codemirror6.js` described by the generated `codemirror-pin.ts`),
-`preview.ts` (the `sandbox="allow-scripts"` preview frame and its bridge,
-scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
+`preview.ts` (the preview frame — sandbox from `previewSandbox()`,
+`allow-scripts` — its bridge and message protocol, asset rewriting, CSP
+nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.13, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.22, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview, the split drag,
 scroll sync and Subresource Integrity).
 

@@ -22,9 +22,11 @@ import type { AddressInfo } from 'node:net';
 import {
   createEditorShell, textareaAdapter, codemirror6Adapter, createTextModel, toEditorText, minimalChange, createPreview, previewFrameDocument,
   lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
-  CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS,
-  type EditorShell, type EditorShellOptions, type EdElement, type EdDocument,
+  CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS, PREVIEW_BRIDGE_HASH, previewScriptHashes,
+  previewSandbox, rewriteAssetUrls,
+  type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
 } from '../src/carrier/editor';
+import { historyChars, undoTexts } from '../src/carrier/editor/adapter';
 import { editHeader, withoutHeader } from '../src/carrier';
 import { md } from '../src/index';
 import { isScriptSafe, type HostConnection, type Saver, type SaveResult, type StorageLike, type PreferenceStore } from '../src/carrier/shell';
@@ -284,7 +286,7 @@ describe('layout, modes, keyboard', () => {
     expect(n.shell.toolbar).toBeNull();
     n.shell.destroy();
     const r = mount({ readOnly: true, chrome: 'compact' });
-    expect(r.root.querySelector('.orz-editor__save')).toBeNull();
+    expect((r.root.querySelector('.orz-editor__save') as HTMLElement).hidden).toBe(true);
     expect(r.ta().readOnly).toBe(true);
     expect(r.root.querySelector('.orz-editor')!.getAttribute('data-chrome-level')).toBe('compact');
     r.shell.destroy();
@@ -784,11 +786,16 @@ function valueImports(entry: string): Set<string> {
   return seen;
 }
 
-/** Measured 2026-10-05 (esbuild, ESM, browser, minified): the editor's own modules 32,823 B (the whole entry with the parser 1.15 MB; CodeMirror is not in it). Bound ≈ +30 %. */
-const EDITOR_OWN_LIMIT = 43_000;
+/**
+ * Measured (esbuild, ESM, browser, minified): the editor's own modules 32,823 B on 2026-10-05; 44,825 B on
+ * 2026-10-06 after closed loop 2 round 1 (hooks, formats, pluggable preview, CSP, gating, patch history).
+ * The whole entry is 1.17 MB with the parser, which header.ts brings in (kitParser); CodeMirror is not in it.
+ * Bound ≈ +30 %.
+ */
+const EDITOR_OWN_LIMIT = 57_000;
 
 describe('module boundaries', () => {
-  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; the editor\'s own code (without the parser and CodeMirror) bundles under 43 KB', async () => {
+  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; the editor\'s own code (without the parser and CodeMirror) bundles under 57 KB', async () => {
     for (const entry of ['src/carrier/shell/index.ts', 'src/carrier/read.ts', 'src/carrier.ts', 'src/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/editor')), entry).toEqual([]);
     }
@@ -875,6 +882,498 @@ describe('renderMarkdownPreview', () => {
   });
 });
 
+// ── round 1 of closed loop 2: findings A-2…A-6, B-3…B-19 ─────────────────
+
+/** The shell's preview frame, driven from the test: what the shell posts to it, and messages "from" it. */
+function frameOf(m: Mounted) {
+  const iframe = m.root.querySelector('iframe') as HTMLIFrameElement;
+  const cw = iframe.contentWindow as unknown as { postMessage: unknown };
+  const posted: Array<Record<string, unknown>> = [];
+  cw.postMessage = (msg: Record<string, unknown>) => { posted.push(msg); };
+  const say = (data: unknown) => { m.win.dispatchEvent(new m.win.MessageEvent('message', { data, source: cw as never }) as unknown as Event); };
+  return { iframe, posted, say };
+}
+/** `navigator.userActivation.isActive` as the browser would report it. */
+const activation = (m: Mounted, isActive: boolean) => Object.defineProperty(m.win.navigator, 'userActivation', { value: { isActive }, configurable: true });
+
+describe('the exact text across undo (A-3, A-4)', () => {
+  it('[E.1] each remembered text keeps its own BOM and line endings: a BOM + CR LF document, setText of an LF text, undo, then typing writes BOM + CR LF again; selection offsets in a remembered mixed-EOL text are mapped on that exact string', () => {
+    const T0 = '﻿a\r\nb';
+    const model = createTextModel(T0);
+    model.adopt('x\ny'); // e.g. an AI proposal in LF without a BOM
+    expect(model.toExact('a\nb')).toBe(T0); // undone back: exact
+    expect(model.toExact('a\nbc')).toBe('﻿a\r\nbc'); // the next keystroke keeps the original's style
+    expect(model.toExact('x\ny')).toBe('x\ny'); // back at the LF text: LF without a BOM again
+    expect(model.toExact('x\nyz\n')).toBe('x\nyz\n');
+    const mixed = createTextModel('a\nb\r\nc'); // style LF (first break), but a CR LF inside
+    expect(mixed.toExactOffset('a\nb\nc', 4)).toBe(5);
+    expect(mixed.toExactOffset('a\nb\nc', 3)).toBe(3);
+    // through the shell, with the textarea engine
+    const m = mount({ text: '﻿# Title\r\n\r\nBody\r\n' });
+    m.shell.setText('# AI proposal\n\nNew body\n');
+    expect(m.shell.undo()).toBe(true);
+    expect(m.shell.getText()).toBe('﻿# Title\r\n\r\nBody\r\n');
+    type(m, 'More\n');
+    expect(m.shell.getText()).toBe('﻿# Title\r\n\r\nBody\r\nMore\r\n');
+    m.shell.destroy();
+  });
+});
+
+describe('events (B-13)', () => {
+  it('[E.2] the change event carries the exact text as it was when the event fired (a plain value, not a live getter)', () => {
+    const m = mount();
+    const seen: Array<{ text: string }> = [];
+    m.shell.on('change', (e) => seen.push(e));
+    type(m, 'a');
+    type(m, 'b');
+    expect(seen.map((e) => e.text)).toEqual([`${CRLF_BOM}a`, `${CRLF_BOM}ab`]);
+    expect(typeof Object.getOwnPropertyDescriptor(seen[0], 'text')!.value).toBe('string');
+    m.shell.destroy();
+  });
+});
+
+describe('frame messages (A-2, E06)', () => {
+  it('[E.14] a forged Escape moves focus only while the preview frame has it; a save key, the view key or a link from the frame needs focus on the frame AND transient user activation; nothing happens while the reader is in the editor', async () => {
+    const save = vi.fn(async () => undefined);
+    const links: string[] = [];
+    const m = mount({ hooks: { save }, onLink: (h) => links.push(h) });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    const ta = m.ta();
+    ta.focus();
+    activation(m, true); // the reader is typing: the page has activation
+    for (const key of ['Escape', 's', '\\']) f.say({ type: 'orz-preview-key', key });
+    f.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
+    await tick();
+    expect(m.root.activeElement).toBe(ta);
+    expect(save).not.toHaveBeenCalled();
+    expect(m.shell.getMode()).toBe('split');
+    expect(links).toEqual([]);
+    // focus on the frame but no activation (e.g. focused by a script): still nothing
+    f.iframe.focus();
+    activation(m, false);
+    f.say({ type: 'orz-preview-key', key: 's' });
+    f.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
+    await tick();
+    expect(save).not.toHaveBeenCalled();
+    expect(links).toEqual([]);
+    // Escape with focus on the frame: focus goes to the toolbar (all it can do)
+    f.say({ type: 'orz-preview-key', key: 'Escape' });
+    expect(m.root.activeElement?.getAttribute('data-mode')).toBe('split');
+    // the reader in the frame (focus + activation): save and link act
+    f.iframe.focus();
+    activation(m, true);
+    f.say({ type: 'orz-preview-key', key: 's' });
+    f.say({ type: 'orz-preview-link', href: 'https://example.org/' });
+    await tick();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(links).toEqual(['https://example.org/']);
+    m.shell.destroy();
+  });
+
+  it('[E.14] the frame\'s "active" and scroll messages never move an editor that has focus or that the reader just touched; the preview leads only after its own claim, with the editor untouched', async () => {
+    const engine = textareaAdapter();
+    const scrollTo = vi.spyOn(engine, 'scrollTo');
+    const m = mount({ adapter: engine });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    const flood = () => { f.say({ type: 'orz-preview-active' }); f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 }); };
+    m.ta().focus();
+    await tick(350);
+    flood();
+    expect(scrollTo).not.toHaveBeenCalled(); // the editor has focus
+    m.ta().blur();
+    m.ta().dispatchEvent(new m.win.PointerEvent('pointermove', { bubbles: true }) as unknown as Event);
+    flood();
+    expect(scrollTo).not.toHaveBeenCalled(); // the reader's pointer is on the editor
+    await tick(1600); // the frame's earlier claims have expired
+    f.say({ type: 'orz-preview-scrolled', top: 500, max: 1000 });
+    expect(scrollTo).not.toHaveBeenCalled(); // no fresh claim of the frame
+    flood();
+    expect(scrollTo).toHaveBeenCalledWith({ fraction: 0 }); // the reader is in the preview (as far as the page can tell)
+    m.shell.destroy();
+  });
+});
+
+describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
+  it('[E.16] renders wait max(debounceMs, 2 × the last render time), never overlap, and coalesce: a slow renderer runs a few times for a burst of typing, not once per keystroke, and the last render is of the final text', async () => {
+    let running = 0;
+    let most = 0;
+    const texts: string[] = [];
+    const render = async (t: string) => {
+      running++;
+      most = Math.max(most, running);
+      await tick(40);
+      running--;
+      texts.push(t);
+      return `<p>${t.length}</p>`;
+    };
+    const m = mount({ render, preview: { assets: false, debounceMs: 10 } });
+    await tick(80); // the first render (40 ms) sets the pace: 80 ms pauses from now on
+    const before = texts.length;
+    for (let i = 0; i < 20; i++) { type(m, 'x'); await tick(25); } // a keystroke every 25 ms > debounceMs
+    await tick(300);
+    const during = texts.length - before;
+    expect(during).toBeLessThanOrEqual(5); // 20 keystrokes; at the fixed 10 ms pause it was one render per key
+    expect(most).toBe(1);
+    expect(texts.at(-1)).toBe(m.shell.getText());
+    // refreshPreview during a render waits for it, then renders the latest text
+    type(m, 'y');
+    const p = m.shell.refreshPreview();
+    type(m, 'z');
+    await m.shell.refreshPreview();
+    await p;
+    expect(texts.at(-1)).toBe(m.shell.getText());
+    expect(most).toBe(1);
+    m.shell.destroy();
+  });
+
+  it('[E.15] a carrier can supply its own frame document and bridge, turn the incremental diff off, navigate by source line, and map lines ↔ tops', async () => {
+    const parts: unknown[] = [];
+    const custom = previewFrameDocument({ assets: false, bridge: 'window.parent.postMessage({type:"orz-preview-ready"},"*")', nonce: 'n1', frameDocument: (p) => { parts.push(p); return `<!doctype html><div id="orz-doc"></div>${p.bridge}`; } });
+    expect(custom).toBe('<!doctype html><div id="orz-doc"></div><script nonce="n1">window.parent.postMessage({type:"orz-preview-ready"},"*")</script>');
+    expect(parts[0]).toMatchObject({ scripts: '', scheme: 'light', articleClass: 'markdown-body', nonce: 'n1' });
+    expect(previewFrameDocument()).toContain(`<script>${PREVIEW_BRIDGE}</script>`);
+    // diff: false → the render message says so (the bridge replaces the content whole, keeping the scroll)
+    const whole = mount({ render: (t) => `<p>${t.length}</p>`, preview: { assets: false, debounceMs: 5, diff: false } });
+    const fw = frameOf(whole);
+    fw.say({ type: 'orz-preview-ready' });
+    await tick(30);
+    expect(fw.posted.find((x) => x.type === 'orz-preview-render')).toMatchObject({ diff: false });
+    expect(PREVIEW_BRIDGE).toContain('d.diff===false');
+    whole.shell.destroy();
+    // navigate: the caret's source line goes to the frame; a line the frame reports scrolls the editor
+    const engine = textareaAdapter();
+    const scrollTo = vi.spyOn(engine, 'scrollTo');
+    const nav = mount({ text: 'a\nb\nc\nd\ne\n', adapter: engine, preview: { assets: false, debounceMs: 5, mode: 'navigate' } });
+    const fn = frameOf(nav);
+    fn.say({ type: 'orz-preview-ready' });
+    nav.ta().focus();
+    nav.ta().setSelectionRange(6, 6); // line 3
+    nav.ta().dispatchEvent(new nav.win.Event('select') as unknown as Event);
+    await tick(40);
+    expect(fn.posted.filter((x) => x.type === 'orz-preview-navigate').at(-1)).toEqual({ type: 'orz-preview-navigate', line: 3 });
+    fn.iframe.focus();
+    fn.say({ type: 'orz-preview-scrolled', line: 4 });
+    expect(scrollTo).toHaveBeenLastCalledWith({ line: 4 });
+    nav.shell.destroy();
+    // mapLine / mapPosition replace the anchor maths
+    const mapped = textareaAdapter();
+    vi.spyOn(mapped, 'getScroll').mockReturnValue({ line: 4, fraction: 0.5 });
+    const toLine = vi.spyOn(mapped, 'scrollTo');
+    const mp = mount({ adapter: mapped, preview: { assets: false, debounceMs: 5, mapLine: (l) => l * 10, mapPosition: (t) => t / 10 } });
+    const fm = frameOf(mp);
+    fm.say({ type: 'orz-preview-ready' });
+    mp.ta().dispatchEvent(new mp.win.Event('scroll') as unknown as Event);
+    await tick(40);
+    expect(fm.posted.filter((x) => x.type === 'orz-preview-scroll').at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
+    fm.iframe.focus();
+    fm.say({ type: 'orz-preview-scrolled', top: 70, max: 1000 });
+    expect(toLine).toHaveBeenLastCalledWith({ line: 7 });
+    mp.shell.destroy();
+  });
+
+  it('[E.19] preview.nonce is stamped on every <script> and <style> of the frame document; PREVIEW_BRIDGE_HASH is the bridge\'s SHA-256 and previewScriptHashes lists every inline script; a frame that never says ready is an error (render) and a quiet notice, gone when it starts', async () => {
+    const full = previewFrameDocument({ nonce: 'r4nd"om', head: '<style>.x{}</style>' });
+    const tags = full.match(/<(script|style)\b[^>]*>/g)!;
+    expect(tags.length).toBeGreaterThan(6);
+    for (const t of tags) expect(t).toContain(' nonce="r4nd&quot;om"');
+    expect(PREVIEW_BRIDGE_HASH).toBe(`sha256-${createHash('sha256').update(PREVIEW_BRIDGE, 'utf8').digest('base64')}`);
+    const inline = [...previewFrameDocument().matchAll(/<script>([\s\S]*?)<\/script>/g)].map((x) => `sha256-${createHash('sha256').update(x[1], 'utf8').digest('base64')}`);
+    expect(await previewScriptHashes()).toEqual([...new Set(inline)]);
+    expect(await previewScriptHashes({ assets: false })).toEqual([PREVIEW_BRIDGE_HASH]);
+    const m = mount({ preview: { assets: false, readyTimeoutMs: 30 } });
+    const errors: string[] = [];
+    m.shell.on('error', (e) => errors.push(e.source));
+    const f = frameOf(m);
+    await tick(60);
+    expect(errors).toEqual(['render']);
+    expect(m.root.querySelector('.orz-editor__preview-note')!.textContent).toBe('The preview could not start on this page.');
+    f.say({ type: 'orz-preview-ready' });
+    expect(m.root.querySelector('.orz-editor__preview-note')).toBeNull();
+    m.shell.destroy();
+    // a frame that starts in time: no error, no notice
+    const ok = mount({ preview: { assets: false, readyTimeoutMs: 30 } });
+    frameOf(ok).say({ type: 'orz-preview-ready' });
+    const none: string[] = [];
+    ok.shell.on('error', (e) => none.push(e.source));
+    await tick(60);
+    expect(none).toEqual([]);
+    ok.shell.destroy();
+  });
+
+  it('[E.20] the preview sandbox is decided in one place, previewSandbox(context): allow-scripts for every host and protocol today (finding B-2 awaits the owner); the shell passes it the host kind and the page protocol', () => {
+    for (const host of ['app', 'standalone'] as const) {
+      for (const protocol of ['https:', 'http:', 'file:', 'blob:', '']) expect(previewSandbox({ host, protocol })).toBe('allow-scripts');
+    }
+    const src = readFileSync('src/carrier/editor/preview.ts', 'utf8');
+    expect(src.match(/setAttribute\('sandbox'/g)).toHaveLength(1);
+    expect(src).toContain("iframe.setAttribute('sandbox', previewSandbox(");
+    for (const f of ['adapter', 'codemirror6', 'index', 'preview', 'render-md', 'shell', 'styles', 'text-model', 'types']) {
+      const code = readFileSync(`src/carrier/editor/${f}.ts`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''); // code, not comments
+      expect(code, f).not.toContain('allow-same-origin');
+      if (f !== 'preview') expect(code, f).not.toMatch(/setAttribute\(\s*['"]sandbox/);
+    }
+    const ctx = page();
+    const el = ctx.mountPoint();
+    const s = createEditorShell(el, { text: '# x', render: () => '', adapter: textareaAdapter(), assemble: () => '', preview: { assets: false } });
+    expect((s.root as unknown as ShadowRoot).querySelector('iframe')!.getAttribute('sandbox')).toBe('allow-scripts');
+    s.destroy();
+  });
+});
+
+describe('text formats (B-8, FC-18 §8.4)', () => {
+  it('[E.17] a header format newer than formats (default [1]) opens read-only with a quiet notice and an error (format); save() refuses without calling hooks.save or the saver; formats: [1, 2] edits it; a newer format set later is not saved either', async () => {
+    const text = `{{nyml\nkind: document\nformat: 2\nuid: ${UID_B}\n}}\n\n# Future\n`;
+    const save = vi.fn(async () => undefined);
+    const saver = fakeSaver({ via: 'file', ok: true });
+    const m = mount({ text, hooks: { save } });
+    const errors: unknown[] = [];
+    m.shell.on('error', (e) => errors.push([e.source, e.message]));
+    await tick();
+    expect(errors).toEqual([['format', 'text format 2 is newer than this editor (format 1): read-only, not saved']]);
+    expect(m.shell.readOnly).toBe(true);
+    expect(m.ta().readOnly).toBe(true);
+    expect((m.root.querySelector('.orz-editor__save') as HTMLElement).hidden).toBe(true);
+    expect(m.root.querySelector('#orz-format-note')!.textContent).toContain('text format 2');
+    m.shell.setReadOnly(false); // a newer format stays read-only
+    expect([m.shell.isReadOnly(), m.shell.readOnly, m.ta().readOnly]).toEqual([true, true, true]);
+    const r = await m.shell.save();
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { error: string }).error).toContain('newer than this editor');
+    key(m, m.ta(), 's', { ctrl: true });
+    await tick();
+    expect(save).not.toHaveBeenCalled();
+    m.shell.destroy();
+    const s = mount({ text, assemble: () => '<html>', saver: saver.saver });
+    expect(await s.shell.save()).toMatchObject({ ok: false });
+    expect(saver.saves).toEqual([]);
+    s.shell.destroy();
+    // a shell that reads format 2
+    const two = mount({ text, formats: [1, 2], hooks: { save } });
+    expect(two.shell.readOnly).toBe(false);
+    expect(two.root.querySelector('#orz-format-note')).toBeNull();
+    await expect(two.shell.save()).resolves.toEqual({ ok: true, via: 'hook' });
+    two.shell.destroy();
+    // format 1 text, then a newer format set through the API: not saved
+    const later = mount({ text: TEXTS.LF, hooks: { save } });
+    later.shell.setHeader({ format: '3' });
+    expect(await later.shell.save()).toMatchObject({ ok: false });
+    expect(save).toHaveBeenCalledTimes(1);
+    later.shell.destroy();
+  });
+});
+
+describe('save notices (B-3, B-16)', () => {
+  it('[E.8] a download says "Download started." (the browser has it, it may not have finished) and clears dirty; on a served page Cmd/Ctrl+S with nothing unsaved stays quiet, with unsaved edits it shows the notice', async () => {
+    const dl = fakeSaver({ via: 'download', ok: true, confirmed: false } as SaveResult);
+    const m = mount({ assemble: () => '<html>', saver: dl.saver });
+    type(m, 'x');
+    await expect(m.shell.save()).resolves.toEqual({ ok: true, via: 'download' });
+    expect(toasts(m.root)).toEqual(['Download started.']);
+    expect(m.shell.isDirty()).toBe(false);
+    m.shell.destroy();
+    const served = fakeSaver({ via: 'served-notice' });
+    const s = mount({ assemble: () => '<html>', saver: served.saver });
+    key(s, s.ta(), 's', { meta: true });
+    await tick(10);
+    expect(s.root.querySelector('#orz-served-note')).toBeNull();
+    type(s, 'edit');
+    key(s, s.ta(), 's', { meta: true });
+    await tick(10);
+    expect(s.root.querySelector('#orz-served-note')).not.toBeNull();
+    s.shell.destroy();
+  });
+});
+
+describe('FC-19 §3 hooks (B-10)', () => {
+  it('[E.18] rewriteAssetUrls sends relative src / srcset / poster (and href of non-links) through resolveAsset; absolute, root, fragment and data references, <a href> and unreadable tags stay; a throwing resolver leaves the reference', () => {
+    const r = (p: string) => (p === 'boom.png' ? (() => { throw new Error('x'); })() : `blob:app/${p}`);
+    expect(rewriteAssetUrls('<p><img src="a b.png" alt="x"><img src=\'c.png\'><img src=d.png></p>', r)).toBe('<p><img src="blob:app/a b.png" alt="x"><img src="blob:app/c.png"><img src="blob:app/d.png"></p>');
+    expect(rewriteAssetUrls('<img srcset="s1.png 1x, https://x/s2.png 2x, s3.png 3x">', r)).toBe('<img srcset="blob:app/s1.png 1x, https://x/s2.png 2x, blob:app/s3.png 3x">');
+    expect(rewriteAssetUrls('<video poster="p.jpg" src="v.mp4"></video><link rel="stylesheet" href="t.css">', r)).toBe('<video poster="blob:app/p.jpg" src="blob:app/v.mp4"></video><link rel="stylesheet" href="blob:app/t.css">');
+    const kept = '<a href="x.md">x</a><img src="https://h/i.png"><img src="/root.png"><img src="#f"><img src="data:image/png;base64,AA"><img src="//cdn/x.png"><img src="boom.png"><img src="">';
+    expect(rewriteAssetUrls(kept, r)).toBe(kept);
+    expect(rewriteAssetUrls('<img src="a&amp;b.png">', (p) => `u:${p}`)).toBe('<img src="u:a&amp;b.png">');
+    expect(rewriteAssetUrls('<p>text with src="x.png" in it</p>', r)).toBe('<p>text with src="x.png" in it</p>');
+    // renderMarkdownPreview takes the render context, so it can be passed as `render` directly
+    const direct = mount({ render: renderMarkdownPreview, hooks: { resolveAsset: (p) => `u:${p}` } });
+    expect(direct.shell.getText()).toBe(CRLF_BOM);
+    direct.shell.destroy();
+  });
+
+  it('[E.18] render gets a context with the host\'s fetchInclude and resolveAsset; the preview receives the HTML with assets resolved; a preview link goes through resolveLink, then onLink', async () => {
+    const ctxs: RenderContext[] = [];
+    const fetchInclude = vi.fn(async (t: string) => `included ${t}`);
+    const links: string[] = [];
+    const m = mount({
+      text: '![p](img/p.png)\n',
+      render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t); },
+      hooks: { fetchInclude, resolveAsset: (p) => `https://cdn.app/${p}`, resolveLink: (h) => `https://app.example/open?d=${encodeURIComponent(h)}` },
+      onLink: (h) => links.push(h),
+    });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(40);
+    expect(await ctxs[0].fetchInclude!('a.md')).toBe('included a.md');
+    expect(ctxs[0].resolveAsset!('x.png')).toBe('https://cdn.app/x.png');
+    const html = String(f.posted.filter((x) => x.type === 'orz-preview-render').at(-1)!.html);
+    expect(html).toContain('src="https://cdn.app/img/p.png"');
+    f.iframe.focus();
+    activation(m, true);
+    f.say({ type: 'orz-preview-link', href: 'week2.md' });
+    expect(links).toEqual(['https://app.example/open?d=week2.md']);
+    m.shell.destroy();
+  });
+
+  it('[E.18] a file pasted or dropped into the editor goes to uploadAsset and its Markdown (image or link) is inserted at the caret as ONE undoable edit in the document\'s line endings; without the hook the engine keeps the event', async () => {
+    const uploadAsset = vi.fn(async (f: EdFile) => `assets/${f.name}`);
+    const m = mount({ text: 'a\r\nb\r\n', hooks: { uploadAsset } });
+    const ta = m.ta();
+    ta.focus();
+    ta.setSelectionRange(2, 2); // start of line "b" (editor offsets)
+    const paste = new m.win.Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [{ name: 'my pic (1).png', type: 'image/png', size: 3 }, { name: 'notes.pdf', type: 'application/pdf', size: 9 }] } });
+    ta.dispatchEvent(paste as unknown as Event);
+    expect(paste.defaultPrevented).toBe(true);
+    await tick(10);
+    expect(m.shell.getText()).toBe('a\r\n![my pic (1)](assets/my%20pic%20%281%29.png)\r\n[notes.pdf](assets/notes.pdf)b\r\n');
+    expect(ta.selectionStart).toBe(2 + '![my pic (1)](assets/my%20pic%20%281%29.png)\n[notes.pdf](assets/notes.pdf)'.length);
+    expect(m.shell.undo()).toBe(true);
+    expect(m.shell.getText()).toBe('a\r\nb\r\n');
+    const drop = new m.win.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [{ name: 'd.jpg', type: 'image/jpeg', size: 1 }], types: ['Files'] } });
+    ta.dispatchEvent(drop as unknown as Event);
+    await tick(10);
+    expect(m.shell.getText()).toContain('![d](assets/d.jpg)');
+    // a failing upload: an error (hook), a toast, nothing inserted
+    const bad = mount({ hooks: { uploadAsset: async () => { throw new Error('too large'); } } });
+    const errors: string[] = [];
+    bad.shell.on('error', (e) => errors.push(`${e.source}: ${e.message}`));
+    const before = bad.shell.getText();
+    await expect(bad.shell.uploadAssets([{ name: 'x.png', type: 'image/png', size: 1 }])).resolves.toEqual({ ok: false, inserted: [], error: 'too large' });
+    expect(errors).toEqual(['hook: too large']);
+    expect(bad.shell.getText()).toBe(before);
+    // no hook: the paste is the engine's
+    const none = mount();
+    const p2 = new none.win.Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(p2, 'clipboardData', { value: { files: [{ name: 'x.png', type: 'image/png', size: 1 }] } });
+    none.ta().dispatchEvent(p2 as unknown as Event);
+    expect(p2.defaultPrevented).toBe(false);
+    for (const s of [m, bad, none]) s.shell.destroy();
+  });
+
+  it('[E.18] requestAi sends the exact text (and the selection as exact offsets) to hooks.ai.request and applies proposed as ONE undoable edit in the document\'s line endings and BOM; a changed text, a failed hook or read-only refuse', async () => {
+    const calls: unknown[] = [];
+    let reply = 'Better\nwords';
+    const request = vi.fn(async (op: string, ctx: { text: string; selection?: { from: number; to: number } }) => { calls.push([op, ctx]); return { proposed: reply }; });
+    const ai = { operations: [{ id: 'rewrite', title: 'Rewrite', selection: true }, { id: 'tidy', title: 'Tidy', selection: false }], request };
+    const m = mount({ hooks: { ai } });
+    const editor = toEditorText(CRLF_BOM);
+    const at = editor.indexOf('# Week 3');
+    m.ta().setSelectionRange(at, at + '# Week 3'.length);
+    await expect(m.shell.requestAi('rewrite')).resolves.toEqual({ ok: true, op: 'rewrite' });
+    const [, ctx] = calls[0] as [string, { text: string; selection: { from: number; to: number } }];
+    expect(ctx.text).toBe(CRLF_BOM);
+    expect(CRLF_BOM.slice(ctx.selection.from, ctx.selection.to)).toBe('# Week 3');
+    expect(m.shell.getText()).toBe(CRLF_BOM.replace('# Week 3', 'Better\r\nwords'));
+    expect(m.shell.undo()).toBe(true);
+    expect(m.shell.getText()).toBe(CRLF_BOM);
+    // whole-text operation: the document keeps its BOM and CR LF
+    reply = '# All new\n\ntext\n';
+    await expect(m.shell.requestAi('tidy')).resolves.toEqual({ ok: true, op: 'tidy' });
+    expect(m.shell.getText()).toBe('﻿# All new\r\n\r\ntext\r\n');
+    m.shell.undo();
+    // the reader typed while the request ran: refused, nothing applied
+    request.mockImplementationOnce(async () => { type(m, 'typed'); return { proposed: 'late' }; });
+    expect(await m.shell.requestAi('tidy')).toEqual({ ok: false, error: 'the text changed during the AI request' });
+    expect(m.shell.getText()).toBe(`${CRLF_BOM}typed`);
+    request.mockImplementationOnce(async () => { throw new Error('quota'); });
+    expect(await m.shell.requestAi('tidy')).toEqual({ ok: false, error: 'quota' });
+    m.ta().setSelectionRange(3, 3);
+    expect(await m.shell.requestAi('rewrite')).toEqual({ ok: false, error: 'no selection' });
+    m.shell.destroy();
+    const ro = mount({ readOnly: true, hooks: { ai } });
+    expect(await ro.shell.requestAi('tidy')).toEqual({ ok: false, error: 'read-only' });
+    ro.shell.destroy();
+  });
+
+  it('[E.18] ensureUid returns the header uid, or mints one (hooks.mintUid, else the kit\'s) and sets it as one undoable header edit; a malformed minted uid is refused', async () => {
+    const withUid = mount();
+    const mint = vi.fn(async () => 'doc-hostminted00001');
+    expect(await withUid.shell.ensureUid()).toBe(UID_A);
+    withUid.shell.destroy();
+    const m = mount({ text: '# No header\r\n', hooks: { mintUid: mint } });
+    expect(await m.shell.ensureUid()).toBe('doc-hostminted00001');
+    expect(m.shell.getText()).toBe('{{nyml\r\nkind: document\r\nuid: doc-hostminted00001\r\n}}\r\n\r\n# No header\r\n');
+    expect(await m.shell.ensureUid()).toBe('doc-hostminted00001');
+    expect(mint).toHaveBeenCalledTimes(1);
+    m.shell.undo();
+    expect(m.shell.getText()).toBe('# No header\r\n');
+    m.shell.destroy();
+    const kit = mount({ text: TEXTS['no header'] });
+    expect(await kit.shell.ensureUid()).toMatch(/^doc-[0-9a-z]{16}$/);
+    kit.shell.destroy();
+    const bad = mount({ text: '# x\n', hooks: { mintUid: async () => 'not-a-uid' } });
+    await expect(bad.shell.ensureUid()).rejects.toThrow(/must match/);
+    expect(bad.shell.getText()).toBe('# x\n');
+    bad.shell.destroy();
+  });
+});
+
+describe('read-only at run time (shell-runtime §7.2)', () => {
+  it('[E.22] setReadOnly(true) makes the engine read-only, hides Save and refuses save, Cmd/Ctrl+S, uploads and AI; setReadOnly(false) restores all of it; isReadOnly() and readOnly follow', async () => {
+    const save = vi.fn(async () => undefined);
+    const uploadAsset = vi.fn(async () => 'a.png');
+    const ai = { operations: [{ id: 'tidy', title: 'Tidy', selection: false }], request: vi.fn(async () => ({ proposed: 'x' })) };
+    const m = mount({ hooks: { save, uploadAsset, ai } });
+    const btn = m.root.querySelector('.orz-editor__save') as HTMLElement;
+    expect([m.shell.isReadOnly(), btn.hidden, m.ta().readOnly]).toEqual([false, false, false]);
+    m.shell.setReadOnly(true);
+    expect([m.shell.isReadOnly(), m.shell.readOnly, btn.hidden, m.ta().readOnly]).toEqual([true, true, true, true]);
+    expect(m.root.querySelector('.orz-editor')!.hasAttribute('data-readonly')).toBe(true);
+    expect(await m.shell.save()).toEqual({ ok: false, error: 'read-only' });
+    key(m, m.ta(), 's', { ctrl: true });
+    expect(await m.shell.uploadAssets([{ name: 'a.png', type: 'image/png', size: 1 }])).toMatchObject({ ok: false, error: 'read-only' });
+    expect(await m.shell.requestAi('tidy')).toEqual({ ok: false, error: 'read-only' });
+    await tick();
+    expect([save.mock.calls.length, uploadAsset.mock.calls.length, ai.request.mock.calls.length]).toEqual([0, 0, 0]);
+    expect(m.shell.getText()).toBe(CRLF_BOM);
+    m.shell.setReadOnly(false);
+    expect([m.shell.isReadOnly(), btn.hidden, m.ta().readOnly]).toEqual([false, false, false]);
+    type(m, '!');
+    await expect(m.shell.save()).resolves.toEqual({ ok: true, via: 'hook' });
+    m.shell.destroy();
+  });
+});
+
+describe('engine history (B-19)', () => {
+  it('[E.21] the textarea history stores patches, not copies: 60 steps of a 200 KB text hold about two copies, and undo/redo walk every step exactly', () => {
+    const big = `${'Lorem ipsum dolor sit amet. '.repeat(7300)}\n`;
+    const m = mount({ text: big });
+    const states = [m.shell.getText()];
+    for (let i = 0; i < 60; i++) {
+      const t = m.shell.getText();
+      const at = (i * 3331) % t.length;
+      m.shell.setText(t.slice(0, at) + `<${i}>` + t.slice(at + (i % 3)));
+      states.push(m.shell.getText());
+    }
+    const held = historyChars(m.shell.adapter)!;
+    expect(held).toBeLessThan(big.length * 2.5);
+    expect(undoTexts(m.shell.adapter)).toEqual(states.slice(0, -1).map(toEditorText));
+    for (let i = states.length - 2; i >= 0; i--) { expect(m.shell.undo()).toBe(true); expect(m.shell.getText()).toBe(states[i]); }
+    expect(m.shell.undo()).toBe(false);
+    for (let i = 1; i < states.length; i++) { expect(m.shell.redo()).toBe(true); expect(m.shell.getText()).toBe(states[i]); }
+    // a new edit after undos drops the redo branch
+    m.shell.undo(); m.shell.undo();
+    type(m, '!');
+    expect(m.shell.redo()).toBe(false);
+    m.shell.undo();
+    expect(m.shell.getText()).toBe(states[states.length - 3]);
+    m.shell.destroy();
+  });
+});
+
 // ── E.13 real Chrome ─────────────────────────────────────────────────────
 
 type Browser = import('playwright-core').Browser;
@@ -920,6 +1419,21 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       });
       window['shell_' + id] = s;
       return s.ready.then(function (r) { return { engine: r.engine, error: r.error ? String(r.error) : null }; });
+    };
+    window.mountOpts = function (id, text, url, o) {
+      var E = window.OrzEditor;
+      o = o || {};
+      var s = E.createEditorShell(document.getElementById(id), {
+        text: text,
+        render: function (t) { return E.renderMarkdownPreview(t); },
+        adapter: E.codemirror6Adapter({ url: url }),
+        hooks: { save: function (t) { window.__saved[id].push(t); return Promise.resolve(); } },
+        preview: Object.assign({ assets: false, debounceMs: 50 }, o.preview || {}),
+      });
+      window['shell_' + id] = s;
+      window['errors_' + id] = [];
+      s.on('error', function (e) { window['errors_' + id].push(e.source + ': ' + e.message); });
+      return s.ready.then(function (r) { return { engine: r.engine, error: r.error ? String(r.error) : null }; });
     };`;
 
   beforeAll(async () => {
@@ -932,7 +1446,9 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       if (path === '/app.js') return js(APP);
       if (path === '/cm6.js') return js(cm);
       if (path === '/cm6-tampered.js') return js(`${cm}\n/* one byte more */`);
+      if (path === '/cm6-slow.js') { setTimeout(() => js(cm), 2500); return; }
       res.setHeader('content-type', 'text/html; charset=utf-8');
+      if (path === '/csp') res.setHeader('content-security-policy', "script-src 'self' 'nonce-abc'");
       res.end('<!doctype html><html><head><meta charset="utf-8"><title>host page</title><style>body{margin:0;font:30px serif;color:red} .box{width:1000px;height:420px} button{background:red}</style></head><body><div id="a" class="box"></div><div id="b" class="box"></div><div id="c" class="box"></div><script src="/editor.js"></script><script src="/app.js"></script></body></html>');
     });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -1109,5 +1625,160 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await p.evaluate('shell_c.getText()')).toBe(`${TEXT_A}fallback`);
     await p.close();
   });
-});
+  // ── round 1 of closed loop 2 ──
+  const FLOOD = `<img src="x" onerror="setInterval(function(){var P=parent;P.postMessage({type:'orz-preview-key',key:'Escape'},'*');P.postMessage({type:'orz-preview-active'},'*');P.postMessage({type:'orz-preview-scrolled',top:0,max:1000},'*');P.postMessage({type:'orz-preview-key',key:'s'},'*');P.postMessage({type:'orz-preview-key',key:'\\\\\\\\'},'*');P.postMessage({type:'orz-preview-link',href:'https://evil.example/'},'*')},40)">`;
+  const TEXT_SAVES = `# Saves\n\n<img src="x" onerror="setInterval(function(){parent.postMessage({type:'orz-preview-key',key:'s'},'*')},40)">\n\nLine 149.\n`;
+  const TEXT_FLOOD = `{{nyml\nkind: document\nuid: ${UID_A}\n}}\n\n# Flood\n\n${FLOOD}\n\n${Array.from({ length: 150 }, (_, i) => `Line ${i}.\n`).join('\n')}`;
 
+  it('[E.13] [E.14] a document script that floods Escape, "active", scroll, save, view and link messages while the reader types changes nothing: every keystroke arrives, focus and the scroll stay in the editor, nothing is saved or opened; with focus moved to the frame by a script (no user activation) a forged save still does nothing', async () => {
+    const p = await open();
+    expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_FLOOD)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    await frameOf(p, 'Line 149.');
+    await p.locator('#a .cm-content').click();
+    await p.keyboard.press('ControlOrMeta+End');
+    const typed = 'typed while the frame floods';
+    for (const ch of typed) { await p.keyboard.type(ch); await p.waitForTimeout(25); }
+    await p.waitForTimeout(400);
+    expect(await p.evaluate('shell_a.getText()')).toBe(`${TEXT_FLOOD}${typed}`);
+    expect(await p.evaluate('shell_a.root.activeElement && shell_a.root.activeElement.className')).toContain('cm-content');
+    expect(await p.locator('#a .cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop)).toBeGreaterThan(1000);
+    expect(await p.evaluate('[window.__saved.a.length, shell_a.getMode()]')).toEqual([0, 'split']);
+    expect(p.context().pages()).toHaveLength(1);
+    await p.close();
+    // E06: focus stays on the frame, but its user activation has expired (5 s in Chrome): forged saves stop.
+    // (A Playwright evaluate counts as a user gesture too, so the page reads the state with its own timers.
+    // Chrome does not let a script focus a cross-origin frame without activation, so focus comes from a click.)
+    // (a forged Escape would move focus out of the frame — all it can do — so this document forges saves only)
+    const q = await open();
+    await q.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_SAVES)}, ${JSON.stringify(`${A}/cm6.js`)})`);
+    await frameOf(q, 'Line 149.');
+    await q.evaluate(`setTimeout(function () {
+      window.__expired = [navigator.userActivation.isActive, shell_a.root.activeElement === shell_a.root.querySelector('iframe'), window.__saved.a.length];
+      setTimeout(function () { window.__later = window.__saved.a.length; }, 1000);
+    }, 6000)`);
+    await q.locator('#a iframe').click({ position: { x: 300, y: 20 } }); // the reader is in the frame: the forged saves act (accepted: FC-19 §8.4)
+    await q.waitForTimeout(7300);
+    const [ua, focused, saves] = (await q.evaluate('window.__expired')) as [boolean, boolean, number];
+    expect([ua, focused]).toEqual([false, true]);
+    expect(saves).toBeGreaterThan(0); // while the click's activation lasted, the frame's save key acted
+    expect(await q.evaluate('window.__later')).toBe(saves); // focus on the frame without activation: no further save
+    expect(q.context().pages()).toHaveLength(1);
+    await q.close();
+  });
+
+  it('[E.13] [E.15] the incremental preview survives a line inserted above: nodes below are kept (their data-src-line updated), a drawn diagram is not redrawn; with diff: false every render replaces the content and keeps the scroll position', async () => {
+    const T = `# Diff\n\nPara one.\n\nPara two.\n\n<div class="stub">diagram source</div>\n\nPara three.\n\n${Array.from({ length: 60 }, (_, i) => `Tail ${i}.\n`).join('\n')}`;
+    const p = await open();
+    await p.evaluate(`Promise.all([mountOpts('a', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6.js`)}), mountOpts('b', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6.js`)}, { preview: { diff: false } })])`);
+    const fa = await frameOf(p, 'Tail 59.');
+    const mark = `(function () {
+      var art = document.getElementById('orz-doc');
+      [].forEach.call(art.childNodes, function (n) { n.__kept = 1; });
+      var stub = art.querySelector('.stub'); stub.innerHTML = '<svg id="drawn"></svg>';
+      return art.querySelector('p:last-of-type').getAttribute('data-src-line');
+    })()`;
+    const lastLine = Number(await fa.evaluate(mark));
+    // one Enter (and a line) after "Para one." — every block below moves down by two lines
+    await p.evaluate('shell_a.setText(shell_a.getText().replace("Para one.\\n", "Para one.\\n\\nInserted.\\n"))');
+    await expect.poll(() => fa.evaluate('document.getElementById("orz-doc").textContent.indexOf("Inserted.") >= 0'), { timeout: 5000 }).toBe(true);
+    const after = (await fa.evaluate(`(function () {
+      var art = document.getElementById('orz-doc'), kids = [].slice.call(art.children);
+      var i = kids.findIndex(function (n) { return n.textContent === 'Inserted.'; });
+      return { above: kids.slice(0, i).every(function (n) { return n.__kept; }), inserted: !kids[i].__kept, below: kids.slice(i + 1).every(function (n) { return n.__kept; }),
+        drawn: !!art.querySelector('.stub #drawn'), last: art.querySelector('p:last-of-type').getAttribute('data-src-line') };
+    })()`)) as Record<string, unknown>;
+    expect(after).toEqual({ above: true, inserted: true, below: true, drawn: true, last: String(lastLine + 2) });
+    // diff: false (shell b)
+    const fb = (await (async () => { for (const f of p.frames()) { if (f !== p.mainFrame() && f !== fa && String(await f.evaluate('document.getElementById("orz-doc") ? document.getElementById("orz-doc").textContent : ""').catch(() => '')).includes('Tail 59.')) return f; } return null; })())!;
+    await p.evaluate('shell_b.root.querySelector(".orz-editor__sync").click()'); // scroll sync off: the frame keeps its own position
+    expect(await p.evaluate('shell_b.root.querySelector(".orz-editor__sync").getAttribute("aria-pressed")')).toBe('false');
+    await fb.evaluate(`(function () { [].forEach.call(document.getElementById('orz-doc').childNodes, function (n) { n.__kept = 1; }); (document.scrollingElement || document.documentElement).scrollTop = 600; })()`);
+    const y0 = Number(await fb.evaluate('(document.scrollingElement || document.documentElement).scrollTop'));
+    expect(y0).toBeGreaterThan(500);
+    await p.evaluate('shell_b.setText(shell_b.getText().replace("Tail 59.", "Tail 59 changed."))');
+    await expect.poll(() => fb.evaluate('document.getElementById("orz-doc").textContent.indexOf("Tail 59 changed.") >= 0'), { timeout: 5000 }).toBe(true);
+    expect(await fb.evaluate('[].some.call(document.getElementById("orz-doc").childNodes, function (n) { return n.__kept; })')).toBe(false);
+    expect(Math.abs(Number(await fb.evaluate('(document.scrollingElement || document.documentElement).scrollTop')) - y0)).toBeLessThanOrEqual(1);
+    await p.close();
+  });
+
+  it('[E.13] [E.19] under a nonce Content-Security-Policy the preview runs with preview.nonce; without it the frame never starts, which is an error (render) and a quiet notice instead of a blank pane', async () => {
+    const p = await browser!.newPage({ viewport: { width: 1200, height: 1400 } });
+    await p.goto(`${A}/csp`);
+    await expect.poll(() => p.evaluate('typeof window.mountOpts')).toBe('function'); // (waitForFunction needs eval, which this CSP forbids)
+    await p.evaluate(`Promise.all([mountOpts('a', '# With nonce\\n\\nshown\\n', ${JSON.stringify(`${A}/cm6.js`)}, { preview: { nonce: 'abc' } }), mountOpts('b', '# Without\\n\\nblocked\\n', ${JSON.stringify(`${A}/cm6.js`)}, { preview: { readyTimeoutMs: 1500 } })])`);
+    await frameOf(p, 'shown');
+    await expect.poll(() => p.evaluate('errors_b.length'), { timeout: 5000 }).toBeGreaterThan(0);
+    expect(await p.evaluate('errors_b[0]')).toMatch(/^render: The preview frame did not start/);
+    expect(await p.evaluate('shell_b.root.querySelector(".orz-editor__preview-note").textContent')).toBe('The preview could not start on this page.');
+    expect(await p.evaluate('[errors_a.length, shell_a.root.querySelector(".orz-editor__preview-note")]')).toEqual([0, null]);
+    await p.close();
+  });
+
+  it('[E.13] [E.21] [E.9] typing and a header edit made while CodeMirror loads carry over: CodeMirror starts from the textarea\'s current text with one undo step per textarea step; setText right after typing is its own undo step', async () => {
+    const T = '# T\r\n\r\nx\r\n';
+    const p = await open();
+    await p.evaluate(`void (window.__r = mountOpts('c', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6-slow.js`)}))`);
+    await p.evaluate('shell_c.setHeader({ title: "Set early" })');
+    const headed = editHeader(T, { title: 'Set early' });
+    await p.locator('#c textarea').click();
+    await p.locator('#c textarea').evaluate((ta) => { const t = ta as HTMLTextAreaElement; t.setSelectionRange(t.value.length, t.value.length); });
+    await p.keyboard.type('during load');
+    expect(await p.evaluate('shell_c.adapter.name')).toBe('textarea');
+    expect(await p.evaluate('window.__r')).toEqual({ engine: 'codemirror6', error: null });
+    expect(await p.evaluate('shell_c.getText()')).toBe(`${headed}during load`);
+    expect(await p.evaluate('[shell_c.undo(), shell_c.getText()]')).toEqual([true, headed]);
+    expect(await p.evaluate('[shell_c.undo(), shell_c.getText()]')).toEqual([true, T]);
+    expect(await p.evaluate('shell_c.undo()')).toBe(false);
+    expect(await p.evaluate('[shell_c.redo(), shell_c.redo(), shell_c.getText()]')).toEqual([true, true, `${headed}during load`]);
+    // E13: typing, then setText at once: one undo removes only the setText
+    await p.locator('#c .cm-content').click();
+    await p.keyboard.press('ControlOrMeta+End');
+    await p.keyboard.type('typed');
+    const typed = await p.evaluate('shell_c.getText()') as string;
+    await p.evaluate('shell_c.setText(shell_c.getText() + "X")');
+    expect(await p.evaluate('[shell_c.undo(), shell_c.getText()]')).toEqual([true, typed]);
+    await p.close();
+  });
+
+  it('[E.13] [E.21] a 1.25 MB CR LF document in the textarea engine: a keystroke in the shell costs about what it costs in a bare textarea', async () => {
+    const big = readFileSync('tests/carrier-corpus/md/large.md', 'utf8').repeat(12).replace(/\r?\n/g, '\r\n');
+    expect(big.length).toBeGreaterThan(1_200_000);
+    const p = await open();
+    const perKey = async (mode: string) => {
+      await p.evaluate(`(function (t, mode) {
+        var a = document.getElementById('c'); a.innerHTML = '';
+        if (mode === 'bare') { var ta = document.createElement('textarea'); ta.style.cssText = 'width:900px;height:400px'; ta.value = t; a.append(ta); ta.addEventListener('input', function () { window.__v = ta.value; }); }
+        else window.shell_c = OrzEditor.createEditorShell(a, { text: t, render: function () { return ''; }, adapter: OrzEditor.textareaAdapter(), hooks: { save: function () { return Promise.resolve(); } }, mode: 'editor' });
+      })(${JSON.stringify(big)}, ${JSON.stringify(mode)})`);
+      await p.locator('#c textarea').first().click();
+      await p.locator('#c textarea').first().evaluate((ta) => { const t = ta as HTMLTextAreaElement; t.setSelectionRange(t.value.length, t.value.length); });
+      await p.keyboard.press('Backspace');
+      const t0 = Date.now();
+      for (let i = 0; i < 12; i++) await p.keyboard.press('Backspace');
+      return (Date.now() - t0) / 12;
+    };
+    const bare = await perKey('bare');
+    const shell = await perKey('shell');
+    expect(shell / bare).toBeLessThan(1.6);
+    expect(await p.evaluate('shell_c.getText()')).toBe(toEditorText(big).slice(0, -13).replace(/\n/g, '\r\n'));
+    await p.close();
+  }, 60_000);
+  it('[E.13] [E.22] setReadOnly switches CodeMirror at run time, also when set while CodeMirror was still loading', async () => {
+    const T = '# RO\n\nbody\n';
+    const p = await open();
+    await p.evaluate(`void (window.__r = mountOpts('c', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6-slow.js`)}))`);
+    await p.evaluate('shell_c.setReadOnly(true)');
+    expect(await p.locator('#c textarea').evaluate((ta) => (ta as HTMLTextAreaElement).readOnly)).toBe(true);
+    expect(await p.evaluate('window.__r')).toEqual({ engine: 'codemirror6', error: null });
+    await p.locator('#c .cm-content').click();
+    await p.keyboard.type('blocked');
+    expect(await p.evaluate('[shell_c.getText(), shell_c.isReadOnly(), shell_c.root.querySelector(".cm-content").getAttribute("contenteditable")]')).toEqual([T, true, 'false']);
+    await p.evaluate('shell_c.setReadOnly(false)');
+    await p.locator('#c .cm-content').click();
+    await p.keyboard.press('ControlOrMeta+ArrowDown');
+    await p.keyboard.type('open');
+    expect(await p.evaluate('shell_c.getText()')).toBe(`${T}open`);
+    await p.close();
+  });
+});

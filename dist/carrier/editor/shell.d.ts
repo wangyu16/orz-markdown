@@ -2,14 +2,22 @@
  * The editor shell (FC-19 §8): the kind-independent base that each carrier's
  * `mountEditor` wraps — chrome toolbar, editor pane and sandboxed preview in
  * one shadow root; view modes, a draggable split, the keyboard map; the exact
- * text, dirty tracking, header edits, save.
+ * text, dirty tracking, header edits, save; the FC-19 §3 hooks that do not
+ * depend on the kind (save, ai, fetchInclude, resolveAsset, uploadAsset,
+ * resolveLink, mintUid).
  *
  * - Text: the shell owns it. The engine (adapter.ts) edits LF text; the text
  *   model (text-model.ts) gives back the document's exact form — byte for byte
  *   when nothing was edited, its own line endings and BOM after edits.
- * - Preview: the caller's `render(text)` (the md kind: `renderMarkdownPreview`)
- *   into the sandboxed frame of preview.ts, debounced; scroll sync on
- *   `data-src-line` anchors, proportional without them.
+ * - Preview: the caller's `render(text, ctx)` (the md kind:
+ *   `renderMarkdownPreview`) into the sandboxed frame of preview.ts, after a
+ *   pause that grows with the render time, never two at once; scroll sync on
+ *   `data-src-line` anchors (or the carrier's mapping / navigation).
+ * - Frame messages are claims of the document's scripts: the shell acts on
+ *   them only while the reader is in the frame (focus on it; for actions with
+ *   effects, also transient user activation).
+ * - Text formats: a header `format` newer than `formats` opens read-only and
+ *   is never saved over (FC-18 §8.4).
  * - Reader preferences (FC-18 §6): split ratio, view mode, scroll sync, editor
  *   font size, dark chrome — through a `PreferenceStore` namespaced by the
  *   document `uid`, never in the text.
@@ -19,25 +27,27 @@
 import { type HeaderChange } from '../header.js';
 import { type PreferenceStore } from '../shell/preferences.js';
 import { type Saver } from '../shell/save.js';
-import { type HostKind } from '../shell/protocol.js';
+import { type AiOperation, type HostKind } from '../shell/protocol.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike } from '../shell/types.js';
 import type { TextEditorAdapter } from './adapter.js';
 import { type PreviewFrameOptions } from './preview.js';
-import type { EdElement, ShadowRootLike } from './types.js';
+import type { EdElement, EdFile, ShadowRootLike } from './types.js';
 export type EditorMode = 'split' | 'editor' | 'preview';
 export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error';
+export type SaveVia = 'hook' | 'host' | 'file' | 'download';
 /** How the save went. `save()` never rejects. */
 export type SaveOutcome = {
     ok: true;
-    via: 'hook' | 'host' | 'file' | 'download';
+    via: SaveVia;
 } | {
     ok: false;
-    via?: 'hook' | 'host' | 'file' | 'download' | 'served-notice';
+    via?: SaveVia | 'served-notice';
     error: string;
     cancelled?: boolean;
 };
 export interface EditorEvents {
+    /** The exact text after the change (captured when the event fires). */
     change: {
         readonly text: string;
     };
@@ -51,19 +61,80 @@ export interface EditorEvents {
     };
     save: {
         text: string;
-        via: 'hook' | 'host' | 'file' | 'download';
+        via: SaveVia;
     };
+    /** `format`: the text's format is newer than the editor's; `hook`: an upload, AI or uid hook failed. */
     error: {
-        source: 'save' | 'render' | 'adapter';
+        source: 'save' | 'render' | 'adapter' | 'format' | 'hook';
         message: string;
         error: unknown;
     };
+}
+/** A range of the exact text (BOM and CR LF counted). */
+export interface TextRange {
+    from: number;
+    to: number;
+}
+/** FC-19 §3 `EditorHooks`: what a host supplies. Every hook is optional. */
+export interface EditorHooks {
+    /** App host: persist the text. Absent → the standalone save (`assemble` + `createSaver`). */
+    save?(text: string): Promise<void>;
+    /** AI operations: `request` gets the exact text and, for a passage, its range; `proposed` replaces it (`requestAi`). */
+    ai?: {
+        operations: AiOperation[];
+        request(op: string, ctx: {
+            text: string;
+            selection?: TextRange;
+        }): Promise<{
+            proposed: string;
+        }>;
+    };
+    /** Include fetching (URL or path → text, or null); passed to `render` in its context. The host owns the trust policy. */
+    fetchInclude?(target: string): Promise<string | null>;
+    /** A relative asset path → the URL the preview loads (applied to the rendered HTML; also passed to `render`). */
+    resolveAsset?(path: string): string;
+    /** A pasted or dropped file → the relative path to insert (as a Markdown image or link). */
+    uploadAsset?(file: EdFile): Promise<string>;
+    /** A link clicked in the preview → the URL to open (then `onLink`, or the default). */
+    resolveLink?(href: string): string;
+    /** A host-minted `uid` (FC-18 §10) for `ensureUid()`; default the kit's `mintUid()`. */
+    mintUid?(): Promise<string>;
+}
+/** What `render` gets besides the text: the host's hooks that a renderer may use. */
+export interface RenderContext {
+    fetchInclude?(target: string): Promise<string | null>;
+    resolveAsset?(path: string): string;
+}
+/** The preview's scroll mapping context (`preview.mapLine` / `mapPosition`). */
+export interface PreviewMapContext {
+    /** `[line, top]` anchors the frame reported, sorted by top. */
+    anchors: ReadonlyArray<[number, number]>;
+    /** The frame's scrollable height. */
+    max: number;
+}
+export interface EditorPreviewOptions extends PreviewFrameOptions {
+    /** The least pause after an edit before the preview renders (ms, default 150); it grows to twice the last render's time. */
+    debounceMs?: number;
+    /** How long the frame may take to start before the shell reports it (`error` `render`) and shows a notice. Default 8000. */
+    readyTimeoutMs?: number;
+    /**
+     * `scroll` (default): the shell posts preview tops (`orz-preview-scroll`)
+     * and reads tops back. `navigate`: the shell posts the source line
+     * (`orz-preview-navigate { line }`, the caret's line while the editor has
+     * focus, else the top line) and the bridge shows what holds it (a slide);
+     * the bridge reports `orz-preview-scrolled { line }` back.
+     */
+    mode?: 'scroll' | 'navigate';
+    /** Editor line (0-based, fractional) → preview top. Return `null` for the default (anchors, else proportional). */
+    mapLine?(line: number, ctx: PreviewMapContext): number | null | undefined;
+    /** Preview top → editor line. Return `null` for the default. */
+    mapPosition?(top: number, ctx: PreviewMapContext): number | null | undefined;
 }
 export interface EditorShellOptions {
     /** The document (FC-18), exact. */
     text: string;
     /** The kind's preview renderer: text → HTML for the sandboxed preview (md: `renderMarkdownPreview`). */
-    render(text: string): string | Promise<string>;
+    render(text: string, ctx: RenderContext): string | Promise<string>;
     /** The editing engine. Default `codemirror6Adapter()` (falls back to a textarea). */
     adapter?: TextEditorAdapter;
     /** Initial mode; default the stored `viewMode` preference (`split`). */
@@ -73,16 +144,16 @@ export interface EditorShellOptions {
     chrome?: 'full' | 'compact' | 'none';
     /** The carrier kind, for the standalone save (`md` by default). */
     kind?: HostKind;
+    /** The text formats this editor reads and writes (FC-18; the carrier's `OrzCarrier.formats`). Default `[1]`. */
+    formats?: number[];
     /** Preferences namespace and save handle key; default the header `uid`. */
     uid?: string;
     /** Reader preferences (FC-19 `preferences`); default `createPreferenceStore(uid, storage)`. */
     preferences?: PreferenceStore;
     /** Storage of the default preference store (default `localStorage`). */
     storage?: StorageLike;
-    /** App host: `hooks.save(text)` persists the text (FC-19 `EditorHooks.save`). */
-    hooks?: {
-        save?(text: string): Promise<void>;
-    };
+    /** FC-19 §3 hooks (`hooks.save` = app host). */
+    hooks?: EditorHooks;
     /** Standalone host: the assembled file for a text (the carrier's `assemble`), saved through `createSaver`. */
     assemble?(text: string): string | Promise<string>;
     /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
@@ -91,17 +162,32 @@ export interface EditorShellOptions {
     saver?: Saver;
     /** A connected app host (`connectHost`): saves go to it, and the dirty state is posted to it. */
     host?: HostConnection;
-    /** The preview frame (theme stylesheet links, scheme, article class, libraries) and the update delay. */
-    preview?: PreviewFrameOptions & {
-        debounceMs?: number;
-    };
-    /** A link clicked in the preview (default: open `http(s):`/`mailto:` links in a new tab). */
+    /** The preview frame (theme links, scheme, article class, libraries, nonce, the carrier's frame/bridge/mapping) and its timing. */
+    preview?: EditorPreviewOptions;
+    /** A link clicked in the preview, after `hooks.resolveLink` (default: open `http(s):`/`mailto:` links in a new tab). */
     onLink?(href: string): void;
     /** Accessible name of the editor region. Default `Document editor`. */
     label?: string;
     /** Below this width (CSS px) only one pane shows at a time. Default 640. */
     narrowWidth?: number;
 }
+/** How an AI request went. Never rejects. */
+export type AiOutcome = {
+    ok: true;
+    op: string;
+} | {
+    ok: false;
+    error: string;
+};
+/** How an upload went: the Markdown inserted for each uploaded file. Never rejects. */
+export type UploadOutcome = {
+    ok: true;
+    inserted: string[];
+} | {
+    ok: false;
+    inserted: string[];
+    error: string;
+};
 export interface EditorShell {
     getText(): string;
     /** Replace the text; one undoable edit unless `resetHistory`. Does not mark it saved. */
@@ -115,6 +201,19 @@ export interface EditorShell {
     markSaved(): void;
     /** `hooks.save` (app host) or `assemble` + the standalone save. Never rejects. */
     save(): Promise<SaveOutcome>;
+    /**
+     * Run `hooks.ai.request(op, { text, selection? })` and apply `proposed` as
+     * ONE undoable edit: it replaces the selection (a passage operation, or
+     * `{ selection: true }`) or the whole text, written in the document's line
+     * endings (and BOM). Refused when the text changed during the request.
+     */
+    requestAi(op: string, options?: {
+        selection?: boolean;
+    }): Promise<AiOutcome>;
+    /** Upload files through `hooks.uploadAsset` and insert their Markdown at the selection (one undoable edit). */
+    uploadAssets(files: ArrayLike<EdFile>): Promise<UploadOutcome>;
+    /** The header `uid`; when there is none, mint one (`hooks.mintUid`, else the kit's) and set it (one undoable edit). */
+    ensureUid(): Promise<string>;
     setMode(mode: EditorMode): void;
     getMode(): EditorMode;
     /** The pane(s) actually shown: in a narrow shell, `split` shows one pane. */
@@ -125,8 +224,18 @@ export interface EditorShell {
     redo(): boolean;
     focus(): void;
     on<E extends EditorEventName>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
-    /** Render the preview now (normally debounced after edits). */
+    /** Render the preview now (normally after a pause in typing). */
     refreshPreview(): Promise<void>;
+    /** Read-only now: asked for (`readOnly`, `setReadOnly`), or forced by a newer text format. */
+    readonly readOnly: boolean;
+    /**
+     * Switch read-only at run time (e.g. while a quiet update runs,
+     * spec/shell-runtime.md §7.2): the engine, Save, Cmd/Ctrl+S, uploads and AI
+     * follow it. A document in a newer text format stays read-only:
+     * `setReadOnly(false)` does not unlock it.
+     */
+    setReadOnly(readOnly: boolean): void;
+    isReadOnly(): boolean;
     /** The chrome's shadow root (for a carrier's own chrome and toasts). */
     readonly root: ShadowRootLike;
     /** The toolbar slot where a carrier adds its tools (null with `chrome: 'none'`). */

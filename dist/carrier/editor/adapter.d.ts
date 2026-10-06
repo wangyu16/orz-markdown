@@ -49,6 +49,10 @@ export interface TextEditorAdapter {
     focus(): void;
     destroy(): void;
     getSelection?(): Selection;
+    /** Switch read-only at run time (the shell's `setReadOnly`). Without it the engine keeps its mount-time state. */
+    setReadOnly?(readOnly: boolean): void;
+    /** Select a range (offsets in the adapter's text); the shell uses it to put the caret after an inserted asset link. */
+    setSelection?(selection: Selection): void;
     hasFocus?(): boolean;
     undo?(): boolean;
     redo?(): boolean;
@@ -63,6 +67,10 @@ export interface TextEditorAdapter {
         error?: unknown;
     }>;
 }
+/** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
+export declare function undoTexts(adapter: TextEditorAdapter): string[] | null;
+/** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
+export declare function historyChars(adapter: TextEditorAdapter): number | null;
 /** The textarea engine: no dependencies, works offline, its own undo history. */
 export declare function textareaAdapter(): TextEditorAdapter;
 //# sourceMappingURL=adapter.d.ts.map

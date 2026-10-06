@@ -7,7 +7,9 @@
  * the result is accepted only when the parser-free `extract` gives back
  * exactly the same text, the same kind and the release's version. Nothing in
  * the live page changes; the caller saves the returned HTML through
- * `createSaver` and reloads.
+ * `createSaver` and reloads only when `performUpdate` says it is safe
+ * (`reload`). Only a top-level standalone file checks: never a framed page,
+ * a page with a connected host, or (by default) a served page.
  *
  * Sources are hard-coded (RULES §5.4): the manifest URL and the bundle URL
  * are built here from `KIND_PACKAGE` and the jsDelivr base; a document's text
@@ -18,7 +20,7 @@
  */
 import { escapeScriptText, extract, KIND_PACKAGE } from '../read.js';
 import type { SaveResult, Saver } from './save.js';
-import { globalWindow, type MessageEventLike, type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
+import { globalWindow, openedFileName, type MessageEventLike, type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
 
 /** The kinds that publish releases (FC-17 minus poster, which never self-updates: RULES §9). */
 export type ReleaseKind = 'md' | 'slides' | 'paged';
@@ -273,6 +275,38 @@ export interface CheckOptions {
   storage?: StorageLike;
   /** Test/carrier override of the CDN base; never taken from a document. */
   cdnBase?: string;
+  /**
+   * The file's host connection (`connectHost`). While a host is connected the
+   * app owns the component version: nothing is checked (spec/shell-runtime.md §7.1).
+   */
+  host?: { connected(): boolean };
+  /**
+   * The page the check runs for (default: the global window). A framed page
+   * (`parent !== page`: embedded by an app host, connected or not yet) is
+   * never checked, and a served page (`http:`/`https:`) only with
+   * `servedPages: true`.
+   */
+  page?: { readonly location?: { readonly protocol?: string }; readonly parent?: unknown };
+  /**
+   * Check on a served page too. Default `false`: a reader of a published page
+   * cannot save over it (shell-runtime §1 step 2), so no update is offered.
+   */
+  servedPages?: boolean;
+}
+
+/**
+ * Why this page must not check, or null: a connected host, a framed page, or
+ * a served page without `servedPages` (spec/shell-runtime.md §7.1).
+ */
+function notChecked(opts: Pick<CheckOptions, 'host' | 'page' | 'servedPages'>): 'hosted' | 'framed' | 'served' | null {
+  if (opts.host && opts.host.connected()) return 'hosted';
+  const page = opts.page ?? globalWindow<{ location?: { protocol?: string }; parent?: unknown }>();
+  if (!page) return null; // not a browser page (Node, a worker): nothing to embed or serve
+  const parent = page.parent;
+  if (parent != null && parent !== page) return 'framed';
+  const protocol = page.location?.protocol;
+  if (!opts.servedPages && (protocol === 'http:' || protocol === 'https:')) return 'served';
+  return null;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -308,7 +342,9 @@ function offer(manifest: ReleaseManifest | null, opts: CheckOptions, skipped: st
 }
 
 /**
- * Is a newer release of this kind available for this document? At most one
+ * Is a newer release of this kind available for this document? Never on a
+ * page embedded in a frame or with a connected host (the app owns the
+ * version), nor on a served page unless `servedPages`. At most one
  * network request per kind per {@link UPDATE_CHECK_INTERVAL_MS} (the last
  * check — success or failure — is recorded in storage; within the interval
  * the recorded manifest is used); without usable storage nothing is fetched.
@@ -320,6 +356,7 @@ function offer(manifest: ReleaseManifest | null, opts: CheckOptions, skipped: st
 export async function checkForUpdate(opts: CheckOptions): Promise<UpdateInfo | null> {
   try {
     if (!isReleaseKind(opts.kind) || !parseSemver(opts.current)) return null;
+    if (notChecked(opts)) return null; // before storage and network: a hosted file makes no request
     if (opts.cdnBase !== undefined) base(opts.cdnBase); // validate early (throws → null)
     const storage = resolveStorage(opts.storage);
     if (!storage) return null; // no way to keep the once-a-day promise: do not check
@@ -346,7 +383,11 @@ export async function checkForUpdate(opts: CheckOptions): Promise<UpdateInfo | n
 
 export type UpdateErrorCode =
   | 'manifest' | 'download' | 'too-large' | 'integrity' | 'no-crypto' | 'encoding' | 'unsafe-bundle'
-  | 'no-document' | 'timeout' | 'bundle' | 'roundtrip' | 'kind' | 'version' | 'delivery';
+  | 'no-document' | 'timeout' | 'bundle' | 'roundtrip' | 'kind' | 'version' | 'delivery'
+  /** performUpdate: the text changed while the update ran (nothing was saved). */
+  | 'changed'
+  /** performUpdate: the page is framed or has a connected host, which owns the version. */
+  | 'hosted';
 
 /** Why a re-assembly was refused. Nothing was changed when one is thrown. */
 export class UpdateError extends Error {
@@ -591,9 +632,19 @@ export async function reassemble(opts: ReassembleOptions): Promise<string> {
 
 // ── the whole update ──────────────────────────────────────────────────────
 
-export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'current'>, Omit<ReassembleOptions, 'release' | 'kind'> {
+export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'current'>, Omit<ReassembleOptions, 'release' | 'kind' | 'text'> {
   kind: ReleaseKind;
   current: string;
+  /**
+   * The editor's current text, read when the update starts and again before
+   * the save (preferred: an edit made while "Updating…" runs is then never
+   * lost). The caller keeps the editor read-only during the update.
+   */
+  getText?(): string;
+  /** The text to carry over, exact, when there is no `getText` (read once). */
+  text?: string;
+  /** The name of the file the page was opened from (default: the last segment of a `file:` page URL). */
+  openedName?: string;
   /** Saves the new file (`createSaver(...)`). */
   saver: Pick<Saver, 'save'>;
   /** Passed to the save (a host's `theme`). */
@@ -605,29 +656,66 @@ export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'curre
 export type PerformUpdateResult =
   | { status: 'up-to-date' }
   | { status: 'failed'; info: UpdateInfo; code: UpdateErrorCode; error: string }
-  | { status: 'updated'; info: UpdateInfo; html: string; save: SaveResult };
+  | {
+      status: 'updated'; info: UpdateInfo; html: string;
+      /** The text the saved file carries. */
+      text: string;
+      save: SaveResult;
+      /**
+       * Reload now: the save wrote the opened file (a host, or File System
+       * Access without a picker or to a file of the opened name) and the
+       * current text is still the saved text. Otherwise keep the page: the
+       * new file is a copy (download, a picked file of another name) or the
+       * text moved on.
+       */
+      reload: boolean;
+    };
+
+const CHANGED = 'The document changed while the update ran, so nothing was saved; try again.';
 
 /**
- * check → reassemble → `saver.save({ text, html })`. Never rejects. The page
- * is not reloaded here: on `updated` with `save.ok` the caller reloads (the
- * saved file now runs the new shell); on `served-notice` it offers
- * `saver.download`; on `failed` nothing was changed.
+ * check → reassemble → re-read the text → `saver.save({ text, html })`.
+ * Never rejects and never reloads; `reload` says whether the caller may.
+ * Refused (`failed`, nothing saved) when the page is framed or hosted
+ * (`hosted`), the update is refused (an {@link UpdateError} code), or the
+ * text changed while it ran (`changed`). On `served-notice` the caller
+ * offers `saver.download`.
  */
 export async function performUpdate(opts: PerformUpdateOptions): Promise<PerformUpdateResult> {
   const info = opts.info ?? (await checkForUpdate(opts));
   if (!info) return { status: 'up-to-date' };
+  const fail = (code: UpdateErrorCode, error: string): PerformUpdateResult => ({ status: 'failed', info, code, error });
+  let hosted: string | null;
+  try { hosted = notChecked({ ...opts, servedPages: true }); } catch { hosted = null; }
+  if (hosted) return fail('hosted', 'This document is embedded in an app, which updates it; nothing was changed.');
+  const read = (): string | undefined => {
+    if (typeof opts.getText === 'function') {
+      try { const t = opts.getText(); return typeof t === 'string' ? t : undefined; } catch { return undefined; }
+    }
+    return opts.text;
+  };
+  const text = read();
+  if (typeof text !== 'string') return fail('roundtrip', 'The document text is missing; nothing was changed.');
   let html: string;
   try {
-    html = await reassemble({ ...opts, release: info.manifest, kind: info.kind });
+    html = await reassemble({ ...opts, text, release: info.manifest, kind: info.kind });
   } catch (e) {
     const code: UpdateErrorCode = e instanceof UpdateError ? e.code : 'bundle';
-    return { status: 'failed', info, code, error: String((e as Error)?.message ?? e) };
+    return fail(code, String((e as Error)?.message ?? e));
   }
+  if (read() !== text) return fail('changed', CHANGED);
   let save: SaveResult;
   try {
-    save = await opts.saver.save({ text: opts.text, html, ...(typeof opts.theme === 'string' ? { theme: opts.theme } : {}) });
+    save = await opts.saver.save({ text, html, ...(typeof opts.theme === 'string' ? { theme: opts.theme } : {}) });
   } catch (e) {
-    save = { via: 'download', ok: false, error: String((e as Error)?.message ?? e) };
+    save = { via: 'download', ok: false, confirmed: false, error: String((e as Error)?.message ?? e) };
   }
-  return { status: 'updated', info, html, save };
+  let opened = opts.openedName;
+  if (opened === undefined) {
+    try { opened = openedFileName(globalWindow<{ location?: { protocol?: string; pathname?: string } }>()?.location); } catch { opened = undefined; }
+  }
+  const wroteOpened = save.via === 'host' ? save.ok
+    : save.via === 'file' ? save.ok && (!save.picked || (save.name !== undefined && save.name === opened))
+    : false;
+  return { status: 'updated', info, html, text, save, reload: wroteOpened && read() === text };
 }

@@ -57,11 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Node):
   - `createSaver({ uid, suggestedName, kind, host })` — save in the order
     connected host → served-page notice → File System Access (handle
-    remembered in IndexedDB `orz-carrier` under the header `uid`, else the
-    page URL; a second save overwrites without a prompt; a copy with another
-    file name does not reuse the original's handle) → download. It saves
-    the HTML the caller assembled and never serializes the live DOM. A
-    cancelled picker reports `cancelled` without a download.
+    remembered in IndexedDB `orz-carrier` under the header `uid` plus the
+    page location, else the page URL; a second save overwrites without a
+    prompt; a handle is reused only on the page it was picked on, so a copy
+    — with another name, or the same name in another folder — gets the
+    picker and never writes over the original) → download. It saves the
+    HTML the caller assembled and never serializes the live DOM. A
+    cancelled picker reports `cancelled` without a download. The result
+    says what was written: `picked` and `name` for a file, `confirmed:
+    false` and `name` for a download (a started download is not a
+    confirmed save).
   - `createPreferenceStore(uid, storage)` — typed, validated reader
     preferences (`splitRatio`, `scrollSync`, `viewMode`, `editorFontSize`,
     `darkChrome`), namespaced by `uid`, failing closed to defaults.
@@ -84,14 +89,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `checkForUpdate({ kind, current, format })` — at most one request per
     kind per day (recorded in `localStorage`), silent on any failure, semver
     precedence, never a prerelease, only releases that read the document's
-    format, honouring `skipVersion(kind, version)`;
+    format, honouring `skipVersion(kind, version)`; no check at all in a
+    framed page or with a connected host (the app owns the version), nor on
+    a served page unless `servedPages: true`;
   - `reassemble({ text, kind, release, delivery })` — transactional: verifies
     the bundle's SHA-384 and that it is script-safe, runs the release's
     `OrzCarrier.assemble` in a hidden `sandbox="allow-scripts"` iframe
     (opaque origin; only that iframe's messages are read), accepts the file
     only when `extract` gives back exactly the text, kind, version and
     delivery, and removes the iframe in every outcome; `performUpdate`
-    composes check → reassemble → `createSaver().save` (the caller reloads);
+    composes check → reassemble → `createSaver().save`, reading the text
+    through `getText()` before and after the re-assembly (an edit meanwhile
+    refuses with `changed`), and says whether the caller may reload
+    (`reload`: only when the opened file itself was written and the text did
+    not move on);
     `UpdateError` codes; `parseManifest`, `manifestUrl`, `bundleUrl`,
     `isBundlePath`, `isScriptSafe`, `sha384Integrity`, `compareSemver`;
   - `mountUpdateIndicator(anchor, info, { onUpdate, onLater, onSkip })` — a
@@ -139,19 +150,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Subresource Integrity. Per-package jsDelivr `+esm` URLs were rejected:
     they resolve `@codemirror/state` to different versions, which CodeMirror
     refuses.
+  - closed loop 2, round 1 (FC-19 §8.8, claims E.14–E.22): the FC-19 §3
+    hooks in the shell (`hooks.fetchInclude` / `resolveAsset` passed to
+    `render(text, ctx)`, assets in the preview resolved through
+    `resolveAsset`, `resolveLink` for preview clicks, `uploadAsset` on paste
+    and drop, `requestAi`, `ensureUid` with `mintUid`, `uploadAssets`);
+    `formats` (a newer text format opens read-only and is never saved,
+    `error` source `format`); `setReadOnly` / `isReadOnly`; a pluggable
+    preview (`frameDocument`, `bridge`, `diff: false`, `mode: 'navigate'`,
+    `mapLine` / `mapPosition`); `preview.nonce`, `PREVIEW_BRIDGE_HASH`,
+    `previewScriptHashes`, and a notice plus `error` when the frame never
+    starts; `previewSandbox()` as the one place the sandbox is decided
+    (still `allow-scripts` everywhere).
+  - Fixed: the shell acted on a forged Escape, "active" or scroll message from
+    the preview's document (it could take focus from the editor or pin its
+    scroll); the BOM and line endings after undoing a `setText` back to the
+    original; selection offsets in mixed-EOL texts; the CodeMirror upgrade
+    dropped the textarea's undo steps; a line inserted above redrew every
+    preview block below (the diff keyed on `data-src-line`); renders ran
+    every 150 ms however slow (now `max(debounceMs, 2 × last render)`, never
+    overlapping); the textarea history stored a full copy per step (now
+    patches); the `change` payload was a live getter; a download toast said
+    "Downloaded" (now "Download started."); Cmd/Ctrl+S on an unedited served
+    page showed the served notice.
 - **Conformance harness** `orz-markdown/carrier/conformance`
   (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
   each carrier runs against itself. `runConformance(target, options)` →
   `ConformanceReport`, `registerConformance({ describe, it, beforeAll,
-  afterAll }, target, options)` (one test per check), `openConformance`,
-  `CHECKS` — 29 checks with stable ids (`C.law.*`, `C.bundle.*`,
+  afterAll }, target, options)` (one test per check, then a final
+  `[conformant]` test that fails on any skipped or deselected check unless
+  `allowSkips`), `openConformance`, `isConformant`,
+  `CHECKS` — 38 checks with stable ids (`C.law.*`, `C.bundle.*`,
   `C.create.*`, `C.edit.*`, `C.save.*`, `C.update.*`, `C.host.*`,
   `C.prefs.*`) over the FC-18 laws (the shipped corpus, hazard texts,
-  Node vs Chrome bytes), the bundle rule and `release.json`, create, edit,
-  the four save routes, the quiet update (indicator, verified re-assembly,
-  tampered and offline refusal, update from the previous release), the
-  three host handshakes and reader preferences — in real Chrome on closed
-  networks where only the release's jsDelivr URLs are answered.
+  Node vs Chrome bytes), the bundle rule and `release.json`, create, edit
+  (with the pinned CodeMirror served, and the textarea fallback; a
+  newer-format text read-only; preview isolation against a forging preview
+  script), the save routes (a same-named copy elsewhere with real handles),
+  the quiet update (indicator, verified re-assembly, tampered, re-signed
+  and version-lying releases, prereleases, once a day, none in a host
+  frame, cdn delivery kept, offline, update from the previous release), the
+  three host handshakes (and foreign hellos) and reader preferences — in
+  real Chrome on closed networks where only the release's jsDelivr URLs are
+  answered. `conformant` is true only when every check ran and passed (a
+  partial run reports `partial: true`); `not-applicable` covers
+  `C.update.from-previous` for a target that declares `firstRelease`.
   `playwright-core` is an optional peer dependency, loaded only when a
   browser check runs; the package now ships `tests/carrier-corpus/` (the
   harness's default corpus).

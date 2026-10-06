@@ -53,6 +53,10 @@ export interface TextEditorAdapter {
   destroy(): void;
   // ── optional capabilities (the shell degrades without them) ──
   getSelection?(): Selection;
+  /** Switch read-only at run time (the shell's `setReadOnly`). Without it the engine keeps its mount-time state. */
+  setReadOnly?(readOnly: boolean): void;
+  /** Select a range (offsets in the adapter's text); the shell uses it to put the caret after an inserted asset link. */
+  setSelection?(selection: Selection): void;
   hasFocus?(): boolean;
   undo?(): boolean;
   redo?(): boolean;
@@ -62,43 +66,84 @@ export interface TextEditorAdapter {
   ready?(): Promise<{ engine: string; error?: unknown }>;
 }
 
-/** Group typing into one undo step when the pauses are shorter than this. */
+/** Group typing (and runs of deletions) into one undo step when the pauses are shorter than this. */
 const GROUP_MS = 500;
 const HISTORY_LIMIT = 300;
 
-interface Snapshot { doc: string; from: number; to: number }
+type Patch = { from: number; to: number; insert: string };
+/**
+ * One history step: the text it returns to and the selection there. Only the
+ * newest entry of each stack holds its text (`doc`, a reference to a string
+ * that existed anyway); older entries hold a patch from the text of the entry
+ * above them (B-19: a 1 MB document no longer costs 1 MB per undo step).
+ */
+interface Entry { doc?: string; patch?: Patch; from: number; to: number }
+
+const applyPatch = (text: string, p: Patch): string => text.slice(0, p.from) + p.insert + text.slice(p.to);
+
+/** The undo history of a textarea adapter, for an engine that takes over (and for tests). */
+interface History {
+  /** The texts undo returns to, oldest first. */
+  texts(): string[];
+  /** Characters the history holds (full texts and patches, both stacks). */
+  retained(): number;
+}
+const histories = new WeakMap<TextEditorAdapter, History>();
+
+/** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
+export function undoTexts(adapter: TextEditorAdapter): string[] | null {
+  return histories.get(adapter)?.texts() ?? null;
+}
+
+/** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
+export function historyChars(adapter: TextEditorAdapter): number | null {
+  return histories.get(adapter)?.retained() ?? null;
+}
 
 /** The textarea engine: no dependencies, works offline, its own undo history. */
 export function textareaAdapter(): TextEditorAdapter {
   let ta: EdTextArea | null = null;
   let opts: AdapterMountOptions | null = null;
+  /** The text, kept in step with the textarea on every input (reading `value` of a large textarea is not free). */
   let last = '';
   let lastSel: Selection = { from: 0, to: 0 };
-  let undoStack: Snapshot[] = [];
-  let redoStack: Snapshot[] = [];
+  let undoStack: Entry[] = [];
+  let redoStack: Entry[] = [];
   let lastInputAt = -Infinity;
+  let lastInputKind = '';
   const off: Array<() => void> = [];
 
   const now = (): number => Date.now();
-  const snapshot = (): Snapshot => ({ doc: last, from: lastSel.from, to: lastSel.to });
-  const push = (s: Snapshot): void => {
-    undoStack.push(s);
-    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  /** Push the text before a transition (`last`) onto a stack; the old top becomes a patch from it. */
+  const record = (stack: Entry[]): void => {
+    const top = stack[stack.length - 1];
+    if (top && top.doc !== undefined) {
+      top.patch = minimalChange(last, top.doc) ?? { from: 0, to: 0, insert: '' };
+      delete top.doc;
+    }
+    stack.push({ doc: last, from: lastSel.from, to: lastSel.to });
+    if (stack.length > HISTORY_LIMIT) stack.shift();
+  };
+  const push = (): void => {
+    record(undoStack);
     redoStack = [];
   };
+  const textOf = (e: Entry): string => (e.doc !== undefined ? e.doc : applyPatch(last, e.patch!));
   const readSel = (): Selection => (ta ? { from: ta.selectionStart ?? 0, to: ta.selectionEnd ?? 0 } : { from: 0, to: 0 });
-  const restore = (s: Snapshot): void => {
+  const restore = (text: string, e: Entry): void => {
     if (!ta) return;
-    ta.value = s.doc;
+    ta.value = text;
     last = ta.value;
-    try { ta.setSelectionRange?.(s.from, s.to); } catch { /* detached */ }
+    try { ta.setSelectionRange?.(e.from, e.to); } catch { /* detached */ }
     lastSel = readSel();
+    lastInputAt = -Infinity;
     opts?.onChange();
   };
   const listen = (type: string, fn: (e: EdEvent) => void): void => {
     ta!.addEventListener(type, fn);
     off.push(() => ta?.removeEventListener(type, fn));
   };
+  const grouped = (kind: string): boolean => kind === 'insertText' || kind === 'deleteContentBackward' || kind === 'deleteContentForward';
 
   const adapter: TextEditorAdapter = {
     name: 'textarea',
@@ -120,8 +165,9 @@ export function textareaAdapter(): TextEditorAdapter {
       listen('input', (e) => {
         const t = now();
         const kind = typeof e.inputType === 'string' ? e.inputType : '';
-        if (t - lastInputAt > GROUP_MS || !kind.startsWith('insertText')) push(snapshot());
-        lastInputAt = kind.startsWith('insertText') ? t : -Infinity;
+        if (t - lastInputAt > GROUP_MS || !grouped(kind) || kind !== lastInputKind) push();
+        lastInputAt = grouped(kind) ? t : -Infinity;
+        lastInputKind = kind;
         last = ta!.value;
         lastSel = readSel();
         options.onChange();
@@ -144,13 +190,13 @@ export function textareaAdapter(): TextEditorAdapter {
       });
     },
     getDoc() {
-      return ta ? ta.value : last;
+      return last;
     },
     setDoc(text, o) {
       if (!ta) { last = text; return; }
-      const before = ta.value;
+      const before = last;
       if (o?.resetHistory) { undoStack = []; redoStack = []; }
-      else if (before !== text) push(snapshot());
+      else if (before !== text) push();
       lastInputAt = -Infinity;
       const change = minimalChange(before, text);
       const s = readSel();
@@ -171,8 +217,21 @@ export function textareaAdapter(): TextEditorAdapter {
       ta?.remove();
       ta = null;
       opts = null;
+      undoStack = [];
+      redoStack = [];
     },
     getSelection: () => (ta ? readSel() : lastSel),
+    setReadOnly(flag) {
+      if (opts) opts = { ...opts, readOnly: flag };
+      if (ta) ta.readOnly = flag;
+    },
+    setSelection(s) {
+      if (!ta) return;
+      const clamp = (n: number): number => Math.max(0, Math.min(last.length, n));
+      try { ta.setSelectionRange?.(clamp(s.from), clamp(s.to)); } catch { /* detached */ }
+      lastSel = readSel();
+      lastInputAt = -Infinity;
+    },
     hasFocus() {
       const doc = ta?.ownerDocument;
       if (!ta || !doc) return false;
@@ -180,17 +239,21 @@ export function textareaAdapter(): TextEditorAdapter {
       return (root?.activeElement ?? doc.activeElement) === ta;
     },
     undo() {
-      const s = undoStack.pop();
-      if (!s || !ta) return false;
-      redoStack.push(snapshot());
-      restore(s);
+      const e = undoStack.pop();
+      if (!e || !ta) return false;
+      const target = textOf(e);
+      lastSel = readSel();
+      record(redoStack);
+      restore(target, e);
       return true;
     },
     redo() {
-      const s = redoStack.pop();
-      if (!s || !ta) return false;
-      undoStack.push(snapshot());
-      restore(s);
+      const e = redoStack.pop();
+      if (!e || !ta) return false;
+      const target = textOf(e);
+      lastSel = readSel();
+      record(undoStack);
+      restore(target, e);
       return true;
     },
     getScroll() {
@@ -198,7 +261,7 @@ export function textareaAdapter(): TextEditorAdapter {
       const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
       const fraction = max > 0 ? Math.min(1, (ta.scrollTop ?? 0) / max) : 0;
       // A textarea has no line geometry: approximate the top line proportionally.
-      const lines = countLines(ta.value);
+      const lines = countLines(last);
       return { line: fraction * Math.max(0, lines - 1), fraction };
     },
     scrollTo(target) {
@@ -206,13 +269,27 @@ export function textareaAdapter(): TextEditorAdapter {
       const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
       let f = target.fraction;
       if (typeof target.line === 'number') {
-        const lines = countLines(ta.value);
+        const lines = countLines(last);
         f = lines > 1 ? target.line / (lines - 1) : 0;
       }
       if (typeof f === 'number' && Number.isFinite(f)) ta.scrollTop = Math.max(0, Math.min(1, f)) * max;
     },
     ready: async () => ({ engine: 'textarea' }),
   };
+  histories.set(adapter, {
+    texts() {
+      // walk down from the current text: each entry's text, newest first
+      const out: string[] = [];
+      let text = last;
+      for (let i = undoStack.length - 1; i >= 0; i--) {
+        const e = undoStack[i];
+        text = e.doc !== undefined ? e.doc : applyPatch(text, e.patch!);
+        out.push(text);
+      }
+      return out.reverse();
+    },
+    retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch!.insert.length), 0),
+  });
   return adapter;
 }
 

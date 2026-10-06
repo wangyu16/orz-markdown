@@ -1,7 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = void 0;
+exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = void 0;
+exports.previewSandbox = previewSandbox;
+exports.previewFrameParts = previewFrameParts;
 exports.previewFrameDocument = previewFrameDocument;
+exports.previewScriptHashes = previewScriptHashes;
+exports.rewriteAssetUrls = rewriteAssetUrls;
 exports.createPreview = createPreview;
 exports.lineToTop = lineToTop;
 exports.topToLine = topToLine;
@@ -29,8 +33,23 @@ const preview_frame_js_1 = require("../../preview-frame.js");
 /** The preview iframe's sandbox: exactly this, never `allow-same-origin`. */
 exports.PREVIEW_SANDBOX = 'allow-scripts';
 /**
+ * The `sandbox` attribute of the preview iframe for a context — the ONE place
+ * it is decided. Today `allow-scripts` everywhere (an opaque origin).
+ *
+ * Owner decision pending (finding B-2): in a standalone `file:` page the
+ * opaque srcdoc preview cannot load the document's relative local images; the
+ * owner may allow `allow-same-origin` for `{ host: 'standalone', protocol:
+ * 'file:' }` ONLY. That would be a one-line change here — nowhere else.
+ */
+function previewSandbox(context) {
+    void context;
+    return exports.PREVIEW_SANDBOX;
+}
+/**
  * The bridge inside the frame (ES5, no `</script`). Swaps the article's
- * changed top-level nodes, enhances, reports anchors; forwards scroll, the
+ * changed top-level nodes (compared without their `data-src-line`, whose new
+ * values are copied onto the kept nodes, so a line inserted above does not
+ * redraw everything below), enhances, reports anchors; forwards scroll, the
  * shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc) and link clicks.
  */
 exports.PREVIEW_BRIDGE = [
@@ -38,12 +57,17 @@ exports.PREVIEW_BRIDGE = [
     'var P=window.parent,art=document.getElementById("orz-doc"),last=0,mute=0,queued=0,timer=0;',
     'var sch=document.documentElement.getAttribute("data-scheme");if(sch==="dark")window.__orzSmilesTheme="dark";',
     'function post(m){try{P.postMessage(m,"*")}catch(e){}}',
-    'function keyOf(n){return n.nodeType===1?n.outerHTML:n.nodeType===3?"#"+n.data:n.nodeType===8?"!"+n.data:""}',
-    'function apply(html){var t=document.createElement("template");t.innerHTML=html;var next=Array.prototype.slice.call(t.content.childNodes),nk=next.map(keyOf),old=Array.prototype.slice.call(art.childNodes),a=old.length,b=next.length,p=0,s=0;',
-    'while(p<a&&p<b&&old[p].__orzKey===nk[p])p++;',
-    'while(s<a-p&&s<b-p&&old[a-1-s].__orzKey===nk[b-1-s])s++;',
-    'var ref=s>0?old[a-s]:null,i;for(i=p;i<a-s;i++)art.removeChild(old[i]);',
-    'for(i=p;i<b-s;i++){next[i].__orzKey=nk[i];art.insertBefore(next[i],ref)}}',
+    'function strip(h){return h.replace(/<[a-zA-Z][^>]*>/g,function(t){return t.replace(/ data-src-line="[^"]*"/g,"")})}',
+    'function keyOf(n){return n.nodeType===1?strip(n.outerHTML):n.nodeType===3?"#"+n.data:n.nodeType===8?"!"+n.data:""}',
+    'function lines(n){var l=[],q,i;if(n.nodeType!==1)return l;if(n.hasAttribute("data-src-line"))l.push(n);q=n.querySelectorAll("[data-src-line]");for(i=0;i<q.length;i++)l.push(q[i]);return l}',
+    'function keep(o,n){if(o.__orzKey!==n.__orzKey)return false;var a=lines(o),b=lines(n),i;if(a.length!==b.length)return false;for(i=0;i<a.length;i++)a[i].setAttribute("data-src-line",b[i].getAttribute("data-src-line"));return true}',
+    'function apply(html){var t=document.createElement("template");t.innerHTML=html;var next=Array.prototype.slice.call(t.content.childNodes),old=Array.prototype.slice.call(art.childNodes),a=old.length,b=next.length,p=0,s=0,i;',
+    'for(i=0;i<b;i++)next[i].__orzKey=keyOf(next[i]);',
+    'while(p<a&&p<b&&keep(old[p],next[p]))p++;',
+    'while(s<a-p&&s<b-p&&keep(old[a-1-s],next[b-1-s]))s++;',
+    'var ref=s>0?old[a-s]:null;for(i=p;i<a-s;i++)art.removeChild(old[i]);',
+    'for(i=p;i<b-s;i++)art.insertBefore(next[i],ref)}',
+    'function whole(html){var y=se().scrollTop;art.innerHTML=html;se().scrollTop=y}',
     'function se(){return document.scrollingElement||document.documentElement}',
     'function max(){return Math.max(0,se().scrollHeight-window.innerHeight)}',
     'function anchors(){var els=art.querySelectorAll("[data-src-line]"),out=[],y=se().scrollTop||0,i,l,r;',
@@ -53,7 +77,7 @@ exports.PREVIEW_BRIDGE = [
     'function enhance(){try{if(typeof window.__orzEnhance==="function")window.__orzEnhance()}catch(e){}}',
     'function later(){clearTimeout(timer);timer=setTimeout(function(){enhance();report()},350)}',
     'window.addEventListener("message",function(e){if(e.source!==P)return;var d=e.data;if(!d||typeof d!=="object")return;',
-    'if(d.type==="orz-preview-render"){last=d.id;try{apply(String(d.html))}catch(x){art.innerHTML=String(d.html)}enhance();report();later()}',
+    'if(d.type==="orz-preview-render"){last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}enhance();report();later()}',
     'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=Date.now()+150;se().scrollTop=d.top}});',
     'if(window.ResizeObserver)new ResizeObserver(later).observe(art);',
     'window.addEventListener("scroll",function(){if(Date.now()<mute||queued)return;queued=1;requestAnimationFrame(function(){queued=0;post({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
@@ -69,30 +93,147 @@ exports.PREVIEW_BRIDGE = [
     'post({type:"orz-preview-ready"});',
     '})();',
 ].join('');
-/** The preview frame's `srcdoc`. */
-function previewFrameDocument(options = {}) {
+/**
+ * `'sha256-…'` of {@link PREVIEW_BRIDGE}, for a hash-based Content-Security-Policy
+ * (`script-src 'sha256-…'`). A test recomputes it; with `assets` the frame has
+ * more inline scripts — {@link previewScriptHashes} lists them all.
+ */
+exports.PREVIEW_BRIDGE_HASH = 'sha256-vGxwt7AxICnk1qS6ExQKrJyNG3WKyC+TyCPieX6Xy8E=';
+/** The inline call that tells the bridge the pinned libraries have loaded. */
+const LIBS_READY = 'window.__orzLibsReady()';
+const BASE_STYLE = 'html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}';
+/** Stamp a nonce on every `<script` and `<style` start tag of shell-built markup. */
+function stampNonce(markup, nonce) {
+    if (!nonce)
+        return markup;
+    const attr = ` nonce="${(0, html_js_1.escapeAttr)(nonce)}"`;
+    return markup.replace(/<(script|style)(?=[\s>])/g, `<$1${attr}`);
+}
+/** The pieces of the frame document for these options. */
+function previewFrameParts(options = {}) {
     const scheme = options.scheme === 'dark' ? 'dark' : 'light';
     const assets = options.assets !== false ? (0, preview_frame_js_1.getPreviewFrameAssets)() : null;
-    return (`<!doctype html><html data-scheme="${scheme}"><head><meta charset="utf-8">` +
+    const nonce = options.nonce || undefined;
+    return {
+        head: stampNonce(`${assets ? assets.headLinks(scheme) : ''}${options.head ?? ''}<style>${BASE_STYLE}</style>`, nonce),
+        bridge: stampNonce(`<script>${options.bridge ?? exports.PREVIEW_BRIDGE}</script>`, nonce),
+        scripts: assets ? stampNonce(`${assets.bodyScripts()}<script>${LIBS_READY}</script>`, nonce) : '',
+        scheme,
+        articleClass: (0, html_js_1.escapeAttr)(options.articleClass ?? 'markdown-body'),
+        ...(nonce ? { nonce } : {}),
+    };
+}
+/** The preview frame's `srcdoc`. */
+function previewFrameDocument(options = {}) {
+    const parts = previewFrameParts(options);
+    if (options.frameDocument)
+        return String(options.frameDocument(parts));
+    return (`<!doctype html><html data-scheme="${parts.scheme}"><head><meta charset="utf-8">` +
         '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-        (assets ? assets.headLinks(scheme) : '') +
-        (options.head ?? '') +
-        '<style>html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}</style>' +
-        `</head><body><article class="${(0, html_js_1.escapeAttr)(options.articleClass ?? 'markdown-body')}" id="orz-doc"></article>` +
+        parts.head +
+        `</head><body><article class="${parts.articleClass}" id="orz-doc"></article>` +
         // the bridge first: the preview shows at once; the libraries enhance it when they arrive (or never, offline)
-        `<script>${exports.PREVIEW_BRIDGE}</script>` +
-        (assets ? `${assets.bodyScripts()}<script>window.__orzLibsReady()</script>` : '') +
+        parts.bridge +
+        parts.scripts +
         '</body></html>');
 }
+/**
+ * `'sha256-…'` of every inline `<script>` in the frame document for these
+ * options (the bridge, and with `assets` the libraries' setup, the runtime and
+ * `__orzEnhance`), for a hash-based CSP. Needs Web Crypto (`crypto.subtle`).
+ */
+async function previewScriptHashes(options = {}) {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle)
+        throw new Error('orz editor: previewScriptHashes needs crypto.subtle');
+    const out = [];
+    for (const m of previewFrameDocument(options).matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
+        const bytes = new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(m[1])));
+        let bin = '';
+        for (const b of bytes)
+            bin += String.fromCharCode(b);
+        const hash = `sha256-${btoa(bin)}`;
+        if (!out.includes(hash))
+            out.push(hash);
+    }
+    return out;
+}
+/** A start tag with its attributes (quoted values may hold `>`). */
+const START_TAG = /<([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)(\s*\/?>)/g;
+const ATTRIBUTE = /(\s+)([^\s"'>/=]+)(?:(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+const ENTITY = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(amp|lt|gt|quot|apos|#39));/g;
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+function decodeAttr(v) {
+    return v.replace(ENTITY, (m, dec, hex, name) => {
+        if (name)
+            return name === '#39' ? "'" : NAMED[name];
+        const cp = dec !== undefined ? Number(dec) : parseInt(hex, 16);
+        return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    });
+}
+/** A relative reference: no scheme, not `//host`, not `/path`, not `#fragment`, not empty. */
+const isRelative = (u) => u !== '' && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u) && !/^[/\\#?]/.test(u);
+/**
+ * Rewrite the relative asset references of rendered HTML through `resolve`
+ * (FC-19 `hooks.resolveAsset`) before it enters the preview: `src`,
+ * `poster`, every URL of `srcset`, and `href` on elements other than `<a>` /
+ * `<area>` (links stay as written; a click goes to `resolveLink`). A resolver
+ * that throws or returns a non-string leaves the reference as it was. Tags
+ * the pattern cannot read are left unchanged.
+ */
+function rewriteAssetUrls(html, resolve) {
+    const res = (u) => {
+        const t = u.trim();
+        if (!isRelative(t))
+            return u;
+        try {
+            const r = resolve(t);
+            return typeof r === 'string' ? r : u;
+        }
+        catch {
+            return u;
+        }
+    };
+    return html.replace(START_TAG, (tag, name, attrs, tail) => {
+        const element = name.toLowerCase();
+        let changed = false;
+        const out = attrs.replace(ATTRIBUTE, (m, space, attr, eq, dq, sq, uq) => {
+            if (eq === undefined)
+                return m;
+            const a = attr.toLowerCase();
+            const set = a === 'srcset';
+            if (!set && a !== 'src' && a !== 'poster' && !((a === 'href' || a === 'xlink:href') && element !== 'a' && element !== 'area'))
+                return m;
+            const raw = decodeAttr(dq ?? sq ?? uq ?? '');
+            const value = set
+                ? raw.split(',').map((part) => {
+                    const lead = part.match(/^\s*/)[0];
+                    const body = part.slice(lead.length);
+                    const cut = body.search(/\s/);
+                    const url = cut < 0 ? body : body.slice(0, cut);
+                    return lead + res(url) + (cut < 0 ? '' : body.slice(cut));
+                }).join(',')
+                : res(raw);
+            if (value === raw)
+                return m;
+            changed = true;
+            return `${space}${attr}="${(0, html_js_1.escapeAttr)(value)}"`;
+        });
+        return changed ? `<${name}${out}${tail}` : tag;
+    });
+}
+/** How long the frame may take to say ready before `onStall`. */
+exports.PREVIEW_READY_TIMEOUT_MS = 8000;
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 /** Create the sandboxed preview iframe in `parent` and talk to it. */
 function createPreview(doc, parent, options, events) {
     const win = doc.defaultView;
     const iframe = doc.createElement('iframe');
-    iframe.setAttribute('sandbox', exports.PREVIEW_SANDBOX);
+    iframe.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
     iframe.setAttribute('title', options.title ?? 'Document preview');
     iframe.className = 'orz-editor__frame';
     iframe.srcdoc = previewFrameDocument(options);
+    const diff = options.diff !== false;
     let ready = false;
     let seq = 0;
     let pending = null;
@@ -102,6 +243,7 @@ function createPreview(doc, parent, options, events) {
         iframe.contentWindow?.postMessage(msg, '*');
     }
     catch { /* detached */ } };
+    const renderMessage = (html) => ({ type: 'orz-preview-render', id: ++seq, html, ...(diff ? {} : { diff: false }) });
     const onMessage = (e) => {
         if (!iframe.contentWindow || e.source !== iframe.contentWindow)
             return;
@@ -111,8 +253,13 @@ function createPreview(doc, parent, options, events) {
         switch (d.type) {
             case 'orz-preview-ready':
                 ready = true;
+                if (stall !== null) {
+                    win?.clearTimeout(stall);
+                    stall = null;
+                }
                 if (pending !== null)
-                    send({ type: 'orz-preview-render', id: ++seq, html: pending });
+                    send(renderMessage(pending));
+                events.onReady?.();
                 break;
             case 'orz-preview-rendered':
                 if (Array.isArray(d.anchors))
@@ -122,11 +269,12 @@ function createPreview(doc, parent, options, events) {
                 events.onRendered?.(anchors, max);
                 break;
             case 'orz-preview-scrolled':
-                if (num(d.top)) {
-                    if (num(d.max))
-                        max = d.max;
+                if (num(d.max))
+                    max = d.max;
+                if (num(d.line))
+                    events.onScrolled?.(num(d.top) ? d.top : 0, max, d.line);
+                else if (num(d.top))
                     events.onScrolled?.(d.top, max);
-                }
                 break;
             case 'orz-preview-key':
                 if (d.key === 's' || d.key === '\\' || d.key === 'Escape')
@@ -144,21 +292,32 @@ function createPreview(doc, parent, options, events) {
     win?.addEventListener('message', onMessage);
     // A moved or reloaded frame boots again and says ready again: the last HTML is re-sent then.
     parent.append(iframe);
+    let stall = win ? win.setTimeout(() => { stall = null; if (!ready)
+        events.onStall?.(); }, options.readyTimeoutMs ?? exports.PREVIEW_READY_TIMEOUT_MS) : null;
     return {
         iframe,
         render(html) {
             pending = html;
             if (ready)
-                send({ type: 'orz-preview-render', id: ++seq, html });
+                send(renderMessage(html));
         },
         scrollTo(top) {
             if (ready && num(top))
                 send({ type: 'orz-preview-scroll', top });
         },
+        navigate(line) {
+            if (ready && num(line))
+                send({ type: 'orz-preview-navigate', line });
+        },
         get anchors() { return anchors; },
         get max() { return max; },
+        get ready() { return ready; },
         destroy() {
             win?.removeEventListener('message', onMessage);
+            if (stall !== null) {
+                win?.clearTimeout(stall);
+                stall = null;
+            }
             iframe.remove();
             pending = null;
         },

@@ -5,7 +5,7 @@
 (FD-03). It implements family contract FC-11 (self-reproducing save) for text
 format 1 (FC-18 §6, §10), the file side of the host protocols
 ([host-protocols.md](host-protocols.md)), the quiet update of FD-05 (§6–§7)
-and the shell chrome (§8). Claims S.1–S.12, U.1–U.11 and V.1–V.5 in
+and the shell chrome (§8). Claims S.1–S.13, U.1–U.13 and V.1–V.5 in
 `notes/CLAIMS.md`; tests in `tests/carrier-shell.test.ts` and
 `tests/carrier-update.test.ts`.
 
@@ -38,9 +38,21 @@ saver.save({ text, html, theme? }): Promise<SaveResult>   // never rejects
 saver.download({ html }): Promise<SaveResult>             // Export / the notice's "download a copy"
 
 type SaveResult =
-  | { via: 'host' | 'file' | 'download'; ok: boolean; error?: string }
+  | { via: 'host'; ok: boolean; error?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; name?: string }
+  | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 ```
+
+**What was written.** A `file` result says whether a picker was shown for
+this save (`picked`: the written file is then the one the reader chose, which
+may not be the file the page was opened from; also `true` on a cancelled
+picker) and the written handle's `name` when the browser reports it. A
+`download` result is a copy handed to the browser: `ok: true` means the
+download was **started**, and `confirmed` is always `false` — the page cannot
+know whether it landed (a blocked or cancelled download looks the same), so a
+caller words it "Download started", never "Saved". Its `name` is
+`suggestedName`. A `host` result is the host's acknowledgement.
 
 - `uid` — the header `uid` (FC-18 §5.1, §10). `suggestedName` — the assembled
   file's name, i.e. the twin name of the text (`twinName('week3.md')` =
@@ -61,31 +73,40 @@ type SaveResult =
    document has unsaved edits. No picker opens and no IndexedDB lookup runs.
 3. **File System Access** (`showSaveFilePicker` exists):
    1. the session's handle, if any (a second save never prompts);
-   2. else the handle remembered under the handle key (below), used only if
-      `queryPermission({ mode: 'readwrite' })` is `granted` or
-      `requestPermission` grants it (Chrome's one-click prompt naming the
-      file), and only if its name matches the opened file when the page is a
-      `file:` URL — a copy of a file carries the same `uid`, and must not
-      write over the original;
+   2. else the handle remembered under the handle key (below), used only
+      when **the record's page location equals this page's** (the URL
+      without query and fragment — for a `file:` page, the file's own path),
+      only if its name matches the opened file when the page is a `file:`
+      URL, and only if `queryPermission({ mode: 'readwrite' })` is `granted`
+      or `requestPermission` grants it (Chrome's one-click prompt naming the
+      file). Every `file:` page shares one IndexedDB, and a copy of a file
+      carries the same `uid` and often the same name: a copy in another
+      folder must get the picker and never write over the original. A record
+      without a location (written before this rule) is not reused;
    3. else the picker, offered `suggestedName` and the kind's extension
       (`.md.html`, `.slides.html`, `.paged.html`, `.poster.html`, plus
-      `.html`); the picked handle is remembered under the handle key.
+      `.html`); the picked handle is remembered under the handle key with
+      this page's location.
 
-   Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok: true }`.
-   A cancelled picker (`AbortError`) → `{ via: 'file', ok: false, error:
-   'cancelled' }`, with no fallback. Any other picker error (no user
+   Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok:
+   true, picked, name }`. A cancelled picker (`AbortError`) → `{ via: 'file',
+   ok: false, error: 'cancelled', picked: true }`, with no fallback. Any other picker error (no user
    activation, policy) or a failed write falls back to step 4, so the work is
    never lost.
 4. **Download:** a `Blob` of `html` (`text/html;charset=utf-8`, so the bytes
    are the UTF-8 of `html`) through an `<a download="{suggestedName}">`; the
-   object URL is revoked after a second → `{ via: 'download', ok: true }` (or
-   `ok: false` when the page has no document to download from).
+   object URL is revoked after a second → `{ via: 'download', ok: true,
+   confirmed: false, name }` (or `ok: false` when the page has no document to
+   download from).
 
 **Handle key.** The header `uid` when it is well-formed (`doc-[0-9a-z]{10,32}`,
-the kit's `UID_PATTERN`); else the page URL without its fragment (FC-18 §10).
-Handles are stored in IndexedDB database `orz-carrier`, object store
-`handles`, value `{ handle, name }` (a `FileSystemFileHandle` is structured-
-cloneable). The store is best-effort: when IndexedDB is unavailable (opaque
+the kit's `UID_PATTERN`) followed by a space and the page location
+(`doc-… file:///Users/me/notes.md.html`; the `uid` alone when the page has no
+location); else the page URL without its fragment (FC-18 §10). So the
+original and a copy elsewhere keep separate records, and saving the copy does
+not cost the original its handle. Handles are stored in IndexedDB database
+`orz-carrier`, object store `handles`, value `{ handle, name, location }` (a
+`FileSystemFileHandle` is structured-cloneable). The store is best-effort: when IndexedDB is unavailable (opaque
 origins, private modes) every lookup misses and the session handle still
 spares the second prompt. Today's per-carrier databases (`orz-mdhtml`,
 `orz-poster`, keyed by `docId`) are not read: after the move, the first save
@@ -209,7 +230,7 @@ Update = **re-assembly, never patching**. All of it is in
 ### 7.1 Check
 
 ```ts
-checkForUpdate({ kind, current, format?, fetch?, now?, storage?, cdnBase? }): Promise<UpdateInfo | null>
+checkForUpdate({ kind, current, format?, fetch?, now?, storage?, cdnBase?, host?, page?, servedPages? }): Promise<UpdateInfo | null>
 type UpdateInfo = { kind, current, latest, notes, manifest };
 skipVersion(kind, version, storage?): boolean
 ```
@@ -227,9 +248,25 @@ skipVersion(kind, version, storage?): boolean
   release (never a prerelease), newer than `current` by semver precedence,
   whose `formats` include the document's `format` (default 1), and newer than
   the version recorded by `skipVersion` under `orz-update-skip:<kind>`.
-- Only the standalone file checks; an app host owns the component version and
-  shows nothing (FC-19 §5.6). A file that meets a newer format opens read-only
-  and the same check offers the release that reads it (FC-18 §8.4).
+- **Who checks.** Only a top-level standalone file. `checkForUpdate` makes no
+  check — no storage write, no request — and resolves `null` when:
+  - the page is **framed** (`window.parent !== window`): an assembled file
+    embedded in an app host runs no update check and shows no indicator,
+    whether or not the host's hello has arrived yet (the host owns the
+    component version, FC-19 §5 invariant 6; the hello may come after the
+    file's boot, so "connected" alone would race);
+  - a `host` connection is passed and connected;
+  - the page is **served** (`http:`/`https:`) — unless the carrier passes
+    `servedPages: true`. A reader of a published page cannot save over it
+    (§1 step 2), so by default no indicator is offered to readers who cannot
+    save; a carrier whose served pages are the reader's own (a local dev
+    server) may opt in.
+
+  These guards are in the kit; a carrier calls `checkForUpdate` at boot and
+  mounts the indicator only for a non-null result. `performUpdate` refuses a
+  framed or hosted page (code `hosted`).
+- A file that meets a newer format opens read-only and the same check offers
+  the release that reads it (FC-18 §8.4).
 
 ### 7.2 Re-assembly (transactional)
 
@@ -263,16 +300,31 @@ reassemble({ text, kind, release, delivery?, fetch?, document?, window?, cdnBase
 Failures reject with `UpdateError` and a `code`: `manifest`, `download`,
 `too-large`, `integrity`, `no-crypto`, `encoding`, `unsafe-bundle`,
 `no-document`, `timeout`, `bundle`, `roundtrip`, `kind`, `version`,
-`delivery`.
+`delivery`; `performUpdate` adds `changed` and `hosted` (below).
 
-The **caller** then saves the returned html through `createSaver` (§1,
-unchanged) and reloads the page so the new shell runs. `performUpdate({ …,
-saver, info? })` composes check → `reassemble` → `saver.save({ text, html,
-theme })` and resolves `{ status: 'up-to-date' }`, `{ status: 'failed', info,
-code, error }` (nothing saved) or `{ status: 'updated', info, html, save }`;
-it never rejects and never reloads. Reload only when `save.ok` and the save
-wrote the opened file (`via: 'file'`/`'host'`); on `served-notice` offer
-`saver.download`.
+The **caller** then saves the returned html through `createSaver` (§1) and
+reloads the page so the new shell runs — but only when that is safe.
+`performUpdate({ …, getText, saver, openedName?, info? })` composes check →
+`reassemble` → re-read the text → `saver.save({ text, html, theme })` and
+resolves `{ status: 'up-to-date' }`, `{ status: 'failed', info, code, error }`
+(nothing saved) or `{ status: 'updated', info, html, text, save, reload }`; it
+never rejects and never reloads.
+
+- **The text.** `getText()` is read when the update starts and **again
+  before the save**; if it changed, nothing is saved (`failed`, code
+  `changed`). (The older `text` option, read once, still works.) **The editor
+  is read-only while the update runs** ("Updating…"): the carrier makes it so
+  (the re-check is the guard if it does not), so nothing typed then can be
+  lost by the reload.
+- **Reload only when** `reload` is `true`: the save wrote the opened file —
+  `via: 'host'` with `ok`, or `via: 'file'` with `ok` and either `picked:
+  false` (the remembered handle of this very page) or a picked file whose
+  `name` equals the opened file's (`openedName`, default the last segment of
+  a `file:` page URL) — **and** the current text still equals the saved
+  text. A download (`confirmed: false`: a copy), the served notice (offer
+  `saver.download`), a picked file of another name, a failed save or a text
+  that moved on during the save leave the page as it is; the carrier says
+  where the new file went.
 
 The text passed in is the editor's current text, unsaved edits included; a
 text that cannot round-trip (mixed line endings, FC-18 law 1) is refused by
@@ -300,8 +352,8 @@ mountUpdateIndicator(anchor, info, { onUpdate, onLater?, onSkip? }, { document? 
   now** / **Skip this version**. Focus moves to Update now; **Esc** closes and
   returns focus to the chip; a pointer-down outside or focus leaving closes
   it. Nothing in the page becomes inert or hidden.
-- **Update now** calls `onUpdate(info)` (typically `performUpdate` then a
-  reload); while it runs the buttons are disabled and the button reads
+- **Update now** calls `onUpdate(info)` (typically `performUpdate`, then a
+  reload when its `reload` is true); while it runs the buttons are disabled and the button reads
   "Updating…"; a rejection is shown inside the popover (`aria-live`
   `polite`). **Not now** calls `onLater` and removes the indicator for this
   page (tomorrow's check offers again). **Skip this version** calls `onSkip`

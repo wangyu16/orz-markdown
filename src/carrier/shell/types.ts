@@ -124,6 +124,24 @@ export function globalWindow<T>(): T | undefined {
   }
 }
 
+/**
+ * The page location a remembered file handle belongs to: the URL without its
+ * query and fragment (for a `file:` page, the file's own path). `undefined`
+ * when the page has no readable location.
+ */
+export function pageLocation(loc: { readonly href?: string } | undefined): string | undefined {
+  const href = loc?.href;
+  return typeof href === 'string' && href ? href.replace(/[?#].*$/s, '') : undefined;
+}
+
+/** The file name a `file:` page was opened from; `undefined` for any other page. */
+export function openedFileName(loc: { readonly protocol?: string; readonly pathname?: string } | undefined): string | undefined {
+  if (!loc || loc.protocol !== 'file:' || typeof loc.pathname !== 'string') return undefined;
+  const last = loc.pathname.split('/').pop();
+  if (!last) return undefined;
+  try { return decodeURIComponent(last); } catch { return last; }
+}
+
 // ── chrome and update UI (chrome.ts, indicator.ts, update.ts) ─────────────
 
 /** An event as the chrome reads it (a DOM `Event` / `KeyboardEvent` satisfies it). */

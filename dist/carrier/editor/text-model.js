@@ -15,9 +15,16 @@ exports.minimalChange = minimalChange;
  * - an editor text equal to the LF form of a text the model was given
  *   (`setText`, the initial text, a header edit) gives back THAT exact text —
  *   so an unedited document, or one undone back to a known state, reads back
- *   byte for byte, mixed line endings included;
+ *   byte for byte, mixed line endings included — and that text's BOM and
+ *   line-ending style become the document's again (each remembered text keeps
+ *   its own style: undoing a `setText` of an LF text back to a CR LF document
+ *   with a BOM writes the next edit in CR LF with the BOM);
  * - any other editor text is written in the document's style: the BOM in
  *   front, every LF as the document's line ending.
+ *
+ * Offsets: for a remembered text the editor offset is mapped by walking that
+ * exact string (a mixed CR LF / LF / CR text maps exactly); otherwise by the
+ * document's style.
  *
  * Pure and deterministic; no browser API.
  */
@@ -34,25 +41,52 @@ function toEditorText(text) {
 function createTextModel(initial) {
     let bom = false;
     let eol = '\n';
-    /** editor form → exact text, most recent first. */
+    /** Remembered texts, most recent first. */
     let known = [];
+    const find = (editorText) => {
+        for (const k of known)
+            if (k.editor === editorText)
+                return k;
+        return undefined;
+    };
+    /** Walk an exact text to the exact offset of an editor offset. */
+    const walk = (exact, at) => {
+        let i = exact.startsWith(BOM) ? 1 : 0;
+        for (let n = 0; n < at && i < exact.length; n++)
+            i += exact.charCodeAt(i) === 13 && exact.charCodeAt(i + 1) === 10 ? 2 : 1;
+        return i;
+    };
     const model = {
         adopt(text) {
             bom = text.startsWith(BOM);
             eol = EOLS[(0, text_js_1.eolStyle)(text)];
             const editor = toEditorText(text);
-            known = [[editor, text], ...known.filter(([e]) => e !== editor)].slice(0, REMEMBERED);
+            known = [{ editor, exact: text, bom, eol }, ...known.filter((k) => k.editor !== editor)].slice(0, REMEMBERED);
             return editor;
         },
         toExact(editorText) {
-            for (const [e, exact] of known)
-                if (e === editorText)
-                    return exact;
+            const k = find(editorText);
+            if (k) {
+                // back at a remembered text: its style is the document's again (A-3)
+                bom = k.bom;
+                eol = k.eol;
+                return k.exact;
+            }
             const body = eol === '\n' ? editorText : editorText.replace(/\n/g, eol);
             return bom ? BOM + body : body;
         },
+        recall(editorText) {
+            const k = find(editorText);
+            if (k) {
+                bom = k.bom;
+                eol = k.eol;
+            }
+        },
         toExactOffset(editorText, offset) {
             const at = Math.max(0, Math.min(offset, editorText.length));
+            const k = find(editorText);
+            if (k)
+                return walk(k.exact, at);
             let shift = bom ? 1 : 0;
             if (eol === '\r\n')
                 for (let i = editorText.indexOf('\n'); i >= 0 && i < at; i = editorText.indexOf('\n', i + 1))

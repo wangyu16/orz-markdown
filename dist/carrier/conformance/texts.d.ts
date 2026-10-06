@@ -17,4 +17,8 @@ export declare const EDIT_TEXT = "\uFEFF{{nyml\r\nkind: document\r\ntitle: Confo
 export declare const OTHER_TEXT = "{{nyml\nkind: document\ntitle: Other\nuid: doc-conformance9z8y7x\n}}\n\n# Other\n";
 /** A marker the harness puts in the live DOM; a saved file must never contain it. */
 export declare const LIVE_DOM_MARKER = "ORZ-CONFORMANCE-LIVE-DOM-MARKER";
+/** A text in a newer format (header `format: 2`): opened, it must be read-only and never saved over (FC-18 §8.4, D7). */
+export declare const NEWER_TEXT = "{{nyml\nkind: document\nformat: 2\ntitle: From a newer release\nuid: doc-conformance5f6g7h\n}}\n\n# From a newer release\n\nWritten in a format this release does not write.\n";
+/** A long text the preview-isolation check types into (its end is far below the fold). */
+export declare const LONG_TEXT: string;
 //# sourceMappingURL=texts.d.ts.map

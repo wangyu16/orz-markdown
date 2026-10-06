@@ -6,12 +6,26 @@
 /** The binding every frame reports through (`context.exposeBinding`). */
 export const RECORD_BINDING = '__orzConformanceRecord';
 
-export type PickerMode = 'stub' | 'none' | 'native';
+export type PickerMode = 'stub' | 'none' | 'native' | 'opfs';
+
+/**
+ * The origin-private folder the `opfs` picker uses for a page path (one folder
+ * per page, so two same-named files in two folders stay two files). ES5 source.
+ */
+export const OPFS_FOLDER = `function (pathname) {
+  var h = 5381;
+  for (var i = 0; i < pathname.length; i++) h = ((h * 33) ^ pathname.charCodeAt(i)) >>> 0;
+  return 'orz-conformance-' + h.toString(36);
+}`;
 
 /**
  * Init script for every frame of a check's context: dialogs are recorded
  * (and never block), uncaught errors are recorded, and the File System Access
- * picker is a recording stub (`stub`), absent (`none`) or the browser's.
+ * picker is a recording stub (`stub`), absent (`none`), the browser's
+ * (`native`), or (`opfs`) a recording function that returns a REAL
+ * `FileSystemFileHandle` from the origin-private file system, in a folder of
+ * the page's path — so IndexedDB, the handle's structured clone, permission
+ * checks and the writes are real (the native picker cannot be automated).
  */
 export function initScript(picker: PickerMode): string {
   return `(() => {
@@ -50,9 +64,29 @@ export function initScript(picker: PickerMode): string {
       return Promise.resolve(handle);
     };
     try { Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, writable: true, value: pick }); } catch (e) {}
+  } else if (picker === 'opfs') {
+    var folder = ${OPFS_FOLDER};
+    var pickReal = function (opts) {
+      var name = (opts && opts.suggestedName) || 'picked.html';
+      rec('picker', { suggestedName: opts && opts.suggestedName, page: String(location.pathname) });
+      return navigator.storage.getDirectory()
+        .then(function (root) { return root.getDirectoryHandle(folder(String(location.pathname)), { create: true }); })
+        .then(function (dir) { return dir.getFileHandle(name, { create: true }); });
+    };
+    try { Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, writable: true, value: pickReal }); } catch (e) {}
   }
 })();`;
 }
+
+/** Page-side: the text of the file the `opfs` picker made for a page path and name (null when there is none). */
+export const READ_OPFS = `async function (a) {
+  var folder = ${OPFS_FOLDER};
+  try {
+    var root = await navigator.storage.getDirectory();
+    var dir = await root.getDirectoryHandle(folder(a.pathname));
+    return await (await (await dir.getFileHandle(a.name)).getFile()).text();
+  } catch (e) { return null; }
+}`;
 
 /** Page-side helpers installed by the harness in a page it drives (deep queries, the island text, the editor). */
 export const PAGE_HELPERS = `(() => {

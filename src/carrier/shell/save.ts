@@ -7,22 +7,39 @@
  *   1. a connected host (`orz-host-save@1`)        → { via: 'host', ok }
  *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
  *   3. File System Access (handle remembered in IndexedDB under the header
- *      `uid`, else the page URL; a second save overwrites silently)
- *                                                   → { via: 'file', ok }
- *   4. a download of `suggestedName`               → { via: 'download', ok }
+ *      `uid` + the page location, else the page URL; reused only on that
+ *      page; a second save overwrites silently)
+ *                                   → { via: 'file', ok, picked, name? }
+ *   4. a download of `suggestedName`
+ *                                   → { via: 'download', ok, confirmed: false, name }
  *
  * Every browser feature is detected when `save` is called, never at module
  * load, so the module imports safely in Node.
  */
 import { KIND_EXTENSIONS, type HostKind } from './protocol.js';
 import type { HostConnection } from './file-side.js';
-import { globalWindow, type FileHandleLike, type IdbDatabaseLike, type IdbFactoryLike, type IdbRequestLike, type IdbStoreLike, type SaverWindow } from './types.js';
+import { globalWindow, openedFileName, pageLocation, type FileHandleLike, type IdbDatabaseLike, type IdbFactoryLike, type IdbRequestLike, type IdbStoreLike, type SaverWindow } from './types.js';
 
 /** FC-18 §5.1: a well-formed uid. (Same pattern as `UID_PATTERN` in the kit core.) */
 export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
 
+/**
+ * What a save did.
+ *
+ * - `host`: the connected host acknowledged (`ok`) or refused / timed out.
+ * - `file`: written through File System Access. `picked` — a picker was shown
+ *   for this save, so the written file is the one the reader chose and may
+ *   not be the file the page was opened from; `name` — the written file's
+ *   name when the browser reports it.
+ * - `download`: a copy handed to the browser (`name` = the suggested name).
+ *   `confirmed` is always `false`: the page cannot know whether the download
+ *   landed (it may be blocked or cancelled); `ok` means it was started.
+ * - `served-notice`: nothing was saved (spec/shell-runtime.md §1 step 2).
+ */
 export type SaveResult =
-  | { via: 'host' | 'file' | 'download'; ok: boolean; error?: string }
+  | { via: 'host'; ok: boolean; error?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; name?: string }
+  | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 
 export interface SaveInput {
@@ -35,7 +52,7 @@ export interface SaveInput {
 }
 
 export interface SaverOptions {
-  /** The header `uid` (FC-18 §10); the handle key. Absent or malformed → the page URL. */
+  /** The header `uid` (FC-18 §10); with the page location, the handle key. Absent or malformed → the page URL. */
   uid?: string;
   /** The file name offered by the picker and used for the download (the twin name). */
   suggestedName: string;
@@ -51,7 +68,7 @@ export interface Saver {
   save(input: SaveInput): Promise<SaveResult>;
   /** Download a copy (Export, or the served-page notice's "download a copy"). */
   download(input: Pick<SaveInput, 'html'>): Promise<SaveResult>;
-  /** The handle key in use: the uid, or the page URL without its fragment. */
+  /** The handle key in use: `<uid> <page location>` (the uid alone without a location), or the page URL without its fragment. */
   handleKey(): string | null;
 }
 
@@ -59,6 +76,13 @@ export interface Saver {
 export interface StoredHandle {
   handle: FileHandleLike;
   name?: string;
+  /**
+   * The page the handle was picked on (`pageLocation`: the URL without query
+   * and fragment). A remembered handle is reused only by a page at the same
+   * location: every `file:` page shares one IndexedDB, so a same-named copy
+   * in another folder (same uid) must not write over the original.
+   */
+  location?: string;
 }
 
 /** Best-effort by contract: every method resolves, never rejects. */
@@ -128,15 +152,6 @@ export function createIndexedDbHandleStore(factory?: IdbFactoryLike): HandleStor
   };
 }
 
-/** The file name the page was opened from (file: URLs only). */
-function openedFileName(win: SaverWindow): string | undefined {
-  const loc = win.location;
-  if (!loc || loc.protocol !== 'file:') return undefined;
-  const last = loc.pathname.split('/').pop();
-  if (!last) return undefined;
-  try { return decodeURIComponent(last); } catch { return last; }
-}
-
 function isServed(win: SaverWindow): boolean {
   const p = win.location?.protocol;
   return p === 'http:' || p === 'https:';
@@ -169,8 +184,13 @@ export function createSaver(opts: SaverOptions): Saver {
   let handle: FileHandleLike | null = null; // this session's handle: later saves never prompt
 
   const key = (): string | null => {
-    if (typeof opts.uid === 'string' && SHELL_UID_PATTERN.test(opts.uid)) return opts.uid;
-    const href = winOf().location?.href;
+    const loc = winOf().location;
+    if (typeof opts.uid === 'string' && SHELL_UID_PATTERN.test(opts.uid)) {
+      // one record per document AND page: a copy elsewhere (same uid) keeps its own record
+      const here = pageLocation(loc);
+      return here === undefined ? opts.uid : `${opts.uid} ${here}`;
+    }
+    const href = loc?.href;
     return href ? href.replace(/#.*$/s, '') : null;
   };
 
@@ -180,7 +200,7 @@ export function createSaver(opts: SaverOptions): Saver {
       const doc = win.document;
       const BlobCtor = win.Blob ?? (globalThis as { Blob?: SaverWindow['Blob'] }).Blob;
       const urls = win.URL ?? (globalThis as { URL?: SaverWindow['URL'] }).URL;
-      if (!doc || !doc.body || !BlobCtor || !urls?.createObjectURL) return { via: 'download', ok: false, error: 'Downloads are not available here.' };
+      if (!doc || !doc.body || !BlobCtor || !urls?.createObjectURL) return { via: 'download', ok: false, confirmed: false, error: 'Downloads are not available here.' };
       const url = urls.createObjectURL(new BlobCtor([html], { type: 'text/html;charset=utf-8' }));
       const a = doc.createElement('a');
       a.href = url;
@@ -191,9 +211,9 @@ export function createSaver(opts: SaverOptions): Saver {
       a.remove();
       const later = win.setTimeout ? win.setTimeout.bind(win) : setTimeout;
       later(() => { try { urls.revokeObjectURL(url); } catch { /* ignore */ } }, 1000);
-      return { via: 'download', ok: true };
+      return { via: 'download', ok: true, confirmed: false, name: opts.suggestedName };
     } catch (e) {
-      return { via: 'download', ok: false, error: message(e) };
+      return { via: 'download', ok: false, confirmed: false, error: message(e) };
     }
   };
 
@@ -201,8 +221,12 @@ export function createSaver(opts: SaverOptions): Saver {
   const remembered = async (k: string, win: SaverWindow): Promise<FileHandleLike | null> => {
     const stored = await store().get(k);
     if (!stored || typeof stored.handle.createWritable !== 'function') return null;
-    // A copy of the file carries the same uid: never write over a file with another name.
-    const opened = openedFileName(win);
+    // A copy of the file carries the same uid, and every file: page shares one IndexedDB:
+    // reuse a handle only on the page it was picked on (a record without a location, or a
+    // page without one, gets the picker), and never write over a file with another name.
+    const here = pageLocation(win.location);
+    if (here === undefined || stored.location !== here) return null;
+    const opened = openedFileName(win.location);
     const name = stored.handle.name ?? stored.name;
     if (opened !== undefined && name !== undefined && name !== opened) return null;
     const h = stored.handle;
@@ -230,8 +254,10 @@ export function createSaver(opts: SaverOptions): Saver {
   const saveToFile = async (html: string, win: SaverWindow): Promise<SaveResult> => {
     const k = key();
     let h = handle;
+    let picked = false;
     if (!h && k) h = await remembered(k, win);
     if (!h) {
+      picked = true;
       const ext = KIND_EXTENSIONS[opts.kind] ?? '.html';
       try {
         h = await win.showSaveFilePicker!({
@@ -239,15 +265,16 @@ export function createSaver(opts: SaverOptions): Saver {
           types: [{ description: DESCRIPTIONS[opts.kind] ?? 'orz document', accept: { 'text/html': ext === '.html' ? ['.html'] : [ext, '.html'] } }],
         });
       } catch (e) {
-        if (errorName(e) === 'AbortError') return { via: 'file', ok: false, error: 'cancelled' };
+        if (errorName(e) === 'AbortError') return { via: 'file', ok: false, error: 'cancelled', picked: true };
         return download(html); // the picker is unusable here (no user activation, policy): download
       }
-      if (k) await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}) });
+      const location = pageLocation(win.location);
+      if (k) await store().put(k, { handle: h, ...(typeof h.name === 'string' ? { name: h.name } : {}), ...(location !== undefined ? { location } : {}) });
     }
     handle = h;
     try {
       await write(h, html);
-      return { via: 'file', ok: true };
+      return { via: 'file', ok: true, picked, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
     } catch {
       return download(html); // the write failed: keep the user's work as a download
     }
@@ -255,7 +282,7 @@ export function createSaver(opts: SaverOptions): Saver {
 
   return {
     async save(input) {
-      if (typeof input?.html !== 'string' || typeof input.text !== 'string') return { via: 'download', ok: false, error: 'text and html must be strings.' };
+      if (typeof input?.html !== 'string' || typeof input.text !== 'string') return { via: 'download', ok: false, confirmed: false, error: 'text and html must be strings.' };
       if (opts.host && opts.host.connected()) {
         const ack = await opts.host.save({ source: input.text, html: input.html, ...(typeof input.theme === 'string' ? { theme: input.theme } : {}) });
         return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };

@@ -46,6 +46,12 @@ export interface CarrierTarget extends BundleSource {
   next?: BundleSource;
   /** An older release: files it made must update to this target exactly (`C.update.from-previous`). */
   previous?: BundleSource;
+  /**
+   * This is the carrier's first release: there is no `previous`, and
+   * `C.update.from-previous` is then reported `not-applicable` (satisfied).
+   * Without this declaration a missing `previous` is a skip.
+   */
+  firstRelease?: boolean;
 }
 
 /** A Playwright browser (playwright-core), structurally. */
@@ -70,9 +76,21 @@ export interface ConformanceOptions {
   checkTimeoutMs?: number;
   /** Progress lines. */
   log?(line: string): void;
+  /**
+   * `registerConformance` only: its final `[conformant]` test passes although
+   * checks were skipped or deselected (a run without Chrome, a partial run).
+   * Failed checks still fail it.
+   */
+  allowSkips?: boolean;
 }
 
-export type CheckStatus = 'passed' | 'failed' | 'skipped';
+/**
+ * `not-applicable`: the check does not apply to this target for a declared
+ * reason (e.g. `C.update.from-previous` for a `firstRelease`); it counts as
+ * satisfied for conformance. `skipped`: it could not run (no browser, no
+ * `next`); it does not.
+ */
+export type CheckStatus = 'passed' | 'failed' | 'skipped' | 'not-applicable';
 
 export interface CheckResult {
   id: string;
@@ -90,11 +108,18 @@ export interface ConformanceReport {
   version: string;
   /** The orz-markdown version whose harness ran. */
   harness: string;
-  /** True when no check failed and none was skipped. */
+  /**
+   * True only when EVERY check of `CHECK_IDS` ran and passed (or is
+   * `not-applicable` for its declared case): a run with `only`/`skip`, a
+   * skipped or a failed check is not conformant.
+   */
   conformant: boolean;
+  /** The run selected a subset of the checks (`only` / `skip`): never conformant. */
+  partial: boolean;
   passed: number;
   failed: number;
   skipped: number;
+  notApplicable: number;
   results: CheckResult[];
 }
 

@@ -124,6 +124,19 @@ export interface IframeLike {
 }
 /** Reach the current global window lazily (never at module load). */
 export declare function globalWindow<T>(): T | undefined;
+/**
+ * The page location a remembered file handle belongs to: the URL without its
+ * query and fragment (for a `file:` page, the file's own path). `undefined`
+ * when the page has no readable location.
+ */
+export declare function pageLocation(loc: {
+    readonly href?: string;
+} | undefined): string | undefined;
+/** The file name a `file:` page was opened from; `undefined` for any other page. */
+export declare function openedFileName(loc: {
+    readonly protocol?: string;
+    readonly pathname?: string;
+} | undefined): string | undefined;
 /** An event as the chrome reads it (a DOM `Event` / `KeyboardEvent` satisfies it). */
 export interface UiEventLike {
     readonly key?: string;

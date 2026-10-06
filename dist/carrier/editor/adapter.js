@@ -1,45 +1,70 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.undoTexts = undoTexts;
+exports.historyChars = historyChars;
 exports.textareaAdapter = textareaAdapter;
 const text_model_js_1 = require("./text-model.js");
-/** Group typing into one undo step when the pauses are shorter than this. */
+/** Group typing (and runs of deletions) into one undo step when the pauses are shorter than this. */
 const GROUP_MS = 500;
 const HISTORY_LIMIT = 300;
+const applyPatch = (text, p) => text.slice(0, p.from) + p.insert + text.slice(p.to);
+const histories = new WeakMap();
+/** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
+function undoTexts(adapter) {
+    return histories.get(adapter)?.texts() ?? null;
+}
+/** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
+function historyChars(adapter) {
+    return histories.get(adapter)?.retained() ?? null;
+}
 /** The textarea engine: no dependencies, works offline, its own undo history. */
 function textareaAdapter() {
     let ta = null;
     let opts = null;
+    /** The text, kept in step with the textarea on every input (reading `value` of a large textarea is not free). */
     let last = '';
     let lastSel = { from: 0, to: 0 };
     let undoStack = [];
     let redoStack = [];
     let lastInputAt = -Infinity;
+    let lastInputKind = '';
     const off = [];
     const now = () => Date.now();
-    const snapshot = () => ({ doc: last, from: lastSel.from, to: lastSel.to });
-    const push = (s) => {
-        undoStack.push(s);
-        if (undoStack.length > HISTORY_LIMIT)
-            undoStack.shift();
+    /** Push the text before a transition (`last`) onto a stack; the old top becomes a patch from it. */
+    const record = (stack) => {
+        const top = stack[stack.length - 1];
+        if (top && top.doc !== undefined) {
+            top.patch = (0, text_model_js_1.minimalChange)(last, top.doc) ?? { from: 0, to: 0, insert: '' };
+            delete top.doc;
+        }
+        stack.push({ doc: last, from: lastSel.from, to: lastSel.to });
+        if (stack.length > HISTORY_LIMIT)
+            stack.shift();
+    };
+    const push = () => {
+        record(undoStack);
         redoStack = [];
     };
+    const textOf = (e) => (e.doc !== undefined ? e.doc : applyPatch(last, e.patch));
     const readSel = () => (ta ? { from: ta.selectionStart ?? 0, to: ta.selectionEnd ?? 0 } : { from: 0, to: 0 });
-    const restore = (s) => {
+    const restore = (text, e) => {
         if (!ta)
             return;
-        ta.value = s.doc;
+        ta.value = text;
         last = ta.value;
         try {
-            ta.setSelectionRange?.(s.from, s.to);
+            ta.setSelectionRange?.(e.from, e.to);
         }
         catch { /* detached */ }
         lastSel = readSel();
+        lastInputAt = -Infinity;
         opts?.onChange();
     };
     const listen = (type, fn) => {
         ta.addEventListener(type, fn);
         off.push(() => ta?.removeEventListener(type, fn));
     };
+    const grouped = (kind) => kind === 'insertText' || kind === 'deleteContentBackward' || kind === 'deleteContentForward';
     const adapter = {
         name: 'textarea',
         mount(el, options) {
@@ -61,9 +86,10 @@ function textareaAdapter() {
             listen('input', (e) => {
                 const t = now();
                 const kind = typeof e.inputType === 'string' ? e.inputType : '';
-                if (t - lastInputAt > GROUP_MS || !kind.startsWith('insertText'))
-                    push(snapshot());
-                lastInputAt = kind.startsWith('insertText') ? t : -Infinity;
+                if (t - lastInputAt > GROUP_MS || !grouped(kind) || kind !== lastInputKind)
+                    push();
+                lastInputAt = grouped(kind) ? t : -Infinity;
+                lastInputKind = kind;
                 last = ta.value;
                 lastSel = readSel();
                 options.onChange();
@@ -94,20 +120,20 @@ function textareaAdapter() {
             });
         },
         getDoc() {
-            return ta ? ta.value : last;
+            return last;
         },
         setDoc(text, o) {
             if (!ta) {
                 last = text;
                 return;
             }
-            const before = ta.value;
+            const before = last;
             if (o?.resetHistory) {
                 undoStack = [];
                 redoStack = [];
             }
             else if (before !== text)
-                push(snapshot());
+                push();
             lastInputAt = -Infinity;
             const change = (0, text_model_js_1.minimalChange)(before, text);
             const s = readSel();
@@ -133,8 +159,27 @@ function textareaAdapter() {
             ta?.remove();
             ta = null;
             opts = null;
+            undoStack = [];
+            redoStack = [];
         },
         getSelection: () => (ta ? readSel() : lastSel),
+        setReadOnly(flag) {
+            if (opts)
+                opts = { ...opts, readOnly: flag };
+            if (ta)
+                ta.readOnly = flag;
+        },
+        setSelection(s) {
+            if (!ta)
+                return;
+            const clamp = (n) => Math.max(0, Math.min(last.length, n));
+            try {
+                ta.setSelectionRange?.(clamp(s.from), clamp(s.to));
+            }
+            catch { /* detached */ }
+            lastSel = readSel();
+            lastInputAt = -Infinity;
+        },
         hasFocus() {
             const doc = ta?.ownerDocument;
             if (!ta || !doc)
@@ -143,19 +188,23 @@ function textareaAdapter() {
             return (root?.activeElement ?? doc.activeElement) === ta;
         },
         undo() {
-            const s = undoStack.pop();
-            if (!s || !ta)
+            const e = undoStack.pop();
+            if (!e || !ta)
                 return false;
-            redoStack.push(snapshot());
-            restore(s);
+            const target = textOf(e);
+            lastSel = readSel();
+            record(redoStack);
+            restore(target, e);
             return true;
         },
         redo() {
-            const s = redoStack.pop();
-            if (!s || !ta)
+            const e = redoStack.pop();
+            if (!e || !ta)
                 return false;
-            undoStack.push(snapshot());
-            restore(s);
+            const target = textOf(e);
+            lastSel = readSel();
+            record(undoStack);
+            restore(target, e);
             return true;
         },
         getScroll() {
@@ -164,7 +213,7 @@ function textareaAdapter() {
             const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
             const fraction = max > 0 ? Math.min(1, (ta.scrollTop ?? 0) / max) : 0;
             // A textarea has no line geometry: approximate the top line proportionally.
-            const lines = countLines(ta.value);
+            const lines = countLines(last);
             return { line: fraction * Math.max(0, lines - 1), fraction };
         },
         scrollTo(target) {
@@ -173,7 +222,7 @@ function textareaAdapter() {
             const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
             let f = target.fraction;
             if (typeof target.line === 'number') {
-                const lines = countLines(ta.value);
+                const lines = countLines(last);
                 f = lines > 1 ? target.line / (lines - 1) : 0;
             }
             if (typeof f === 'number' && Number.isFinite(f))
@@ -181,6 +230,20 @@ function textareaAdapter() {
         },
         ready: async () => ({ engine: 'textarea' }),
     };
+    histories.set(adapter, {
+        texts() {
+            // walk down from the current text: each entry's text, newest first
+            const out = [];
+            let text = last;
+            for (let i = undoStack.length - 1; i >= 0; i--) {
+                const e = undoStack[i];
+                text = e.doc !== undefined ? e.doc : applyPatch(text, e.patch);
+                out.push(text);
+            }
+            return out.reverse();
+        },
+        retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch.insert.length), 0),
+    });
     return adapter;
 }
 function countLines(text) {

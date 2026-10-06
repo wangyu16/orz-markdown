@@ -5,14 +5,22 @@ exports.createEditorShell = createEditorShell;
  * The editor shell (FC-19 §8): the kind-independent base that each carrier's
  * `mountEditor` wraps — chrome toolbar, editor pane and sandboxed preview in
  * one shadow root; view modes, a draggable split, the keyboard map; the exact
- * text, dirty tracking, header edits, save.
+ * text, dirty tracking, header edits, save; the FC-19 §3 hooks that do not
+ * depend on the kind (save, ai, fetchInclude, resolveAsset, uploadAsset,
+ * resolveLink, mintUid).
  *
  * - Text: the shell owns it. The engine (adapter.ts) edits LF text; the text
  *   model (text-model.ts) gives back the document's exact form — byte for byte
  *   when nothing was edited, its own line endings and BOM after edits.
- * - Preview: the caller's `render(text)` (the md kind: `renderMarkdownPreview`)
- *   into the sandboxed frame of preview.ts, debounced; scroll sync on
- *   `data-src-line` anchors, proportional without them.
+ * - Preview: the caller's `render(text, ctx)` (the md kind:
+ *   `renderMarkdownPreview`) into the sandboxed frame of preview.ts, after a
+ *   pause that grows with the render time, never two at once; scroll sync on
+ *   `data-src-line` anchors (or the carrier's mapping / navigation).
+ * - Frame messages are claims of the document's scripts: the shell acts on
+ *   them only while the reader is in the frame (focus on it; for actions with
+ *   effects, also transient user activation).
+ * - Text formats: a header `format` newer than `formats` opens read-only and
+ *   is never saved over (FC-18 §8.4).
  * - Reader preferences (FC-18 §6): split ratio, view mode, scroll sync, editor
  *   font size, dark chrome — through a `PreferenceStore` namespaced by the
  *   document `uid`, never in the text.
@@ -20,6 +28,7 @@ exports.createEditorShell = createEditorShell;
  *   (listeners, timers, the iframe, the engine, its element).
  */
 const header_js_1 = require("../header.js");
+const uid_js_1 = require("../uid.js");
 const chrome_js_1 = require("../shell/chrome.js");
 const preferences_js_1 = require("../shell/preferences.js");
 const save_js_1 = require("../shell/save.js");
@@ -37,7 +46,28 @@ const MODE_META = {
 const RATIO_MIN = 0.1;
 const RATIO_MAX = 0.9;
 const RATIO_STEP = 0.05;
+/** How long a frame's "active" claim lets the preview lead the scroll (ms). */
+const CLAIM_MS = 1500;
+/** How long a touch of the editor in the host page (pointer, wheel, key) keeps the editor leading (ms). */
+const TOUCH_MS = 300;
 const message = (e) => typeof e === 'object' && e !== null && typeof e.message === 'string' ? e.message : String(e);
+const BOM = '﻿';
+/** The header `format` of a text (default 1; a malformed value reads as 1, as `readDocument` does). */
+function formatOf(fields) {
+    const f = fields?.['format']?.trim();
+    return f !== undefined && /^[1-9][0-9]*$/.test(f) ? Number(f) : 1;
+}
+/** The Markdown for an uploaded file: an image for `image/*`, else a link. */
+function assetMarkdown(file, path) {
+    const name = String(file.name ?? 'file');
+    const label = (/^image\//i.test(String(file.type ?? '')) ? name.replace(/\.[^.]*$/, '') : name).replace(/[[\]\\\r\n]/g, '');
+    const target = path.replace(/[ ()<>\r\n]/g, (c) => ({ ' ': '%20', '(': '%28', ')': '%29', '<': '%3C', '>': '%3E', '\r': '', '\n': '' }[c]));
+    return /^image\//i.test(String(file.type ?? '')) ? `![${label}](${target})` : `[${label}](${target})`;
+}
+const filesOf = (t) => {
+    const f = t?.files;
+    return f && typeof f.length === 'number' ? Array.from(f) : [];
+};
 /** Mount the editor shell in `element`. */
 function createEditorShell(element, options) {
     if (typeof options?.text !== 'string')
@@ -48,12 +78,22 @@ function createEditorShell(element, options) {
     const win = doc?.defaultView;
     if (!doc || !win)
         throw new Error('orz editor: the element must belong to a document with a window');
-    const readOnly = options.readOnly === true;
+    const hooks = options.hooks ?? {};
+    const header = (0, header_js_1.readHeader)(options.text);
+    const formats = (Array.isArray(options.formats) ? options.formats : []).filter((f) => Number.isInteger(f) && f > 0);
+    const maxFormat = formats.length ? Math.max(...formats) : 1;
+    const docFormat = formatOf(header?.fields);
+    /** A newer text format opens read-only and is never saved over (FC-18 §8.4, D7). */
+    const newerFormat = docFormat > maxFormat ? docFormat : null;
+    /** Read-only now: asked for (`readOnly`, `setReadOnly`) or forced by a newer format, which nothing unlocks. */
+    let readOnly = options.readOnly === true || newerFormat !== null;
     const chromeLevel = options.chrome ?? 'full';
     const kind = options.kind ?? 'md';
     const narrowWidth = options.narrowWidth ?? 640;
-    const debounceMs = options.preview?.debounceMs ?? 150;
-    const uid = options.uid ?? (0, header_js_1.readHeader)(options.text)?.fields['uid']?.trim();
+    const previewOptions = options.preview ?? {};
+    const debounceMs = previewOptions.debounceMs ?? 150;
+    const navigateMode = previewOptions.mode === 'navigate';
+    const uid = options.uid ?? header?.fields['uid']?.trim();
     const prefs = options.preferences ?? (0, preferences_js_1.createPreferenceStore)(uid, options.storage);
     const adapter = options.adapter ?? (0, codemirror6_js_1.codemirror6Adapter)();
     const model = (0, text_model_js_1.createTextModel)(options.text);
@@ -71,6 +111,12 @@ function createEditorShell(element, options) {
     const cancel = (id) => { if (id !== null && id !== undefined) {
         win.clearTimeout(id);
         timers.delete(id);
+    } };
+    const clock = () => { try {
+        return win.performance?.now() ?? Date.now();
+    }
+    catch {
+        return Date.now();
     } };
     let destroyed = false;
     // ── events ──
@@ -143,6 +189,7 @@ function createEditorShell(element, options) {
     const modeButtons = new Map();
     let statusText = null;
     let syncButton = null;
+    let saveButton = null;
     if (chromeLevel !== 'none') {
         const bar = el('div', 'orz-editor__bar');
         bar.setAttribute('role', 'toolbar');
@@ -166,13 +213,21 @@ function createEditorShell(element, options) {
         syncButton.title = 'Scroll the preview with the editor';
         listen(syncButton, 'click', () => setScrollSync(!prefs.get('scrollSync')));
         bar.append(modes, toolbar, status, syncButton);
-        if (!readOnly) {
-            const save = button('orz-btn orz-btn--primary orz-editor__save', 'Save', 'save');
-            save.title = `Save (${mod}S)`;
-            listen(save, 'click', () => { void api.save(); });
-            bar.append(save);
-        }
+        // hidden while read-only (setReadOnly shows it again)
+        saveButton = button('orz-btn orz-btn--primary orz-editor__save', 'Save', 'save');
+        saveButton.title = `Save (${mod}S)`;
+        saveButton.hidden = readOnly;
+        listen(saveButton, 'click', () => { void api.save(); });
+        bar.append(saveButton);
         container.append(bar);
+    }
+    if (newerFormat !== null) {
+        // a quiet notice (no action: the quiet update of the standalone file, or the app, offers the newer editor)
+        const note = el('div', 'orz-editor__notice orz-editor__notice--quiet');
+        note.setAttribute('id', 'orz-format-note');
+        note.setAttribute('role', 'status');
+        note.append(doc.createTextNode(`This document uses text format ${newerFormat}, newer than this editor (format ${maxFormat}). It is shown read-only and will not be saved here.`));
+        container.append(note);
     }
     const noticeSlot = el('div');
     noticeSlot.hidden = true;
@@ -271,11 +326,17 @@ function createEditorShell(element, options) {
     };
     // ── text, dirty ──
     let baseline = options.text;
+    /** The editor form of the saved text: a different editor text is a different exact text, found without converting. */
+    let baselineEditor = (0, text_model_js_1.toEditorText)(baseline);
     let dirty = false;
     let setting = false;
     const getText = () => model.toExact(adapter.getDoc());
+    const differs = () => {
+        const d = adapter.getDoc();
+        return d !== baselineEditor || model.toExact(d) !== baseline;
+    };
     const updateDirty = () => {
-        const d = getText() !== baseline;
+        const d = differs();
         if (d === dirty)
             return;
         dirty = d;
@@ -288,112 +349,223 @@ function createEditorShell(element, options) {
         catch { /* host gone */ }
         emit('dirty', { dirty: d });
     };
+    const adoptBaseline = (text) => {
+        baseline = text;
+        baselineEditor = (0, text_model_js_1.toEditorText)(text);
+    };
     const changed = () => {
         if (destroyed)
             return;
+        // back at a remembered text (undo): its BOM and line endings are the document's again
+        model.recall(adapter.getDoc());
         updateDirty();
         if (has('change'))
-            emit('change', { get text() { return getText(); } });
+            emit('change', { text: getText() });
         previewStale = true;
-        scheduleRender(debounceMs);
+        scheduleRender();
+        if (navigateMode)
+            syncFromEditor();
     };
     // ── preview ──
     let previewStale = true;
     let renderTimer = null;
-    let renderSeq = 0;
     let lastRendered = null;
-    let active = null;
-    const renderNow = async () => {
-        cancel(renderTimer);
-        renderTimer = null;
-        if (destroyed)
-            return;
+    /** The render in progress (renders never overlap); another is coalesced into `renderAgain`. */
+    let renderRunning = null;
+    let renderAgain = false;
+    let lastRenderMs = 0;
+    /** The pause before a render: at least `debounceMs`, and twice the last render's time (a slow renderer is not run per keystroke). */
+    const renderDelay = () => Math.max(debounceMs, 2 * lastRenderMs);
+    const renderCtx = {
+        ...(hooks.fetchInclude ? { fetchInclude: (t) => hooks.fetchInclude(t) } : {}),
+        ...(hooks.resolveAsset ? { resolveAsset: (p) => hooks.resolveAsset(p) } : {}),
+    };
+    const runRender = async () => {
         const text = getText();
         if (text === lastRendered) {
             previewStale = false;
             return;
         }
-        const seq = ++renderSeq;
+        const t0 = clock();
         let html;
         try {
-            html = String(await options.render(text));
+            html = String(await options.render(text, renderCtx));
         }
         catch (error) {
-            if (!destroyed && seq === renderSeq)
+            lastRenderMs = clock() - t0;
+            if (!destroyed)
                 emit('error', { source: 'render', message: message(error), error });
             return;
         }
-        if (destroyed || seq !== renderSeq)
+        lastRenderMs = clock() - t0;
+        if (destroyed)
             return;
+        if (hooks.resolveAsset)
+            html = (0, preview_js_1.rewriteAssetUrls)(html, (p) => hooks.resolveAsset(p));
         lastRendered = text;
         previewStale = getText() !== text;
         preview.render(html);
     };
+    const renderNow = () => {
+        cancel(renderTimer);
+        renderTimer = null;
+        if (destroyed)
+            return Promise.resolve();
+        if (renderRunning) {
+            renderAgain = true;
+            return renderRunning;
+        }
+        const run = runRender().finally(() => {
+            renderRunning = null;
+            if (renderAgain && !destroyed) {
+                renderAgain = false;
+                scheduleRender();
+            }
+        });
+        renderRunning = run;
+        return run;
+    };
     function scheduleRender(ms) {
         if (destroyed || currentView() === 'editor')
             return;
+        if (renderRunning) {
+            renderAgain = true;
+            return;
+        }
         cancel(renderTimer);
-        renderTimer = later(() => { void renderNow(); }, ms);
+        renderTimer = later(() => { void renderNow(); }, ms ?? renderDelay());
     }
+    // Frame messages are claims of the document's scripts (A-2). The preview leads the scroll only
+    // while the reader is there: focus on the preview iframe, or a recent claim of the frame (it posts
+    // one on wheel, pointer and touch input) while the editor neither has focus nor was touched in the
+    // host page (pointer, wheel, keys — events the frame cannot forge) just before. So a
+    // document script that floods "active" and scroll messages cannot move or pin the editor while the
+    // reader types in it or scrolls it. (The parent page sees no pointer events over the iframe, so
+    // "the pointer is over the preview" is not observable from here.)
+    let claimAt = -Infinity;
+    let editorTouchAt = -Infinity;
+    const frameFocused = () => root.activeElement === preview.iframe;
+    const previewLeads = () => {
+        if (frameFocused())
+            return true;
+        const t = clock();
+        return t - claimAt < CLAIM_MS && t - editorTouchAt > TOUCH_MS && !(adapter.hasFocus?.() ?? false);
+    };
+    // A key or link reported by the frame acts only when the reader is in the frame: focus is on the
+    // preview iframe (a real key press or click there needs it) and the page has transient user
+    // activation (a real input in the frame activates its ancestors). Escape (which a browser does not
+    // count as activation) needs the focus only: all it does is move focus from the frame to the toolbar.
+    const activated = () => {
+        if (!frameFocused())
+            return false;
+        const ua = win.navigator?.userActivation;
+        return !ua || ua.isActive === true;
+    };
     const syncOn = () => prefs.get('scrollSync') === true && currentView() === 'split';
+    const lineOf = (text, offset) => {
+        let n = 0;
+        for (let i = text.indexOf('\n'); i >= 0 && i < offset; i = text.indexOf('\n', i + 1))
+            n++;
+        return n;
+    };
     let syncQueued = false;
     function syncFromEditor() {
-        if (!syncOn() || active === 'preview' || syncQueued)
+        if (!syncOn() || previewLeads() || syncQueued)
             return;
         syncQueued = true;
         const run = () => {
             syncQueued = false;
-            if (destroyed || !syncOn() || active === 'preview')
+            if (destroyed || !syncOn() || previewLeads())
                 return;
+            if (navigateMode) {
+                const sel = adapter.hasFocus?.() ? adapter.getSelection?.() : undefined;
+                const line = sel ? lineOf(adapter.getDoc(), sel.to) : adapter.getScroll?.().line;
+                if (typeof line === 'number')
+                    preview.navigate(line);
+                return;
+            }
             const pos = adapter.getScroll?.();
             if (!pos)
                 return;
             const anchors = preview.anchors;
-            preview.scrollTo(anchors.length ? (0, preview_js_1.lineToTop)(anchors, pos.line) : pos.fraction * preview.max);
+            const mapped = previewOptions.mapLine?.(pos.line, { anchors, max: preview.max });
+            preview.scrollTo(typeof mapped === 'number' && Number.isFinite(mapped) ? mapped : anchors.length ? (0, preview_js_1.lineToTop)(anchors, pos.line) : pos.fraction * preview.max);
         };
         if (win.requestAnimationFrame)
             win.requestAnimationFrame(run);
         else
             later(run, 16);
     }
-    const syncFromPreview = (top, max) => {
-        if (!syncOn() || active !== 'preview' || !adapter.scrollTo)
+    const syncFromPreview = (top, max, line) => {
+        if (!syncOn() || !previewLeads() || !adapter.scrollTo)
             return;
-        const anchors = preview.anchors;
-        adapter.scrollTo(anchors.length ? { line: (0, preview_js_1.topToLine)(anchors, top) } : { fraction: max > 0 ? top / max : 0 });
-    };
-    const openLink = (href) => {
-        if (options.onLink) {
-            options.onLink(href);
+        if (typeof line === 'number') {
+            adapter.scrollTo({ line });
             return;
         }
-        if (/^(https?:|mailto:)/i.test(href)) {
+        const anchors = preview.anchors;
+        const mapped = previewOptions.mapPosition?.(top, { anchors, max });
+        if (typeof mapped === 'number' && Number.isFinite(mapped))
+            adapter.scrollTo({ line: mapped });
+        else
+            adapter.scrollTo(anchors.length ? { line: (0, preview_js_1.topToLine)(anchors, top) } : { fraction: max > 0 ? top / max : 0 });
+    };
+    const openLink = (href) => {
+        let target = href;
+        if (hooks.resolveLink) {
             try {
-                win.open?.(href, '_blank', 'noopener,noreferrer');
+                const r = hooks.resolveLink(href);
+                if (typeof r !== 'string')
+                    return;
+                target = r;
+            }
+            catch {
+                return;
+            }
+        }
+        if (options.onLink) {
+            options.onLink(target);
+            return;
+        }
+        if (/^(https?:|mailto:)/i.test(target)) {
+            try {
+                win.open?.(target, '_blank', 'noopener,noreferrer');
             }
             catch { /* blocked */ }
         }
     };
-    // A key or link reported by the frame acts only when the reader is in the frame: focus is on the
-    // preview iframe (a real key press or click there needs it) and the page has transient user
-    // activation (a real input in the frame activates its ancestors). A document script that posts
-    // these messages while the reader works in the editor does nothing.
-    const activated = () => {
-        if (root.activeElement !== preview.iframe)
-            return false;
-        const ua = win.navigator?.userActivation;
-        return !ua || ua.isActive === true;
-    };
-    const preview = (0, preview_js_1.createPreview)(doc, previewPane, { ...(options.preview ?? {}), title: 'Document preview' }, {
-        onRendered: () => { if (active !== 'preview')
-            syncFromEditor(); },
-        onScrolled: syncFromPreview,
-        onKey: (key) => { if (key === 'Escape' || activated())
-            onShortcut(key, null); },
+    let previewNote = null;
+    const standalone = !hooks.save && typeof options.assemble === 'function';
+    const preview = (0, preview_js_1.createPreview)(doc, previewPane, {
+        ...previewOptions,
+        title: 'Document preview',
+        context: { host: standalone ? 'standalone' : 'app', protocol: String(win.location?.protocol ?? '') },
+    }, {
+        onRendered: () => syncFromEditor(),
+        onScrolled: (top, max, line) => syncFromPreview(top, max, line),
+        onKey: (key) => {
+            if (key === 'Escape' ? frameFocused() : activated())
+                onShortcut(key, null);
+        },
         onLink: (href) => { if (activated())
             openLink(href); },
-        onActive: () => { active = 'preview'; },
+        // a claim of the frame: it counts only while the editor is untouched (previewLeads)
+        onActive: () => { claimAt = clock(); },
+        onReady: () => { previewNote?.remove(); previewNote = null; },
+        onStall: () => {
+            if (destroyed)
+                return;
+            const error = new Error('The preview frame did not start: a Content-Security-Policy that blocks its inline scripts? Pass preview.nonce, or allow PREVIEW_BRIDGE_HASH / previewScriptHashes().');
+            emit('error', { source: 'render', message: error.message, error });
+            previewNote = el('div', 'orz-editor__preview-note');
+            previewNote.setAttribute('role', 'status');
+            previewNote.append(doc.createTextNode('The preview could not start on this page.'));
+            previewPane.append(previewNote);
+        },
     });
+    const touchEditor = () => { editorTouchAt = clock(); };
+    for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown', 'focusin', 'touchstart'])
+        listen(editorPane, type, touchEditor, { passive: true, capture: true });
     // ── the engine ──
     adapter.mount(engineEl, {
         doc: (0, text_model_js_1.toEditorText)(options.text),
@@ -403,6 +575,8 @@ function createEditorShell(element, options) {
         onChange: () => { if (!setting)
             changed(); },
         onSelection: (s) => {
+            if (navigateMode)
+                syncFromEditor();
             if (!has('selection'))
                 return;
             const d = adapter.getDoc();
@@ -420,7 +594,17 @@ function createEditorShell(element, options) {
     container.setAttribute('data-dirty', 'false');
     if (statusText)
         statusText.data = 'Saved';
-    // ── keyboard, pointer ──
+    const formatError = () => new Error(`text format ${formatOf((0, header_js_1.readHeader)(getText())?.fields)} is newer than this editor (format ${maxFormat}): read-only, not saved`);
+    if (newerFormat !== null) {
+        // after the caller had a chance to subscribe
+        void Promise.resolve().then(() => {
+            if (destroyed)
+                return;
+            const error = formatError();
+            emit('error', { source: 'format', message: error.message, error });
+        });
+    }
+    // ── keyboard, pointer, paste and drop ──
     const focusChrome = () => {
         const b = modeButtons.get(currentView()) ?? null;
         (b ?? container).focus?.();
@@ -429,7 +613,7 @@ function createEditorShell(element, options) {
         if (key === 's') {
             e?.preventDefault();
             if (!readOnly)
-                void api.save();
+                void save(true);
             return true;
         }
         if (key === '\\') {
@@ -454,9 +638,20 @@ function createEditorShell(element, options) {
         else if (k === 'Escape' && editorPane.contains?.(e.target))
             onShortcut('Escape', e);
     });
-    listen(editorPane, 'pointerenter', () => { active = 'editor'; });
-    listen(editorPane, 'focusin', () => { active = 'editor'; });
-    listen(previewPane, 'pointerenter', () => { active = 'preview'; });
+    // a file pasted or dropped into the editor goes to hooks.uploadAsset (capture: before the engine reads it as text)
+    const takeFiles = (e, files) => {
+        if (!hooks.uploadAsset || readOnly || !files.length)
+            return;
+        e.preventDefault();
+        e.stopPropagation?.();
+        void api.uploadAssets(files);
+    };
+    listen(editorPane, 'paste', (e) => takeFiles(e, filesOf(e.clipboardData)), true);
+    listen(editorPane, 'drop', (e) => takeFiles(e, filesOf(e.dataTransfer)), true);
+    listen(editorPane, 'dragover', (e) => {
+        if (hooks.uploadAsset && !readOnly && Array.from(e.dataTransfer?.types ?? []).includes('Files'))
+            e.preventDefault();
+    }, true);
     let drag = null;
     listen(divider, 'pointerdown', (e) => {
         if ((e.button ?? 0) !== 0 || typeof e.pointerId !== 'number')
@@ -526,11 +721,12 @@ function createEditorShell(element, options) {
     const toast = (text, tone) => { if (!destroyed)
         (0, chrome_js_1.showToast)(root, text, { tone }); };
     const succeed = (text, via) => {
-        baseline = text;
+        adoptBaseline(text);
         updateDirty();
         if (!destroyed)
             emit('save', { text, via });
-        toast(via === 'download' ? 'Downloaded a copy of the document.' : 'Saved.', 'success');
+        // a download is handed to the browser: it has started, not necessarily finished (B-3)
+        toast(via === 'download' ? 'Download started.' : 'Saved.', 'success');
         return { ok: true, via };
     };
     const fail = (error, via) => {
@@ -573,13 +769,20 @@ function createEditorShell(element, options) {
         noticeSlot.append(notice);
         noticeSlot.hidden = false;
     };
-    const doSave = async () => {
+    const doSave = async (fromKey) => {
+        const text = getText();
+        if (formatOf((0, header_js_1.readHeader)(text)?.fields) > maxFormat) {
+            // never saved over a newer format (FC-18 §8.4): no hook, no saver
+            const error = formatError();
+            if (!destroyed)
+                emit('error', { source: 'format', message: error.message, error });
+            return { ok: false, error: error.message };
+        }
         if (readOnly)
             return { ok: false, error: 'read-only' };
-        const text = getText();
-        if (options.hooks?.save) {
+        if (hooks.save) {
             try {
-                await options.hooks.save(text);
+                await hooks.save(text);
             }
             catch (e) {
                 return fail(e, 'hook');
@@ -598,7 +801,8 @@ function createEditorShell(element, options) {
         saver ?? (saver = (0, save_js_1.createSaver)({ ...(uid ? { uid } : {}), suggestedName: options.fileName ?? `document${protocol_js_1.KIND_EXTENSIONS[kind] ?? '.html'}`, kind, ...(options.host ? { host: options.host } : {}) }));
         const r = await saver.save({ text, html });
         if (r.via === 'served-notice') {
-            if (!destroyed)
+            // Cmd/Ctrl+S on a served page with nothing unsaved stays quiet (B-16); the Save button and save() show the notice
+            if (!destroyed && !(fromKey && text === baseline))
                 showServedNotice();
             return { ok: false, via: 'served-notice', error: 'served page' };
         }
@@ -607,6 +811,24 @@ function createEditorShell(element, options) {
         if (r.via === 'file' && r.error === 'cancelled')
             return { ok: false, via: 'file', error: 'cancelled', cancelled: true };
         return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+    };
+    const save = (fromKey) => {
+        if (destroyed)
+            return Promise.resolve({ ok: false, error: 'destroyed' });
+        saving ?? (saving = doSave(fromKey).finally(() => { saving = null; }));
+        return saving;
+    };
+    /** Replace an editor-text range with editor text (LF), as one undoable edit written in the document's style; the caret goes after it. */
+    const replaceEditorRange = (from, to, insert) => {
+        const d = adapter.getDoc();
+        const next = d.slice(0, from) + insert + d.slice(to);
+        api.setText(model.toExact(next));
+        adapter.setSelection?.({ from: from + insert.length, to: from + insert.length });
+    };
+    /** Text from a host (AI proposal) in the document's line endings. */
+    const inDocumentStyle = (text) => {
+        const body = text.startsWith(BOM) ? text.slice(1) : text;
+        return model.eol === '\n' ? body.replace(/\r\n?/g, '\n') : body.replace(/\r\n|\r|\n/g, model.eol);
     };
     const api = {
         getText,
@@ -630,12 +852,101 @@ function createEditorShell(element, options) {
                 api.setText(next);
         },
         isDirty() { updateDirty(); return dirty; },
-        markSaved() { baseline = getText(); updateDirty(); },
-        save() {
+        markSaved() { adoptBaseline(getText()); updateDirty(); },
+        save: () => save(false),
+        async requestAi(op, o) {
+            const ai = hooks.ai;
+            if (!ai || typeof ai.request !== 'function')
+                return { ok: false, error: 'no AI hook (hooks.ai)' };
+            if (readOnly)
+                return { ok: false, error: 'read-only' };
             if (destroyed)
-                return Promise.resolve({ ok: false, error: 'destroyed' });
-            saving ?? (saving = doSave().finally(() => { saving = null; }));
-            return saving;
+                return { ok: false, error: 'destroyed' };
+            const operation = Array.isArray(ai.operations) ? ai.operations.find((x) => x && x.id === op) : undefined;
+            const passage = o?.selection ?? operation?.selection === true;
+            const before = getText();
+            let selection;
+            if (passage) {
+                const d = adapter.getDoc();
+                const s = adapter.getSelection?.();
+                if (!s || s.from === s.to)
+                    return { ok: false, error: 'no selection' };
+                selection = { from: model.toExactOffset(d, Math.min(s.from, s.to)), to: model.toExactOffset(d, Math.max(s.from, s.to)) };
+            }
+            let proposed;
+            try {
+                proposed = (await ai.request(op, { text: before, ...(selection ? { selection: { ...selection } } : {}) }))?.proposed;
+                if (typeof proposed !== 'string')
+                    throw new Error('the AI hook returned no proposed text');
+            }
+            catch (error) {
+                if (!destroyed)
+                    emit('error', { source: 'hook', message: message(error), error });
+                return { ok: false, error: message(error) };
+            }
+            if (destroyed)
+                return { ok: false, error: 'destroyed' };
+            if (getText() !== before)
+                return { ok: false, error: 'the text changed during the AI request' };
+            const styled = inDocumentStyle(proposed);
+            api.setText(selection ? before.slice(0, selection.from) + styled + before.slice(selection.to) : (model.bom ? BOM : '') + styled);
+            return { ok: true, op };
+        },
+        async uploadAssets(files) {
+            const list = Array.from(files ?? []);
+            if (!hooks.uploadAsset)
+                return { ok: false, inserted: [], error: 'no upload hook (hooks.uploadAsset)' };
+            if (readOnly)
+                return { ok: false, inserted: [], error: 'read-only' };
+            const inserted = [];
+            let failure = null;
+            for (const file of list) {
+                try {
+                    const path = await hooks.uploadAsset(file);
+                    if (typeof path !== 'string' || !path)
+                        throw new Error('the upload hook returned no path');
+                    inserted.push(assetMarkdown(file, path));
+                }
+                catch (error) {
+                    failure = error;
+                    break;
+                }
+            }
+            if (destroyed)
+                return { ok: false, inserted: [], error: 'destroyed' };
+            if (inserted.length) {
+                const s = adapter.getSelection?.() ?? { from: adapter.getDoc().length, to: adapter.getDoc().length };
+                replaceEditorRange(Math.min(s.from, s.to), Math.max(s.from, s.to), inserted.join('\n'));
+            }
+            if (failure !== null) {
+                emit('error', { source: 'hook', message: message(failure), error: failure });
+                toast(`Could not upload: ${message(failure)}`, 'error');
+                return { ok: false, inserted, error: message(failure) };
+            }
+            return { ok: true, inserted };
+        },
+        async ensureUid() {
+            const have = (0, header_js_1.readHeader)(getText())?.fields['uid']?.trim();
+            if (have)
+                return have;
+            if (readOnly)
+                throw new Error('orz editor: read-only — cannot add a uid');
+            let minted;
+            try {
+                minted = hooks.mintUid ? String(await hooks.mintUid()) : (0, uid_js_1.mintUid)();
+            }
+            catch (error) {
+                if (!destroyed)
+                    emit('error', { source: 'hook', message: message(error), error });
+                throw error;
+            }
+            if (!header_js_1.UID_PATTERN.test(minted))
+                throw new Error(`orz editor: a minted uid must match ${String(header_js_1.UID_PATTERN)} (got "${minted}")`);
+            const again = (0, header_js_1.readHeader)(getText())?.fields['uid']?.trim(); // set meanwhile
+            if (again)
+                return again;
+            api.setHeader({ uid: minted });
+            return minted;
         },
         setMode,
         getMode: () => mode,
@@ -655,7 +966,26 @@ function createEditorShell(element, options) {
             set.add(fn);
             return () => { set.delete(fn); };
         },
-        refreshPreview: () => renderNow(),
+        async refreshPreview() {
+            if (renderRunning)
+                await renderRunning;
+            return renderNow();
+        },
+        get readOnly() { return readOnly; },
+        setReadOnly(flag) {
+            const next = flag === true || newerFormat !== null;
+            if (next === readOnly || destroyed)
+                return;
+            readOnly = next;
+            if (readOnly)
+                container.setAttribute('data-readonly', '');
+            else
+                container.removeAttribute('data-readonly');
+            if (saveButton)
+                saveButton.hidden = readOnly;
+            adapter.setReadOnly?.(readOnly);
+        },
+        isReadOnly: () => readOnly,
         root,
         toolbar,
         adapter,

@@ -64,14 +64,17 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
 - `src/carrier/shell/` — `orz-markdown/carrier/shell`, the browser runtime of
   every assembled file (spec/shell-runtime.md, spec/host-protocols.md):
   `createSaver` (host → served notice → File System Access with the handle in
-  IndexedDB under the header `uid` → download; it saves the HTML the caller
-  assembled, never the live DOM), `createPreferenceStore` (reader preferences
+  IndexedDB under the header `uid` + page location, reused only on that page
+  — every `file:` page shares one IndexedDB → download; it saves the HTML the
+  caller assembled, never the live DOM), `createPreferenceStore` (reader preferences
   by `uid`, fail closed), `connectHost` / `embedCarrierFrame` (file and host
   sides of `orz-host-save/-ai/-include@1`), the quiet update in `update.ts`
   (`checkForUpdate` once a day per kind, `reassemble` — SHA-384-verified,
   script-safe bundle run in a `sandbox="allow-scripts"` iframe, accepted only
   when `extract` gives back the exact text/kind/version — and
-  `performUpdate`) with `mountUpdateIndicator` in `indicator.ts`, and the
+  `performUpdate`, which re-reads the text before saving and says when a
+  reload is safe; no check in a framed/hosted or served page) with
+  `mountUpdateIndicator` in `indicator.ts`, and the
   shell chrome in `chrome.ts` (`CHROME_CSS` tokens, `ICONS`,
   `createShadowRoot`, `showToast`). Update URLs are hard-coded (jsDelivr +
   `KIND_PACKAGE`, RULES §5.4): never add a path that takes a URL from a
@@ -84,12 +87,18 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   every carrier's `mountEditor` wraps (FC-19 §8): `createEditorShell` (toolbar,
   split/editor/preview modes, draggable split, keyboard map, one pane below
   640 px, save via `hooks.save` or `assemble` + `createSaver`, reader
-  preferences by `uid`), `text-model.ts` (the exact text — BOM, line endings
-  — behind an LF editor; never normalise the text in storage), `adapter.ts`
+  preferences by `uid`, the FC-19 §3 hooks, `formats` (a newer text format
+  is read-only and never saved), `setReadOnly`), `text-model.ts` (the exact
+  text — BOM, line endings, per remembered text — behind an LF editor; never
+  normalise the text in storage), `adapter.ts`
   (`TextEditorAdapter`, `textareaAdapter`), `codemirror6.ts`
   (`codemirror6Adapter`: textarea first, upgraded when CodeMirror loads),
-  `preview.ts` (the `sandbox="allow-scripts"` preview frame — never add
-  `allow-same-origin` — and its bridge), `render-md.ts`
+  `preview.ts` (the preview frame — its sandbox comes ONLY from
+  `previewSandbox()`, `allow-scripts` today; never add `allow-same-origin`
+  elsewhere — and its bridge, the message protocol a carrier's own bridge
+  speaks). Frame messages are the document's claims: act on them only as
+  claim E.14 says (focus on the frame, plus user activation for effects).
+  `render-md.ts`
   (`renderMarkdownPreview`, `data-src-line` anchors). It may import the
   parser; `carrier/shell`, `carrier/read` and `carrier` must not import it
   (E.10). CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js`
@@ -166,7 +175,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
   `tests/carrier-editor.test.ts` (E.13 and the Chrome halves of E.1, E.3–E.9,
-  E.11) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
+  E.11, E.14, E.15, E.19, E.21, E.22) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;

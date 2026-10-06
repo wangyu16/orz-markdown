@@ -18,6 +18,14 @@ export interface MarkdownPreviewOptions {
   twinLinks?: boolean;
   /** Extra render env (e.g. a host's include resolution). */
   env?: Record<string, unknown>;
+  /**
+   * The editor shell's render context (`render(text, ctx)`), accepted so this
+   * function can be passed as `render` directly. Not used here: the shell
+   * applies `resolveAsset` to the rendered HTML itself, and includes need an
+   * asynchronous pre-pass (`prepareSources`) before rendering.
+   */
+  fetchInclude?(target: string): Promise<string | null>;
+  resolveAsset?(path: string): string;
 }
 
 /** Block tokens without nesting that render their attributes. */

@@ -99,9 +99,35 @@ export interface CheckOptions {
     storage?: StorageLike;
     /** Test/carrier override of the CDN base; never taken from a document. */
     cdnBase?: string;
+    /**
+     * The file's host connection (`connectHost`). While a host is connected the
+     * app owns the component version: nothing is checked (spec/shell-runtime.md §7.1).
+     */
+    host?: {
+        connected(): boolean;
+    };
+    /**
+     * The page the check runs for (default: the global window). A framed page
+     * (`parent !== page`: embedded by an app host, connected or not yet) is
+     * never checked, and a served page (`http:`/`https:`) only with
+     * `servedPages: true`.
+     */
+    page?: {
+        readonly location?: {
+            readonly protocol?: string;
+        };
+        readonly parent?: unknown;
+    };
+    /**
+     * Check on a served page too. Default `false`: a reader of a published page
+     * cannot save over it (shell-runtime §1 step 2), so no update is offered.
+     */
+    servedPages?: boolean;
 }
 /**
- * Is a newer release of this kind available for this document? At most one
+ * Is a newer release of this kind available for this document? Never on a
+ * page embedded in a frame or with a connected host (the app owns the
+ * version), nor on a served page unless `servedPages`. At most one
  * network request per kind per {@link UPDATE_CHECK_INTERVAL_MS} (the last
  * check — success or failure — is recorded in storage; within the interval
  * the recorded manifest is used); without usable storage nothing is fetched.
@@ -111,7 +137,11 @@ export interface CheckOptions {
  * skipped version.
  */
 export declare function checkForUpdate(opts: CheckOptions): Promise<UpdateInfo | null>;
-export type UpdateErrorCode = 'manifest' | 'download' | 'too-large' | 'integrity' | 'no-crypto' | 'encoding' | 'unsafe-bundle' | 'no-document' | 'timeout' | 'bundle' | 'roundtrip' | 'kind' | 'version' | 'delivery';
+export type UpdateErrorCode = 'manifest' | 'download' | 'too-large' | 'integrity' | 'no-crypto' | 'encoding' | 'unsafe-bundle' | 'no-document' | 'timeout' | 'bundle' | 'roundtrip' | 'kind' | 'version' | 'delivery'
+/** performUpdate: the text changed while the update ran (nothing was saved). */
+ | 'changed'
+/** performUpdate: the page is framed or has a connected host, which owns the version. */
+ | 'hosted';
 /** Why a re-assembly was refused. Nothing was changed when one is thrown. */
 export declare class UpdateError extends Error {
     readonly code: UpdateErrorCode;
@@ -171,9 +201,19 @@ export interface ReassembleOptions {
  * caller saves it (`createSaver().save`) and reloads.
  */
 export declare function reassemble(opts: ReassembleOptions): Promise<string>;
-export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'current'>, Omit<ReassembleOptions, 'release' | 'kind'> {
+export interface PerformUpdateOptions extends Omit<CheckOptions, 'kind' | 'current'>, Omit<ReassembleOptions, 'release' | 'kind' | 'text'> {
     kind: ReleaseKind;
     current: string;
+    /**
+     * The editor's current text, read when the update starts and again before
+     * the save (preferred: an edit made while "Updating…" runs is then never
+     * lost). The caller keeps the editor read-only during the update.
+     */
+    getText?(): string;
+    /** The text to carry over, exact, when there is no `getText` (read once). */
+    text?: string;
+    /** The name of the file the page was opened from (default: the last segment of a `file:` page URL). */
+    openedName?: string;
     /** Saves the new file (`createSaver(...)`). */
     saver: Pick<Saver, 'save'>;
     /** Passed to the save (a host's `theme`). */
@@ -192,13 +232,25 @@ export type PerformUpdateResult = {
     status: 'updated';
     info: UpdateInfo;
     html: string;
+    /** The text the saved file carries. */
+    text: string;
     save: SaveResult;
+    /**
+     * Reload now: the save wrote the opened file (a host, or File System
+     * Access without a picker or to a file of the opened name) and the
+     * current text is still the saved text. Otherwise keep the page: the
+     * new file is a copy (download, a picked file of another name) or the
+     * text moved on.
+     */
+    reload: boolean;
 };
 /**
- * check → reassemble → `saver.save({ text, html })`. Never rejects. The page
- * is not reloaded here: on `updated` with `save.ok` the caller reloads (the
- * saved file now runs the new shell); on `served-notice` it offers
- * `saver.download`; on `failed` nothing was changed.
+ * check → reassemble → re-read the text → `saver.save({ text, html })`.
+ * Never rejects and never reloads; `reload` says whether the caller may.
+ * Refused (`failed`, nothing saved) when the page is framed or hosted
+ * (`hosted`), the update is refused (an {@link UpdateError} code), or the
+ * text changed while it ran (`changed`). On `served-notice` the caller
+ * offers `saver.download`.
  */
 export declare function performUpdate(opts: PerformUpdateOptions): Promise<PerformUpdateResult>;
 //# sourceMappingURL=update.d.ts.map

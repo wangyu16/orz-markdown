@@ -21,8 +21,21 @@ export interface Record_ {
     data: unknown;
     url: string;
 }
+/**
+ * The pinned CodeMirror 6 bundle's jsDelivr URL (the editor's
+ * `CODEMIRROR6_URL`): answered inside the closed network from this package's
+ * own `vendor/codemirror6.js`, so the edit checks run with CodeMirror loaded.
+ */
+export declare const CODEMIRROR_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.0.0/vendor/codemirror6.js";
+/**
+ * Chrome refuses the origin-private file system on `file:` pages unless it was
+ * launched with this flag; the `opfs` picker (real handles for
+ * `C.save.copy-elsewhere`) needs it. The harness's own browser has it; for a
+ * browser passed in without it, that check launches one of its own.
+ */
+export declare const FILE_ACCESS_FLAG = "--allow-file-access-from-files";
 export interface CdnPlan {
-    /** The release whose manifest answers `<pkg>-browser@latest/release.json` (none: the manifest request fails — offline). */
+    /** The release whose manifest answers `<pkg>-browser@latest/release.json` (none: the manifest request fails — offline). Its bundle URL is answered first. */
     latest?: Release;
     /** Serve `latest`'s bundle with one byte more than its integrity covers. */
     tamper?: boolean;
@@ -53,11 +66,14 @@ export declare class Session {
     hostOrigin: string;
     fileOrigin: string;
     private ownsBrowser;
+    private fileBrowser;
+    private ownsFileBrowser;
     private servers;
     private files;
     private tmp;
     private contexts;
     private memo;
+    private codemirror;
     private constructor();
     static open(target: CarrierTarget, options: ConformanceOptions, needsBrowser: boolean): Promise<Session>;
     private listen;
@@ -65,6 +81,15 @@ export declare class Session {
     serve(name: string, html: string): string;
     /** Write an assembled file to the temporary directory; returns its `file:` URL. */
     writeFile(name: string, html: string): string;
+    /**
+     * A release made from another: `append` is added to its bundle (a re-signed
+     * build of it), `version` replaces the manifest's version; the manifest's
+     * integrity is recomputed, so the bytes match what it announces.
+     */
+    derive(base: Release, o: {
+        version?: string;
+        append?: string;
+    }): Release;
     /** The target's Node `assemble`, memoised per text and options. */
     assemble(text: string, o?: AssembleOptions): Promise<string>;
     /** The URL patterns of the jsDelivr routes for this kind. */
@@ -73,7 +98,12 @@ export declare class Session {
     context(o: {
         picker: PickerMode;
         cdn?: CdnPlan;
+        codemirror?: boolean;
     }): Promise<CheckContext>;
+    /** A browser whose `file:` pages have the origin-private file system ({@link FILE_ACCESS_FLAG}). */
+    private browserForFiles;
+    /** This package's `vendor/codemirror6.js` (null when it is not shipped). */
+    private codemirrorBytes;
     /** Close the contexts a check opened. */
     closeContexts(): Promise<void>;
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */

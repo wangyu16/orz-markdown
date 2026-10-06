@@ -6,7 +6,7 @@
  * checks open.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
+exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
 /** Uids used by the browser checks (well-formed, FC-18 §5.1). */
 exports.UID_A = 'doc-conformance0a1b2c';
 exports.UID_B = 'doc-conformance9z8y7x';
@@ -37,4 +37,8 @@ exports.EDIT_TEXT = `﻿{{nyml\r\nkind: document\r\ntitle: Conformance — 漢�
 exports.OTHER_TEXT = `{{nyml\nkind: document\ntitle: Other\nuid: ${exports.UID_B}\n}}\n\n# Other\n`;
 /** A marker the harness puts in the live DOM; a saved file must never contain it. */
 exports.LIVE_DOM_MARKER = 'ORZ-CONFORMANCE-LIVE-DOM-MARKER';
+/** A text in a newer format (header `format: 2`): opened, it must be read-only and never saved over (FC-18 §8.4, D7). */
+exports.NEWER_TEXT = '{{nyml\nkind: document\nformat: 2\ntitle: From a newer release\nuid: doc-conformance5f6g7h\n}}\n\n# From a newer release\n\nWritten in a format this release does not write.\n';
+/** A long text the preview-isolation check types into (its end is far below the fold). */
+exports.LONG_TEXT = `{{nyml\nkind: document\ntitle: Preview isolation\nuid: doc-conformance3p4q5r\n}}\n\n# Preview isolation\n\n${Array.from({ length: 160 }, (_, i) => `Paragraph ${i + 1} of a long document.\n`).join('\n')}`;
 //# sourceMappingURL=texts.js.map
