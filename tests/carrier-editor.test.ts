@@ -1798,6 +1798,101 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await p.evaluate('shell_c.getText()')).toBe(toEditorText(big).slice(0, -13).replace(/\n/g, '\r\n'));
     await p.close();
   }, 60_000);
+
+  it('[E.13] [E.23] a scroll event dispatched between a keystroke\'s DOM change and CodeMirror\'s read of it (Chrome revealing the caret under load) keeps every keystroke in order: CodeMirror reads the live selection, not the one before the key', async () => {
+    const T = '# S\r\n\r\nfirst\r\n';
+    const p = await open();
+    expect(await p.evaluate(`mountOpts('c', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    // One task, no microtask checkpoint between the insertions and the scroll events: the mutation
+    // observer has not run when CodeMirror's scroll handler reads the change. Targets: the scroller
+    // (inside the shadow root), the window, the shadow host (a light-DOM scroll parent).
+    const ok = await p.evaluate(`(function () {
+      var view = OrzCodeMirror6.view.EditorView.findFromDOM(shell_c.root.querySelector('.cm-editor'));
+      view.focus();
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      var targets = [view.scrollDOM, window, document.getElementById('c'), document];
+      var s = 'Second line', ok = true;
+      for (var i = 0; i < s.length; i++) {
+        ok = document.execCommand('insertText', false, s[i]) && ok;
+        targets[i % targets.length].dispatchEvent(new Event('scroll'));
+      }
+      return ok;
+    })()`);
+    expect(ok).toBe(true);
+    await expect.poll(() => p.evaluate('shell_c.getText()')).toBe(`${T}Second line`);
+    expect(await p.evaluate('shell_c.adapter.getSelection()')).toEqual({ from: 22, to: 22 });
+    await p.keyboard.type('!');
+    expect(await p.evaluate('shell_c.getText()')).toBe(`${T}Second line!`);
+    await p.close();
+  });
+
+  it('[E.13] [E.21] keystrokes typed while CodeMirror arrives — before a key, between its keydown and keyup, as bare text input, or as a textarea change whose input event has not run — all land in order exactly once, the caret stays where the reader left it, and undo walks back to the original', async () => {
+    const T = '# L\r\n\r\nx\r\n';
+    const S = 'ab cd\nef gh';
+    const p = await open();
+    await p.addScriptTag({ url: `${A}/cm6.js` }); // the modules, handed over by loadModules when the test says
+    await p.evaluate(`window.mountLate = function (text) {
+      var E = window.OrzEditor, c = document.getElementById('c'), arrive;
+      if (window.shell_c) window.shell_c.destroy();
+      c.innerHTML = '';
+      var gate = new Promise(function (r) { arrive = r; });
+      window.__arrive = function () { arrive(window.OrzCodeMirror6); };
+      window.__engine = null;
+      window.shell_c = E.createEditorShell(c, {
+        text: text, render: function (t) { return E.renderMarkdownPreview(t); },
+        adapter: E.codemirror6Adapter({ loadModules: function () { return gate; } }),
+        hooks: { save: function () { return Promise.resolve(); } }, preview: { assets: false, debounceMs: 50 },
+      });
+      window.shell_c.ready.then(function (r) { window.__engine = r.engine; });
+    }`);
+    const key = (ch: string): string => (ch === '\n' ? 'Enter' : ch);
+    const arrive = async (): Promise<void> => {
+      await p.evaluate('window.__arrive()');
+      await p.waitForFunction('window.__engine === "codemirror6"');
+    };
+    // every point of arrival, each with a different way of typing the key it lands on
+    const phases = ['before', 'between', 'insertText', 'pending'] as const;
+    let runs = 0;
+    for (let at = 0; at < S.length; at++) {
+      const phase = phases[at % phases.length];
+      if (phase !== 'before' && S[at] === '\n') continue;
+      await p.evaluate(`mountLate(${JSON.stringify(T)})`);
+      await p.locator('#c textarea').click();
+      await p.locator('#c textarea').evaluate((ta) => { const t = ta as HTMLTextAreaElement; t.setSelectionRange(t.value.length, t.value.length); });
+      for (let i = 0; i < S.length; i++) {
+        const ch = S[i];
+        if (i !== at) { await p.keyboard.press(key(ch)); continue; }
+        if (phase === 'before') { await arrive(); await p.keyboard.press(key(ch)); }
+        else if (phase === 'between') { await p.keyboard.down(ch); await arrive(); await p.keyboard.up(ch); }
+        else if (phase === 'insertText') { await arrive(); await p.keyboard.insertText(ch); }
+        else {
+          // the textarea has the character but its input event has not been handled yet when CodeMirror arrives
+          await p.evaluate(`(function () {
+            var ta = shell_c.root.querySelector('textarea'), n = ta.selectionStart;
+            ta.value = ta.value.slice(0, n) + ${JSON.stringify(ch)} + ta.value.slice(n);
+            ta.setSelectionRange(n + 1, n + 1);
+            window.__arrive();
+          })()`);
+          await p.waitForFunction('window.__engine === "codemirror6"');
+        }
+      }
+      const where = `arrival at ${at} (${phase})`;
+      expect(await p.evaluate('shell_c.adapter.name'), where).toBe('codemirror6');
+      const typed = `${T}${S.replace(/\n/g, '\r\n')}`;
+      expect(await p.evaluate('shell_c.getText()'), where).toBe(typed);
+      expect(await p.evaluate('shell_c.isDirty()'), where).toBe(true);
+      expect(await p.evaluate('shell_c.adapter.getSelection()'), where).toEqual({ from: toEditorText(typed).length, to: toEditorText(typed).length });
+      await p.keyboard.type('!');
+      expect(await p.evaluate('shell_c.getText()'), where).toBe(`${typed}!`);
+      const back = await p.evaluate('(function () { var n = 0; while (shell_c.undo() && n < 100) n++; return [n, shell_c.getText()]; })()') as [number, string];
+      expect(back[1], where).toBe(T);
+      expect(back[0], where).toBeGreaterThan(0);
+      expect(await p.evaluate('(function () { while (shell_c.redo()); return shell_c.getText(); })()'), where).toBe(`${typed}!`);
+      runs++;
+    }
+    expect(runs).toBeGreaterThanOrEqual(9);
+    await p.close();
+  }, 120_000);
   it('[E.13] [E.22] setReadOnly switches CodeMirror at run time, also when set while CodeMirror was still loading', async () => {
     const T = '# RO\n\nbody\n';
     const p = await open();

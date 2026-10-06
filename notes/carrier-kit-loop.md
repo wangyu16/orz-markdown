@@ -136,3 +136,54 @@ Measured: 1,624 tests green, `tsc` clean, build passes, Chrome tests ran.
 Summary of loop 1: 3 rounds; 3 HIGH found and fixed (U+0130 round trip, a
 `}}` cutting the header silently, a browser claim never run in a browser);
 claims K.1–K.22 and M.22–M.23 bound and mutation-checked.
+
+---
+
+## Loop 2 — the whole kit (end of Phase 2)
+
+Target: `carrier/shell` (save, preferences, host protocols, quiet update,
+indicator, chrome), `carrier/editor` (editor shell, text model, adapters,
+CodeMirror 6 loading, preview), `carrier/conformance` (harness, stub).
+Claims S, U, V, E, H. Starting state: `orz-markdown@2600cdf`, 1,764 tests
+green.
+
+### Round 1 — 2026-10-06
+
+Two independent adversaries: A against the claims (73 mutations: S 17/18
+caught, U/V 22/23, E 18/22, H 1/10), B against the design (spec by spec, real
+Chrome, Phase 3 and Alembic fitness, cost).
+
+**2 HIGH (one ORZ found by both, one SPEC), ~14 MEDIUM, ~11 LOW.** Held in
+real Chrome: exact text through every save path and through CodeMirror
+(U+2028/9, NEL, CR, CR LF + BOM, astral); update safety end to end
+(integrity, script-safe + no CR, opaque sandbox, round trip, kind, version,
+delivery; tampered/offline/wrong kind/downgrade/prerelease refused); preview
+isolation; CodeMirror SRI; no leaks over 200 mount/destroy cycles.
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| A-1 / B-1 a remembered File System Access handle (keyed by `uid`, guarded by the file name) was reused by a same-named copy in another folder — every `file:` page shares one IndexedDB — and wrote over the original | ORZ | HIGH | fix — handle key `"<uid> <location>"`, reused only from the same page location; S.3, S.12 (real handles, Docs vs Downloads) |
+| B-2 the opaque preview frame of a standalone `file:` page cannot load relative local images | SPEC | HIGH | owner decision 2026-10-06: `allow-same-origin` for a standalone `file:` page only (`previewSandbox`, E.20, real-Chrome image test) |
+| A-2 forged Escape / "active" / scroll messages from the preview's document took focus or pinned the scroll | ISOLATION | MED | fix — gated (focus in the frame, activation for effects; scroll-lead rule in E.14) |
+| A-3 / A-4 BOM and line-ending style belonged to the last adopted text, not to the undo entry; offsets on mixed-EOL texts | ORZ | MED/LOW | fix — style per remembered entry; offsets by walking the exact string (E.1) |
+| A-5 / B-12 an update saved the click-time text and the stub reloaded after a download; `SaveResult` did not say which file was written | ORZ+SPEC | MED | fix — `getText()` re-read before saving (`changed`), `reload` only when the opened file got exactly that text; `picked`/`name`; editor read-only during an update (`setReadOnly`); S.13, U.12 |
+| A-6 / B-14 the textarea→CodeMirror upgrade dropped the undo history | ORZ | LOW | fix — textarea steps replayed as isolated CodeMirror steps (E.21) |
+| A-7 / B-6 / B-7 / A-8 the harness passed 9 of 10 broken kits; partial or skipped runs counted as conformant | ORZ | MED | fix — 9 new checks (38), CodeMirror served in the closed network, conformant only when every check ran (`partial`, `notApplicable`, final `[conformant]` test); 11 broken stubs each fail a named check (H.5) |
+| B-3 a blocked or cancelled download counted as saved | ORZ | MED | partly — downloads carry `confirmed: false`, the toast says "Download started"; dirty still clears (a download is the only save in some browsers) |
+| B-4 the preview diff keyed on `data-src-line`: one new line replaced every node below | ORZ | MED | fix (E.15) |
+| B-5 one synchronous render per pause, whatever it cost | ORZ | MED | fix — pacing max(debounce, 2 × last render), no overlap (E.16) |
+| B-8 D7 (a newer format opens read-only) not enforced | ORZ | MED | fix — `formats`, forced read-only, save refused (E.17) |
+| B-9 the preview was not pluggable for paged/slides | SPEC | MED | fix — `frameDocument`, `bridge`, `diff: false`, `mode: 'navigate'`, `mapLine`/`mapPosition` (E.15, FC-19 §8.4) |
+| B-10 FC-19 §3 hooks missing from the shared shell | SPEC | MED | fix — `resolveAsset`, `resolveLink`, `fetchInclude` (render context), `uploadAssets`, `requestAi`, `ensureUid` (E.18) |
+| B-11 a strict CSP gave a silently blank preview | ORZ | MED | fix — `preview.nonce`, `PREVIEW_BRIDGE_HASH`, `previewScriptHashes`, ready timeout with notice and `error` (E.19) |
+| B-18 who runs the update check was unspecified | SPEC | LOW | fix — none in frames, hosted or served pages by default (U.13) |
+| B-13, B-16, B-17, B-19, U16, S03, E06, E13, E15 (live `change` text, served notice without edits, docs drift, textarea history memory, test gaps) | ORZ | LOW | fix |
+| B-15 a document script can open an http(s) tab while the reader interacts with the preview | ISOLATION | LOW | dismissed — documents are trusted sources (M.21) and the browser requires real activation; stated in FC-19 §8.4 |
+
+**After round 1** (`orz-markdown@9b38693`, B-2 in `@7567455`): claims S.13,
+U.12, U.13, E.14–E.22 added; S.3, S.11, S.12, U.6, U.10, E.1, E.2, E.5, E.8,
+E.9, E.10, E.13, E.20, H.1–H.3, H.5 reworded. 1,813 tests green twice. Test
+infrastructure: real-Chrome suites run in their own vitest group after the
+timing-bounded unit tests, then the harness alone; default timeouts raised.
+Open into round 2: a full run showed one keystroke reordered while CodeMirror
+replaced the textarea (`Seond linec`) — a data-integrity bug, being fixed.

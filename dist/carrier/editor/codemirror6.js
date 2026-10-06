@@ -167,7 +167,9 @@ function codemirror6Adapter(options = {}) {
     };
     const upgrade = (m, el, o) => {
         const f = fallback;
-        // the textarea's CURRENT text (typed or set while CodeMirror loaded), its selection, focus, scroll and undo steps
+        // the textarea's CURRENT text (typed or set while CodeMirror loaded), its selection, focus, scroll and undo steps:
+        // its live value first (a change whose input event has not run yet is one more step, reported to the shell; E.21)
+        (0, adapter_js_1.syncTextarea)(f);
         const doc = f.getDoc();
         const steps = (0, adapter_js_1.undoTexts)(f) ?? [];
         const sel = f.getSelection?.() ?? { from: 0, to: 0 };
@@ -193,10 +195,50 @@ function codemirror6Adapter(options = {}) {
         state = state.update({ selection: { anchor: clamp(sel.from), head: clamp(sel.to) } }).state;
         f.destroy();
         fallback = null;
-        view = new m.view.EditorView({ state, parent: el, ...(o.root ? { root: o.root } : {}) });
+        // E.23: CodeMirror reads a pending DOM change on every scroll of the editor or a scroll parent
+        // WITHOUT re-reading the DOM selection (DOMObserver.onScroll → flush(false)). Chrome can
+        // dispatch the scroll that reveals the caret after a keystroke's text is in the DOM but before
+        // CodeMirror's mutation observer has run (seen under load): the change is then applied with the
+        // caret from before the key, the caret stays behind the character and every later key is typed
+        // in front of it ("Second line" → "Seond linec"). So a scroll with a DOM change pending first
+        // flushes it with the live selection; CodeMirror's own flush then finds nothing. Registered
+        // before the view exists, so it runs before CodeMirror's listeners: capture on the shadow root
+        // for the editor's own scrollers, and on the window (first listener there) for the page's.
+        // `observer.flush` / `pendingRecords` are internals of the pinned bundle (E.11, E.23).
+        const flushFirst = () => {
+            const obs = view?.observer;
+            if (!obs || typeof obs.flush !== 'function' || typeof obs.pendingRecords !== 'function')
+                return;
+            try {
+                if (obs.pendingRecords().length > 0)
+                    obs.flush(true);
+            }
+            catch { /* CodeMirror's own handler runs next */ }
+        };
+        const captureRoots = [];
+        const shadow = o.root;
+        if (shadow && typeof shadow.addEventListener === 'function')
+            captureRoots.push(shadow);
+        const win = el.ownerDocument?.defaultView;
+        if (win && typeof win.addEventListener === 'function')
+            captureRoots.push(win);
+        for (const t of captureRoots)
+            t.addEventListener('scroll', flushFirst, { capture: true, passive: true });
+        const flushOff = () => { for (const t of captureRoots)
+            t.removeEventListener('scroll', flushFirst, { capture: true }); };
+        try {
+            view = new m.view.EditorView({ state, parent: el, ...(o.root ? { root: o.root } : {}) });
+        }
+        catch (error) {
+            flushOff();
+            throw error;
+        }
         const onScroll = () => o.onScroll?.();
         view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
-        scrollOff = () => view?.scrollDOM.removeEventListener('scroll', onScroll);
+        scrollOff = () => {
+            view?.scrollDOM.removeEventListener('scroll', onScroll);
+            flushOff();
+        };
         if (scroll)
             adapter.scrollTo({ fraction: scroll.fraction });
         if (focused)

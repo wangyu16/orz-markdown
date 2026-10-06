@@ -174,7 +174,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `tests/carrier-kit.test.ts` (K.9, K.12), `tests/carrier-shell.test.ts`
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
-  `tests/carrier-editor.test.ts` (E.13 and the Chrome halves of E.1, E.3–E.9,
+  `tests/carrier-editor.test.ts` (E.13, E.23 and the Chrome halves of E.1, E.3–E.9,
   E.11, E.14, E.15, E.19, E.21, E.22) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound

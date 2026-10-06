@@ -87,12 +87,23 @@ interface History {
   texts(): string[];
   /** Characters the history holds (full texts and patches, both stacks). */
   retained(): number;
+  /** Take in a change of the textarea whose `input` event has not been handled yet (one more undo step, `onChange`). */
+  sync(): void;
 }
 const histories = new WeakMap<TextEditorAdapter, History>();
 
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 export function undoTexts(adapter: TextEditorAdapter): string[] | null {
   return histories.get(adapter)?.texts() ?? null;
+}
+
+/**
+ * Bring a textarea adapter's kept text up to the textarea's live value (E.21): `getDoc()` returns
+ * the text as of the last `input` event (reading `value` of a large textarea is not free), so an
+ * engine taking over calls this first and loses no character typed just before. No-op for another engine.
+ */
+export function syncTextarea(adapter: TextEditorAdapter): void {
+  histories.get(adapter)?.sync();
 }
 
 /** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
@@ -289,6 +300,14 @@ export function textareaAdapter(): TextEditorAdapter {
       return out.reverse();
     },
     retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch!.insert.length), 0),
+    sync() {
+      if (!ta || ta.value === last) return;
+      push();
+      lastInputAt = -Infinity;
+      last = ta.value;
+      lastSel = readSel();
+      opts?.onChange();
+    },
   });
   return adapter;
 }

@@ -173,7 +173,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     overlapping); the textarea history stored a full copy per step (now
     patches); the `change` payload was a live getter; a download toast said
     "Downloaded" (now "Download started."); Cmd/Ctrl+S on an unedited served
-    page showed the served notice.
+    page showed the served notice; in Chrome under load a keystroke could be
+    applied behind the caret (CodeMirror's scroll handler read a pending
+    change with the selection from before the key: "Second line" became
+    "Seond linec"; claim E.23); the CodeMirror upgrade read the textarea's
+    text as of its last `input` event, not its live value.
 - **Conformance harness** `orz-markdown/carrier/conformance`
   (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
   each carrier runs against itself. `runConformance(target, options)` →

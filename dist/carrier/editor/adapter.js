@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.undoTexts = undoTexts;
+exports.syncTextarea = syncTextarea;
 exports.historyChars = historyChars;
 exports.textareaAdapter = textareaAdapter;
 const text_model_js_1 = require("./text-model.js");
@@ -12,6 +13,14 @@ const histories = new WeakMap();
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 function undoTexts(adapter) {
     return histories.get(adapter)?.texts() ?? null;
+}
+/**
+ * Bring a textarea adapter's kept text up to the textarea's live value (E.21): `getDoc()` returns
+ * the text as of the last `input` event (reading `value` of a large textarea is not free), so an
+ * engine taking over calls this first and loses no character typed just before. No-op for another engine.
+ */
+function syncTextarea(adapter) {
+    histories.get(adapter)?.sync();
 }
 /** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
 function historyChars(adapter) {
@@ -243,6 +252,15 @@ function textareaAdapter() {
             return out.reverse();
         },
         retained: () => [...undoStack, ...redoStack].reduce((n, e) => n + (e.doc !== undefined ? e.doc.length : e.patch.insert.length), 0),
+        sync() {
+            if (!ta || ta.value === last)
+                return;
+            push();
+            lastInputAt = -Infinity;
+            last = ta.value;
+            lastSel = readSel();
+            opts?.onChange();
+        },
     });
     return adapter;
 }

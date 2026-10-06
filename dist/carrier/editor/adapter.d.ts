@@ -69,6 +69,12 @@ export interface TextEditorAdapter {
 }
 /** The texts `undo()` steps back through (oldest first; the current text not included), or `null` for another engine. */
 export declare function undoTexts(adapter: TextEditorAdapter): string[] | null;
+/**
+ * Bring a textarea adapter's kept text up to the textarea's live value (E.21): `getDoc()` returns
+ * the text as of the last `input` event (reading `value` of a large textarea is not free), so an
+ * engine taking over calls this first and loses no character typed just before. No-op for another engine.
+ */
+export declare function syncTextarea(adapter: TextEditorAdapter): void;
 /** Characters a textarea adapter's history holds (a full text counts whole even when shared with the page), or `null`. */
 export declare function historyChars(adapter: TextEditorAdapter): number | null;
 /** The textarea engine: no dependencies, works offline, its own undo history. */
