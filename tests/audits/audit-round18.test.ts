@@ -48,7 +48,7 @@ describe('round 18 — half A: linear again', () => {
   }, 120_000);
   it('[M.5] many {{attrs}} markers and keys are linear (M1)', async () => {
     const markers = (n: number) => 'Para ' + Array.from({ length: n }, (_, i) => `{{attrs[.c${i}]}}`).join(' ');
-    expect(await ratio(() => md.render(markers(1000)), () => md.render(markers(4000)))).toBeLessThan(8);
+    expect(await ratio(() => md.render(markers(4000)), () => md.render(markers(16000)))).toBeLessThan(8); // sizes large enough that load noise does not dominate
   }, 120_000);
   it('[M.16] deep raw nesting and family globals are refused in fetched text (L1, L3)', async () => {
     const host = '{{md https://e.test/a}}\n\nHOST-AFTER';

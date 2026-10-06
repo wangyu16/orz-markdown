@@ -106,6 +106,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FC-19 §2: the standard bundle global `globalThis.OrzCarrier = { kind,
   version, formats, assemble(text, { delivery, engineSource }), extract,
   readDocument, mountEditor, … }`.
+- **Editor shell** `orz-markdown/carrier/editor` (`src/carrier/editor/`;
+  FC-19 §8): `createEditorShell(element, { text, render, … })`, the
+  kind-independent base of every carrier's `mountEditor`:
+  - toolbar, editor and preview in one shadow root (`CHROME_CSS` +
+    `EDITOR_CSS`); split / editor / preview modes (`setMode`, Cmd/Ctrl+\);
+    a draggable, keyboard-operable split; Cmd/Ctrl+S saves, Esc leaves the
+    editor; one pane at a time below 640 px of the shell's own width;
+  - the exact text: `getText()` is the given text byte for byte until it is
+    edited (CR LF, CR, BOM, mixed line endings), and keeps the document's BOM
+    and line-ending style after edits; `setText`, `setHeader(changes)` (FC-18
+    §9 `editHeader` as one undoable edit), `isDirty` / `markSaved`, events
+    `change` / `dirty` / `selection` / `save` / `error`, `undo` / `redo`;
+  - the preview: the carrier's `render(text)` (md: `renderMarkdownPreview`,
+    which stamps `data-src-line` and rewrites twin links) into an iframe with
+    `sandbox="allow-scripts"` (opaque origin), incremental (unchanged blocks
+    and drawings kept), debounced, with scroll sync on the line anchors;
+  - save: `hooks.save(text)` in an app, else `assemble(text)` + `createSaver`
+    (host, served-page notice, File System Access, download); dirty clears
+    only on success; never rejects;
+  - reader preferences (split ratio, view mode, scroll sync, font size, dark
+    chrome) through `createPreferenceStore`, namespaced by the header `uid`;
+  - engines behind `TextEditorAdapter`: `codemirror6Adapter()` (markdown
+    mode, line wrapping, history, search) — editable at once as a textarea,
+    upgraded when CodeMirror loads, kept as a textarea when it cannot — and
+    `textareaAdapter()`; apps that bundle CodeMirror pass `loadModules`.
+  - CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js` (now shipped
+    in the package; `@codemirror/state` 6.7.6, view 6.43.13, commands
+    6.11.1, language 6.12.4, lang-markdown 6.5.2, search 6.7.2; built by
+    `npm run build:codemirror`), loaded from
+    `cdn.jsdelivr.net/npm/orz-markdown@<version>/vendor/codemirror6.js` with
+    Subresource Integrity. Per-package jsDelivr `+esm` URLs were rejected:
+    they resolve `@codemirror/state` to different versions, which CodeMirror
+    refuses.
 
 ### Fixed
 

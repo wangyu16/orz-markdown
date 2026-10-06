@@ -14,11 +14,13 @@
     "./carrier": "./dist/carrier.js",
     "./carrier/read": "./dist/carrier/read.js",
     "./carrier/shell": "./dist/carrier/shell/index.js",
+    "./carrier/editor": "./dist/carrier/editor/index.js",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "themes",
+    "vendor",
     "orz-markdown-skills"
   ],
   "scripts": {
@@ -32,7 +34,8 @@
     "render": "tsx scripts/render.ts",
     "render:minimal": "tsx scripts/render-minimal.ts",
     "prepublishOnly": "npm run build && npm run test",
-    "build:web": "node build/web-bundle.mjs"
+    "build:web": "node build/web-bundle.mjs",
+    "build:codemirror": "tsx scripts/build-codemirror.ts"
   },
   "keywords": [
     "markdown",
@@ -74,6 +77,13 @@
     "qrcode-svg": "^1.1.0"
   },
   "devDependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/search": "6.7.2",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
+    "@lezer/highlight": "1.2.5",
     "@types/markdown-it-anchor": "^7.0.0",
     "@types/markdown-it-container": "^4.0.0",
     "@types/markdown-it-footnote": "^3.0.4",

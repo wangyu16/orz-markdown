@@ -20,6 +20,7 @@ npm run test:watch # vitest watch
 npm run render     # tsx scripts/render.ts → tests/example.html (standalone themed demo; diff it to catch output changes)
 npm run build:web  # docs/orzmd.browser.js (site editor bundle) + sync docs/themes from themes/
 npm run check:site # website starter versions + discovery metadata
+npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror 6 bundle) + src/carrier/editor/codemirror-pin.ts
 ```
 
 ## Architecture
@@ -79,6 +80,23 @@ npm run check:site # website starter versions + discovery metadata
   U.10, V.5); not imported by `orz-markdown/carrier`, whose import graph must
   stay free of browser state (K.2). Only `chrome.ts` writes `innerHTML`, and
   only `ICONS` constants (V.4); no shell module reads the page DOM (S.4).
+- `src/carrier/editor/` — `orz-markdown/carrier/editor`, the editor shell
+  every carrier's `mountEditor` wraps (FC-19 §8): `createEditorShell` (toolbar,
+  split/editor/preview modes, draggable split, keyboard map, one pane below
+  640 px, save via `hooks.save` or `assemble` + `createSaver`, reader
+  preferences by `uid`), `text-model.ts` (the exact text — BOM, line endings
+  — behind an LF editor; never normalise the text in storage), `adapter.ts`
+  (`TextEditorAdapter`, `textareaAdapter`), `codemirror6.ts`
+  (`codemirror6Adapter`: textarea first, upgraded when CodeMirror loads),
+  `preview.ts` (the `sandbox="allow-scripts"` preview frame — never add
+  `allow-same-origin` — and its bridge), `render-md.ts`
+  (`renderMarkdownPreview`, `data-src-line` anchors). It may import the
+  parser; `carrier/shell`, `carrier/read` and `carrier` must not import it
+  (E.10). CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js`
+  (shipped in the package, loaded from jsDelivr `orz-markdown@<VERSION>` with
+  SRI): the `@codemirror/*` devDependencies are pinned exactly; after changing
+  one run `npm run build:codemirror` (E.11 fails otherwise). Never load
+  per-package `+esm` URLs (they duplicate `@codemirror/state`).
 - `spec/` — binding carrier specs owned here: FC-18 (text form and assembly)
   and FC-19 (editor component), plus the canonical host protocols (FC-12)
   and the shell runtime (FC-11). Change them only through the family's
@@ -134,7 +152,9 @@ npm run check:site # website starter versions + discovery metadata
   C.20, M.8) are then unverified; the same holds for the Chrome parts of
   `tests/carrier-kit.test.ts` (K.9, K.12), `tests/carrier-shell.test.ts`
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
-  U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first).
+  U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
+  `tests/carrier-editor.test.ts` (E.13 and the Chrome halves of E.1, E.3–E.9,
+  E.11).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;

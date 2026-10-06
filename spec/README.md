@@ -6,7 +6,7 @@ Binding specifications owned by orz-markdown for the orz carrier family
 | Spec | What it defines |
 |---|---|
 | [FC-18 · Text form and assembly, format 1](FC-18-text-format-1.md) | the plain-text twin of every carrier file, its header, and the exact `assemble` / `extract` laws |
-| [FC-19 · Editor component API](FC-19-editor-component.md) | the browser editor component that the files and web apps embed |
+| [FC-19 · Editor component API](FC-19-editor-component.md) | the browser editor component that the files and web apps embed; §8 the shared editor shell (`orz-markdown/carrier/editor`) every carrier's `mountEditor` wraps |
 | [Host protocols](host-protocols.md) (FC-12, canonical) | `orz-host-save@1`, `orz-host-ai@1`, `orz-host-include@1`: the iframe handshake between an app and an embedded assembled file, the kind registry, the security rules, format-1 saves |
 | [Shell runtime](shell-runtime.md) (FC-11) | the standalone save (host → served notice → File System Access with a handle remembered by `uid` → download), reader preferences, the release manifest (`release.json`) and quiet update (once-a-day check, sandboxed transactional re-assembly, indicator), and the shell chrome (tokens, icons, toasts) |
 
@@ -37,3 +37,17 @@ in `tests/carrier-shell.test.ts` (real Chrome for the cross-origin handshake,
 downloads and IndexedDB); claims U.1–U.11 and V.1–V.5, tests in
 `tests/carrier-update.test.ts` (real Chrome for the sandboxed update against a
 fake CDN, downloads and CSS isolation).
+
+The editor shell is `src/carrier/editor/` (FC-19 §8) — `shell.ts`
+(`createEditorShell`: toolbar, modes, split, keyboard, the exact text, dirty
+tracking, `setHeader`, save), `text-model.ts` (exact text behind an LF
+editor), `adapter.ts` (`TextEditorAdapter`, `textareaAdapter`),
+`codemirror6.ts` (`codemirror6Adapter`, `loadCodeMirror6`; the pinned bundle
+`vendor/codemirror6.js` described by the generated `codemirror-pin.ts`),
+`preview.ts` (the `sandbox="allow-scripts"` preview frame and its bridge,
+scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
+(`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
+parser; `carrier/shell` and `carrier/read` do not import it). Claims
+E.1–E.13, tests in `tests/carrier-editor.test.ts` (real Chrome for
+CodeMirror in a shadow root, the opaque-origin preview, the split drag,
+scroll sync and Subresource Integrity).

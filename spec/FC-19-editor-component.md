@@ -145,3 +145,168 @@ The component's version is the carrier's version (`orz-<x>` and
 `orz-<x>-browser` in lockstep). Additive options and hooks are minor releases;
 removing or changing one is a major release. The text format is versioned
 separately (FC-18).
+
+## 8. Editor shell (implementation note, orz-markdown `carrier/editor`)
+
+**Status:** implementation of the shared base, not a change to §3–§5. The
+API refinements it suggests for `EditorOptions` / `Editor` are listed in §8.7
+for review; until accepted, §3–§4 stand as written.
+
+Each carrier's `mountEditor` wraps one kind-independent base, exported by
+orz-markdown as `orz-markdown/carrier/editor` (`src/carrier/editor/`). The
+carrier adds its kind's tools (layout and template pickers, theme picker,
+lint) to the shell's toolbar slot and supplies its renderer and `assemble`.
+Claims E.1–E.13 (`notes/CLAIMS.md`), tests `tests/carrier-editor.test.ts`.
+
+### 8.1 Mounting
+
+```ts
+const shell = createEditorShell(element, {
+  text,                              // exact (FC-18)
+  render(text) { return html; },     // the kind's preview renderer; md: renderMarkdownPreview(text)
+  adapter?,                          // default codemirror6Adapter()
+  mode?, readOnly?, chrome?,         // as FC-19 §3
+  hooks?: { save? },                 // app host: save(text)
+  assemble?, fileName?, kind?, host?, saver?,   // standalone host: assemble(text) → html, then createSaver
+  uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
+  preview?: { head?, scheme?, articleClass?, assets?, debounceMs? },
+  onLink?, label?, narrowWidth?,
+});
+shell.getText() / setText(text, { resetHistory? }) / setHeader(changes) / isDirty() / markSaved()
+shell.save(): Promise<SaveOutcome>        // never rejects
+shell.setMode(m) / getMode() / getView() / setSplitRatio(r) / getSplitRatio() / undo() / redo()
+shell.focus() / on(event, fn) → off / refreshPreview() / destroy()
+shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapter / shell.ready
+```
+
+### 8.2 Layout, modes, keyboard
+
+- One host element appended to `element`, with an open shadow root holding
+  `CHROME_CSS` and `EDITOR_CSS` (constructed stylesheets): a toolbar
+  (Editor / Split / Preview with `aria-pressed`, the carrier's slot, the save
+  state, Sync scroll, Save), an optional served-page notice, the editor pane,
+  a separator and the preview pane. `chrome: 'compact'` hides the labels
+  (icons stay, controls keep their `aria-label`); `'none'` has no toolbar.
+- Modes `split` / `editor` / `preview`. Cmd/Ctrl+\ cycles split → editor →
+  preview → split. Below `narrowWidth` (640 px) of the shell's **own** width
+  (a `ResizeObserver`; an app may give it a narrow column) only one pane
+  shows: `split` shows the editor, Cmd/Ctrl+\ flips editor ↔ preview, the
+  Split button hides. `getView()` is what shows.
+- Cmd/Ctrl+S saves; Esc in the editor moves focus to the toolbar (so Tab
+  indentation never traps focus). The preview frame forwards the same keys.
+- The separator (`role="separator"`) drags with pointer capture and moves by
+  5 % with the arrow keys, Home/End to 10 % / 90 %; the ratio (editor share,
+  0.1–0.9) is a reader preference.
+
+### 8.3 Text and history
+
+- The shell owns the text. Engines edit LF text without a BOM; the text
+  model keeps the document's BOM and line-ending style (that of its first
+  line break, FC-18 §8.1). An editor text equal to the LF form of a text the
+  shell was given (`text`, `setText`, `setHeader`) reads back as **that exact
+  text** — so an unedited document, or one undone back to a known state,
+  round-trips byte for byte, mixed line endings included; other texts are
+  written in the document's style.
+- `setText(text)` is one undoable edit (the smallest replacement, so the
+  caret survives); `{ resetHistory: true }` starts the history over. It does
+  not mark the text saved.
+- `setHeader(changes)` = `setText(editHeader(getText(), changes))`: one
+  undoable edit, FC-18 §9 rules; what `editHeader` refuses throws, changing
+  nothing.
+- `isDirty()` = the text differs from the last saved one (undoing back to it
+  is clean). Events: `change { text }`, `dirty { dirty }`, `selection { from,
+  to }` (offsets in the exact text), `save { text, via }`, `error { source:
+  'save' | 'render' | 'adapter', message, error }`.
+
+### 8.4 Preview
+
+- An iframe with `sandbox="allow-scripts"` exactly (opaque origin: the
+  document's scripts run in it and cannot reach the host page, its storage
+  or cookies) and `srcdoc` = a fixed bridge script, then the pinned preview
+  libraries (`getPreviewFrameAssets`, `__orzEnhance`) — the preview shows at
+  once and is enhanced when the libraries arrive. `preview.head` adds the
+  carrier's theme stylesheet links (shell markup, never document content).
+- The shell posts `{ type: 'orz-preview-render', id, html }` after the frame
+  says `orz-preview-ready` (and again on a new ready). The bridge keeps every
+  top-level node whose HTML is unchanged (common prefix and suffix), so drawn
+  diagrams and the scroll position survive typing, re-runs `__orzEnhance`
+  and reports the `data-src-line` anchors. Each side reads only messages from
+  the other's window; payloads are data.
+- Renders run after a pause in typing (`debounceMs`, 150 ms), not while only
+  the editor shows. A failing `render` keeps the last preview (`error`).
+- Scroll sync (a reader preference): the pane the reader drives (pointer,
+  focus, wheel) leads; positions map through the anchors (line ↔ top,
+  linear between anchors), proportionally when there are none. Anchor lines
+  are 0-based lines of the whole text (`renderMarkdownPreview` adds the
+  header's lines).
+- Links clicked in the preview never navigate the frame: `#fragment` links
+  scroll it, others go to `onLink` (default: `http(s):`/`mailto:` in a new tab
+  with `noopener`). A save key or a link reported by the frame acts only while
+  focus is on the preview iframe and the page has transient user activation
+  (`navigator.userActivation`), so a document script that posts them while the
+  reader works in the editor saves and opens nothing.
+- A page with a Content-Security-Policy must allow inline scripts in the
+  `srcdoc` frame (it inherits the page's policy), as for the update sandbox.
+
+### 8.5 Save
+
+- App host (`hooks.save`): `hooks.save(getText())`.
+- Standalone host: `assemble(getText())` → `createSaver({ uid, suggestedName:
+  fileName, kind, host }).save({ text, html })` (spec/shell-runtime.md §1). A
+  served page shows the `#orz-served-note` notice; "Download a copy" calls
+  `saver.download`. A cancelled picker is not an error.
+- One save at a time; dirty clears only on success (an edit made during the
+  save stays dirty); a toast announces the result; `save()` never rejects.
+  With a connected host (`connectHost`), the dirty state is posted to it.
+
+### 8.6 Engines (`TextEditorAdapter`)
+
+```ts
+interface TextEditorAdapter {
+  readonly name: string;
+  mount(el, { doc, readOnly, onChange, onSelection?, onScroll?, root?, label? }): void | Promise<void>;
+  getDoc(): string;                                  // LF, no BOM
+  setDoc(text, { resetHistory? }): void;             // one undoable step unless resetHistory
+  focus(): void; destroy(): void;
+  // optional: getSelection, hasFocus, undo, redo, getScroll → { line, fraction }, scrollTo({ line | fraction }), ready()
+}
+```
+
+- `codemirror6Adapter({ loadModules?, url?, timeoutMs? })` — CodeMirror 6
+  with the Markdown language, line wrapping, history, search, bracket
+  matching, the Markdown keymap (list continuation) and Tab indentation,
+  styled with the chrome tokens, mounted in the shell's shadow root. It is a
+  textarea at once and upgrades in place (text, selection, focus, scroll)
+  when CodeMirror arrives; if CodeMirror cannot load it stays a textarea and
+  `ready()` reports the error (the shell warns once).
+- **Loading.** Default: ONE pinned bundle, `vendor/codemirror6.js` of the
+  orz-markdown package (exact versions in `CODEMIRROR6_VERSIONS`; built by
+  `npm run build:codemirror`), from
+  `https://cdn.jsdelivr.net/npm/orz-markdown@<VERSION>/vendor/codemirror6.js`
+  by one `<script integrity crossorigin>` per document (no eval, no inline
+  script; Subresource Integrity pins the bytes; script-safe, so a carrier may
+  also inline it, and the adapter then uses the global it set without
+  fetching). Per-package `+esm` URLs are not used: jsDelivr resolves
+  `@codemirror/state` to a different version in each, and CodeMirror refuses
+  two copies. `url` (a code option, never read from a document) serves the
+  same bytes from elsewhere; `loadModules` lets an app that bundles
+  CodeMirror pass its own modules (`{ state, view, commands, language,
+  markdown, search? }` — module namespaces), and nothing is fetched.
+- `textareaAdapter()` — a plain `<textarea>` with its own undo history; no
+  network. Tests and offline files use it.
+
+### 8.7 Refinements proposed for §3–§4 (for review; not yet binding)
+
+1. `Editor.save()` resolves a `SaveOutcome` (`{ ok, via, error?, cancelled? }`)
+   and never rejects (§4 says `Promise<void>`; a void promise cannot report a
+   cancelled picker or a served page without throwing).
+2. `Editor.setHeader(changes)` (FC-18 §9 as one undoable edit) and
+   `undo()` / `redo()` added to §4, so hosts edit header keys without
+   re-implementing §9.
+3. Event payloads bound: `change { text }`, `dirty { dirty }`, `selection
+   { from, to }` (exact-text offsets — also the `Range` of `hooks.ai`'s
+   `selection`), `save { text, via }`, `error { source, message, error }`.
+4. `setText` defaults to an undoable edit (`resetHistory: false`) and does not
+   mark the text saved.
+5. `chrome: 'compact'` = icon-only toolbar; Cmd/Ctrl+\ cycles the modes.
+6. `hooks.resolveLink` covers preview link clicks too (the shell's `onLink`).

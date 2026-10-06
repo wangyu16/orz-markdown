@@ -612,7 +612,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['document.ts', 'envelope.ts', 'header.ts', 'index.ts', 'links.ts', 'parser.ts', 'read.ts', 'shell', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'links.ts', 'parser.ts', 'read.ts', 'shell', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {
@@ -942,6 +942,15 @@ describe('round 1: title chain (FC-18 §8.1)', () => {
 describe('round 1: cost (K.14)', () => {
   const header = '{{nyml\nkind: document\ntitle: Big\nauthor: A\n}}\n\n';
   const bodyOf = (n: number): string => Array.from({ length: n }, (_, i) => `## Section ${i}\n\nParagraph ${i} with **bold**, \`code\`, [link](x${i}.md) and $x^${i % 9}$.\n\n- a\n- b\n`).join('\n');
+  // Interleaved best-of-n for two sizes, so a load spike hits both, not one (full-suite flake).
+  const bestPair = (f: () => unknown, g: () => unknown, n = 7): [number, number] => {
+    let a = Infinity, b = Infinity;
+    for (let i = 0; i < n; i++) {
+      let t = performance.now(); f(); a = Math.min(a, performance.now() - t);
+      t = performance.now(); g(); b = Math.min(b, performance.now() - t);
+    }
+    return [a, b];
+  };
   const best = (f: () => unknown, n = 5): number => { let b = Infinity; for (let i = 0; i < n; i++) { const t = performance.now(); f(); b = Math.min(b, performance.now() - t); } return b; };
 
   it('[K.14] readHeader is O(header): on a 3.5 MB text it costs under 1/100 of parsing the document, and the same for 4× the body (ratios to a baseline measured in this run)', () => {
@@ -974,17 +983,15 @@ describe('round 1: cost (K.14)', () => {
     }
   });
 
-  it('[K.14] assembleEnvelope and extract are linear: 4× the input costs under 8× the time', () => {
-    const a = header + bodyOf(5000);
-    const b = header + bodyOf(20000);
-    const ta = best(() => assembleEnvelope(a, PARTS[0]), 3);
-    const tb = best(() => assembleEnvelope(b, PARTS[0]), 3);
-    expect(tb).toBeLessThan(8 * ta + 5);
+  it('[K.14] assembleEnvelope and extract are linear: 8× the input costs under 24× the time (quadratic would be 64×)', () => {
+    const a = header + bodyOf(10000);
+    const b = header + bodyOf(80000);
+    const [ta, tb] = bestPair(() => assembleEnvelope(a, PARTS[0]), () => assembleEnvelope(b, PARTS[0]), 5);
+    expect(tb).toBeLessThan(24 * ta + 5);
     const fa = assembleEnvelope(a, PARTS[0]);
     const fb = assembleEnvelope(b, PARTS[0]);
-    const xa = best(() => extract(fa), 3);
-    const xb = best(() => extract(fb), 3);
-    expect(xb).toBeLessThan(8 * xa + 5);
+    const [xa, xb] = bestPair(() => extract(fa), () => extract(fb), 5);
+    expect(xb).toBeLessThan(24 * xa + 5);
   }, 60_000);
 });
 

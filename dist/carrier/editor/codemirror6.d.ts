@@ -1,0 +1,81 @@
+import { type TextEditorAdapter } from './adapter.js';
+import type { EdDocument } from './types.js';
+type Any = any;
+/**
+ * The CodeMirror 6 exports the adapter uses, grouped by package. Module
+ * namespaces satisfy it: `{ state: await import('@codemirror/state'), view:
+ * await import('@codemirror/view'), commands: …, language: …, markdown: await
+ * import('@codemirror/lang-markdown'), search: … }` (search optional).
+ */
+export interface CodeMirror6Modules {
+    state: {
+        EditorState: Any;
+        Compartment?: Any;
+        EditorSelection?: Any;
+    };
+    view: {
+        EditorView: Any;
+        keymap: Any;
+        drawSelection?: Any;
+        highlightActiveLine?: Any;
+        highlightSpecialChars?: Any;
+        dropCursor?: Any;
+    };
+    commands: {
+        history: Any;
+        defaultKeymap: Any;
+        historyKeymap: Any;
+        indentWithTab?: Any;
+        undo: Any;
+        redo: Any;
+        isolateHistory?: Any;
+    };
+    language: {
+        syntaxHighlighting: Any;
+        defaultHighlightStyle: Any;
+        indentOnInput?: Any;
+        bracketMatching?: Any;
+        LanguageSupport?: Any;
+    };
+    markdown: {
+        markdownLanguage: Any;
+        markdownKeymap?: Any;
+    };
+    search?: {
+        searchKeymap?: Any;
+        highlightSelectionMatches?: Any;
+    };
+    /** Package versions (the pinned bundle sets it). */
+    versions?: Record<string, string>;
+}
+/** Where the pinned bundle is served (the package version that ships it). */
+export declare const CODEMIRROR6_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.0.0/vendor/codemirror6.js";
+/** How long the bundle may take to load before the textarea is kept. */
+export declare const CODEMIRROR6_TIMEOUT_MS = 20000;
+export interface CodeMirror6Options {
+    /** Supply the modules (an app that bundles CodeMirror 6); nothing is fetched. */
+    loadModules?: () => CodeMirror6Modules | Promise<CodeMirror6Modules>;
+    /**
+     * Load the pinned bundle from another address (self-hosting, tests). A code
+     * option, never read from a document; the bytes must still match the pinned
+     * integrity.
+     */
+    url?: string;
+    timeoutMs?: number;
+}
+/** True when an object has the exports the adapter needs. */
+export declare function isCodeMirror6Modules(m: unknown): m is CodeMirror6Modules;
+/**
+ * Load the pinned CodeMirror 6 bundle into a document: a `<script>` with the
+ * pinned SRI integrity, appended to `<head>` once; resolves the bundle's
+ * global. Rejects on a network or integrity failure, a timeout or a bundle
+ * without the expected exports (a later call tries again).
+ */
+export declare function loadCodeMirror6(doc: EdDocument, options?: {
+    url?: string;
+    timeoutMs?: number;
+}): Promise<CodeMirror6Modules>;
+/** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
+export declare function codemirror6Adapter(options?: CodeMirror6Options): TextEditorAdapter;
+export {};
+//# sourceMappingURL=codemirror6.d.ts.map
