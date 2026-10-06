@@ -131,7 +131,9 @@ opens a second connection for its editor.
 3. **Isolation.** The chrome renders in a shadow root (the host's CSS cannot
    break it, and it cannot restyle the host); the document preview renders in
    a sandboxed frame (orz-markdown preview frame), so document content never
-   runs in the host page.
+   runs in the host page. One exception (owner, 2026-10-06): a standalone
+   file opened from disk (`file:`) gives its preview frame the page's origin,
+   so relative local images show; the document already runs in that page.
 4. **CSP-friendly:** no `eval`, no inline event handlers.
 5. **Text is the only output.** The component never changes text it was not
    asked to change: block IDs (FC-02), unknown and host header keys, and
@@ -274,12 +276,14 @@ shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapte
 ### 8.4 Preview
 
 - An iframe whose `sandbox` is decided in one place,
-  `previewSandbox({ host, protocol })` — `allow-scripts` exactly for every
-  context today (opaque origin: the document's scripts run in it and cannot
-  reach the host page, its storage or cookies). Owner decision pending
-  (finding B-2): a standalone `file:` page cannot show the document's
-  relative local images in the opaque frame; allowing `allow-same-origin`
-  there only would be a one-line change in that function. `srcdoc` = a fixed
+  `previewSandbox({ host, protocol })` — `allow-scripts` exactly in every
+  app host and on every served page (opaque origin: the document's scripts
+  run in it and cannot reach the host page, its storage or cookies). A
+  standalone `file:` page gets `allow-scripts allow-same-origin` (owner
+  decision 2026-10-06, finding B-2): an opaque frame is refused `file:`
+  subresources, so relative local images would never show; nothing is lost,
+  because the same document already runs in that page as its read view and
+  its raw HTML passes the strict allowlist. `srcdoc` = a fixed
   bridge script, then the pinned preview libraries (`getPreviewFrameAssets`,
   `__orzEnhance`) — the preview shows at once and is enhanced when the
   libraries arrive. `preview.head` adds the carrier's theme stylesheet links

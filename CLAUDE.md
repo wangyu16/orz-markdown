@@ -94,8 +94,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (`TextEditorAdapter`, `textareaAdapter`), `codemirror6.ts`
   (`codemirror6Adapter`: textarea first, upgraded when CodeMirror loads),
   `preview.ts` (the preview frame — its sandbox comes ONLY from
-  `previewSandbox()`, `allow-scripts` today; never add `allow-same-origin`
-  elsewhere — and its bridge, the message protocol a carrier's own bridge
+  `previewSandbox()`: `allow-scripts`, plus `allow-same-origin` only for a
+  standalone `file:` page (owner, B-2); never add it anywhere else — and its bridge, the message protocol a carrier's own bridge
   speaks). Frame messages are the document's claims: act on them only as
   claim E.14 says (focus on the frame, plus user activation for effects).
   `render-md.ts`

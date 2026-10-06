@@ -10,12 +10,15 @@ export interface PreviewContext {
 }
 /**
  * The `sandbox` attribute of the preview iframe for a context — the ONE place
- * it is decided. Today `allow-scripts` everywhere (an opaque origin).
+ * it is decided. `allow-scripts` (an opaque origin) everywhere except a
+ * standalone file opened from disk.
  *
- * Owner decision pending (finding B-2): in a standalone `file:` page the
- * opaque srcdoc preview cannot load the document's relative local images; the
- * owner may allow `allow-same-origin` for `{ host: 'standalone', protocol:
- * 'file:' }` ONLY. That would be a one-line change here — nowhere else.
+ * Owner decision 2026-10-06 (finding B-2): in a standalone `file:` page an
+ * opaque srcdoc frame is refused `file:` subresources, so the document's
+ * relative local images would never show. There the frame also gets
+ * `allow-same-origin`: nothing is lost, because the same document already runs
+ * in that page (its read view) and raw HTML in it passes the strict allowlist.
+ * App hosts and served pages keep the opaque frame. Change it only here.
  */
 export declare function previewSandbox(context: PreviewContext): string;
 /** The pieces of the preview frame's document, for a carrier that writes its own (`frameDocument`). */

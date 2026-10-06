@@ -14,7 +14,10 @@
  * skip when Chrome is absent.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import http from 'node:http';
 import vm from 'node:vm';
@@ -1102,16 +1105,19 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     ok.shell.destroy();
   });
 
-  it('[E.20] the preview sandbox is decided in one place, previewSandbox(context): allow-scripts for every host and protocol today (finding B-2 awaits the owner); the shell passes it the host kind and the page protocol', () => {
+  it('[E.20] the preview sandbox is decided in one place, previewSandbox(context): allow-scripts for every app host and every served page, plus allow-same-origin only for a standalone file: page (owner, B-2); the shell passes it the host kind and the page protocol', () => {
     for (const host of ['app', 'standalone'] as const) {
-      for (const protocol of ['https:', 'http:', 'file:', 'blob:', '']) expect(previewSandbox({ host, protocol })).toBe('allow-scripts');
+      for (const protocol of ['https:', 'http:', 'file:', 'blob:', '']) {
+        expect(previewSandbox({ host, protocol })).toBe(host === 'standalone' && protocol === 'file:' ? 'allow-scripts allow-same-origin' : 'allow-scripts');
+      }
     }
     const src = readFileSync('src/carrier/editor/preview.ts', 'utf8');
     expect(src.match(/setAttribute\('sandbox'/g)).toHaveLength(1);
     expect(src).toContain("iframe.setAttribute('sandbox', previewSandbox(");
     for (const f of ['adapter', 'codemirror6', 'index', 'preview', 'render-md', 'shell', 'styles', 'text-model', 'types']) {
       const code = readFileSync(`src/carrier/editor/${f}.ts`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''); // code, not comments
-      expect(code, f).not.toContain('allow-same-origin');
+      if (f === 'preview') expect(code.match(/allow-same-origin/g), f).toHaveLength(1); // previewSandbox's file: case only
+      else expect(code, f).not.toContain('allow-same-origin');
       if (f !== 'preview') expect(code, f).not.toMatch(/setAttribute\(\s*['"]sandbox/);
     }
     const ctx = page();
@@ -1608,6 +1614,34 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await p.evaluate('window.__listeners')).toBe(0);
     expect(await p.evaluate('[document.querySelectorAll("iframe").length, document.getElementById("a").childElementCount, document.getElementById("b").childElementCount]')).toEqual([0, 0, 0]);
     await p.close();
+  });
+
+  it('[E.13] [E.20] a standalone file opened from disk (file:) shows the document\'s relative local images in the preview; an app host on the same file: page keeps the opaque frame, where they stay blank', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orz-e20-'));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEUlEQVR4nGP4z8DwHwyBDAAk8AP9eF9ZWQAAAABJRU5ErkJggg==', 'base64');
+    writeFileSync(join(dir, 'fig.png'), png);
+    writeFileSync(join(dir, 'editor.js'), editorJs);
+    writeFileSync(join(dir, 'doc.md.html'), `<!doctype html><html><body><div id="s"></div><div id="a"></div><script src="editor.js"></script><script>
+      var E = window.OrzEditor, text = '# Figure\\n\\n![fig](fig.png)\\n';
+      var opts = function (extra) { return Object.assign({ text: text, render: function (t) { return E.renderMarkdownPreview(t); }, adapter: E.textareaAdapter(), preview: { assets: false, debounceMs: 10 } }, extra); };
+      window.st = E.createEditorShell(document.getElementById('s'), opts({ assemble: function () { return ''; } }));
+      window.ap = E.createEditorShell(document.getElementById('a'), opts({ hooks: { save: function () { return Promise.resolve(); } } }));
+    </script></body></html>`);
+    const page = await browser!.newPage();
+    try {
+      await page.goto(pathToFileURL(join(dir, 'doc.md.html')).href);
+      const frames = () => page.evaluate(() => ['st', 'ap'].map((k) => (window as unknown as Record<string, { root: ShadowRoot }>)[k].root.querySelector('iframe')!.getAttribute('sandbox')));
+      expect(await frames()).toEqual(['allow-scripts allow-same-origin', 'allow-scripts']);
+      const width = (k: string) => page.evaluate((key) => {
+        const f = (window as unknown as Record<string, { root: ShadowRoot }>)[key].root.querySelector('iframe')!;
+        try { const d = f.contentDocument; if (!d) return -2; const img = d.querySelector('img'); return img && img.complete ? img.naturalWidth : -1; } catch { return -2; }
+      }, k);
+      await expect.poll(() => width('st'), { timeout: 15_000 }).toBe(4);
+      expect(await width('ap')).toBe(-2); // opaque: the page cannot even look in
+    } finally {
+      await page.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('[E.13] [E.9] [E.11] a bundle whose bytes differ from the pinned integrity is refused by the browser: the shell keeps the textarea engine, reports the error, and still edits and saves', async () => {

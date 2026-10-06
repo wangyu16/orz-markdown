@@ -160,8 +160,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     preview (`frameDocument`, `bridge`, `diff: false`, `mode: 'navigate'`,
     `mapLine` / `mapPosition`); `preview.nonce`, `PREVIEW_BRIDGE_HASH`,
     `previewScriptHashes`, and a notice plus `error` when the frame never
-    starts; `previewSandbox()` as the one place the sandbox is decided
-    (still `allow-scripts` everywhere).
+    starts; `previewSandbox()` as the one place the sandbox is decided:
+    `allow-scripts`, plus `allow-same-origin` only for a standalone file
+    opened from disk, so its relative local images show in the preview.
   - Fixed: the shell acted on a forged Escape, "active" or scroll message from
     the preview's document (it could take focus from the editor or pin its
     scroll); the BOM and line endings after undoing a `setText` back to the
