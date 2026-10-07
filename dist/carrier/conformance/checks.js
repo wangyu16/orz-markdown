@@ -775,13 +775,14 @@ exports.editChecks = {
         await (0, session_js_1.call)(page, `async function (text) {
       localStorage.setItem('orz-conformance-secret', 'S3CRET');
       document.cookie = 'orzconformance=S3CRET';
-      window.__hookSaves = 0;
+      window.__hookSaves = 0; window.__links = [];
       var el = document.createElement('div');
       el.style.cssText = 'width: 1100px; height: 640px;';
       document.body.appendChild(el);
-      var e = await globalThis.OrzCarrier.mountEditor(el, { text: text, mode: 'split', hooks: { save: function () { window.__hookSaves++; return Promise.resolve(); } } });
+      var e = await globalThis.OrzCarrier.mountEditor(el, ${ISOLATION_OPTIONS});
       window.__orzEditor = e;
       if (e && e.ready && typeof e.ready.then === 'function') { try { await e.ready; } catch (x) {} }
+      ${WATCH_VIEW}
       return true;
     }`, texts_js_1.LONG_TEXT);
         const sandboxes = await ed(page, 'window.__orzC.deepAll(document, "iframe").map(function (f) { return f.getAttribute("sandbox"); })');
@@ -802,7 +803,11 @@ exports.editChecks = {
       var n = 0, end = Date.now() + ms;
       var t = setInterval(function () {
         var P = parent;
+        P.postMessage({ type: 'orz-preview-ready' }, '*');
+        P.postMessage({ type: 'orz-preview-ready', channel: 'forged' }, '*');
+        P.postMessage({ type: 'orz-preview-ready', channel: 'forged', secret: 'guessed' }, '*');
         P.postMessage({ type: 'orz-preview-key', key: 's' }, '*');
+        P.postMessage({ type: 'orz-preview-key', key: '\\\\' }, '*');
         P.postMessage({ type: 'orz-preview-key', key: 'Escape' }, '*');
         P.postMessage({ type: 'orz-preview-active' }, '*');
         P.postMessage({ type: 'orz-preview-scrolled', top: 0, max: 100000 }, '*');
@@ -850,30 +855,61 @@ exports.editChecks = {
         p.eq(ctx.context.pages().length, 1, 'pages opened by forged links, synthetic clicks or window.open (no user activation)');
         p.eq(ctx.requests.filter((u) => u.startsWith('https://example.org/')), [], 'requests to forged link targets');
         p.eq(ctx.of('dialog').length, 0, 'dialogs');
-        // bounded: a page that stops answering (a focus loop between the editor and the frame) is a finding, not a hang
-        let timer;
-        const stuck = await Promise.race([
-            focusTheft(s, p).then(() => false),
-            new Promise((resolve) => { timer = setTimeout(() => resolve(true), 45000); }),
-        ]).finally(() => clearTimeout(timer));
-        if (stuck)
-            p.fail('focus theft: the page stopped answering within 45 s while the preview stole the focus (a focus loop between the editor and the frame?)');
+        await noAction(page, p, 'forged messages');
+        // the phases below each in a page of their own; bounded: a page that stops answering (a focus loop
+        // between the editor and the frame) is a finding, not a hang
+        const phases = [['focus theft', focusTheft], ['replaced previews', replacedPreviews], ['tab switch', tabSwitch]];
+        for (const [name, phase] of phases) {
+            let timer;
+            const stuck = await Promise.race([
+                phase(s, p).then(() => false),
+                new Promise((resolve) => { timer = setTimeout(() => resolve(true), 60000); }),
+            ]).finally(() => clearTimeout(timer));
+            if (stuck)
+                p.fail(`${name}: the page stopped answering within 60 s (a focus loop between the editor and the frame?)`);
+        }
     },
 };
 /**
- * Phase 3 of C.edit.preview-isolation: a document script in the preview (THEFT_SCRIPT, run by the
- * document itself from an image's error handler) keeps stealing the focus and forges save keys,
- * Escapes, "active" and links from the keys it receives — with the user activation those keys give
- * the frame. The reader clicks the editor and types. (A preview that never runs the document's
- * handlers cannot be robbed this way; the outcome is checked either way.)
+ * The editor options of the preview-isolation pages: an app host's `hooks.save` that counts, and
+ * `hooks.resolveLink` that records every link reaching the host and opens none (FC-19 §3).
  */
-async function focusTheft(s, p) {
+const ISOLATION_OPTIONS = `{ text: text, mode: 'split', hooks: {
+  save: function () { window.__hookSaves = (window.__hookSaves || 0) + 1; return Promise.resolve(); },
+  resolveLink: function (h) { (window.__links = window.__links || []).push(String(h)); return null; }
+} }`;
+/**
+ * Page script (after a mount into `el`): records every change of what the editor shows — its preview
+ * frame shown or hidden, its text area shown or hidden — in `window.__views` (a view change, e.g. by a
+ * forged view key, hides one of them; FC-19's Editor has no getter for the mode).
+ */
+const WATCH_VIEW = `(function () {
+  window.__views = [];
+  var shown = function (n) { if (!n) return false; var r = n.getBoundingClientRect(); return r.width > 2 && r.height > 2; };
+  var now = function () {
+    var f = window.__orzC.deepAll(el, 'iframe')[0];
+    var t = window.__orzC.deepAll(el, '.cm-content, textarea')[0];
+    return (shown(f) ? 'preview' : '-') + '+' + (shown(t) ? 'editor' : '-');
+  };
+  var first = now();
+  window.__viewFirst = first;
+  setInterval(function () { var v = now(); if (v !== first && window.__views.length < 50) window.__views.push(v); }, 20);
+})();`;
+/** Nothing a frame forged acted: no save, no link reaching the host, no chip offering one, no view change. */
+async function noAction(page, p, what) {
+    p.eq(await ed(page, 'window.__hookSaves || 0'), 0, `${what}: saves (hooks.save)`);
+    p.eq(await ed(page, 'window.__links || []'), [], `${what}: links that reached the host (hooks.resolveLink)`);
+    p.eq(await ed(page, 'window.__orzC.deepAll(document, "[data-orz-link]").length'), 0, `${what}: links offered to open (the shell's chip)`);
+    p.eq(await ed(page, 'window.__views || []'), [], `${what}: view changes (the preview or the editor was hidden, from ${await ed(page, 'window.__viewFirst')})`);
+}
+/** Mount one editor (ISOLATION_OPTIONS, WATCH_VIEW) in a fresh page of its own context. */
+async function isolationPage(s, text) {
     const ctx = await s.context({ picker: 'stub' });
     const page = await ctx.newPage();
     await page.goto(`${s.fileOrigin}/page/target.html`);
     await page.evaluate(page_js_1.PAGE_HELPERS);
     await (0, session_js_1.call)(page, `async function (text) {
-    window.__hookSaves = 0; window.__theft = 0; window.__stolen = [];
+    window.__theft = 0; window.__stolen = []; window.__hookSaves = 0; window.__links = [];
     window.addEventListener('message', function (e) {
       var d = e.data;
       if (d && d.type === 'orz-conformance-theft') window.__theft++;
@@ -883,50 +919,128 @@ async function focusTheft(s, p) {
     el.setAttribute('data-orz-conformance', 'editor');
     el.style.cssText = 'width: 1100px; height: 640px;';
     document.body.appendChild(el);
-    var e = await globalThis.OrzCarrier.mountEditor(el, { text: text, mode: 'split', hooks: { save: function () { window.__hookSaves++; return Promise.resolve(); } } });
+    var e = await globalThis.OrzCarrier.mountEditor(el, ${ISOLATION_OPTIONS});
     window.__orzEditor = e;
     if (e && e.ready && typeof e.ready.then === 'function') { try { await e.ready; } catch (x) {} }
+    ${WATCH_VIEW}
     return true;
-  }`, texts_js_1.THEFT_TEXT);
+  }`, text);
+    return { page, ctx };
+}
+/** Where the editor's own focus() put the caret, inside the visible part of the editor (null: not in the editor). */
+const EDITOR_POINT = `(function () {
+  window.__orzEditor.focus();
+  var a = document.activeElement;
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  if (!a || a === document.body || a.tagName === 'IFRAME') return null;
+  // click inside the VISIBLE part of the editor: CodeMirror's content element can extend far
+  // above the viewport once it has scrolled to the caret, so clip to its scroller and the window
+  var r = a.getBoundingClientRect();
+  var sc = a.closest ? a.closest('.cm-scroller') : null;
+  var v = sc ? sc.getBoundingClientRect() : r;
+  var top = Math.max(r.top, v.top, 0), bottom = Math.min(r.bottom, v.bottom, innerHeight);
+  var left = Math.max(r.left, v.left, 0), right = Math.min(r.right, v.right, innerWidth);
+  if (bottom - top < 4 || right - left < 4) return null;
+  return { x: Math.min((left + right) / 2, left + 200), y: Math.min((top + bottom) / 2, top + 60) };
+})()`;
+/** Nothing reached outside the page: no other page, no request to a forged target, no dialog. */
+function nothingOutside(ctx, p, what) {
+    p.eq(ctx.context.pages().length, 1, `${what}: pages opened by links or popups`);
+    p.eq(ctx.requests.filter((u) => u.startsWith('https://example.org/')), [], `${what}: requests to forged link targets`);
+    p.eq(ctx.of('dialog').length, 0, `${what}: dialogs`);
+}
+/**
+ * Phase 3 of C.edit.preview-isolation: a document script in the preview (THEFT_SCRIPT, run by the
+ * document itself from an image's error handler) keeps stealing the focus and forges save keys,
+ * view keys, Escapes, "active" and links from the keys it receives — with the user activation those
+ * keys give the frame. The reader clicks the editor and types. Keys may go to the preview (the
+ * accepted limit, FC-19 §5 invariant 3); nothing else may come of it.
+ */
+async function focusTheft(s, p) {
+    const { page, ctx } = await isolationPage(s, texts_js_1.THEFT_TEXT);
     if (!p.check(await until(() => page.frames().length > 1, 10000), 'focus theft: no preview frame loaded within 10 s'))
         return;
     await until(async () => (await ed(page, 'window.__theft')) > 2, 4000); // the document's script has started (when the preview runs it)
-    // the reader clicks the editor (where its own focus() puts the caret) and types
-    const at = await ed(page, `(function () {
-    window.__orzEditor.focus();
-    var a = document.activeElement;
-    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
-    if (!a || a === document.body || a.tagName === 'IFRAME') return null;
-    // click inside the VISIBLE part of the editor: CodeMirror's content element can extend far
-    // above the viewport once it has scrolled to the caret, so clip to its scroller and the window
-    var r = a.getBoundingClientRect();
-    var sc = a.closest ? a.closest('.cm-scroller') : null;
-    var v = sc ? sc.getBoundingClientRect() : r;
-    var top = Math.max(r.top, v.top, 0), bottom = Math.min(r.bottom, v.bottom, innerHeight);
-    var left = Math.max(r.left, v.left, 0), right = Math.min(r.right, v.right, innerWidth);
-    if (bottom - top < 4 || right - left < 4) return null;
-    return { x: Math.min((left + right) / 2, left + 200), y: Math.min((top + bottom) / 2, top + 60) };
-  })()`);
+    const at = await ed(page, EDITOR_POINT);
     if (!p.check(at, 'focus theft: the editor\'s focus() did not focus an element of the editor'))
         return;
-    const before = await ed(page, 'window.__orzEditor.getText()');
     await page.mouse.click(at.x, at.y);
-    const typed = 'typedwhilestolen';
-    await page.keyboard.type(typed, { delay: 60 });
-    await page.waitForTimeout(600);
-    const got = await ed(page, 'window.__orzEditor.getText()');
-    const stolen = await ed(page, 'window.__stolen');
-    p.check(got.length === before.length + typed.length && got.includes(typed), `focus theft: the keys the reader typed after clicking the editor did not all reach the text (the preview received ${JSON.stringify(stolen.join(''))}) — ${firstDiff(got.replace(typed, ''), before)}`);
-    const where = await ed(page, `(function () {
-    var a = document.activeElement, path = [];
-    while (a) { path.push(a.tagName); if (!a.shadowRoot || !a.shadowRoot.activeElement) break; a = a.shadowRoot.activeElement; }
-    return path.join(' > ');
-  })()`);
-    p.check(!/IFRAME$/.test(where) && where !== 'BODY', `focus theft: the focus is not back in the editor after typing (it is on ${where})`);
-    p.eq(await ed(page, 'window.__hookSaves'), 0, 'focus theft: saves triggered by save keys forged from stolen keystrokes');
-    p.eq(ctx.context.pages().length, 1, 'focus theft: pages opened by links or popups forged from stolen keystrokes');
-    p.eq(ctx.requests.filter((u) => u.startsWith('https://example.org/')), [], 'focus theft: requests to forged link targets');
-    p.eq(ctx.of('dialog').length, 0, 'focus theft: dialogs');
+    await page.keyboard.type('typedwhilestolen', { delay: 60 });
+    await page.waitForTimeout(800);
+    await noAction(page, p, 'focus theft');
+    nothingOutside(ctx, p, 'focus theft');
+}
+/**
+ * Phase 4: previews replaced or nested by their own document (replacedTexts) — a nested frame that
+ * steals the focus and posts to the top, `document.open()`, a meta refresh to an http page of the
+ * harness's other origin and to a `data:` URL — each asking for the bridge's port and forging keys
+ * and links. The reader types in the editor meanwhile. None may get a port; nothing may act.
+ */
+async function replacedPreviews(s, p) {
+    const grabUrl = s.serve('orz-conformance-grab.html', texts_js_1.GRAB_PAGE).replace(s.fileOrigin, s.hostOrigin);
+    for (const [name, text] of Object.entries((0, texts_js_1.replacedTexts)(grabUrl))) {
+        const what = `replaced preview (${name})`;
+        const { page, ctx } = await isolationPage(s, text);
+        if (!p.check(await until(() => page.frames().length > 1, 10000), `${what}: no preview frame loaded within 10 s`)) {
+            await ctx.context.close();
+            continue;
+        }
+        const at = await ed(page, EDITOR_POINT);
+        if (at)
+            await page.mouse.click(at.x, at.y);
+        await page.keyboard.type('typed', { delay: 40 });
+        await page.waitForTimeout(3500); // the refreshes (1 s) have navigated, and the documents asked for the port for 3 s
+        const got = [];
+        for (const f of page.frames())
+            if (f !== page.mainFrame())
+                got.push(String(await f.evaluate('window.__orzGot || ""').catch(() => '')));
+        p.check(!got.join('').includes('[port]'), `${what}: a document that replaced or nested the preview got its port`);
+        await noAction(page, p, what);
+        nothingOutside(ctx, p, what);
+        await ctx.context.close();
+    }
+}
+/**
+ * Phase 5: the reader clicks into the preview, switches to another tab and back, twice (Chrome gives
+ * the frame its focus back): the preview must keep working — not replaced, paused or noted, no
+ * `error` — so an edit still shows in it and Cmd/Ctrl+S pressed in it saves once.
+ */
+async function tabSwitch(s, p) {
+    const { page, ctx } = await isolationPage(s, texts_js_1.LONG_TEXT);
+    await ed(page, '(window.__errors = [], window.__orzEditor.on("error", function (e) { window.__errors.push(e.source + ": " + e.message); }), true)');
+    if (!p.check(await until(() => page.frames().length > 1, 10000), 'tab switch: no preview frame loaded within 10 s'))
+        return;
+    const frameEl = 'window.__orzC.deepAll(document, "iframe")[0]';
+    await ed(page, `(window.__frame0 = ${frameEl}, true)`);
+    const box = await ed(page, `(function () { var r = ${frameEl}.getBoundingClientRect(); return r.width > 40 ? { x: r.left + 60, y: r.top + 60 } : null; })()`);
+    if (!p.check(box, 'tab switch: the preview frame is not shown in split mode'))
+        return;
+    await page.mouse.click(box.x, box.y);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(400);
+    for (let i = 0; i < 2; i++) {
+        const other = await ctx.newPage();
+        await other.goto(`${s.fileOrigin}/blank.html`);
+        await other.bringToFront();
+        await other.waitForTimeout(600);
+        await page.bringToFront();
+        await page.waitForTimeout(1500);
+        await other.close();
+    }
+    const state = await ed(page, `[${frameEl} === window.__frame0, window.__errors, /Content-Security-Policy/.test(${frameEl}.srcdoc || ''), window.__orzC.deepAll(document, '[data-orz-paused]').length]`);
+    p.eq(state, [true, [], false, 0], 'tab switch: the preview after a tab switch round trip with the focus in it ([the same frame, error events, a pausing policy, pause notes])');
+    await page.mouse.click(box.x, box.y);
+    await page.keyboard.press('ControlOrMeta+s');
+    p.check(await until(async () => (await ed(page, 'window.__hookSaves || 0')) >= 1, 3000), 'tab switch: Cmd/Ctrl+S pressed in the preview after the round trip did not save');
+    await page.waitForTimeout(300);
+    p.eq(await ed(page, 'window.__hookSaves || 0'), 1, 'tab switch: saves from one Cmd/Ctrl+S in the preview');
+    const marker = 'Written after the tab switch';
+    await ed(page, `(window.__orzEditor.setText(window.__orzEditor.getText() + ${JSON.stringify(`\n${marker}.\n`)}), true)`);
+    const shows = async () => { for (const f of page.frames())
+        if (f !== page.mainFrame() && String(await f.evaluate('document.body ? document.body.textContent : ""').catch(() => '')).includes(marker))
+            return true; return false; };
+    p.check(await until(shows, 5000), 'tab switch: an edit after the round trip did not show in the preview');
+    p.eq(await ed(page, 'window.__views'), [], 'tab switch: view changes');
 }
 // ── save ─────────────────────────────────────────────────────────────────
 const EDITED = `${texts_js_1.EDIT_TEXT}Saved paragraph — 𝒳.\r\n`;

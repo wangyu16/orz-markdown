@@ -38,8 +38,10 @@
  * an editor left read-only after an update, an edit during a hook save
  * marked saved, Cmd/Ctrl+S saving a read-only app editor) and the save and
  * update gaps (a cdn file saved inline, includes dropped by a save or an
- * update) — each fails a named check (the table `caught` below says which
- * and why).
+ * update), a forged view key that switches the view (r3-ungated-view-key)
+ * and, under the owner's option B, a shell that hands the preview's port to
+ * any ready without the frame's secret (port-without-secret) — each fails a
+ * named check (the table `caught` below says which and why).
  *
  * One file, one Chrome, shared stub builds (the suite is heavy; a second
  * file running in parallel pushed other suites' default timeouts over).
@@ -395,6 +397,9 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['save-to-inline', 'C.save.keeps-delivery', /cdn-delivery file/],
     ['save-drops-includes', 'C.save.keeps-includes', /lost or changed the file's #orz-includes/],
     ['update-drops-includes', 'C.update.keeps-includes', /lost or changed the file's #orz-includes/],
+    ['r3-ungated-view-key', 'C.edit.preview-isolation', /forged messages: view changes/],
+    // option B (2026-10-06): a shell that hands the preview's port to any ready, without the frame secret
+    ['port-without-secret', 'C.edit.preview-isolation', /replaced preview \((meta refresh http|meta refresh data|document\.open)\): a document that replaced or nested the preview got its port/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5] the ${variant} mutant fails ${id}`, async () => {

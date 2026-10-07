@@ -13,13 +13,14 @@
  *   `renderMarkdownPreview`) into the sandboxed frame of preview.ts, after a
  *   pause that grows with the render time, never two at once; scroll sync on
  *   `data-src-line` anchors (or the carrier's mapping / navigation).
- * - Frame messages are claims of the document's scripts: the shell acts on
- *   them only while the reader is in the frame (focus that entered it with the
- *   reader's pointer, a Tab or the shell's own `focus()`; for actions with
- *   effects, also transient user activation). Focus that a document script
- *   takes is given back at once and the document's scripts are paused in the
- *   preview; links from the frame open only through the host (`onLink`) or a
- *   click on the shell's own "Open" chip.
+ * - Frame messages: keys (save, view, Escape), links, input and scrolls act
+ *   only when the bridge reports them through its authenticated port (the
+ *   reader's own trusted events in the frame); window messages are data and
+ *   never act. A document's scripts may take the keyboard focus inside the
+ *   preview (accepted, FC-19 §5 invariant 3): keys typed then go to the
+ *   preview, but nothing there can save, switch views, open a link or scroll
+ *   the editor. Links from the frame open only through the host (`onLink`) or
+ *   a click on the shell's own "Open" chip.
  * - Text formats: a header `format` newer than `formats` opens read-only and
  *   is never saved over (FC-18 §8.4).
  * - Reader preferences (FC-18 §6): split ratio, view mode, scroll sync, editor
@@ -123,7 +124,7 @@ export interface RenderContext {
 export interface EditorPreviewChannel {
     /** Post a message to the frame (the carrier's own types). False while the frame is not ready. */
     post(message: Readonly<Record<string, unknown>>): boolean;
-    /** Listen to the frame's messages of one type — claims of the document's scripts, data only. Returns the unsubscribe. */
+    /** Listen to the frame's messages of one type (through the authenticated port, and a carrier's own types on the window — data only). Returns the unsubscribe. */
     on(type: string, fn: (message: PreviewMessage) => void): () => void;
     /** Rebuild the frame document with another `head` and/or `scheme` (e.g. a theme change); the preview shows again. */
     setOptions(options: {

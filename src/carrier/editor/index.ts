@@ -25,7 +25,7 @@ export { createTextModel, toEditorText, minimalChange, detachString } from './te
 export type { TextModel } from './text-model.js';
 export {
   previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes,
-  PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_READY_TIMEOUT_MS,
+  PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS,
 } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';
 export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes } from './render-md.js';

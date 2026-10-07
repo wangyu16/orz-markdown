@@ -32,23 +32,17 @@ export interface PreviewContext {
 export declare function previewSandbox(context: PreviewContext): string;
 /** The pieces of the preview frame's document, for a carrier that writes its own (`frameDocument`). */
 export interface PreviewFrameParts {
-    /**
-     * For `<head>`: the pinned libraries' stylesheet links (with `assets`), the
-     * carrier's `head`, the base style (nonce-stamped). While the document's
-     * scripts are paused it starts with the `<meta>` Content-Security-Policy
-     * that pauses them: place it in `<head>`, before the article and
-     * `scripts` (the policy must precede the document's content and every
-     * library script; the nonce-stamped `bridge` may come before it or right
-     * after it — FC-19 §8.4).
-     */
+    /** For `<head>`: the pinned libraries' stylesheet links (with `assets`), the carrier's `head`, the base style (nonce-stamped). */
     head: string;
     /**
-     * The bridge `<script>` element (nonce-stamped). The default bridge finds
-     * `#orz-doc` when a render arrives, so it can (and should) come before the
-     * stylesheets — first in `<head>`, or right after the pausing `<meta>` that
-     * `head` may start with, as the default document puts it: a script after a
-     * pending stylesheet waits for it. A carrier's own bridge goes wherever
-     * that bridge expects.
+     * The bridge `<script>` element (nonce-stamped, carrying the frame's
+     * secret in {@link PREVIEW_SECRET_ATTRIBUTE}). The default bridge finds
+     * `#orz-doc` when a render arrives, so it can (and should) come first in
+     * `<head>`, before the stylesheets, as the default document puts it: a
+     * script after a pending stylesheet waits for it. It must come before
+     * anything of the document (the secret must be gone before document content
+     * exists — it only arrives through the port, after the ready). A carrier's
+     * own bridge goes wherever that bridge expects.
      */
     bridge: string;
     /** The pinned preview libraries' `<script>` elements and their ready call (nonce-stamped; empty without `assets`). */
@@ -58,8 +52,8 @@ export interface PreviewFrameParts {
     articleClass: string;
     /**
      * The nonce stamped on the frame's scripts and styles. A carrier's own
-     * `<script>` (or `<style>`) in its frame document must carry it: the
-     * pausing policy (and an app's nonce policy) runs nothing else (B#5).
+     * `<script>` (or `<style>`) in its frame document must carry it under an
+     * app's nonce policy, which runs nothing else (B#5).
      */
     nonce?: string;
 }
@@ -81,18 +75,22 @@ export interface PreviewFrameOptions {
     /**
      * The bridge script (a carrier's own; default `PREVIEW_BRIDGE`): plain
      * script text, script-safe, speaking the preview message protocol
-     * (FC-19 §8.4).
+     * (FC-19 §8.4). To get the port (and with it keys, links and scroll) it
+     * must do the default bridge's handshake: read and remove
+     * {@link PREVIEW_SECRET_ATTRIBUTE} from `document.currentScript` first
+     * thing, post `orz-preview-ready { channel, secret }`, take the port from
+     * `orz-preview-port { channel }` and send its reports through it.
      */
     bridge?: string;
+    /**
+     * The frame's secret (set by `createPreview`, a new one for every frame
+     * document): written on the bridge's `<script>` as
+     * {@link PREVIEW_SECRET_ATTRIBUTE}. Without it the bridge says a plain ready
+     * and gets no port (renders only).
+     */
+    secret?: string;
     /** Write the whole frame document from its parts (a carrier's own layout, e.g. slides or pages). */
     frameDocument?(parts: PreviewFrameParts): string;
-    /**
-     * Pause the document's own scripts (set by the shell after the document
-     * took the keyboard focus): a `<meta>` CSP `script-src 'nonce-…'
-     * 'strict-dynamic'` runs only the frame's nonce-stamped scripts (this nonce,
-     * or `nonce` when given), not the document's event handlers.
-     */
-    pauseScripts?: string;
     /**
      * `true` (default): the bridge keeps unchanged top-level nodes. `false`:
      * every render replaces the content whole, keeping the scroll position (a
@@ -101,6 +99,12 @@ export interface PreviewFrameOptions {
     diff?: boolean;
 }
 /**
+ * The attribute of the bridge's own `<script>` element that carries the
+ * frame's secret (FC-19 §8.4, the authenticated channel). A bridge reads it
+ * and removes it first thing, before any document content exists.
+ */
+export declare const PREVIEW_SECRET_ATTRIBUTE = "data-orz-preview-secret";
+/**
  * The bridge inside the frame (ES5, no `</script`). Swaps the article's
  * changed top-level nodes (compared without their `data-src-line`, whose new
  * values are copied onto the kept nodes, so a line inserted above does not
@@ -108,45 +112,47 @@ export interface PreviewFrameOptions {
  * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc), link
  * clicks and the reader's input (pointer, wheel, touch, keys).
  *
- * Authenticated channel (F1, B#10). Its ready carries a random `channel`;
- * the shell answers with a MessageChannel port for it, which the bridge takes
- * in a capture listener registered before anything else in the frame (and
- * hides from the frame's other listeners) — before any document content
- * exists, since that only arrives through the port. From then on the shell's
- * messages come through the port, and the bridge sends its own reports
- * through it with `Reflect.apply` and `MessagePort.prototype.postMessage` as
- * they were when it started, so the document's scripts cannot send on it.
- * It reports keys, link clicks, input and scrolls only for trusted events
- * (`isTrusted`): what arrives on the port is the reader's own input in the
- * frame, never a document script's. When the frame gains the focus it says
- * whether the reader's own pointer or touch in the frame brought it there
- * (`orz-preview-focus { reader }`): focus a document script takes says
- * `reader: false`. Chrome may move the focus into the frame a moment before
- * the click's pointerdown arrives there: a trusted pointerdown within 1.5 s
- * of a focus reported without one — or of the bridge starting in a frame that
- * already has the focus (a frame reloaded while focused) — sends
- * `{ reader: true, late: true }`; and the shell's `orz-preview-ping { id }`
- * gets `orz-preview-pong { id, pointer }`: whether a trusted pointerdown came
- * after the last focus reported without one (input queued before the ping is
- * handled first).
+ * Authenticated channel (option B, 2026-10-06). The shell writes a per-frame
+ * secret on the bridge's own `<script>` ({@link PREVIEW_SECRET_ATTRIBUTE}); the
+ * bridge reads and removes it first thing, synchronously, before any document
+ * content exists (that only arrives through the port). Its ready carries the
+ * secret and a random `channel`; the shell answers with a MessageChannel port
+ * only for a ready with this frame's secret, which the bridge takes in a
+ * capture listener registered before anything else in the frame (and hides
+ * from the frame's other listeners). A document that replaces the bridge's
+ * (`document.open()`, a navigation, a meta refresh) cannot know the secret, so
+ * it never gets a port. From then on the shell's messages come through the
+ * port, and the bridge sends its own reports through it with `Reflect.apply`
+ * and `MessagePort.prototype.postMessage` as they were when it started, so the
+ * document's scripts cannot send on it. It reports keys, link clicks, input
+ * and scrolls only for trusted events (`isTrusted`) — scrolls (and
+ * `navigated`) only within 1.5 s of the reader's own pointer (a press, or a
+ * drag), wheel, touch or key in the frame, since a script's scrolling fires trusted scroll events
+ * too: what arrives on the port is the reader's own input in the frame,
+ * never a document script's.
  *
  * It finds `#orz-doc` when a render arrives (so it may run before the
  * article exists, in `<head>`). Page hooks a carrier's frame document may
  * define: `window.__orzPreviewApply(html, msg)` replaces the DOM update (it
- * may return a promise; the bridge reports when it settles),
+ * may return a promise; the bridge reports when it settles, and runs the
+ * next render — only the latest — after it: never two at once),
  * `window.__orzPreviewNavigate(line)` receives `orz-preview-navigate`, and
  * `window.__orzPreviewMessage(msg)` any other message from the shell
  * (`shell.preview.post`). `window.__orzPreview.report()` re-reports the
- * anchors; `window.__orzPreview.post(msg)` posts a carrier's own message to
- * the shell as a plain window message (a claim, like any other).
+ * anchors; `window.__orzPreview.navigated(line)` reports the source line the
+ * preview shows (navigate mode) through the port, only within 1.5 s of the
+ * reader's own input in the frame; `window.__orzPreview.post(msg)` posts a
+ * carrier's own message to the shell as a plain window message (data).
  */
 export declare const PREVIEW_BRIDGE: string;
 /**
  * `'sha256-…'` of {@link PREVIEW_BRIDGE}, for a hash-based Content-Security-Policy
  * (`script-src 'sha256-…'`). A test recomputes it; with `assets` the frame has
- * more inline scripts — {@link previewScriptHashes} lists them all.
+ * more inline scripts — {@link previewScriptHashes} lists them all. (The
+ * secret is an attribute of the `<script>` element, not its text: the hash
+ * does not change per frame.)
  */
-export declare const PREVIEW_BRIDGE_HASH = "sha256-b5U0KPkMCBoiEeKodg9ElyhxwmpJaT6BdZ+gmcYdg28=";
+export declare const PREVIEW_BRIDGE_HASH = "sha256-H1iuz4liwX/FMMxx0fL3854mJcMGhThLP+BrQREttCw=";
 /** The pieces of the frame document for these options. */
 export declare function previewFrameParts(options?: PreviewFrameOptions): PreviewFrameParts;
 /** The preview frame's `srcdoc`. */
@@ -179,40 +185,23 @@ export interface PreviewEvents {
     onRendered?(anchors: Array<[number, number]>, max: number): void;
     /** The frame scrolled: its top and scrollable height, or (a navigating bridge) the source line it shows. */
     onScrolled?(top: number, max: number, line?: number): void;
-    /**
-     * `s`, `\`, `Escape` pressed inside the frame. `trusted`: reported by the
-     * default bridge through its port, from a trusted key event (the reader's own
-     * key); otherwise a window message — a claim of the frame's scripts.
-     */
-    onKey?(key: string, trusted: boolean): void;
-    /** A link clicked in the frame; `trusted` as for `onKey` (a trusted click). */
-    onLink?(href: string, trusted: boolean): void;
-    /**
-     * The reader pointed, scrolled, touched or typed in the frame (`input`:
-     * `pointer`, `wheel`, `touch`, `key`). `trusted` as for `onKey`; untrusted, it
-     * is a claim the shell does not trust alone.
-     */
-    onActive?(input: string | undefined, trusted: boolean): void;
-    /**
-     * The frame gained the focus (the default bridge only, through its port):
-     * `reader` when the reader's own pointer or touch in the frame brought it
-     * there; otherwise a script in the frame took it (or the shell, or a Tab in
-     * the page, gave it).
-     */
-    onFocus?(reader: boolean): void;
-    /** The bridge's answer to `orz-preview-ping { id }` (port only): did a trusted pointerdown follow the last focus it reported without one? */
-    onPong?(id: number, pointer: boolean): void;
-    /** The frame said ready (again, after a reload). */
+    /** `s`, `\`, `Escape` pressed inside the frame (the bridge's report through its port: a trusted key event, the reader's own). */
+    onKey?(key: string): void;
+    /** A link the reader clicked in the frame (through the port: a trusted click). */
+    onLink?(href: string): void;
+    /** The reader pointed, scrolled, touched or typed in the frame (`input`: `pointer`, `wheel`, `touch`, `key`; through the port). */
+    onActive?(input: string | undefined): void;
+    /** The frame said ready (again, after a reload): an authenticated ready, or a plain one of a bridge without the port. */
     onReady?(): void;
     /** The frame did not say ready within `readyTimeoutMs` (a CSP that blocks its scripts, a broken bridge). */
     onStall?(): void;
 }
-/** A message from the preview frame (a claim of the document's scripts: data, never trusted). */
+/** A message from the preview frame (data). */
 export type PreviewMessage = Readonly<Record<string, unknown>> & {
     readonly type: string;
 };
 export interface PreviewController {
-    /** The preview iframe (pausing or resuming the document's scripts replaces it with a new one). */
+    /** The preview iframe. */
     readonly iframe: EdIframe;
     /**
      * Show this HTML (sent when the frame is ready; the last one is re-sent if
@@ -226,26 +215,23 @@ export interface PreviewController {
     navigate(line: number): void;
     /** Post a message to the frame's bridge (the carrier's own types). False when the frame is not ready. */
     post(message: Readonly<Record<string, unknown>>): boolean;
-    /** Listen to the frame's messages of one type (after the shell's own handling); returns the unsubscribe. */
+    /**
+     * Listen to the frame's messages of one type (after the shell's own handling): those through the
+     * port, and window messages of a carrier's own types (data; never the `orz-preview-*` types).
+     * Returns the unsubscribe.
+     */
     on(type: string, fn: (message: PreviewMessage) => void): () => void;
     /** Rebuild the frame document with another `head` / `scheme` (e.g. a theme change); the last HTML is shown again. */
     setOptions(options: {
         head?: string;
         scheme?: ColorScheme;
     }): void;
-    /** Rebuild the frame under a CSP that runs only the frame's own nonce-stamped scripts (`nonce`), not the document's. */
-    pauseScripts(nonce: string): void;
-    /** Rebuild the frame with the document's scripts running again (after a pause that turned out to be the reader's own click). */
-    resumeScripts(): void;
-    /** The document's scripts are paused (`pauseScripts`). */
-    readonly scriptsPaused: boolean;
     /** The frame has acknowledged a render by its id since it last said ready (its bridge paces). */
     readonly acknowledges: boolean;
     /**
-     * The frame's bridge speaks through the private port (the default bridge):
-     * its reports are authenticated. Once true it stays true for this preview
-     * (also while a reloaded frame has not yet taken its new port, when the
-     * bridge's report types on the window are ignored all the same).
+     * The frame's bridge proved the frame's secret and speaks through the
+     * private port (the default bridge): its reports are authenticated. Once
+     * true it stays true for this preview.
      */
     readonly authenticated: boolean;
     readonly anchors: ReadonlyArray<[number, number]>;

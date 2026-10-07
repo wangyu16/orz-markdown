@@ -64,7 +64,6 @@ export interface EdElement {
     append(...nodes: unknown[]): void;
     appendChild(node: unknown): unknown;
     remove(): void;
-    replaceWith?(...nodes: unknown[]): void;
     addEventListener(type: string, listener: EdListener, options?: boolean | {
         capture?: boolean;
         passive?: boolean;
@@ -145,9 +144,6 @@ export interface EdView {
     readonly navigator?: {
         readonly platform?: string;
         readonly userAgent?: string;
-        readonly userActivation?: {
-            readonly isActive?: boolean;
-        };
     };
     readonly location?: {
         readonly protocol?: string;

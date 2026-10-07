@@ -25,12 +25,28 @@ export declare const LONG_TEXT: string;
  * A document script that steals the focus (ES5; no double quote, so it fits an HTML attribute): it
  * puts an input in the preview and focuses it every 40 ms, posts a heartbeat
  * (`orz-conformance-theft`) so the harness knows it runs, and on every key it receives reports it
- * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, Escape, "active",
- * a link — and a popup, all inside the user activation that key gives the frame.
+ * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, the view key,
+ * Escape, "active", a link — and a popup, all inside the user activation that key gives the frame.
  */
 export declare const THEFT_SCRIPT: string;
 /** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
 export declare const THEFT_TEXT: string;
+/**
+ * What a document that replaced the preview's own (`document.open()`, a navigation, a meta refresh)
+ * would do to get the bridge's private port (ES5; no double quote): ask for it with readies — plain,
+ * with a channel, with a guessed secret, every 250 ms — and, should it get a port, send a save, the
+ * view key, Escape, a link and a scroll through it. `window.__orzGot` records `[port]` when it got one.
+ */
+export declare const GRAB_SCRIPT: string;
+/** The page a document's meta refresh navigates its preview to (served by the harness on its other origin). */
+export declare const GRAB_PAGE = "<!doctype html><meta charset=\"utf-8\"><title>replaced preview</title><script>window.__orzGot='';addEventListener('message',function(e){var d=e.data;if(d&&d.type==='orz-preview-port'&&e.ports&&e.ports[0]){window.__orzGot+='[port]';var P=e.ports[0];P.postMessage({type:'orz-preview-key',key:'s'});P.postMessage({type:'orz-preview-key',key:'\\\\'});P.postMessage({type:'orz-preview-key',key:'Escape'});P.postMessage({type:'orz-preview-link',href:'https://example.org/port'});P.postMessage({type:'orz-preview-scrolled',top:0,max:100000})}},true);var n=0,T=parent,ask=function(){T.postMessage({type:'orz-preview-ready'},'*');T.postMessage({type:'orz-preview-ready',channel:'g1'},'*');T.postMessage({type:'orz-preview-ready',channel:'g2',secret:'guess'},'*');if(++n<12)setTimeout(ask,250)};ask()</script>";
+/**
+ * Documents whose previews are replaced or nested by their own content (round 3 of closed loop 2, the
+ * vectors of option B): a nested `<iframe srcdoc>` that steals the focus and posts forged readies,
+ * keys and links to the top; `document.open()` then {@link GRAB_SCRIPT}; a meta refresh to an http
+ * page of another origin (`grabUrl`, serving {@link GRAB_PAGE}) and one to a `data:` URL running it.
+ */
+export declare function replacedTexts(grabUrl: string): Record<string, string>;
 /**
  * A document with includes (FC-18 §8.3, D4) and the resolved includes its file carries in
  * `#orz-includes` (keys in code-unit order, as the island stores them). A page cannot resolve local

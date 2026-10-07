@@ -47,7 +47,10 @@ editor), `adapter.ts` (`TextEditorAdapter`, `textareaAdapter`),
 `vendor/codemirror6.js` described by the generated `codemirror-pin.ts`),
 `preview.ts` (the preview frame — sandbox from `previewSandbox()`:
 `allow-scripts`, plus `allow-same-origin` only for a standalone `file:` page,
-owner decision B-2, FC-19 §8.4 — its bridge and message protocol, asset rewriting, CSP
+owner decision B-2, FC-19 §8.4 — its bridge, the authenticated channel (a per-frame secret
+the bridge reads first; keys, links and scrolls act only through the port — a document's
+scripts taking the keyboard focus in the preview is an accepted limit, FC-19 §5) and the
+message protocol, asset rewriting, CSP
 nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims

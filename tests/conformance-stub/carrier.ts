@@ -153,7 +153,34 @@ interface MountOptions {
   readOnly?: boolean;
   mode?: 'split' | 'editor' | 'preview';
   chrome?: 'full' | 'compact' | 'none';
-  hooks?: { save?(text: string): Promise<void> };
+  hooks?: { save?(text: string): Promise<void>; resolveLink?(href: string): string };
+}
+
+/**
+ * BUG (mutation) port-without-secret: the preview hands its port to any ready that asks for one — as
+ * if the shell did not check the frame's secret: every `orz-preview-ready` with a channel reaches the
+ * shell's message listener carrying the secret of the frame it came from, as a new load of that frame.
+ */
+function handPortToAnyReady(): void {
+  const add = window.addEventListener.bind(window);
+  const loads: Array<(e: Event) => void> = [];
+  const elAdd = HTMLIFrameElement.prototype.addEventListener;
+  HTMLIFrameElement.prototype.addEventListener = function (this: HTMLIFrameElement, type: string, l: EventListenerOrEventListenerObject, o?: boolean | AddEventListenerOptions) {
+    if (type === 'load' && typeof l === 'function') loads.push(l as (e: Event) => void);
+    return elAdd.call(this, type, l, o);
+  } as typeof elAdd;
+  (window as { addEventListener: unknown }).addEventListener = (type: string, l: EventListenerOrEventListenerObject, o?: boolean | AddEventListenerOptions) => {
+    if (type !== 'message' || typeof l !== 'function') return add(type, l, o);
+    return add(type, (e: Event) => {
+      const m = e as MessageEvent;
+      const d = m.data as { type?: unknown; channel?: unknown } | null;
+      if (!d || d.type !== 'orz-preview-ready' || typeof d.channel !== 'string' || !current) return (l as (e: Event) => void)(e);
+      const frame = Array.from((current.root as unknown as ShadowRoot).querySelectorAll('iframe')).find((f) => f.contentWindow === m.source);
+      const secret = /data-orz-preview-secret="([^"]*)"/.exec(frame?.srcdoc ?? '')?.[1];
+      for (const load of loads) load(new Event('load'));
+      (l as (e: Event) => void)({ data: { ...d, secret }, source: m.source, origin: m.origin, ports: m.ports } as unknown as Event);
+    }, o);
+  };
 }
 
 function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
@@ -174,6 +201,7 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     ...(o?.includes ? { includes: o.includes } : {}),
   });
   const includes = VARIANT === 'save-drops-includes' ? undefined : fileIncludes(); // BUG (mutation) save-drops-includes
+  if (VARIANT === 'port-without-secret') handPortToAnyReady();
   const shell = createEditorShell(element as never, {
     text: options.text,
     render: (t) => renderMarkdownPreview(t),
@@ -181,7 +209,7 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     ...(options.readOnly && VARIANT !== 'readonly-ignored' ? { readOnly: true } : {}),
     ...(options.chrome ? { chrome: options.chrome } : {}),
     ...(VARIANT === 'shared-prefs' ? { preferences: createPreferenceStore(undefined) } : {}), // BUG (mutation): one namespace for every document
-    ...(app ? { hooks: { save: hookSave! } } : {
+    ...(app ? { hooks: { save: hookSave!, ...(options.hooks?.resolveLink ? { resolveLink: options.hooks.resolveLink } : {}) } } : {
       kind: 'md' as const,
       fileName: fileName(),
       assemble: VARIANT === 'live-dom'
@@ -230,6 +258,10 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     // BUG (mutation): the reader's view mode is kept in the document's header (and the edit hidden from dirty)
     const setMode = shell.setMode.bind(shell);
     shell.setMode = (m) => { setMode(m); shell.setHeader({ x_view_mode: m }); shell.markSaved(); };
+  }
+  if (VARIANT === 'r3-ungated-view-key') {
+    // BUG (mutation) r3: the preview's view key acts without the reader's gesture (a window message)
+    window.addEventListener('message', (e) => { const d = e.data as { type?: string; key?: string } | null; if (d?.type === 'orz-preview-key' && d.key === '\\') shell.setMode(shell.getMode() === 'split' ? 'editor' : 'split'); });
   }
   if (VARIANT === 'ungated-keys') {
     // BUG (mutation): the preview's key and link messages act without the reader's gesture

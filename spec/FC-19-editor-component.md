@@ -166,7 +166,16 @@ opens a second connection for its editor.
    runs in the host page. One exception (owner, 2026-10-06): a standalone
    file opened from disk (`file:`, the top-level window, no connected host)
    gives its preview frame the page's origin, so relative local images show;
-   the document already runs in that page.
+   the document already runs in that page. **Accepted limit** (owner,
+   2026-10-06, option B; documents are content from trusted sources, claim
+   M.21): a document's own scripts may take the keyboard focus inside the
+   preview, so keystrokes the reader means for the editor can go into the
+   preview instead. The guarantee is that such scripts cannot reach the host
+   page, its storage or its cookies, cannot navigate it or open a window
+   without the reader's click, and cannot cause a save, a mode change, a link
+   opening or a scroll of the editor by anything other than the reader's own
+   key presses and clicks, reported through the preview's authenticated
+   channel (§8.4).
 4. **CSP-friendly:** no `eval`, no inline event handlers.
 5. **Text is the only output.** The component never changes text it was not
    asked to change: block IDs (FC-02), unknown and host header keys, and
@@ -335,8 +344,8 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   `assemble`, no `host`, a top-level window) unless `standalone` says; the
   assembled file's own boot passes `standalone: true`, and even then a framed
   or hosted `file:` page keeps the opaque frame.
-- `srcdoc` = the default bridge script **first in `<head>`**, before any
-  stylesheet (a script after a pending stylesheet waits for it: a slow theme
+- `srcdoc` = the default bridge script **first in `<head>`** (carrying the
+  frame's secret, below), before any stylesheet (a script after a pending stylesheet waits for it: a slow theme
   would hold back the ready and every render), then the stylesheets
   (`preview.head`: the carrier's theme links — shell markup, never document
   content), `<article id="orz-doc">` and the pinned preview libraries
@@ -350,21 +359,47 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   nodes — so a line inserted above does not redraw the blocks below; drawn
   diagrams and the scroll position survive typing. It re-runs `__orzEnhance`
   and reports the `data-src-line` anchors with the render's `id`.
-- **The private channel.** The default bridge's ready carries a random
-  `channel` token; the shell answers `{ type: 'orz-preview-port', channel }`
-  with a MessageChannel port, which the bridge takes in a capture listener
-  registered before anything else in the frame (hidden from the frame's other
-  listeners) before any document content exists — that only arrives through
-  the port. From then on the shell's messages go through the port (so a shell
-  mounted into another window's document by that window's opener reaches its
-  frame: the frame no longer depends on which window posted), and the
-  bridge's reports come only through it: it sends them with `Reflect.apply`
-  and `MessagePort.prototype.postMessage` as they were when it started, and
-  only for trusted events (`isTrusted`) — keys, link clicks, pointer / wheel /
-  touch / key input, scrolls, and focus. The same report types posted on the
-  window are a document script's and are ignored. A carrier's own bridge
-  without a port speaks window messages, which the shell reads as before
-  (claims; the gates below).
+- **The authenticated channel** (owner, 2026-10-06, option B). Every frame
+  document the shell writes gets a new secret (`crypto.getRandomValues`),
+  placed on the bridge's own `<script>` element as the attribute
+  `data-orz-preview-secret` (`PREVIEW_SECRET_ATTRIBUTE`; an attribute, not
+  script text, so `PREVIEW_BRIDGE_HASH` is the same for every frame). The
+  bridge reads and removes it first thing (`document.currentScript`),
+  synchronously, before any document content exists — that only arrives
+  through the port — and says `orz-preview-ready { channel, secret }` (a
+  random `channel` too). The shell hands a MessageChannel port
+  (`orz-preview-port { channel }`) only for a ready from its frame's window
+  that carries this frame's secret, once per load of the frame document (a
+  reload of the same document — the iframe moved, `location.reload()` — runs
+  the bridge first again and may take a new port; the old one is retired). A
+  ready without the right secret, a second one before the frame loads again,
+  or a plain ready once a port was handed is ignored: it changes nothing, and
+  never closes the port the bridge holds. A document that replaced the
+  bridge's — `document.open()`, a navigation, a meta refresh to an http or
+  `data:` page, a nested frame — cannot know the secret, so it never gets a
+  port (in the owner-accepted standalone `file:` frame, which shares the
+  page's origin, the document's scripts could read it from the page — they
+  reach the editor there anyway). The bridge takes the port in a capture listener registered before
+  anything else in the frame (hidden from the frame's other listeners); from
+  then on the shell's messages go through the port (so a shell mounted into
+  another window's document by that window's opener reaches its frame), and
+  the bridge sends its reports only through it, with `Reflect.apply` and
+  `MessagePort.prototype.postMessage` as they were when it started, and only
+  for trusted events (`isTrusted`) — keys, link clicks, pointer / wheel /
+  touch / key input, and scrolls (scrolls only within 1.5 s of the reader's
+  own pointer press or drag, wheel, touch or key in the frame: a script's
+  scrolling fires trusted scroll events too). **There is one trust path.**
+  Keys, links, input and scrolls act only when they arrive through the
+  authenticated port; nothing arriving on the window (`postMessage`) ever acts
+  on keys, links, focus or scroll — window messages are data: a plain ready
+  of a bridge without the port (the shell then posts renders on the window,
+  and that bridge's `orz-preview-rendered` acknowledgements pace them), and a
+  carrier's own message types (`shell.preview.on`). A carrier's own bridge
+  that wants keys, links or scroll does the same handshake: read and remove
+  the attribute from `document.currentScript` first thing, post the ready
+  with the secret and a channel, take the port from `orz-preview-port`, and
+  send its reports through it. Carriers should use the default bridge with
+  its page hooks (below) instead of their own.
 - **When renders run.** A render runs until the frame acknowledges it
   (`orz-preview-rendered` with its `id`; a bridge that reports no id
   acknowledges any render; one that never reports is not waited for after
@@ -377,16 +412,13 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
 - **Pluggable preview** (orz-slides, orz-paged): `preview.frameDocument(parts)`
   writes the whole frame document from `parts = { head, bridge, scripts,
   scheme, articleClass, nonce? }` (the bridge and library `<script>`s and the
-  stylesheet links, nonce-stamped; put `parts.bridge` before the stylesheets
-  and `parts.head` in `<head>`, before the article and `parts.scripts`:
-  while the document's scripts are paused `parts.head` starts with the
-  pausing `<meta>` policy, which must precede the document's content and
-  every library script — the bridge, nonce-stamped, may come before it or
-  right after it, as the default document puts it; a carrier's own
-  `<script>` in the frame document must carry `parts.nonce` (B#5: without
-  it the pausing policy, or an app's nonce policy, blocks it — and with it,
-  it runs while the document's scripts are paused); `preview.bridge` replaces the
-  bridge script (script-safe, speaking the protocol below);
+  stylesheet links, nonce-stamped; put `parts.bridge` — which carries the
+  frame's secret — first in `<head>`, before the stylesheets, and before
+  anything that could hold the document's content; `parts.head` in `<head>`,
+  before the article and `parts.scripts`; a carrier's own `<script>` in the
+  frame document must carry `parts.nonce` under an app's nonce policy, B#5);
+  `preview.bridge` replaces the bridge script (script-safe, speaking the
+  protocol below and doing the handshake above to get the port);
   `preview.diff: false` makes every render replace the content whole, keeping
   the scroll position (a renderer that reflows nodes);
   `preview.mapLine(line, { anchors, max })` / `mapPosition(top, ctx)` replace
@@ -394,18 +426,26 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   'navigate'` posts the source line instead of a top — the caret's line while
   the editor has focus, else its top line; and the caret's line whenever a
   view change shows the preview, again once it has rendered — and reads a
-  line back.
+  line back through the port (`window.__orzPreview.navigated(line)`, below).
 - **Page hooks of the default bridge**, so a carrier's frame document can
-  customise it without its own bridge (keys, Escape, links, input, focus,
-  ready and the port stay the bridge's): `window.__orzPreviewApply(html,
-  msg)` replaces the DOM update (it may return a promise; the render is
-  acknowledged when it settles), `window.__orzPreviewNavigate(line)` gets
-  `orz-preview-navigate`, `window.__orzPreviewMessage(msg)` any other message
-  from the shell. `window.__orzPreview.report()` re-reports the anchors (after
-  an asynchronous layout); `window.__orzPreview.post(msg)` posts a carrier's
-  own message to the shell as a window message — a claim, like any. These
-  hooks share the frame with the document's scripts, which can define them
-  too: they gain nothing they could not do to the frame's DOM already.
+  customise it without its own bridge (keys, Escape, links, input, the
+  secret, ready and the port stay the bridge's) — the recommended way for a
+  carrier's own frame layout: `window.__orzPreviewApply(html, msg)` replaces
+  the DOM update (it may return a promise; the render is acknowledged when
+  it settles; calls never overlap — a render that arrives while one is
+  pending waits, and only the latest runs after it),
+  `window.__orzPreviewNavigate(line)` gets `orz-preview-navigate`,
+  `window.__orzPreviewMessage(msg)` any other message from the shell.
+  `window.__orzPreview.report()` re-reports the anchors (after an
+  asynchronous layout); `window.__orzPreview.navigated(line)` reports the
+  source line the preview now shows (navigate mode) as `orz-preview-scrolled
+  { line }` through the port — only within 1.5 s of the reader's own input in
+  the frame, and the shell follows it only while the preview leads (below),
+  like a scroll; `window.__orzPreview.post(msg)` posts a carrier's own
+  message to the shell as a window message — data, never an action. These
+  hooks share the frame with the document's scripts, which can define or
+  call them too: they gain nothing they could not do to the frame's DOM
+  already.
 - **The channel API.** `shell.preview.post(msg)` posts a carrier's own
   message to the bridge (false while the frame is not ready). The frame is
   the document's: whatever a carrier posts there is readable by the
@@ -417,14 +457,14 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   frame document (e.g. a theme change) and shows the last HTML again.
 - Protocol (shell → frame): `orz-preview-port { channel }` (with the port),
   `orz-preview-render { id, html, diff? }`, `orz-preview-scroll { top }`,
-  `orz-preview-navigate { line }`, `orz-preview-ping { id }`, and a carrier's
-  own types; (frame →
-  shell): `orz-preview-ready { channel? }`, `orz-preview-rendered { id,
-  anchors: [line, top][], max }`, `orz-preview-scrolled { top, max }` or
-  `{ line }`, `orz-preview-key { key: 's' | '\\' | 'Escape' }`,
-  `orz-preview-link { href }`, `orz-preview-active { input? }`,
-  `orz-preview-focus { reader, late? }` and `orz-preview-pong { id, pointer }`
-  (port only), and a carrier's own types.
+  `orz-preview-navigate { line }`, and a carrier's own types; (frame →
+  shell, on the window): `orz-preview-ready { channel, secret }` (or a plain
+  `orz-preview-ready` of a bridge without the port) and a carrier's own
+  types; (frame → shell, through the port only): `orz-preview-rendered { id,
+  anchors: [line, top][], max }` (on the window too for a bridge without the
+  port), `orz-preview-scrolled { top, max }` or `{ line }`, `orz-preview-key
+  { key: 's' | '\\' | 'Escape' }`, `orz-preview-link { href }`,
+  `orz-preview-active { input? }`, and a carrier's own types.
 - Scroll sync (a reader preference): positions map through the anchors (line
   ↔ top, linear between anchors), proportionally when there are none. Anchor
   lines are 0-based lines of the whole text (`renderMarkdownPreview` adds the
@@ -434,48 +474,24 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   the host page (pointer, wheel — also on an unfocused editor —, keys) in the
   last 300 ms.
 - **What the frame reports.** Through the port, a key (save, view, Escape)
-  or a link is the reader's own input in the frame and acts. Without a port
-  (a carrier's own bridge) the frame's messages are claims of the document's
-  scripts: a save key, the view key or a link acts only while focus is on the
-  preview iframe **and** the page has transient user activation; an Escape
-  needs the focus only (all it does is move focus from the frame to the
-  toolbar). So a document script that floods these messages moves nothing,
-  saves nothing and opens nothing — with the default bridge, not even while
-  the reader is in the frame (finding B-15, accepted in round 1, is closed for
-  the default bridge; it stands for a carrier's own bridge).
-- **Focus theft** (finding F1). A document script can focus an element of
-  its frame at any time, and the reader's keys then go to the frame. The
-  default bridge reports, when the frame gains the focus, whether the
-  reader's own pointer or touch in the frame brought it there. Focus that
-  arrives otherwise — not by a Tab in the page, the shell's own `focus()`,
-  or a press on the preview pane in the page either (Chrome sends a click to
-  the iframe element itself while the frame cannot be hit yet, and that
-  click focuses the frame with no pointerdown inside it) — goes back at once to where the reader was (the page's element,
-  the shell's, else the shell's region when the reader was not in it; no key reaches the
-  frame meanwhile; the bridge's report can arrive before the page has seen
-  the focus leave, and a frame reloaded to pause its scripts may take the
-  focus when it commits, so a blur the page sees in the next second is undone
-  too, and a key that finds nothing focused then goes to the editor). Chrome may move the focus into the frame a moment before
-  the click's pointerdown reaches it, so the shell then asks the bridge
-  through the port (`orz-preview-ping { id }` → `orz-preview-pong { id,
-  pointer }`; input already queued in the frame is handled before the
-  question) whether the reader's pointerdown followed — as does a late report
-  of it (`{ reader: true, late: true }`). Yes: it was the reader, and the
-  frame gets the focus back. No (and no report of the reader's pointer in
-  the next 1.2 s, in which a loaded machine may still deliver it), the focus
-  taken again before the question is settled (a click does not do that, a
-  script does: then at once), or no answer within 1.5 s: theft — the
-  document's scripts are paused in the preview: a new frame replaces the old
-  one (removing it ends the document at once; a new `srcdoc` would keep it
-  running until the new one commits), built under a `<meta>`
-  policy `script-src 'nonce-…' 'strict-dynamic'` that runs only the frame's
-  own nonce-stamped scripts (and what they load), with a quiet note in the
-  pane and an `error { source: 'render' }` 0.5 s later; a late report of the
-  reader's pointer (within 1.5 s of the focus, or of the bridge starting in
-  a frame that has it) arriving within that time undoes the pause: the
-  document's scripts run again and the reader gets the frame. Limit: a key typed in the
-  moment of the first theft, before the focus is back, can reach the frame; a
-  carrier's own bridge gets no theft defence.
+  or a link is the reader's own input in the frame and acts. The same
+  messages on the window — a document script's, or a carrier's own bridge
+  without the port — never act, whatever the focus or user activation. So a
+  document script that floods them moves nothing, saves nothing and opens
+  nothing, also while the reader is in the frame (finding B-15 of round 1,
+  accepted then, is closed).
+- **Keyboard focus** (accepted limit, §5 invariant 3; owner, 2026-10-06,
+  option B). A document script can focus an element of its frame at any
+  time (Chrome lets a cross-origin frame take the focus without user
+  activation), and the reader's keys then go to the preview; the shell
+  neither takes the focus back nor pauses the document's scripts (the
+  focus-theft detection of round 2 was bypassable and misfired: a tab
+  switch gives the frame its focus back). What reaches the frame stays
+  there: its scripts get those keystrokes, but a save, a view change, an
+  Escape action, a link or a scroll of the editor still needs the reader's
+  own trusted key or click reported through the authenticated port. A key
+  the reader presses in the frame — knowingly or not — is the reader's own
+  (Cmd/Ctrl+S there saves).
 - **Links** clicked in the preview never navigate the frame: `#fragment`
   links scroll it; others go through `hooks.resolveLink` (when given; it gets
   the source href — with it, the shell asks the renderer for links as written,
@@ -643,17 +659,23 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   `previewFrameParts`, `rewriteAssetUrls`, `previewScriptHashes`,
   `PREVIEW_BRIDGE_HASH`, `PREVIEW_READY_TIMEOUT_MS`.
 - Round 2 of closed loop 2 (2026-10-06, additive): options `standalone`,
-  `openedHtml`, `preview.pauseScripts` (set by the shell), the render
-  context's `twinLinks` and `cache`; `shell.preview` (`post`, `on`,
-  `setOptions`); the bridge's port, page hooks and `orz-preview-focus`;
-  `codemirror6Adapter({ nonce })`; `PreviewController` `post`, `on`,
-  `setOptions`, `pauseScripts`, `resumeScripts`, `scriptsPaused`,
-  `acknowledges`, `authenticated`, `render()` resolving when the frame
-  acknowledges it, and `iframe` as a getter (pausing replaces the element);
-  `PreviewEvents.onFocus`, `onPong` (and `trusted` on `onKey` / `onLink` /
-  `onActive`);
-  exports `renderMarkdownPreviewWithIncludes`, `mapSrcset`, `undoSteps`,
+  `openedHtml`, the render context's `twinLinks` and `cache`;
+  `shell.preview` (`post`, `on`, `setOptions`); the bridge's port and page
+  hooks; `codemirror6Adapter({ nonce })`; `PreviewController` `post`, `on`,
+  `setOptions`, `acknowledges`, `authenticated`, `render()` resolving when
+  the frame acknowledges it, and `iframe` as a getter; exports
+  `renderMarkdownPreviewWithIncludes`, `mapSrcset`, `undoSteps`,
   `detachString`, `CODEMIRROR6_HISTORY_STEPS`.
+- Option B (owner, 2026-10-06; unreleased, so the round-2 pieces it drops
+  were never published): the frame secret and `PREVIEW_SECRET_ATTRIBUTE`,
+  `PreviewFrameOptions.secret` (set by `createPreview`), the page hook
+  `__orzPreview.navigated(line)`, serialised `__orzPreviewApply`; removed:
+  `preview.pauseScripts`, `PreviewController.pauseScripts` /
+  `resumeScripts` / `scriptsPaused`, `PreviewEvents.onFocus` / `onPong`, the
+  `trusted` argument of `onKey` / `onLink` / `onActive` (they now fire only
+  for reports through the port), the bridge's `orz-preview-focus` /
+  `-ping` / `-pong`, and the focus-theft defence with its note and
+  `error`.
 - Round 3 of closed loop 2 (2026-10-06, additive): `assemble`'s `includes`
   option (§2) and the shell's `includes` option, passed as the `assemble`
   option's second argument (§8.5); the default `openedHtml` computed at

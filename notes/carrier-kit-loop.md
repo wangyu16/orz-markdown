@@ -229,3 +229,44 @@ K.20, E.5, E.7, E.8, E.10, E.12–E.16, E.18–E.21, E.23, H.1, H.2, H.5
 reworded. Limits stated: a key typed at the very instant of the first
 theft can still reach the frame; a carrier's own bridge (no port) gets the
 older focus-plus-activation gate.
+
+### Round 3 — 2026-10-06
+
+Fresh adversaries on `@79d9cc5`: A against the claims (40 kit mutations, 35
+caught; 7 broken stubs, 6 passed as conformant), B against the design (spec
+↔ code, Phase 3 previews rebuilt in Chrome on the new protocol, Alembic
+page, saving UX, cost).
+
+**4 HIGH (3 ISOLATION/ORZ in the round-2 theft defence, 1 SPEC), ~10
+MEDIUM, ~10 LOW.** Held: content-proved saves (S.3/S.12/S.13), the update's
+`changed`/`reload` rules, ack pacing without deadlock, B-2 unreachable from
+http(s)/framed/connected pages, srcset parsing, read-only/destroy
+re-checks; real Paged.js and slides previews on the new protocol; the
+Alembic page end to end; no leaks over 200 cycles with real thefts; sizes
+within bounds.
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| A-F1 theft detection bypassed (nested `<iframe srcdoc>`, a forged ready closing the real port, `document.open()`) | ISOLATION | HIGH | superseded by owner decision (option B) |
+| A-F2 the private port went to any document that posted a ready (after `document.open()`, a navigation, a meta refresh to http): its "trusted" reports saved and reached `onLink` | ISOLATION | HIGH | fix — per-frame secret on the bridge's script, read and removed before content; the port only for a ready with it, once per load; window messages never act (E.14, `C.edit.preview-isolation` replaced/nested phases, stub `port-without-secret`) |
+| B-1 false "paused" on normal use: click into the preview, switch tab, come back — Chrome refocuses the frame, treated as theft (also slides/paged) | ORZ | HIGH | superseded by option B (detection removed; a tab-switch round trip is now tested) |
+| B-2 resolved includes (`#orz-includes`) dropped by every browser save and quiet update, and update verification passed | SPEC+ORZ | HIGH | fix — `assemble(text, { includes })`, `reassemble` passes and verifies them (`includes` error), corpus file with includes, `C.save.keeps-includes`, `C.update.keeps-includes` |
+| A-F3 any Tab opened a 1 s blind window; B-3 focus returned to the wrong editor; B-9 no `focusPreview`; B-10 theft reported as a render error | ISOLATION/ORZ/SPEC | MED/LOW | moot under option B (machinery removed) |
+| B-4 navigate mode could not read a line back through the port | SPEC | MED | fix — `__orzPreview.navigated(line)`, gated by the reader's own input |
+| B-5 a carrier's own frame scripts must carry `parts.nonce` | SPEC | MED | fix — stated in FC-19 §8.4 |
+| B-6 large documents: two assembles per save click could outlast activation (download fallback) | ORZ | MED | fix — `openedHtml` assembled once at idle |
+| H: 6 broken stubs passed (reload after a picked file, editor stuck read-only after an update, edit during a hook save marked saved, Cmd+S on a read-only editor, ungated view key, pause stripped) | ORZ | MED | fix — stricter checks; 7 more stubs caught; the pause stub dropped with the pause |
+| A-F4 a pinned initial text shadowed a newer exact form after 17 edits; m15 stale acks; m24 session proof; m28 lookup order | ORZ | LOW | fix |
+| B-7 saves did not keep the file's delivery; B-8 an extra picker after a CLI re-assembly; B-11 `__orzPreviewApply` re-entrancy; B-12 ordering advice; A-F5 frame messages readable by the document; docs drift | ORZ/SPEC | LOW | fix (delivery kept, `C.save.keeps-delivery`; handle accepted when it holds the opened bytes; apply serialised; documented) |
+
+**Owner decision 2026-10-06 (option B).** A document's own scripts are
+trusted author content (M.21). The guarantee is the sealed frame plus the
+authenticated channel: only the reader's real key presses and clicks,
+reported through the secret-gated port, can save, switch views, scroll the
+editor or offer a link. A document script taking the keyboard focus inside
+the preview is an accepted limit (FC-19 §5, E.14); the round-2 focus-theft
+detection and script pausing were removed (bypassable, and misfired on tab
+switches). Revisit if an app edits documents from untrusted authors.
+
+**After round 3** (`@e59dc30`, option B in the next commit): 1,918 tests
+green; harness 45 checks.

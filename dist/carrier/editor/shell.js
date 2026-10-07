@@ -16,13 +16,14 @@ exports.createEditorShell = createEditorShell;
  *   `renderMarkdownPreview`) into the sandboxed frame of preview.ts, after a
  *   pause that grows with the render time, never two at once; scroll sync on
  *   `data-src-line` anchors (or the carrier's mapping / navigation).
- * - Frame messages are claims of the document's scripts: the shell acts on
- *   them only while the reader is in the frame (focus that entered it with the
- *   reader's pointer, a Tab or the shell's own `focus()`; for actions with
- *   effects, also transient user activation). Focus that a document script
- *   takes is given back at once and the document's scripts are paused in the
- *   preview; links from the frame open only through the host (`onLink`) or a
- *   click on the shell's own "Open" chip.
+ * - Frame messages: keys (save, view, Escape), links, input and scrolls act
+ *   only when the bridge reports them through its authenticated port (the
+ *   reader's own trusted events in the frame); window messages are data and
+ *   never act. A document's scripts may take the keyboard focus inside the
+ *   preview (accepted, FC-19 §5 invariant 3): keys typed then go to the
+ *   preview, but nothing there can save, switch views, open a link or scroll
+ *   the editor. Links from the frame open only through the host (`onLink`) or
+ *   a click on the shell's own "Open" chip.
  * - Text formats: a header `format` newer than `formats` opens read-only and
  *   is never saved over (FC-18 §8.4).
  * - Reader preferences (FC-18 §6): split ratio, view mode, scroll sync, editor
@@ -51,26 +52,10 @@ const MODE_META = {
 const RATIO_MIN = 0.1;
 const RATIO_MAX = 0.9;
 const RATIO_STEP = 0.05;
-/** How long a frame's "active" claim lets the preview lead the scroll (ms). */
+/** How long the frame's "active" report (the reader's input in it) lets the preview lead the scroll (ms). */
 const CLAIM_MS = 1500;
 /** How long a touch of the editor in the host page (pointer, wheel, key) keeps the editor leading (ms). */
 const TOUCH_MS = 300;
-/** A Tab pressed in the shell this recently explains focus entering the frame (ms). */
-const TAB_MS = 1000;
-/** A press on the preview pane in the page this recent explains focus entering the frame (ms). */
-const PANE_MS = 1000;
-/** How long the shell's own `focus()` explains focus entering the frame (ms). */
-const GRANT_MS = 500;
-/** A reader's focus report this soon after a pause for theft undoes it (Chrome may focus the frame before the click's pointerdown); the note waits as long (ms). */
-const RESUME_MS = 500;
-/** After undoing such a pause, how long focus entering the (reloading) frame is the reader's (ms). */
-const RESUME_GRANT_MS = 3000;
-/** How long the shell waits for the bridge's answer about a pointerdown before it counts the focus as theft (ms; the focus is back meanwhile). */
-const PONG_MS = 1500;
-/** After the bridge said no pointerdown followed the focus, how long a late report of one may still settle it (ms). */
-const CONFIRM_MS = 1200;
-/** After giving the focus back from a theft, how long a blur the page sees is undone too (ms). */
-const RESTORE_MS = 1000;
 /** How long a render waits for the frame's acknowledgement: a bridge known to acknowledge, one not known yet (ms). */
 const ACK_WAIT_MS = 10000;
 const FIRST_ACK_WAIT_MS = 1500;
@@ -503,186 +488,21 @@ function createEditorShell(element, options) {
             delay = Math.min(delay, Math.max(0, staleSince + maxWait() - clock()));
         renderTimer = later(() => { void renderNow(); }, delay);
     }
-    // Frame messages are claims of the document's scripts (A-2) — except the reports the default
-    // bridge sends through its private port, which it makes only for trusted events (the reader's own
-    // input in the frame; `trusted` below). The preview leads the scroll only while the reader is
-    // there: focus on the preview iframe, or a recent "active" report of the frame (wheel, pointer,
-    // touch, keys) while the editor neither has focus nor was touched in the host page (pointer, wheel,
-    // keys) just before. So a document script that floods "active" and scroll messages cannot move or
-    // pin the editor while the reader types in it or scrolls it.
+    // Frame messages (A-2): the bridge's reports through its authenticated port come from trusted
+    // events (the reader's own input in the frame) and are the only ones that act; window messages are
+    // data. The preview leads the scroll only while the reader is there: focus on the preview iframe,
+    // or a recent "active" report (wheel, pointer, touch, keys) while the editor neither has focus nor
+    // was touched in the host page (pointer, wheel, keys) just before. A document's scripts may take
+    // the keyboard focus inside the frame (accepted, FC-19 §5 invariant 3): what the reader types then
+    // goes to the preview, but no save, view change, link or scroll of the editor comes of it.
     let claimAt = -Infinity;
     let editorTouchAt = -Infinity;
     const frameFocused = () => root.activeElement === preview.iframe;
-    // ── focus entering the frame (F1) ──
-    // A document script can focus an element of its frame at any time (Chrome lets a cross-origin
-    // frame take focus without user activation); the reader's keys then go to the frame. The default
-    // bridge says, through its port, whether the reader's own pointer or touch in the frame brought the
-    // focus there (it sees them before the focus moves). Focus that arrives otherwise — and not by a
-    // Tab in the page or the shell's own focus() — is theft: it goes back at once to where the reader
-    // was, and the document's scripts are paused in the preview, so it does not happen again.
-    let tabAt = -Infinity;
-    let grantUntil = -Infinity;
-    /** The reader pressed on the preview pane in the page: Chrome sends a click there (to the iframe element) when the frame cannot be hit yet, and the click focuses the frame without a pointerdown inside it. */
-    let paneDownAt = -Infinity;
-    /** The element of the shell that last had the focus, and the page's own element (outside the shell) if it had it later. */
-    let lastShellFocus = null;
-    let pageFocus = null;
-    let pausedNote = null;
-    const randomNonce = () => {
-        try {
-            const a = new Uint32Array(4);
-            win.crypto?.getRandomValues?.(a);
-            if (a.some((x) => x !== 0))
-                return Array.from(a, (x) => x.toString(36)).join('');
-        }
-        catch { /* no crypto */ }
-        return `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-    };
-    /**
-     * Give the focus back to where the reader was: the page's element, else the shell's (the editor
-     * through the engine, so CodeMirror restores its selection), else the editor (the toolbar when the
-     * editor is hidden). The bridge's report can arrive before the page has seen its own loss of focus,
-     * while the page still counts the editor as focused and focusing it again does nothing: a blur the
-     * page sees in the next moment (a focusout without a new target, or the window's blur) is the
-     * frame's doing too and is undone as well.
-     */
-    let restoreUntil = -Infinity;
-    const putFocusBack = () => {
-        if (destroyed)
-            return;
-        if (pageFocus) {
-            try {
-                pageFocus.focus?.({ preventScroll: true });
-            }
-            catch { /* gone */ }
-            if (!frameFocused())
-                return;
-        }
-        const shown = currentView() !== 'preview';
-        if (lastShellFocus && container.contains?.(lastShellFocus)) {
-            if (shown && editorPane.contains?.(lastShellFocus))
-                adapter.focus();
-            else
-                lastShellFocus.focus?.({ preventScroll: true });
-            return; // the page may count the frame as focused a moment longer: the blur watch of restoreFocus covers it
-        }
-        // the reader was not in the shell (a theft at load): the shell's region — no caret moved, nothing scrolled
-        container.focus?.({ preventScroll: true });
-    };
-    const restoreFocus = () => {
-        restoreUntil = clock() + RESTORE_MS;
-        putFocusBack();
-    };
-    /** When the shell paused the document's scripts for a theft (a reader's report soon after undoes it). */
-    let pausedAt = -Infinity;
-    let theftPause = false;
-    const onTheft = () => {
-        if (destroyed)
-            return;
-        restoreFocus();
-        if (preview.scriptsPaused)
-            return;
-        preview.pauseScripts(previewOptions.nonce || randomNonce());
-        pausedAt = clock();
-        theftPause = true;
-        // said only once it is not the reader's click after all (Chrome may focus the frame before its pointerdown)
-        later(() => {
-            if (destroyed || !theftPause || !preview.scriptsPaused)
-                return;
-            const error = new Error('The document\'s scripts took the keyboard focus from the editor: they are paused in the preview.');
-            emit('error', { source: 'render', message: error.message, error });
-            pausedNote = el('div', 'orz-editor__preview-note orz-editor__preview-note--top');
-            pausedNote.setAttribute('role', 'status');
-            pausedNote.setAttribute('data-orz-paused', '');
-            pausedNote.append(doc.createTextNode('This document\'s scripts tried to take the keyboard, so they are paused in this preview.'));
-            previewPane.append(pausedNote);
-        }, RESUME_MS);
-    };
-    /**
-     * The frame gained the focus (the bridge's report): the reader's own doing, or theft. Focus the
-     * reader did not bring goes back at once (no key reaches the frame meanwhile); then the bridge is
-     * asked whether a pointerdown followed — Chrome may focus the frame a moment before the click's
-     * pointerdown reaches it, and input queued there is handled before the question. Yes: the reader's
-     * click, the frame gets the focus back. No (or no answer in time): theft, the scripts are paused.
-     */
-    let asking = null;
-    let pingSeq = 0;
-    const settleAsking = () => { if (asking) {
-        cancel(asking.timer);
-        asking = null;
-    } };
-    const letReaderIn = () => {
-        settleAsking();
-        restoreUntil = -Infinity; // the bounce was wrong: no more undoing of blurs
-        grantUntil = clock() + GRANT_MS;
-        preview.iframe.focus?.();
-    };
-    const theftNow = () => { settleAsking(); onTheft(); };
-    const onFrameFocus = (reader) => {
-        if (destroyed)
-            return;
-        const t = clock();
-        if (reader) {
-            if (asking) {
-                letReaderIn();
-                return;
-            }
-            if (theftPause && t - pausedAt < RESUME_MS && preview.scriptsPaused) {
-                // the "theft" was the reader's click, reported a moment late: run the document's scripts again, let the reader in
-                theftPause = false;
-                restoreUntil = -Infinity;
-                preview.resumeScripts();
-                grantUntil = t + RESUME_GRANT_MS; // the frame reloads: its focus must not count as theft
-                preview.iframe.focus?.();
-            }
-            return;
-        }
-        if (t < grantUntil || t - tabAt < TAB_MS || t - paneDownAt < PANE_MS)
-            return;
-        restoreFocus();
-        if (preview.scriptsPaused)
-            return;
-        // taken again before the question was settled: a reader's click does not do that, a script does
-        if (asking) {
-            theftNow();
-            return;
-        }
-        const id = ++pingSeq;
-        asking = { id, said: false, timer: later(() => { if (asking?.id === id)
-                theftNow(); }, PONG_MS) };
-        if (!preview.post({ type: 'orz-preview-ping', id }))
-            theftNow();
-    };
-    const onPong = (id, pointer) => {
-        if (destroyed || !asking || asking.id !== id || asking.said)
-            return;
-        if (pointer) {
-            letReaderIn();
-            return;
-        }
-        // no pointerdown yet: under load it may still be on its way — a short wait, which a report of the
-        // reader's pointer (or another theft) settles sooner
-        cancel(asking.timer);
-        asking.said = true;
-        asking.timer = later(() => { if (asking?.id === id)
-            theftNow(); }, CONFIRM_MS);
-    };
     const previewLeads = () => {
         if (frameFocused())
             return true;
         const t = clock();
         return t - claimAt < CLAIM_MS && t - editorTouchAt > TOUCH_MS && !(adapter.hasFocus?.() ?? false);
-    };
-    // A key or link the bridge reports through its port is the reader's own (a trusted event in the
-    // frame): it acts. A carrier's own bridge (no port) sends claims: they act only while focus is on
-    // the preview iframe and the page has transient user activation (a real input in the frame
-    // activates its ancestors); Escape (which a browser does not count as activation) needs the focus
-    // only: all it does is move focus from the frame to the toolbar.
-    const activated = () => {
-        if (!frameFocused())
-            return false;
-        const ua = win.navigator?.userActivation;
-        return !ua || ua.isActive === true;
     };
     const syncOn = () => prefs.get('scrollSync') === true && currentView() === 'split';
     const lineOf = (text, offset) => {
@@ -742,7 +562,7 @@ function createEditorShell(element, options) {
         else
             adapter.scrollTo(anchors.length ? { line: (0, preview_js_1.topToLine)(anchors, top) } : { fraction: max > 0 ? top / max : 0 });
     };
-    // Links from the frame are claims too (F1b): they open only through the host (`onLink`) or the
+    // Links from the frame (F1b), even the reader's own clicks: they open only through the host (`onLink`) or the
     // reader's own click on the shell's chip — the frame never opens a window by itself.
     let linkChip = null;
     const dismissChip = () => { linkChip?.remove(); linkChip = null; };
@@ -819,22 +639,14 @@ function createEditorShell(element, options) {
             }
         },
         onScrolled: (top, max, line) => syncFromPreview(top, max, line),
-        onKey: (key, trusted) => {
-            if (trusted || (key === 'Escape' ? frameFocused() : activated()))
-                onShortcut(key, null);
-        },
-        onLink: (href, trusted) => { if (trusted || activated())
-            openLink(href); },
+        // through the authenticated port only (preview.ts): the reader's own key or click in the frame
+        onKey: (key) => { onShortcut(key, null); },
+        onLink: (href) => { openLink(href); },
         // counts only while the editor is untouched (previewLeads)
         onActive: () => { claimAt = clock(); },
-        onFocus: (reader) => onFrameFocus(reader),
-        onPong: (id, pointer) => onPong(id, pointer),
         onReady: () => {
             previewNote?.remove();
             previewNote = null;
-            // a frame reloaded for a theft may take the browser's focus with it when it commits: take it back
-            if (theftPause && preview.scriptsPaused && clock() - pausedAt < 5000)
-                restoreFocus(); // (and watch the next moment again)
         },
         onStall: () => {
             if (destroyed)
@@ -850,36 +662,6 @@ function createEditorShell(element, options) {
     const touchEditor = () => { editorTouchAt = clock(); };
     for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown', 'focusin', 'touchstart'])
         listen(editorPane, type, touchEditor, { passive: true, capture: true });
-    // what the page sees around the frame (F1): a Tab (keyboard navigation into the frame) and where the focus was
-    const docListen = (type, fn) => {
-        if (typeof doc.addEventListener !== 'function')
-            return;
-        doc.addEventListener(type, fn, true);
-        cleanups.push(() => doc.removeEventListener?.(type, fn, true));
-    };
-    docListen('keydown', (e) => {
-        if (e.key === 'Tab')
-            tabAt = clock();
-        // just after a theft, a key that finds nothing focused (the frame took the focus and let it go)
-        // goes to the editor: the text of a key goes where the focus is once its keydown has run
-        else if (clock() < restoreUntil && (doc.activeElement === doc.body || !doc.activeElement))
-            putFocusBack();
-    });
-    docListen('focusin', (e) => { pageFocus = e.target === host ? null : e.target; });
-    listen(container, 'focusin', (e) => {
-        const target = (e.composedPath?.()[0] ?? e.target);
-        if (target !== preview.iframe)
-            lastShellFocus = target;
-    });
-    for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
-        listen(previewPane, type, (e) => { if (e.isTrusted !== false)
-            paneDownAt = clock(); }, { capture: true, passive: true });
-    }
-    // just after a theft: the page sees the frame take the focus a moment late — undo that as well
-    listen(container, 'focusout', (e) => { if (clock() < restoreUntil && !e.relatedTarget)
-        later(putFocusBack, 0); });
-    listen(win, 'blur', () => { if (clock() < restoreUntil)
-        later(putFocusBack, 0); });
     // ── the engine ──
     adapter.mount(engineEl, {
         doc: (0, text_model_js_1.toEditorText)(options.text),
@@ -1329,10 +1111,8 @@ function createEditorShell(element, options) {
         focus() {
             if (destroyed)
                 return;
-            if (currentView() === 'preview') {
-                grantUntil = clock() + GRANT_MS; // the shell's own focus() is a legitimate entry into the frame
+            if (currentView() === 'preview')
                 preview.iframe.focus?.();
-            }
             else
                 adapter.focus();
         },

@@ -70,7 +70,6 @@ export interface EdElement {
   append(...nodes: unknown[]): void;
   appendChild(node: unknown): unknown;
   remove(): void;
-  replaceWith?(...nodes: unknown[]): void;
   addEventListener(type: string, listener: EdListener, options?: boolean | { capture?: boolean; passive?: boolean }): void;
   removeEventListener(type: string, listener: EdListener, options?: boolean | { capture?: boolean }): void;
   focus?(options?: { preventScroll?: boolean }): void;
@@ -139,7 +138,7 @@ export interface EdView {
   open?(url: string, target?: string, features?: string): unknown;
   readonly ResizeObserver?: new (cb: () => void) => EdResizeObserver;
   readonly CSSStyleSheet?: new () => { replaceSync(css: string): void };
-  readonly navigator?: { readonly platform?: string; readonly userAgent?: string; readonly userActivation?: { readonly isActive?: boolean } };
+  readonly navigator?: { readonly platform?: string; readonly userAgent?: string };
   readonly location?: { readonly protocol?: string };
   readonly performance?: { now(): number };
   readonly top?: unknown;

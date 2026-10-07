@@ -28,7 +28,9 @@ export type StubVariant =
   // closed loop 2 round 2 (harness sub-probe): more subtly non-conformant carriers
   | 'meta-from-body' | 'no-eol-attr' | 'no-generator' | 'update-any-format' | 'note-when-hosted' | 'prefs-in-text' | 'name-handle'
   // closed loop 2 round 3: carriers that passed the harness (the claims adversary's r3-* and the save/update gaps)
-  | 'r3-reload-picked' | 'r3-readonly-stuck' | 'r3-hook-markSaved' | 'r3-readonly-save-key'
+  | 'r3-reload-picked' | 'r3-readonly-stuck' | 'r3-hook-markSaved' | 'r3-readonly-save-key' | 'r3-ungated-view-key'
+  // option B (2026-10-06): the preview's port without the frame secret
+  | 'port-without-secret'
   | 'save-to-inline' | 'save-drops-includes' | 'update-drops-includes';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';

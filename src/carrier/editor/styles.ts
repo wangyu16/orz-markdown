@@ -51,7 +51,6 @@ export const EDITOR_CSS = `
   font-size: var(--orz-chrome-text-sm); color: var(--orz-chrome-muted); background: var(--orz-chrome-surface-2);
   border: 1px solid var(--orz-chrome-border); border-radius: 6px;
 }
-.orz-editor__preview-note--top { inset: var(--orz-chrome-space-3) var(--orz-chrome-space-3) auto; }
 .orz-editor__link-chip {
   position: absolute; inset: auto var(--orz-chrome-space-3) var(--orz-chrome-space-3) auto; max-width: calc(100% - 2 * var(--orz-chrome-space-3));
   display: flex; align-items: center; gap: var(--orz-chrome-space-2); padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3);

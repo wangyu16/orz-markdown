@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EDITOR_CSS = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
+exports.EDITOR_CSS = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
 /**
  * `orz-markdown/carrier/editor` — the editor shell (FC-19 §8): the
  * kind-independent base each carrier's `mountEditor` wraps. Chrome toolbar,
@@ -50,6 +50,7 @@ Object.defineProperty(exports, "previewScriptHashes", { enumerable: true, get: f
 Object.defineProperty(exports, "PREVIEW_SANDBOX", { enumerable: true, get: function () { return preview_js_1.PREVIEW_SANDBOX; } });
 Object.defineProperty(exports, "PREVIEW_BRIDGE", { enumerable: true, get: function () { return preview_js_1.PREVIEW_BRIDGE; } });
 Object.defineProperty(exports, "PREVIEW_BRIDGE_HASH", { enumerable: true, get: function () { return preview_js_1.PREVIEW_BRIDGE_HASH; } });
+Object.defineProperty(exports, "PREVIEW_SECRET_ATTRIBUTE", { enumerable: true, get: function () { return preview_js_1.PREVIEW_SECRET_ATTRIBUTE; } });
 Object.defineProperty(exports, "PREVIEW_READY_TIMEOUT_MS", { enumerable: true, get: function () { return preview_js_1.PREVIEW_READY_TIMEOUT_MS; } });
 var render_md_js_1 = require("./render-md.js");
 Object.defineProperty(exports, "renderMarkdownPreview", { enumerable: true, get: function () { return render_md_js_1.renderMarkdownPreview; } });

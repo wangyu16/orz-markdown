@@ -20,7 +20,7 @@ export type { CodeMirror6Modules, CodeMirror6Options } from './codemirror6.js';
 export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_GLOBAL } from './codemirror-pin.js';
 export { createTextModel, toEditorText, minimalChange, detachString } from './text-model.js';
 export type { TextModel } from './text-model.js';
-export { previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_READY_TIMEOUT_MS, } from './preview.js';
+export { previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS, } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';
 export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes } from './render-md.js';
 export type { MarkdownPreviewOptions } from './render-md.js';
