@@ -270,3 +270,37 @@ switches). Revisit if an app edits documents from untrusted authors.
 
 **After round 3** (`@e59dc30`, option B in the next commit): 1,918 tests
 green; harness 45 checks.
+
+### Round 4 — 2026-10-06 (confirming)
+
+One fresh adversary on `@e8d8f0c`: 25 targeted mutations (21 caught; the 4
+survivors equivalent or test gaps), the 98 real-Chrome editor tests, a
+review of the reworked harness checks. **No HIGH; 1 LOW.**
+
+Held: the authenticated channel — the secret is read and removed before
+any document content and is not in the frame's DOM; the port is handed
+only for a ready with this frame's secret, once per load; forged, second
+and plain-after-handed readies are ignored and the real port kept;
+replaced documents (`document.open()`, nested `<iframe srcdoc>`, meta
+refresh to another http origin and to `data:`) get no port; window messages
+never act. Includes through saves and updates (exact `sameIncludes`),
+delivery kept, content-proved handles, the F4 text-model fix, the harness's
+new phases (substantive assertions), and the option-B regression sweep
+(multi-instance, acks, `shell.preview`, popup mounting, link chip, CSP).
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| F1 while a document script holds the focus, the reader's keys open the 1.5 s scroll window, so the document's own `scrollTo` moves the editor through scroll sync | ISOLATION/SPEC | LOW | accepted under option B (a reader's keyboard scrolling of the preview cannot be told from a script's; scroll position only) — stated in FC-19 §8.4, E.14 and the bridge comment |
+| M28 a window render acknowledgement after the port was handed was untested | ORZ | LOW | fix — test bound to E.14 (catches the mutation) |
+| M4, M21, M29 (handed reset on load, name fast-reject, retired-port grace) | — | — | equivalent: the secret, the content proof and timing cover them |
+
+**Loop 2 closed 2026-10-06** (stop rule: a round with no HIGH classed ORZ or
+ISOLATION). Summary: 4 rounds; HIGH found and fixed — a same-named copy
+overwrote the original (1), the `file:` preview could not show local images
+(owner: same-origin there only), keystroke reorder under load (CodeMirror),
+focus theft by a document script (2 rounds; closed by owner decision
+option B: authenticated channel, focus taking accepted), save-as elsewhere
+then reopen lost work, undo patches retained whole texts, the harness
+passed broken carriers (twice), includes dropped by browser saves and
+updates. Claims S.1–S.13, U.1–U.13, V.1–V.5, E.1–E.25, H.1–H.5 bound and
+mutation-checked; harness 45 checks.

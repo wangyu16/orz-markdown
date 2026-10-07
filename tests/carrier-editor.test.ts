@@ -933,6 +933,22 @@ function authFrameOf(m: Mounted) {
   return { ...f, sent, bridge, port };
 }
 
+describe('render acknowledgements after the handshake (loop 2 round 4, M28)', () => {
+  it('[E.14] once a port is handed, a render acknowledgement posted on the window (a replaced document\'s) is ignored — no pacing ack, no anchors, no subscriber call; the same acknowledgement through the port is taken', async () => {
+    const m = mount();
+    const f = authFrameOf(m);
+    const seen: unknown[] = [];
+    m.shell.preview.on('orz-preview-rendered', (d) => seen.push(d));
+    f.say({ type: 'orz-preview-rendered', id: 1, anchors: [[1, 0]], max: 10 });
+    await tick();
+    expect(seen).toEqual([]);
+    f.bridge({ type: 'orz-preview-rendered', id: 1, anchors: [[1, 0]], max: 10 });
+    await tick();
+    expect(seen).toHaveLength(1);
+    m.shell.destroy();
+  });
+});
+
 describe('the exact text across undo (A-3, A-4)', () => {
   it('[E.1] each remembered text keeps its own BOM and line endings: a BOM + CR LF document, setText of an LF text, undo, then typing writes BOM + CR LF again; selection offsets in a remembered mixed-EOL text are mapped on that exact string', () => {
     const T0 = '﻿a\r\nb';

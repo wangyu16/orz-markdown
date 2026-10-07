@@ -491,7 +491,14 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   Escape action, a link or a scroll of the editor still needs the reader's
   own trusted key or click reported through the authenticated port. A key
   the reader presses in the frame — knowingly or not — is the reader's own
-  (Cmd/Ctrl+S there saves).
+  (Cmd/Ctrl+S there saves). One consequence (loop 2 round 4): while a
+  document script holds the focus, the reader's keys there also open the
+  1.5 s window in which the frame's scrolls are reported, so the document's
+  own scrolling can move the editor through scroll sync. A reader's
+  keyboard scrolling of the preview (PageDown, arrows, Space) cannot be told
+  apart from a script's, so this is part of the same accepted limit: the
+  editor's scroll position only, never its text, a save, a view, a link or
+  a window.
 - **Links** clicked in the preview never navigate the frame: `#fragment`
   links scroll it; others go through `hooks.resolveLink` (when given; it gets
   the source href — with it, the shell asks the renderer for links as written,

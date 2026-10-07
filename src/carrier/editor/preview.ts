@@ -171,8 +171,10 @@ export const PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * and scrolls only for trusted events (`isTrusted`) — scrolls (and
  * `navigated`) only within 1.5 s of the reader's own pointer (a press, or a
  * drag), wheel, touch or key in the frame, since a script's scrolling fires trusted scroll events
- * too: what arrives on the port is the reader's own input in the frame,
- * never a document script's.
+ * too: what arrives on the port follows the reader's own input in the
+ * frame. Accepted limit (FC-19 §8.4): while a document script holds the
+ * focus, the reader's keys open that window too, so the document's own
+ * scrolling may move the editor's scroll position through scroll sync.
  *
  * It finds `#orz-doc` when a render arrives (so it may run before the
  * article exists, in `<head>`). Page hooks a carrier's frame document may
