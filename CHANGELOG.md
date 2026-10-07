@@ -7,355 +7,245 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-06
+
+The carrier kit: the shared building blocks the family's single-file carriers
+(orz-mdhtml, orz-slides, orz-paged) are being rebuilt on (family decisions
+FD-03, FD-05–07). It extends `orz-markdown/carrier`, adds four entry points
+(`carrier/read`, `carrier/shell`, `carrier/editor`, `carrier/conformance`),
+and adds the binding specs in `spec/`. The parser's output is unchanged for
+existing documents, with one exception: a `{{nyml}}` block whose kind is
+`document` now renders nothing (below). Additive for `^2.0.0` consumers.
+
 ### Added
 
-- **Carrier kit core (text format 1, FC-18)** in `orz-markdown/carrier`
-  (`src/carrier/`):
-  - header: `readHeader`, `setHeaderValue`, `removeHeaderKey` (in-place,
-    one-line edits; legacy `kind: meta` headers upgraded on the first edit),
-    `lintHeader`, and the key registry (`COMMON_HEADER_KEYS`,
-    `KIND_HEADER_KEYS`, `WRITER_KEY`, `UID_PATTERN`);
-  - document: `readDocument` (kind, format, DocMeta with `uid`, theme, lang,
-    settings, host keys, derived title, lint), `kindFromFilename`, `twinName`,
-    `mintUid`;
-  - links: `twinHref`, `registerTwinLinks` — relative links to text twins
-    render as links to the assembled twin when `env.orzTwinLinks === true`;
-  - envelope: `assembleEnvelope`, `extract`, `readIslandFromDom`, `skillUrl`,
-    `eolStyle`, `hasMixedEol`, `hasLoneSurrogate`, and the island ids. The
-    source island stores the text with LF line breaks and records
-    `data-orz-eol` / `data-orz-bom`, so a DOM read is exact too.
-  - `editHeader` (several sets, removes and `key: |` multi-line values in one
-    pass), `Header.entries` (per-key positions) and `line`/`from`/`to` on
-    lint findings; new lint codes (`closer-in-value` for a header cut inside a
-    value, `closer-not-alone`, `opener-not-alone`, `stray-document-block`,
-    `front-matter`, `bad-lang`, `bad-measure`, `bad-ratio`, `nul`,
-    `lone-surrogate`, `mixed-eol`);
-  - `decodeText` (UTF-8 bytes → text, keeping the BOM that `File.text()`
-    strips); `extract` returns `includes`; `ShellParts.delivery` is optional
-    (default `inline`); `readDocument` resolves `measure`/`ratio` defaults.
-  - `withoutHeader` (the body a carrier renders, with its offset);
-    `decodeText(bytes, { fatal })`; lint codes `ignored-line` and `kind-case`;
-    `extract` reads a file whose line endings were converted to CR LF.
-  - `orz-markdown/carrier/read`: the parser-free reading entry (`extract`,
-    `readIslandFromDom`, `decodeText`, the escape helpers; under 30 KB
-    minified). `DocMeta`/`DocLicense` types re-exported from the carrier.
-  - The kit parses with a private markdown-it instance configured like `md`,
-    so a host's `md.set()`/`md.use()` cannot change assembled bytes.
-  - `orz-markdown/carrier` now loads the parser (`md`) as well, and importing
-    it registers the twin-link core rule on the shared `md` (inert unless a
-    render's env sets `orzTwinLinks: true`).
-- `docMetaFromFields` (DocMeta from a flat nyml field map; values trimmed,
-  empty ones omitted), exported from the main entry and `orz-markdown/doc-meta`.
-- `createMarkdown()`: builds a markdown-it instance with the shared `md`'s
-  configuration (the `{{name}}` plugin registry stays global).
+**Specifications (`spec/`)** — binding, owned here:
+[FC-18](spec/FC-18-text-format-1.md) (text form and assembly, format 1),
+[FC-19](spec/FC-19-editor-component.md) (editor component API; §8 the shared
+editor shell), [host protocols](spec/host-protocols.md) (FC-12, canonical;
+moved from orz-mdhtml's `PROTOCOL.md`, with the kind registry
+`md`/`slides`/`paged`/`poster`, both sides' security rules and format-1 saves:
+`source` is the exact text twin), [shell runtime](spec/shell-runtime.md)
+(FC-11: save order, reader preferences, release manifest, quiet update,
+chrome) and [conformance](spec/conformance.md) (implementation note). The
+golden corpus of format-1 texts, `tests/carrier-corpus/`, is now shipped in
+the package (the conformance harness's default corpus).
+
+**Main entry**
+
+- `createMarkdown()` builds a markdown-it instance configured like the shared
+  `md` (the `{{name}}` plugin registry stays global).
+- `docMetaFromFields(fields)` (also from `orz-markdown/doc-meta`): DocMeta
+  from a flat nyml field map; values trimmed, empty ones omitted.
 - `scanNymlBlocks(source, tokens?)` accepts the tokens of a parse the caller
   already has.
-- `spec/`: the binding carrier specifications FC-18 (text form and assembly,
-  format 1) and FC-19 (editor component API).
-- **Shell runtime** `orz-markdown/carrier/shell` (`src/carrier/shell/`): the
-  browser runtime every assembled file shares (parser-free, safe to import in
-  Node):
-  - `createSaver({ uid, suggestedName, kind, host })` — save in the order
-    connected host → served-page notice → File System Access (handle
-    remembered in IndexedDB `orz-carrier` under the header `uid` plus the
-    page location, else the page URL; a second save overwrites without a
-    prompt; a handle is reused only on the page it was picked on, so a copy
-    — with another name, or the same name in another folder — gets the
-    picker and never writes over the original) → download. It saves the
-    HTML the caller assembled and never serializes the live DOM. A
-    cancelled picker reports `cancelled` without a download. The result
-    says what was written: `picked` and `name` for a file, `confirmed:
-    false` and `name` for a download (a started download is not a
-    confirmed save).
-  - `createPreferenceStore(uid, storage)` — typed, validated reader
-    preferences (`splitRatio`, `scrollSync`, `viewMode`, `editorFontSize`,
-    `darkChrome`), namespaced by `uid`, failing closed to defaults.
-  - `connectHost` (file side) and `embedCarrierFrame` (host side, for apps
-    that embed an assembled file in an iframe) for `orz-host-save@1`,
-    `orz-host-ai@1` and `orz-host-include@1`, with the shared message
-    constants and types; wire-compatible with version 1.
-- `spec/host-protocols.md`: the canonical host-protocol spec (moved from
-  orz-mdhtml's `PROTOCOL.md`, FD-03), with the kind registry
-  (`md`/`slides`/`paged`/`poster`), the security rules for both sides, and
-  format-1 saves (`source` is the exact text twin; hosts persist the text).
-  `spec/shell-runtime.md`: the save order and reader preferences.
-- **Quiet update** in `orz-markdown/carrier/shell` (FD-05;
-  `spec/shell-runtime.md` §6–§7):
-  - the release manifest: every `orz-<x>-browser` package publishes
-    `release.json` (`kind`, `version`, `formats`, `notes`, `bundle.path`,
-    `bundle.integrity` = `sha384-…`); manifest and bundle URLs are hard-coded
-    jsDelivr patterns over `KIND_PACKAGE` (now also exported by
-    `orz-markdown/carrier/read`), never taken from a document;
-  - `checkForUpdate({ kind, current, format })` — at most one request per
-    kind per day (recorded in `localStorage`), silent on any failure, semver
-    precedence, never a prerelease, only releases that read the document's
-    format, honouring `skipVersion(kind, version)`; no check at all in a
-    framed page or with a connected host (the app owns the version), nor on
-    a served page unless `servedPages: true`;
-  - `reassemble({ text, kind, release, delivery })` — transactional: verifies
-    the bundle's SHA-384 and that it is script-safe, runs the release's
-    `OrzCarrier.assemble` in a hidden `sandbox="allow-scripts"` iframe
-    (opaque origin; only that iframe's messages are read), accepts the file
-    only when `extract` gives back exactly the text, kind, version and
-    delivery, and removes the iframe in every outcome; `performUpdate`
-    composes check → reassemble → `createSaver().save`, reading the text
-    through `getText()` before and after the re-assembly (an edit meanwhile
-    refuses with `changed`), and says whether the caller may reload
-    (`reload`: only when the save wrote a file proved by its content to be
-    the opened one, or the host acknowledged, and the text did not move on);
-    `UpdateError` codes; `parseManifest`, `manifestUrl`, `bundleUrl`,
-    `isBundlePath`, `isScriptSafe`, `sha384Integrity`, `compareSemver`;
-  - `mountUpdateIndicator(anchor, info, { onUpdate, onLater, onSkip })` — a
-    small chip next to the brand with a non-modal, keyboard-operable popover
-    (Update now / Not now / Skip this version, "What's new"); no modal, no
-    `confirm()`, no banner.
-- **Shell chrome** (`spec/shell-runtime.md` §8): `CHROME_CSS` (OKLCH tokens,
-  light/dark by `prefers-color-scheme` and `data-chrome`, focus rings,
-  spacing/radius/type scales, reduced motion), `ICONS` (12 inline SVGs),
-  `createShadowRoot`, `showToast` (polite live region, stacking,
-  dismissible).
-- FC-19 §2: the standard bundle global `globalThis.OrzCarrier = { kind,
-  version, formats, assemble(text, { delivery, engineSource }), extract,
-  readDocument, mountEditor, … }`.
-- **Editor shell** `orz-markdown/carrier/editor` (`src/carrier/editor/`;
-  FC-19 §8): `createEditorShell(element, { text, render, … })`, the
-  kind-independent base of every carrier's `mountEditor`:
-  - toolbar, editor and preview in one shadow root (`CHROME_CSS` +
-    `EDITOR_CSS`); split / editor / preview modes (`setMode`, Cmd/Ctrl+\);
-    a draggable, keyboard-operable split; Cmd/Ctrl+S saves, Esc leaves the
-    editor; one pane at a time below 640 px of the shell's own width;
-  - the exact text: `getText()` is the given text byte for byte until it is
-    edited (CR LF, CR, BOM, mixed line endings), and keeps the document's BOM
-    and line-ending style after edits; `setText`, `setHeader(changes)` (FC-18
-    §9 `editHeader` as one undoable edit), `isDirty` / `markSaved`, events
-    `change` / `dirty` / `selection` / `save` / `error`, `undo` / `redo`;
-  - the preview: the carrier's `render(text)` (md: `renderMarkdownPreview`,
-    which stamps `data-src-line` and rewrites twin links) into a sandboxed
-    iframe (`previewSandbox()`: `allow-scripts`, an opaque origin, except a
-    standalone file opened from disk — see round 1), incremental (unchanged
-    blocks and drawings kept), debounced, with scroll sync on the line anchors;
-  - save: `hooks.save(text)` in an app, else `assemble(text)` + `createSaver`
-    (host, served-page notice, File System Access, download); dirty clears
-    only on success; never rejects;
-  - reader preferences (split ratio, view mode, scroll sync, font size, dark
-    chrome) through `createPreferenceStore`, namespaced by the header `uid`;
-  - engines behind `TextEditorAdapter`: `codemirror6Adapter()` (markdown
-    mode, line wrapping, history, search) — editable at once as a textarea,
-    upgraded when CodeMirror loads, kept as a textarea when it cannot — and
-    `textareaAdapter()`; apps that bundle CodeMirror pass `loadModules`.
-  - CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js` (now shipped
-    in the package; `@codemirror/state` 6.7.6, view 6.43.13, commands
-    6.11.1, language 6.12.4, lang-markdown 6.5.2, search 6.7.2; built by
-    `npm run build:codemirror`), loaded from
-    `cdn.jsdelivr.net/npm/orz-markdown@<version>/vendor/codemirror6.js` with
-    Subresource Integrity. Per-package jsDelivr `+esm` URLs were rejected:
-    they resolve `@codemirror/state` to different versions, which CodeMirror
-    refuses.
-  - closed loop 2, round 1 (FC-19 §8.8, claims E.14–E.22): the FC-19 §3
-    hooks in the shell (`hooks.fetchInclude` / `resolveAsset` passed to
-    `render(text, ctx)`, assets in the preview resolved through
-    `resolveAsset`, `resolveLink` for preview clicks, `uploadAsset` on paste
-    and drop, `requestAi`, `ensureUid` with `mintUid`, `uploadAssets`);
-    `formats` (a newer text format opens read-only and is never saved,
-    `error` source `format`); `setReadOnly` / `isReadOnly`; a pluggable
-    preview (`frameDocument`, `bridge`, `diff: false`, `mode: 'navigate'`,
-    `mapLine` / `mapPosition`); `preview.nonce`, `PREVIEW_BRIDGE_HASH`,
-    `previewScriptHashes`, and a notice plus `error` when the frame never
-    starts; `previewSandbox()` as the one place the sandbox is decided:
-    `allow-scripts`, plus `allow-same-origin` only for a standalone file
-    opened from disk, so its relative local images show in the preview.
-  - Fixed: the shell acted on a forged Escape, "active" or scroll message from
-    the preview's document (it could take focus from the editor or pin its
-    scroll); the BOM and line endings after undoing a `setText` back to the
-    original; selection offsets in mixed-EOL texts; the CodeMirror upgrade
-    dropped the textarea's undo steps; a line inserted above redrew every
-    preview block below (the diff keyed on `data-src-line`); renders ran
-    every 150 ms however slow (now `max(debounceMs, 2 × last render)`, never
-    overlapping); the textarea history stored a full copy per step (now
-    patches); the `change` payload was a live getter; a download toast said
-    "Downloaded" (now "Download started."); Cmd/Ctrl+S on an unedited served
-    page showed the served notice; in Chrome under load a keystroke could be
-    applied behind the caret (CodeMirror's scroll handler read a pending
-    change with the selection from before the key: "Second line" became
-    "Seond linec"; claim E.23); the CodeMirror upgrade read the textarea's
-    text as of its last `input` event, not its live value.
-  - closed loop 2, round 2 (claims E.24, E.25; FC-19 §4 and §8): the
-    preview bridge takes a private MessageChannel port from the shell and
-    reports keys, links, input and scrolls only through it and only for
-    trusted events, so a document script's forged save, view, Escape and
-    link messages do nothing even while the reader is in the preview, and a
-    shell mounted into a popup by its opener reaches its frame (option B
-    below: the port only for the frame's secret); a link from the preview opens through `onLink`
-    or, by default, from a chip the reader clicks ("Open <host>?"), never by
-    itself; `shell.preview` (`post`, `on`, `setOptions({ head, scheme })`)
-    and page hooks for a carrier's frame document (`__orzPreviewApply`,
-    `__orzPreviewNavigate`, `__orzPreviewMessage`, `__orzPreview.report`);
-    renders wait for the frame's acknowledgement and count its time, and run
-    at least every `max(1 s, 4 × render)` while typing continues; navigate
-    mode follows the caret when a view change shows the preview;
-    `renderMarkdownPreviewWithIncludes` (URL includes through
-    `ctx.fetchInclude`, cached per shell); with `hooks.resolveLink` links
-    render as written (`ctx.twinLinks: false`); `codemirror6Adapter({ nonce
-    })`, and the nonce on stylesheet links; options `standalone` and
-    `openedHtml` (the standalone saver gets the opened file's bytes, by
-    default `assemble` of the mounted text); `Editor` in FC-19 §4 lists
-    `requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly`, `isReadOnly`.
-  - Fixed (round 2): a document script in the preview that took the focus
-    while the reader typed could forge saves and popups with the activation
-    of the keys it received; the preview stayed blank until slow stylesheets loaded
-    (the bridge waited behind them) and then claimed a CSP problem; a slow
-    frame (a paged renderer) was sent renders as fast as the renderer made
-    them; continuous typing held the preview back until it paused; navigate
-    mode did not follow a view change; a framed or hosted `file:` page got
-    the same-origin preview frame; `srcset` was split on every comma (a
-    `data:` URL broke); `resolveLink` got the twin-rewritten href; an AI
-    proposal, an upload or a uid arriving after `setReadOnly(true)` or
-    `destroy()` still changed the text; a save finishing after `destroy()`
-    posted the dirty state to the host; `getText()` after `destroy()` was
-    empty with CodeMirror; the initial and saved texts fell out of the text
-    model's 16-text window (17 header edits undone back were no longer exact
-    or clean); a CR LF document cost two copies per remembered text; the
-    textarea history's patches, cut from whole texts, kept every whole text
-    alive (V8 slices: 300 steps of a 1.25 MB text held 716 MB, now 6 MB);
-    CodeMirror's arrival replayed every textarea step through whole-text
-    copies (200 steps of 1.25 MB: 4.0 s and +542 MB here, 20.9 s in the
-    finding; now the newest 100 from the patches, 0.36 s and +91 MB); the
-    E.10 size bound measured the source (the shipped CommonJS bundle of the
-    editor's own code is 64.9 KB; bound 70 KB), and the tests' ESM bundle of
-    the source loaded KaTeX twice, so `\ce` failed in it.
-  - The preview's defence against a document's own scripts, owner decision
-    2026-10-06 ("option B"; FC-19 §5 invariant 3 and §8.4, claims E.5, E.14,
-    E.15, E.25): every frame document gets a new secret on the bridge's own
-    `<script>` (`data-orz-preview-secret`, `PREVIEW_SECRET_ATTRIBUTE`; the
-    bridge reads and removes it first thing), and the shell hands the port
-    only for a ready carrying it, once per load — a forged ready, a second
-    one, or one from a document that replaced the bridge's
-    (`document.open()`, a navigation, a meta refresh to an http or `data:`
-    page, a nested frame) gets nothing and no longer closes the real port
-    (it did, and `document.open()` or a meta refresh then got the port and
-    could save, toggle the view or send links). Nothing arriving on the
-    window acts on keys, links, focus or scroll any more (also not for a
-    carrier's own bridge, which gets the port only through the same
-    handshake); scroll reports need the reader's own input in the frame in
-    the last 1.5 s. Added: `PreviewFrameOptions.secret`, the page hook
-    `__orzPreview.navigated(line)` (navigate mode reads a line back through
-    the port), and `__orzPreviewApply` calls that never overlap. Accepted
-    limit: a document's own scripts may take the keyboard focus inside the
-    preview, so keys can go there instead of the editor (documents are
-    trusted content, M.21); they still cannot save, switch views, open
-    links or scroll the editor. Removed (added in round 2, never released):
-    the focus-theft defence — focus given back, the ping/pong question, the
-    paused preview under a nonce-only CSP with its note and `error`, which
-    was bypassable (a nested frame, a forged ready, `document.open()`) and
-    paused innocent documents after a tab switch — with
-    `preview.pauseScripts`, `PreviewController.pauseScripts` /
-    `resumeScripts` / `scriptsPaused`, `PreviewEvents.onFocus` / `onPong`,
-    the `trusted` argument of `onKey` / `onLink` / `onActive`, and the
-    bridge's `orz-preview-focus` / `-ping` / `-pong`. `PREVIEW_BRIDGE_HASH`
-    changed with the bridge.
-- **Conformance harness** `orz-markdown/carrier/conformance`
-  (`src/carrier/conformance/`; spec/conformance.md): the Node-side test tool
-  each carrier runs against itself. `runConformance(target, options)` →
-  `ConformanceReport`, `registerConformance({ describe, it, beforeAll,
-  afterAll }, target, options)` (one test per check, then a final
-  `[conformant]` test that fails on any skipped or deselected check unless
-  `allowSkips`), `openConformance`, `isConformant`,
-  `CHECKS` — 42 checks with stable ids (`C.law.*`, `C.bundle.*`,
-  `C.create.*`, `C.edit.*`, `C.save.*`, `C.update.*`, `C.host.*`,
-  `C.prefs.*`) over the FC-18 laws (the shipped corpus, hazard texts,
-  Node vs Chrome bytes), the bundle rule and `release.json`, create, edit
-  (with the pinned CodeMirror served, and the textarea fallback; a
-  newer-format text read-only; preview isolation against a forging preview
-  script), the save routes (a same-named copy elsewhere with real handles),
-  the quiet update (indicator, verified re-assembly, tampered, re-signed
-  and version-lying releases, prereleases, once a day, none in a host
-  frame, cdn delivery kept, offline, update from the previous release), the
-  three host handshakes (and foreign hellos) and reader preferences — in
-  real Chrome on closed networks where only the release's jsDelivr URLs are
-  answered. `conformant` is true only when every check ran and passed (a
-  partial run reports `partial: true`); `not-applicable` covers
-  `C.update.from-previous` for a target that declares `firstRelease`.
-  `playwright-core` is an optional peer dependency, loaded only when a
-  browser check runs; the package now ships `tests/carrier-corpus/` (the
-  harness's default corpus).
-  - closed loop 2, round 2: checks run side by side (`lanes`, default 3;
-    each check in browser contexts of its own; `C.edit.preview-isolation`
-    alone), and four checks are new — `C.edit.app-host` (the hook save's
-    exact text, `readOnly`, separate undo, no style leak, no update check in
-    an app), `C.save.save-as-elsewhere`, `C.update.edit-during` (an edit
-    while the update downloads is never lost) and `C.update.other-format`;
-    existing checks got stricter (a focus-stealing preview script, a moved
-    clock, refusals and `formats` in the browser bundle, one in-place write
-    per update, the downloaded name, no update check in a silent host's
-    frame, no style or storage key outside the document's namespace, no
-    preference in a saved file, the updated file edits and saves, no console
-    error offline). The 16 broken carriers that passed the whole harness as
-    conformant in the round-2 audit, and 7 more from its sub-probe, each
-    fail a named check now.
-  - Option B (2026-10-06): `C.edit.preview-isolation` no longer asks for the
-    focus back or for every key while a document script steals the focus
-    (an accepted limit now); it asks that nothing acts — no save, no link
-    reaching `hooks.resolveLink` or offered, no view change, no page — for
-    forged messages (now also readies and view keys), the focus thief, and
-    previews replaced or nested by their own document (a nested frame,
-    `document.open()`, meta refreshes to an http page of the harness's
-    other origin and to `data:`), none of which may get the port; and that
-    a tab switch round trip with the focus in the preview leaves it
-    working. A carrier whose forged view key switches the view, and a shell
-    that hands the port to any ready, fail it.
+
+**`orz-markdown/carrier` — the kit core (FC-18).** Browser-safe; it now loads
+the parser and parses with a private instance from `createMarkdown()`, so a
+host's `md.set()`/`md.use()` cannot change assembled bytes. Importing it
+registers the twin-link rule on the shared `md` (inert unless a render's env
+sets `orzTwinLinks: true`).
+
+- Header: `readHeader`, `editHeader` (several sets, removes and `key: |`
+  multi-line values in one in-place pass; the header is never
+  re-serialized), `setHeaderValue`, `removeHeaderKey`, `withoutHeader` (the
+  body a carrier renders, with its offset), `lintHeader` (findings with
+  `line`/`from`/`to`), `Header.entries`, and the key registry
+  (`COMMON_HEADER_KEYS`, `KIND_HEADER_KEYS`, `WRITER_KEY`, `UID_PATTERN`). A
+  legacy `kind: meta` header is upgraded to `kind: document` on the first
+  edit. Lint codes include `closer-in-value`, `closer-not-alone`,
+  `opener-not-alone`, `stray-document-block`, `front-matter`, `bad-lang`,
+  `bad-measure`, `bad-ratio`, `nul`, `lone-surrogate`, `mixed-eol`,
+  `ignored-line` and `kind-case`.
+- Document: `readDocument` (kind, format, DocMeta with `uid`, theme, lang,
+  settings with `measure`/`ratio` defaults, host keys, derived title, lint),
+  `kindFromFilename`, `twinName`, `mintUid` (the kit's only randomness).
+- Links: `twinHref`, `registerTwinLinks` — a relative Markdown link to a
+  text twin (`week2.slides.md`) renders as a link to the assembled twin
+  (`week2.slides.html`) when `env.orzTwinLinks === true`.
+- Envelope: `assembleEnvelope` (deterministic; `ShellParts.delivery`
+  optional, default `inline`; resolved `includes` stored in
+  `#orz-includes`), `extract` (returns `includes`; also reads a file whose
+  line endings were converted to CR LF), `readIslandFromDom`, `skillUrl`,
+  `eolStyle`, `hasMixedEol`, `hasLoneSurrogate`, `decodeText(bytes,
+  { fatal })` (UTF-8, keeping the BOM that `File.text()` strips), the island
+  ids, `KIND_PACKAGE`, and the `DocMeta`/`DocLicense` types. The source
+  island stores the text with LF line breaks and records `data-orz-eol` /
+  `data-orz-bom`, so `extract` and a DOM read give back the text byte for
+  byte.
+
+**`orz-markdown/carrier/read`** — the parser-free reading entry (`extract`,
+`readIslandFromDom`, `decodeText`, `KIND_PACKAGE`, the escape helpers; under
+30 KB minified).
+
+**`orz-markdown/carrier/shell`** — the browser runtime of every assembled
+file (spec/shell-runtime.md, spec/host-protocols.md). Parser-free and safe to
+import in Node; not re-exported by `orz-markdown/carrier`.
+
+- `createSaver({ uid, suggestedName, kind, host, openedHtml })` — saves the
+  HTML the caller assembled (never the live DOM) in the order connected host
+  → served-page notice → File System Access → download. A file handle is
+  remembered in IndexedDB under the header `uid` and the page location, and
+  reused without a prompt only on that page and only when the file's content
+  proves it is the opened file (`openedHtml`, or what this page last wrote
+  through it; the record keeps the SHA-256 of the last write). Names prove
+  nothing: a copy, or a same-named file in another folder, gets the picker.
+  The result says what happened (`picked`, `name`, `opened` for a file;
+  `confirmed: false` for a download; `cancelled` for a cancelled picker).
+- `createPreferenceStore(uid, storage)` — typed, validated reader
+  preferences (`splitRatio`, `scrollSync`, `viewMode`, `editorFontSize`,
+  `darkChrome`), namespaced by `uid`, failing closed to defaults.
+- `connectHost` (file side) and `embedCarrierFrame` (host side) for
+  `orz-host-save@1`, `orz-host-ai@1` and `orz-host-include@1`, with the
+  shared message constants and types; wire-compatible with version 1.
+- Quiet update (FD-05): every `orz-<x>-browser` package publishes
+  `release.json` (`kind`, `version`, `formats`, `notes`, `bundle.path`,
+  `bundle.integrity`); URLs are hard-coded jsDelivr patterns over
+  `KIND_PACKAGE`, never taken from a document. `checkForUpdate({ kind,
+  current, format })` asks at most once a day per kind, is silent on any
+  failure, never offers a prerelease or a release that cannot read the
+  document's format, honours `skipVersion`, and does not run in a framed
+  page, with a connected host, or on a served page (unless `servedPages:
+  true`). `reassemble` verifies the bundle's SHA-384 and that it is
+  script-safe (no CR), runs the release's `OrzCarrier.assemble` in a hidden
+  `sandbox="allow-scripts"` iframe, and accepts the file only when `extract`
+  gives back exactly the text, kind, version, delivery and includes.
+  `performUpdate` composes check → reassemble → save, re-reads the text
+  before saving (an edit meanwhile refuses with `changed`) and returns
+  `reload` only when the save provably wrote the opened file or the host
+  acknowledged. Also `UpdateError`, `parseManifest`, `manifestUrl`,
+  `bundleUrl`, `isBundlePath`, `isScriptSafe`, `sha384Integrity`,
+  `compareSemver`.
+- `mountUpdateIndicator(anchor, info, { onUpdate, onLater, onSkip })` — a
+  small chip with a non-modal, keyboard-operable popover (Update now / Not
+  now / Skip this version, "What's new").
+- Chrome: `CHROME_CSS` (OKLCH tokens, light/dark by `prefers-color-scheme`
+  and `data-chrome`, focus rings, reduced motion), `ICONS` (12 inline SVGs),
+  `createShadowRoot`, `showToast` (polite live region).
+
+**`orz-markdown/carrier/editor`** — the editor shell every carrier's
+`mountEditor` wraps (FC-19 §8; FC-19 §2 defines the bundle global
+`globalThis.OrzCarrier = { kind, version, formats, assemble, extract,
+readDocument, mountEditor, … }`).
+
+- `createEditorShell(element, { text, render, … })`: toolbar, editor and
+  preview in one shadow root (`CHROME_CSS` + `EDITOR_CSS`); split / editor /
+  preview modes (`setMode`, Cmd/Ctrl+\); a draggable, keyboard-operable
+  split; Cmd/Ctrl+S saves, Esc leaves the editor; one pane below 640 px of
+  the shell's own width; `compact` toolbar.
+- The exact text: `getText()` is the given text byte for byte until edited
+  (CR LF, CR, BOM, mixed line endings) and keeps the BOM and line-ending
+  style after edits; `setText` (undoable by default), `setHeader(changes)`
+  (one undoable `editHeader`), `isDirty` / `markSaved`, `undo` / `redo`,
+  events `change` / `dirty` / `selection` / `save` / `error`.
+- Save: `hooks.save(text)` in an app, else `assemble(text)` + `createSaver`
+  (options `standalone`, `openedHtml`); `save()` resolves a `SaveOutcome`
+  and never rejects; dirty clears only on success.
+- The FC-19 §3 hooks: `fetchInclude` / `resolveAsset` (passed to
+  `render(text, ctx)`), `resolveLink` for preview clicks, `uploadAsset` on
+  paste and drop, `requestAi`, `ensureUid` (with `mintUid`), `uploadAssets`.
+  `formats`: a newer text format opens read-only and is never saved.
+  `setReadOnly` / `isReadOnly`. Reader preferences through
+  `createPreferenceStore`.
+- Preview: the carrier's `render(text)` (md: `renderMarkdownPreview`, which
+  stamps `data-src-line` and rewrites twin links;
+  `renderMarkdownPreviewWithIncludes` for URL includes through
+  `ctx.fetchInclude`) in a sandboxed iframe, incremental (unchanged blocks
+  and drawings kept), paced by the frame's acknowledgement
+  (`max(debounceMs, 2 × last render)` while idle, at least every
+  `max(1 s, 4 × render)` while typing), with scroll sync on the line
+  anchors. Pluggable for a carrier's own frame (`frameDocument`, `bridge`,
+  `diff: false`, `mode: 'navigate'`, `mapLine` / `mapPosition`, page hooks
+  `__orzPreviewApply`, `__orzPreviewNavigate`, `__orzPreviewMessage`,
+  `__orzPreview.report` / `.navigated`), `shell.preview` (`post`, `on`,
+  `setOptions({ head, scheme })`), `preview.nonce`, `PREVIEW_BRIDGE_HASH`,
+  `previewScriptHashes`, `PREVIEW_SECRET_ATTRIBUTE`,
+  `PreviewFrameOptions.secret`; a notice and `error` when the frame never
+  starts. A link clicked in the preview opens through `onLink` or, by
+  default, from a chip the reader clicks ("Open <host>?"), never by itself.
+- Preview isolation (FC-19 §5 invariant 3, §8.4): `previewSandbox()` is the
+  one place the sandbox is decided — `allow-scripts` with an opaque origin.
+  The bridge talks to the shell only over a private MessageChannel port,
+  handed once per load and only for a ready message that carries the
+  frame's secret (`data-orz-preview-secret` on the bridge's own `<script>`,
+  read and removed first thing); keys, links, input and scrolls act only
+  through that port and only from trusted events. A forged or second ready,
+  or a document that replaced the bridge's (`document.open()`, a navigation,
+  a meta refresh, a nested frame), gets nothing.
+- Engines behind `TextEditorAdapter`: `codemirror6Adapter({ nonce,
+  loadModules })` (markdown mode, wrapping, history, search) — editable at
+  once as a textarea, upgraded when CodeMirror loads, kept as a textarea
+  when it cannot — and `textareaAdapter()`.
+- CodeMirror 6 is ONE pinned bundle shipped in the package,
+  `vendor/codemirror6.js` (`@codemirror/state` 6.7.6, view 6.43.13,
+  commands 6.11.1, language 6.12.4, lang-markdown 6.5.2, search 6.7.2; built
+  by `npm run build:codemirror`), loaded from
+  `https://cdn.jsdelivr.net/npm/orz-markdown@2.1.0/vendor/codemirror6.js`
+  with Subresource Integrity (`CODEMIRROR6_URL`, `CODEMIRROR6_INTEGRITY`).
+  Per-package `+esm` URLs are not used: they resolve `@codemirror/state` to
+  different versions, which CodeMirror refuses.
+
+**`orz-markdown/carrier/conformance`** — the Node-side harness each carrier
+runs against itself (spec/conformance.md): `runConformance(target, options)`
+→ `ConformanceReport`, `registerConformance({ describe, it, beforeAll,
+afterAll }, target, options)` (one test per check plus a final
+`[conformant]` test that fails on any skipped check unless `allowSkips`),
+`openConformance`, `isConformant`, and `CHECKS` — 45 checks with stable ids
+(`C.law.*`, `C.bundle.*`, `C.create.*`, `C.edit.*`, `C.save.*`,
+`C.update.*`, `C.host.*`, `C.prefs.*`) over the FC-18 laws, the bundle rule
+and `release.json`, create, edit (CodeMirror and the textarea fallback,
+read-only newer formats, preview isolation), the save routes, the quiet
+update (tampered, re-signed and version-lying releases, offline, an edit
+during the update), the host handshakes and reader preferences. Checks run
+in real Chrome on closed networks where only the release's jsDelivr URLs are
+answered, side by side in `lanes` (default 3), each in browser contexts of
+its own. `conformant` is true only when every check ran and passed
+(`partial: true` otherwise). `playwright-core` is an optional peer
+dependency, loaded only when a browser check runs.
+
+### Changed
+
+- A `{{nyml}}` block whose kind is `document` (the FC-18 document header)
+  renders nothing and takes no `nyml-data` number. A renderer of a
+  format-1 text renders `withoutHeader(text).body`: the shared `md` still
+  renders a legacy `kind: meta` block as a data island.
+- The nyml reader treats U+2028 and U+2029 as ordinary characters: only LF,
+  CR LF and CR end a line (a value holding them was silently dropped).
+- A nyml key named `__proto__` is kept as data (it was dropped).
+- `extractDocMeta` trims values; a value that is empty after trimming is
+  absent (through the shared `docMetaFromFields`).
+- `@types/markdown-it` is a dependency (the published types expose it).
 
 ### Fixed
-
-- The standalone save took a remembered handle for the opened file by its
-  page location and name. The real picker opens in the last folder used and
-  offers the same name there, so after a "save as" into Downloads the page
-  reopened from its own folder silently overwrote the Downloads file, and an
-  update saved there reloaded the stale original. A handle is now proved by
-  its content: before reuse its file must hold what this page last wrote
-  through it or the opened file's bytes (`createSaver`'s new `openedHtml`,
-  the carrier's `assemble` of the text the page loaded; without it nothing
-  is reused across page loads), the record keeps the SHA-256 of the last
-  write, and only handles proved to be the opened file are remembered. A
-  `file` save result says `opened`; `performUpdate`'s `reload` rests on it
-  (`openedName` is ignored).
-- Size bounds of the shell measured the TypeScript source while carriers
-  bundle the CommonJS `dist/` (S.11 said 45.7 KB; what ships was 58.9 KB).
-  The bounds now measure the dist (shell 62 KB, update 22 KB, update + UI
-  40 KB, chrome 16 KB, reader 30 KB), and the shell index re-exports with
-  `export *` (−4.1 KB of CommonJS getters).
-- The stub carrier's bundle loaded KaTeX twice (the parser's ESM `mhchem`
-  import and the plugin's `require` resolve to two builds) and `\ce` did not
-  render from it; its build now resolves both to one.
 
 - HTML scanners lowered a whole document with `toLowerCase()` and used its
   offsets on the original: a `İ` (or another length-changing case mapping)
   before an island shifted every offset, so `parseDocMetaIsland` missed the
   island. Case mapping for HTML is now ASCII-only (`src/ascii.ts`).
 
-### Changed
+### Security
 
-- A `{{nyml}}` block whose kind is `document` (the FC-18 document header)
-  renders nothing and takes no `nyml-data` number.
-- The nyml reader treats U+2028 and U+2029 as ordinary characters: only LF,
-  CR LF and CR end a line (a value holding them was silently dropped).
-- A nyml key named `__proto__` is kept as data (it was dropped).
-- `@types/markdown-it` is a dependency (the published types expose it).
-- The R.7 KaTeX-budget regression test bounds its time relative to a
-  baseline measured in the same run instead of an absolute 40 s (it flaked
-  under load).
-- Tests: `vitest.config.ts` defines two projects; the conformance harness
-  run (`tests/conformance.test.ts`, ~90 s of real Chrome) runs alone after
-  every other suite (`sequence.groupOrder`), because in parallel it starved
-  the ratio- and timeout-bounded perf and Chrome tests.
-- `KIND_PACKAGE` lives in the parser-free `src/carrier/read.ts` (still
-  exported by `orz-markdown/carrier`; now also by `orz-markdown/carrier/read`).
-- Carrier specs amended (owner, 2026-10-06): FC-19 §3–4 take the editor
-  shell's refinements (`save()` resolves a `SaveOutcome`; `setHeader`,
-  `undo`, `redo`; bound event payloads; `setText` undoable by default;
-  `compact` toolbar; `resolveLink` for preview clicks) and say that a
-  standalone save goes through the file's own host connection; FC-18 §3
-  requires `carrier: <kind>` in a newly created header; shell-runtime §6
-  forbids CR in a bundle, and `isScriptSafe` / `reassemble` now refuse one.
+- Assembled files update themselves only from hard-coded jsDelivr URLs, after
+  verifying the bundle's SHA-384 and that it is script-safe, in an
+  opaque-origin sandbox, and only when the re-assembled file gives back
+  exactly the same text (see `carrier/shell` above).
+- The editor preview runs a document's scripts in an opaque-origin sandbox
+  with no host access, and nothing a document's scripts send can save,
+  switch views, open links or windows, or scroll the editor (see
+  `carrier/editor` above).
+
+### Accepted limits
+
+- **Keyboard focus in the preview.** A document's own scripts may take the
+  keyboard focus inside the preview, so keys can go there instead of the
+  editor. Documents are trusted content (claim M.21); they still cannot
+  save, switch views, open links or scroll the editor. No focus-theft
+  detection is attempted (owner decision 2026-10-06, FC-19 §5 invariant 3).
+- **Same-origin preview for a standalone `file:` page.** When an assembled
+  file is opened from disk as a top-level page with no host, the preview
+  frame also gets `allow-same-origin`, so the document's relative local
+  images show (owner decision B-2, FC-19 §8.4). Never in a framed, hosted or
+  served page.
 
 ## [2.0.0] - 2026-10-03
 

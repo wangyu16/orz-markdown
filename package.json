@@ -1,6 +1,6 @@
 {
   "name": "orz-markdown",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Markdown renderer and single-file, self-editing HTML document family with math, diagrams, themes, and source-aware copy.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

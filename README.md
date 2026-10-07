@@ -111,6 +111,33 @@ their native deck config and accept the same programmatic override.
 import { extractDocMeta, parseDocMetaIsland } from 'orz-markdown/doc-meta';
 ```
 
+### The document header (text format 1, ≥ 2.1.0)
+
+The rebuilt carriers keep every document as plain text (`name.md`,
+`name.slides.md`, `name.paged.md`) beside its assembled file (`name.md.html`,
+…). Its metadata and settings live in one leading header — a nyml block whose
+first key is `kind: document` ([FC-18 §5](spec/FC-18-text-format-1.md)):
+
+```markdown
+{{nyml
+kind: document
+title: Cell Biology — Week 3
+author: Your Name
+license: CC-BY-4.0
+theme: light-neat-3
+}}
+
+# Cell Biology …
+```
+
+The parser renders nothing for a `kind: document` block (and gives it no
+`nyml-data` number); the carriers read it. A plain Markdown file with no
+header is a valid document too, and a leading `kind: meta` block is still
+read as a legacy header. Relative links to a text twin
+(`[Week 2](week2.slides.md)`) stay `.md` links in the text, so they work on
+GitHub, and point to the assembled twin (`week2.slides.html`) in an assembled
+file (the render env's `orzTwinLinks: true`).
+
 ## Themes
 
 We provide multiple ready-to-use CSS themes for rendering the output! You do not need to style the custom plugins from scratch.
@@ -163,16 +190,32 @@ preview identically instead of re-deriving it.
 
 | Import | What it gives you |
 |---|---|
-| `orz-markdown` | the configured `md` instance, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `VERSION`, `KATEX_VERSION` |
+| `orz-markdown` | the configured `md` instance, `createMarkdown()`, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `VERSION`, `KATEX_VERSION` |
 | `orz-markdown/runtime` | the browser runtime (tabs, QR expand, copy-as-Markdown) as a script string |
 | `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned) |
 | `orz-markdown/doc-meta` | the DocMeta API on its own |
-| `orz-markdown/carrier` | shared helpers for single-file carriers: reversible source-island escaping, `jsonForScript`, HTML escaping, `maskInertMarkdown`, `VERSION` |
+| `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint, `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser) |
+| `orz-markdown/carrier/read` | `extract`, `readIslandFromDom`, `decodeText`, escape helpers — reads assembled files without the parser |
+| `orz-markdown/carrier/shell` | the browser runtime of every assembled file: save, reader preferences, host protocols, quiet update, chrome (parser-free, Node-safe to import) |
+| `orz-markdown/carrier/editor` | the editor shell every carrier's `mountEditor` wraps (FC-19 §8), with the pinned CodeMirror 6 bundle `vendor/codemirror6.js` |
+| `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`) |
 | `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
 | `orz-markdown/themes/*` | the CSS themes |
 
 orz-markdown has no static Node dependencies: it bundles for the browser
 (esbuild, Vite, …) with no `fs`/`path`/`process` shims.
+
+### Carrier kit (≥ 2.1.0)
+
+The `orz-markdown/carrier*` entries are the shared kit the family's
+single-file carriers (orz-mdhtml, orz-slides, orz-paged) are being rebuilt on
+(family decisions FD-03, FD-05–07). Their binding specifications live in
+[`spec/`](spec/README.md): the text form and assembly (FC-18), the editor
+component (FC-19), the host protocols, the shell runtime, and the
+conformance harness; the golden corpus is
+[`tests/carrier-corpus/`](tests/carrier-corpus/) (shipped in the package).
+Authors only need the [document header](#the-document-header-text-format-1--210)
+above; everything else is for carrier and host builders.
 
 ### Security notes
 
@@ -217,7 +260,7 @@ npm test
 npm pack
 ```
 
-The generated tarball is written to the repository root and includes `dist/`, `themes/`, and `orz-markdown-skills/`.
+The generated tarball is written to the repository root and includes `dist/`, `themes/`, `vendor/` (the pinned CodeMirror 6 bundle), `orz-markdown-skills/`, and `tests/carrier-corpus/` (the conformance corpus).
 
 ## Agent Skill
 
@@ -278,7 +321,7 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 | **SMILES Chemistry**| `sm` | `{{smiles C1=CC=CC=C1}}` | Embeds SMILES chemical formulas parsed specifically for `smilesDrawer` visualization. |
 | **Chart** | N/A | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` | Declarative bar/line/pie/doughnut charts from a small line-based config (`type`, `labels`, `series: Name = …` or `data: …`, optional `title`). Rendered client-side with Chart.js. |
 | **YAML Objects** | `yml` | `{{yaml\ntitle: Doc\n}}` | Embeds the multiline YAML configuration blindly into an invisible `<script type="application/yaml">` block. |
-| **NYML Parser** | N/A | `{{nyml\nkey: value\n}}` | NYML-specific parser logic. Evaluates and injects the resulting properties as an invisible `<script type="application/json">` block. |
+| **NYML Parser** | N/A | `{{nyml\nkey: value\n}}` | NYML-specific parser logic. Evaluates and injects the resulting properties as an invisible `<script type="application/json">` block. A block whose `kind` is `document` (the document header) renders nothing. |
 | **Test** | N/A | `{{test-block}}` | Reserved testing elements for structural plugin resolution constraints. |
 
 > **📝 Escaping Plugins:**

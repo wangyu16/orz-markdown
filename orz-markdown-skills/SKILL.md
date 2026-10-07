@@ -1,6 +1,6 @@
 ---
 name: orz-markdown
-description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, chart, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, markdown/md file or URL includes, or their aliases mm/qr/yt/sm/sp/em/yml/md-include), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 12 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, or any KaTeX math syntax in this project. ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
+description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, chart, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, markdown/md file or URL includes, or their aliases mm/qr/yt/sm/sp/em/yml/md-include), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 12 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, any KaTeX math syntax in this project, or the {{nyml kind: document}} document header of a text-format-1 document (.md / .slides.md / .paged.md beside its assembled .html twin). ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
 compatibility:
   runtime: "Node.js >= 20.16; CommonJS package, named imports work from ESM"
   package: "orz-markdown"
@@ -132,6 +132,34 @@ Use `extractDocMeta`, `mergeDocMeta`, `renderDocMetaHead`,
 `orz-markdown/doc-meta`; do not create a second metadata grammar in a host app.
 Blank host values (empty strings/arrays) never overwrite the author's values.
 
+**Document header (text format 1, ≥ 2.1.0).** The rebuilt carriers keep each
+document as a text twin (`name.md`, `name.slides.md`, `name.paged.md`) beside
+its assembled file (`name.md.html`, …). Its metadata and settings go in ONE
+leading header, a nyml block whose first key is `kind: document`:
+
+```markdown
+{{nyml
+kind: document
+title: Cell Biology — Week 3
+author: Yu Wang
+license: CC-BY-4.0
+theme: light-neat-3
+}}
+```
+
+`{{nyml` alone on the first line, `kind: document` next, `}}` alone on the
+last; one `key: value` per line (`key: |` for a multi-line value); no `}}`
+inside a value. Keys: the DocMeta fields above plus `format`, `carrier`,
+`uid` (keep it exactly; never invent or change one), `lang`, `theme`, and the
+kind's own (`measure` for md; `ratio`, `footer`, `transition` for slides;
+the page settings for paged); host keys start with `x_<host>_`. Unknown keys
+are kept. The parser renders nothing for this block. A file with no header is
+still a valid `md` document; an old leading `kind: meta` block is read as a
+legacy header. **Twin links:** link to the text twin
+(`[Week 2](week2.slides.md)`); it works on GitHub and becomes a link to
+`week2.slides.html` inside an assembled file. Full rules:
+[FC-18](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md).
+
 ### Building a carrier or host (≥ 2.0.0)
 
 `orz-markdown/carrier` holds the family's shared, Node-free building blocks:
@@ -144,6 +172,14 @@ source for directives). `VERSION` / `KATEX_VERSION` come from
 `resolveIncludePath(target, env)` / the `IncludeEnv` type to resolve a file
 include exactly as the renderer will (null when refused). The package bundles for the browser with no
 `fs`/`path`/`process` shims.
+
+The carrier kit (≥ 2.1.0) adds `orz-markdown/carrier` (text format 1:
+header tools, `readDocument`, `assembleEnvelope` / `extract`),
+`orz-markdown/carrier/read` (parser-free reading), `orz-markdown/carrier/shell`
+(save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
+(the shared editor shell) and `orz-markdown/carrier/conformance` (test
+harness). They are for carrier and host builders; their binding specs are in
+the repository's [`spec/`](https://github.com/wangyu16/orz-markdown/tree/main/spec) folder.
 
 ---
 
@@ -205,7 +241,7 @@ Each plugin is **block** or **inline**, not both. Block (`youtube`, `mermaid`, `
 | **attrs** | — | `# Title{{attrs[id="hero"]}}` |
 | **markdown** | `md`, `md-include` | `{{md ./path/to/file.md}}` |
 | **yaml** | `yml` | `{{yaml\nkey: val\n}}` (invisible metadata) |
-| **nyml** | — | `{{nyml\nkey: val\n}}` (parsed to JSON) |
+| **nyml** | — | `{{nyml\nkey: val\n}}` (parsed to JSON; `kind: document` = the document header, renders nothing) |
 
 ### Containers — `::: name ... :::`
 

@@ -504,3 +504,5 @@ Emitted as `<script type="application/json" id="nyml-data">` (later blocks: `nym
 ```
 
 Read it with `JSON.parse(document.getElementById('nyml-data').textContent)`. If the body cannot be parsed, the island holds `{"error":"Failed to parse NYML"}`.
+
+A block whose `kind` is `document` (`{{nyml\nkind: document\n…\n}}`) is the **document header** of text format 1 (≥ 2.1.0): it renders nothing and takes no `nyml-data` number; carriers read it for the document's metadata and settings. Write it first in the file, `kind: document` as its first key. See "Document header" in `SKILL.md` and [FC-18 §5](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md).

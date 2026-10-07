@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.KATEX_VERSION = exports.VERSION = void 0;
 /** The orz-markdown version that produced this module. */
-exports.VERSION = '2.0.0';
+exports.VERSION = '2.1.0';
 /** The KaTeX version orz-markdown renders math with; its CSS must match. */
 exports.KATEX_VERSION = '0.16.47';
 //# sourceMappingURL=version.js.map
