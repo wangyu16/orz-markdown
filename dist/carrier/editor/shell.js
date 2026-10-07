@@ -63,6 +63,7 @@ const FIRST_ACK_WAIT_MS = 1500;
 const MAX_WAIT_MS = 1000;
 const message = (e) => typeof e === 'object' && e !== null && typeof e.message === 'string' ? e.message : String(e);
 const BOM = '﻿';
+const TEXT_CHANGED_SINCE = 'the text changed since the AI proposal was made';
 /** The header `format` of a text (default 1; a malformed value reads as 1, as `readDocument` does). */
 function formatOf(fields) {
     const f = fields?.['format']?.trim();
@@ -101,12 +102,13 @@ function createEditorShell(element, options) {
     const chromeLevel = options.chrome ?? 'full';
     const kind = options.kind ?? 'md';
     const narrowWidth = options.narrowWidth ?? 640;
-    const previewOptions = options.preview ?? {};
+    const nonce = typeof options.nonce === 'string' && options.nonce ? options.nonce : undefined;
+    const previewOptions = { ...(nonce ? { nonce } : {}), ...(options.preview ?? {}) };
     const debounceMs = previewOptions.debounceMs ?? 150;
     const navigateMode = previewOptions.mode === 'navigate';
     const uid = options.uid ?? header?.fields['uid']?.trim();
     const prefs = options.preferences ?? (0, preferences_js_1.createPreferenceStore)(uid, options.storage);
-    const adapter = options.adapter ?? (0, codemirror6_js_1.codemirror6Adapter)();
+    const adapter = options.adapter ?? (0, codemirror6_js_1.codemirror6Adapter)(nonce ? { nonce } : {});
     const model = (0, text_model_js_1.createTextModel)(options.text);
     /** The text the shell was mounted with: what the page was opened with (the saver's proof of the opened file). */
     const openedText = options.text;
@@ -410,6 +412,7 @@ function createEditorShell(element, options) {
         // B#12: with the host's own link resolution, links stay as written so resolveLink gets the source href
         ...(hooks.resolveLink ? { twinLinks: false } : {}),
         cache: new Map(),
+        ...(options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { includes: Object.freeze({ ...options.includes }) } : {}),
     };
     /** Wait for the frame to acknowledge a render (B#3), at most ACK_WAIT_MS; not at all for a frame that never does. */
     const waitAck = (acked) => {
@@ -952,6 +955,8 @@ function createEditorShell(element, options) {
         api.setText(model.toExact(next));
         adapter.setSelection?.({ from: from + insert.length, to: from + insert.length });
     };
+    /** Proposals this shell made (`proposeAi`) → the exact text they were made on. */
+    const proposals = new WeakMap();
     /** Text from a host (AI proposal) in the document's line endings. */
     const inDocumentStyle = (text) => {
         const body = text.startsWith(BOM) ? text.slice(1) : text;
@@ -989,6 +994,14 @@ function createEditorShell(element, options) {
         } },
         save: () => save(false),
         async requestAi(op, o) {
+            const r = await api.proposeAi(op, o);
+            if (!r.ok)
+                return r;
+            const a = api.applyAi(r.proposal);
+            // 2.1.0's wording, kept: here the text can only have changed during the request
+            return !a.ok && a.error === TEXT_CHANGED_SINCE ? { ok: false, error: 'the text changed during the AI request' } : a;
+        },
+        async proposeAi(op, o) {
             const ai = hooks.ai;
             if (!ai || typeof ai.request !== 'function')
                 return { ok: false, error: 'no AI hook (hooks.ai)' };
@@ -1023,11 +1036,33 @@ function createEditorShell(element, options) {
                 return { ok: false, error: 'destroyed' };
             if (readOnly)
                 return { ok: false, error: 'read-only' };
+            const range = selection ?? { from: 0, to: before.length };
+            const proposal = Object.freeze({
+                op,
+                proposed,
+                range: Object.freeze({ ...range }),
+                original: (0, text_model_js_1.detachString)(before.slice(range.from, range.to)),
+                passage: !!selection,
+            });
+            proposals.set(proposal, before);
+            return { ok: true, op, proposal };
+        },
+        applyAi(proposal, o) {
+            const before = proposal && typeof proposal === 'object' ? proposals.get(proposal) : undefined;
+            if (before === undefined)
+                return { ok: false, error: 'not a proposal of this editor' };
+            if (destroyed)
+                return { ok: false, error: 'destroyed' };
+            if (readOnly)
+                return { ok: false, error: 'read-only' };
             if (getText() !== before)
-                return { ok: false, error: 'the text changed during the AI request' };
-            const styled = inDocumentStyle(proposed);
-            api.setText(selection ? before.slice(0, selection.from) + styled + before.slice(selection.to) : (model.bom ? BOM : '') + styled);
-            return { ok: true, op };
+                return { ok: false, error: TEXT_CHANGED_SINCE };
+            const replacement = typeof o?.proposed === 'string' ? o.proposed : proposal.proposed;
+            const styled = inDocumentStyle(replacement);
+            const { from, to } = proposal.range;
+            api.setText(proposal.passage ? before.slice(0, from) + styled + before.slice(to) : (model.bom ? BOM : '') + styled);
+            proposals.delete(proposal);
+            return { ok: true, op: proposal.op };
         },
         async uploadAssets(files) {
             const list = Array.from(files ?? []);

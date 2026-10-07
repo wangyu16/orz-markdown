@@ -1326,7 +1326,7 @@ exports.updateChecks = {
             p.eq(after.attrs, [], 'inert / aria-hidden / hidden changes in the page');
             p.eq(ctx.of('dialog').map((r) => r.data), [], 'dialogs (alert, confirm, prompt, showModal)');
             p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 1, 'manifest requests');
-            p.eq(ctx.requests.filter((u) => !u.endsWith('/release.json')).length, 0, 'bundle requests before the reader asked for the update');
+            p.eq(ctx.requests.filter((u) => s.isBundleRequest(u)).length, 0, 'bundle requests before the reader asked for the update');
         }
         finally {
             release();
@@ -1423,7 +1423,7 @@ exports.updateChecks = {
         p.check(await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 10000), 'the file never asked for release.json');
         await page.waitForTimeout(2000);
         p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, `update indicators for ${other.version}, whose formats [987] do not include the file's format 1`);
-        p.eq(ctx.requests.filter((u) => !u.endsWith('/release.json')), [], 'bundle requests');
+        p.eq(ctx.requests.filter((u) => s.isBundleRequest(u)), [], 'bundle requests');
     },
     async 'C.update.tampered'(s, p) {
         const next = needNext(s);
@@ -1533,7 +1533,7 @@ exports.updateChecks = {
         p.check(await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 10000), 'the file never asked for release.json');
         await page.waitForTimeout(2000);
         p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, `update indicators for the prerelease ${pre.version} (never offered)`);
-        p.eq(ctx.requests.filter((u) => !u.endsWith('/release.json')), [], 'bundle requests');
+        p.eq(ctx.requests.filter((u) => s.isBundleRequest(u)), [], 'bundle requests');
     },
     async 'C.update.once-a-day'(s, p) {
         const next = needNext(s);
@@ -1544,13 +1544,14 @@ exports.updateChecks = {
         await page.goto(s.writeFile(fileName(s, 'daily'), html));
         if (!p.check(await chip(page), 'no update indicator on the first open'))
             return;
-        await page.reload();
+        await ctx.leave(page, () => page.reload()); // a clean page: a beforeunload it raised would be accepted, and fails "dialogs" below
         p.check(await chip(page), 'no update indicator after a reload (the stored manifest offers it again the same day)');
         const other = await ctx.newPage();
         await other.goto(s.writeFile(fileName(s, 'daily-other'), await s.assemble(texts_js_1.OTHER_TEXT, { delivery: 'inline' })));
         p.check(await chip(other), 'no update indicator in a second file of the kind');
         await page.waitForTimeout(500);
         p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 1, 'manifest requests for one open, one reload and a second file on the same day (at most one per kind per day)');
+        p.eq(ctx.of('dialog').map((r) => r.data), [], 'dialogs (a clean file asks nothing when it is reloaded)');
     },
     async 'C.update.hosted'(s, p) {
         const next = needNext(s);

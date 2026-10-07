@@ -13,6 +13,8 @@ import './plugins/nyml.js';
 export { register } from './registry.js';
 export type { PluginDefinition } from './registry.js';
 export { prepareSources } from './prepare-sources.js';
+export { THEMES, DEFAULT_THEME, isThemeId, themeInfo } from './themes.js';
+export type { ThemeInfo, ThemeScheme } from './themes.js';
 export type { PrepareSourcesOptions } from './prepare-sources.js';
 /**
  * TeX characters rendered per document, and of them inside `\ce{…}`/`\pu{…}`

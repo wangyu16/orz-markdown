@@ -85,3 +85,31 @@ describe("prepareSources", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('include directive names (2.2.0)', () => {
+  it('[M.11] the include directive names are ONE list (INCLUDE_DIRECTIVES): every name the renderer registers as an include resolves a URL include in prepareSources — on its own line, mid-paragraph, in a list item and a quote — and a scheme in any case (HTTPS://) is a URL to both', async () => {
+    const { INCLUDE_DIRECTIVES } = await import('../src/plugins/markdown-include.js');
+    const { getDefinition } = await import('../src/registry.js');
+    const { md } = await import('../src/index.js');
+    const fetched: string[] = [];
+    const fetcher = async (u: string) => { fetched.push(u); return `FETCHED ${fetched.length}\n`; };
+    expect([...INCLUDE_DIRECTIVES].sort()).toEqual(['markdown', 'md', 'md-include']);
+    const include = getDefinition('md-include');
+    for (const name of INCLUDE_DIRECTIVES) {
+      expect(getDefinition(name), name).toBe(include); // the renderer's include plugin, under every name
+      for (const [where, src] of [['block', `a\n\n{{${name} https://x.test/a.md}}\n\nb\n`], ['inline', `a {{${name} https://x.test/a.md}} b\n`], ['list', `- {{${name} https://x.test/a.md}}\n`], ['quote', `> {{${name} https://x.test/a.md}}\n`]] as const) {
+        const before = fetched.length;
+        const out = await prepareSources(src, { fetcher });
+        expect(fetched.length, `${name} ${where}`).toBe(before + 1);
+        expect(out, `${name} ${where}`).toContain('FETCHED');
+      }
+    }
+    // the scheme's case: a URL to the renderer (it renders nothing for it), resolved by prepareSources
+    const upper = 'a\n\n{{md HTTPS://x.test/UP.md}}\n\nb\n';
+    expect(md.render(upper)).not.toContain('HTTPS://');
+    expect(await prepareSources(upper, { fetcher })).toContain('FETCHED');
+    expect(fetched.at(-1)).toBe('HTTPS://x.test/UP.md');
+    // an unknown name is not an include for either
+    expect(await prepareSources('{{mdx https://x.test/a.md}}\n', { fetcher })).toBe('{{mdx https://x.test/a.md}}\n');
+  });
+});

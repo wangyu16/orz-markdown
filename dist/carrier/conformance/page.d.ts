@@ -2,8 +2,14 @@
  * Page-side code of the harness, as plain ES2017 source strings (they run in
  * Chrome, never in Node, and must not depend on how this file is compiled).
  */
-/** The binding every frame reports through (`context.exposeBinding`). */
+/** The binding every frame reports through (`context.exposeBinding`); absent in a carrier's own test, where only the page log records. */
 export declare const RECORD_BINDING = "__orzConformanceRecord";
+/**
+ * Where every frame also keeps what the init script recorded (`{ type, data,
+ * url }`: `dialog`, `pageerror`, `picker`, `write`), for a carrier's own tests
+ * that install {@link initScript} without the harness's binding (2.2.0).
+ */
+export declare const PAGE_LOG = "__orzConformanceLog";
 export type PickerMode = 'stub' | 'none' | 'native' | 'opfs';
 /**
  * The origin-private folder the `opfs` picker uses for a page path (one folder

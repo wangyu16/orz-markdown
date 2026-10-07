@@ -196,6 +196,18 @@ class Session {
         }
         return p;
     }
+    /**
+     * A request for this kind's release bundle: any file of `<pkg>-browser@<any
+     * version>/` but the manifest (`@latest/release.json`). The update checks
+     * count these — a file may fetch other resources (its theme, fonts, preview
+     * libraries: spec/conformance.md §3) but no bundle before the reader asks
+     * for the update (2.2.0; before, every request but the manifest counted).
+     */
+    isBundleRequest(url) {
+        const u = url.split(/[?#]/)[0];
+        const prefix = `https://cdn.jsdelivr.net/npm/${read_js_1.KIND_PACKAGE[this.target.kind]}-browser@`;
+        return u.startsWith(prefix) && u !== this.cdnUrls().manifest && u.indexOf('/', prefix.length) > prefix.length;
+    }
     /** The URL patterns of the jsDelivr routes for this kind. */
     cdnUrls() {
         const pkg = `${read_js_1.KIND_PACKAGE[this.target.kind]}-browser`;
@@ -248,8 +260,13 @@ class Session {
             }
             return route.abort('internetdisconnected');
         });
+        /** Pages the check is leaving on purpose while clean: their beforeunload is accepted (A.14 of 2.2.0). */
+        const leaving = new Set();
         const watch = (page) => {
-            page.on('dialog', (d) => { records.push({ type: 'dialog', data: { kind: d.type(), message: d.message() }, url: page.url() }); void d.dismiss().catch(() => undefined); });
+            page.on('dialog', (d) => {
+                records.push({ type: 'dialog', data: { kind: d.type(), message: d.message() }, url: page.url() });
+                void (d.type() === 'beforeunload' && leaving.has(page) ? d.accept() : d.dismiss()).catch(() => undefined);
+            });
             page.on('pageerror', (e) => { records.push({ type: 'pageerror', data: e.message, url: page.url() }); });
             page.on('console', (m) => { if (m.type() === 'error')
                 records.push({ type: 'console-error', data: m.text(), url: page.url() }); });
@@ -267,6 +284,15 @@ class Session {
             downloads,
             newPage: async () => context.newPage(),
             of: (type) => records.filter((r) => r.type === type),
+            async leave(page, action) {
+                leaving.add(page);
+                try {
+                    return await action();
+                }
+                finally {
+                    leaving.delete(page);
+                }
+            },
         };
     }
     /** A browser whose `file:` pages have the origin-private file system ({@link FILE_ACCESS_FLAG}). */

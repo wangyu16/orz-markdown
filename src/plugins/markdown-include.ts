@@ -124,7 +124,13 @@ function readInclude(resolved: string, env: IncludeEnv): string | null {
   }
 }
 
-const INCLUDE_ALIASES = new Set(['markdown', 'md', 'md-include']);
+/**
+ * The include directive names — the ONE list: the renderer registers these
+ * aliases and `prepareSources` resolves URL includes written with any of them
+ * (claim M.11).
+ */
+export const INCLUDE_DIRECTIVES: readonly string[] = Object.freeze(['markdown', 'md', 'md-include']);
+const INCLUDE_ALIASES: ReadonlySet<string> = new Set(INCLUDE_DIRECTIVES);
 /** Characters of included files per render. */
 const MAX_INCLUDED = 5_000_000;
 
@@ -144,7 +150,7 @@ export function registerMarkdownInclude(md: MarkdownIt, registry = true): void {
   if (registry) {
     register({
       type: 'block',
-      aliases: ['markdown', 'md', 'md-include'],
+      aliases: [...INCLUDE_DIRECTIVES],
       // Reached only for directives the core rule did not expand: URL includes
       // (resolve them with prepareSources), unreadable or refused paths, nested.
       render() {

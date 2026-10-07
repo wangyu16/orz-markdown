@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The carrier app and the kit gaps the orz-mdhtml 1.0 rebuild found (2.2.0
+content; family plan REBUILD §3a, owner decision 2). Additive for `^2.1.0`
+consumers; the parser's output is unchanged.
+
+### Added
+
+**`orz-markdown/carrier/app`** (new entry; [spec/carrier-app.md](spec/carrier-app.md)):
+the standalone assembled file's runtime every carrier bundle runs, lifted
+from orz-mdhtml 1.0 behind one seam, `StandaloneKind` (the kind supplies its
+assemble, creation tool, `mountEditor`, read view, header settings and extra
+actions; the app knows no kind). `startCarrier(kind)` sets
+`globalThis.OrzCarrier` (FC-19 §2) and boots in an assembled file:
+`readOpenedFile` (text, uid, format, delivery, includes, inline engine, file
+name), the read view in the page, the chrome in a shadow root (brand, Edit,
+settings, actions, Save, Download a copy, New document, Save as new copy),
+edit mode, header settings with undo, the unsaved-changes warning
+(`beforeunload`, top-level only, never for the update's reload), the host
+connection (save, include, AI with the review flow), the quiet update
+(who checks, read-only while it runs, reload only when the kit says so),
+reader preferences, the page keymap (respecting `defaultPrevented`) and the
+`OrzCarrier.standalone` handle (`CarrierApp`). Also `bootCarrierApp`,
+`carrierGlobal`, `captureEngineSource`, the widgets (`menuButton`,
+`settingPicker`, `attachSettings`, `reviewProposal`, `attachAiMenu`,
+`followPresentation`, `WIDGET_CSS`) and a test seam (`services`). Notes on
+how orz-paged (Paged.js read view, Print) and orz-slides (navigation,
+Present) fit, in the spec. Claims A.1–A.13.
+
+**Editor (`orz-markdown/carrier/editor`, FC-19, additive)**
+
+- `proposeAi(op, { selection? })` and `applyAi(proposal, { proposed? })`:
+  the review flow of host-protocols §4 — a proposal with its exact-text
+  range, applied as one undoable edit, refused if the text changed.
+  `requestAi` is unchanged. Types `AiProposal`, `AiProposalOutcome` (E.26).
+- `createEditorShell({ nonce })` — FC-19 §3 `nonce`: the preview frame's
+  (when `preview.nonce` is not given) and the default CodeMirror adapter's.
+- `shell.preview.setOptions({ articleClass })` (a measure change).
+- `renderMarkdownPreview(text, { includes })` and
+  `renderMarkdownPreviewWithIncludes(text, { includes, fetchInclude })` read
+  an `#orz-includes` record (file includes through `includeRecordEnv`, a
+  `readFile` on a virtual root; URL includes after the host's
+  `fetchInclude`); the shell passes its `includes` option as
+  `ctx.includes`. `includeRecordEnv` is exported.
+
+**Shell, preview frame, themes, harness**
+
+- `ICONS`: `measure`, `new`, `copy`.
+- `enhanceDocument(root, { scheme, assets, nonce, runtime })` in
+  `orz-markdown/preview-frame`: the preview frame's enhancement (highlight.js,
+  Mermaid, SMILES, Chart.js, KaTeX's and highlight.js's stylesheets, the orz
+  runtime) for content rendered in a page, loading only what the content
+  needs; idempotent (M.24).
+- `THEMES`, `DEFAULT_THEME`, `isThemeId`, `themeInfo` (main entry and the
+  new `orz-markdown/themes`): the bundled themes' ids, names and colour
+  schemes (M.25).
+- `orz-markdown/carrier/conformance` exports its page helpers for a
+  carrier's own tests: `initScript` (pickers incl. the OPFS one; a page log
+  `PAGE_LOG`), `readOpfs`, `writeOpfs`, `pageRecords`, `callPage`, the
+  page-side sources, `FILE_ACCESS_FLAG`, `CODEMIRROR_URL` (H.6).
+
+### Changed
+
+- `renderMarkdownPreviewWithIncludes` passes the render env to
+  `prepareSources` as `includeEnv`: a text with a live file include now gets
+  its URL includes too (before, they stayed directives).
+- The include directive names are one list (`INCLUDE_DIRECTIVES` of the
+  include plugin) that `prepareSources` builds its patterns from; a URL
+  scheme in any case (`HTTPS://`) is now resolved, as the renderer already
+  treated it as a URL.
+- `sandboxDocument` puts nothing after the bundle in its `<script>`: a bundle
+  that reads its own script text in the update sandbox gets exactly the
+  verified bytes.
+- A read-only CodeMirror editor stays focusable and selectable (state
+  read-only, content `tabindex="0"`, `aria-readonly`), so selection, copy and
+  Cmd/Ctrl+S work in it (FC-19 §5 invariant 7).
+- Conformance harness: `C.update.indicator`, `C.update.other-format` and
+  `C.update.prerelease` count only bundle requests (any file of
+  `<pkg>-browser@<version>/` but the manifest), so a file may load its own
+  stylesheets (H.7); dialogs stay dismissed except a `beforeunload` where a
+  check leaves a page it expects clean (`CheckContext.leave`, the reload of
+  `C.update.once-a-day`, which now also asserts no dialog) (H.8). The stub
+  carrier is rebuilt on `carrier/app`; every broken build is still caught,
+  and a file that fetches its bundle early (`prefetch-bundle`) is.
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers

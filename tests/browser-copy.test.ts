@@ -715,3 +715,121 @@ suite('copy-as-Markdown in real Chrome', () => {
     expect(counts.wrappers).toBe(1);
   });
 });
+
+// ── M.24 in-page enhancement (2.2.0) ─────────────────────────────────────
+
+suite('enhanceDocument: the preview frame\'s enhancement for content rendered in a page (real Chrome)', () => {
+  const FAKE_LIBS = (pa: ReturnType<typeof getPreviewFrameAssets>): Record<string, string> => ({
+    [pa.cdn.hljsJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.hljs={highlightElement:function(el){window.__calls.hljs=(window.__calls.hljs||0)+1;el.classList.add('hljs')}};",
+    [pa.cdn.mermaidJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.mermaid={initialize:function(o){window.__mermaidInit=o},run:function(o){window.__calls.mermaid=(window.__calls.mermaid||0)+o.nodes.length;o.nodes.forEach(function(n){n.setAttribute('data-processed','true')});return Promise.resolve()}};",
+    [pa.cdn.smilesJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.SmilesDrawer={Drawer:function(){this.draw=function(t,c,theme){window.__smilesTheme=theme}},parse:function(s,cb){window.__calls.smiles=(window.__calls.smiles||0)+1;cb({})}};",
+    [pa.cdn.chartJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.Chart=function(){window.__calls.chart=(window.__calls.chart||0)+1};",
+  });
+  let bundle = '';
+  let own: Browser | null = null; // its own Chrome: the copy suite closes the shared one when it ends
+  afterAll(async () => { await own?.close(); });
+  beforeAll(async () => {
+    own = await launch();
+    const { build } = await import('esbuild');
+    const out = await build({ stdin: { contents: "export { enhanceDocument, PREVIEW_CDN } from './src/preview-frame';", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'iife', globalName: 'E', platform: 'browser', write: false, logLevel: 'silent' });
+    bundle = out.outputFiles[0].text;
+  });
+
+  async function enhancePage(o: { offline?: string[] } = {}) {
+    const pa = getPreviewFrameAssets();
+    const libs = FAKE_LIBS(pa);
+    const context = await own!.newContext();
+    const requests: string[] = [];
+    await context.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.startsWith('data:') || url === 'about:blank') return route.continue();
+      if (url === 'https://page.test/doc.html') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html><head><meta charset="utf-8"></head><body><header id="site">Site</header><article class="markdown-body" id="doc"></article></body></html>' });
+      requests.push(url);
+      if (o.offline?.includes(url)) return route.abort('internetdisconnected');
+      if (libs[url]) return route.fulfill({ status: 200, contentType: 'text/javascript', body: libs[url] });
+      if (url.endsWith('.css')) return route.fulfill({ status: 200, contentType: 'text/css', body: '/* css */' });
+      return route.abort('internetdisconnected');
+    });
+    const p = await context.newPage();
+    await p.goto('https://page.test/doc.html');
+    await p.addScriptTag({ content: bundle });
+    return { p, context, requests, pa };
+  }
+  const render = (p: Page, src: string) => p.evaluate((html) => { document.getElementById('doc')!.innerHTML = html; }, md.render(src));
+  const enhance = (p: Page, o: Record<string, unknown> = {}) => p.evaluate((opts) => (window as unknown as { E: { enhanceDocument(r: Element, o: unknown): Promise<{ loaded: string[]; failed: string[] }> } }).E.enhanceDocument(document.getElementById('doc')!, opts), o);
+  const state = (p: Page) => p.evaluate(() => ({
+    loads: (window as unknown as { __loads?: number }).__loads ?? 0,
+    calls: { ...((window as unknown as { __calls?: Record<string, number> }).__calls ?? {}) },
+    scripts: Array.from(document.querySelectorAll('script[src]')).map((s) => [s.getAttribute('src'), s.getAttribute('nonce')]),
+    inline: Array.from(document.querySelectorAll('script:not([src])')).filter((s) => (s.textContent ?? '').includes('OrzMarkdownRuntime') && !(s.textContent ?? '').includes('PREVIEW_CDN')).map((s) => s.getAttribute('nonce')),
+    links: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((l) => [l.getAttribute('href'), l.id, l.getAttribute('nonce')]),
+    runtime: typeof (window as unknown as { OrzMarkdownRuntime?: unknown }).OrzMarkdownRuntime,
+  }));
+
+  it('[M.24] enhanceDocument loads only what the content needs (code: highlight.js and its stylesheet of the scheme; math: KaTeX\'s stylesheet), installs the runtime once (copy-as-Markdown, tabs), stamps the nonce, and is idempotent; content that needs Mermaid, SMILES and Chart.js loads exactly those, each drawn once', async () => {
+    const { p, context, requests, pa } = await enhancePage();
+    await render(p, '# Code and math\n\n```js\nlet x = 1;\n```\n\nSome **bold** and $E = mc^2$.\n\n:::: tabs\n::: tab A\na\n:::\n::: tab B\nb\n:::\n::::\n');
+    const r1 = await enhance(p, { scheme: 'dark', nonce: 'n1' });
+    expect(r1).toEqual({ loaded: [pa.cdn.hljsJs], failed: [] });
+    let s = await state(p);
+    expect(s.loads).toBe(1);
+    expect(s.calls).toEqual({ hljs: 1 });
+    expect(s.scripts).toEqual([[pa.cdn.hljsJs, 'n1']]);
+    expect(s.inline).toEqual(['n1']);
+    expect(s.runtime).toBe('object');
+    expect(s.links).toEqual([[pa.cdn.katexCss, '', 'n1'], [pa.cdn.hljsDarkCss, 'orz-hljs', 'n1']]);
+    expect(requests.filter((u) => /mermaid|smiles|chart/.test(u))).toEqual([]);
+    expect(await p.evaluate(() => document.querySelectorAll('#doc .tabs-bar').length)).toBe(1);
+    expect(await p.evaluate(() => (window as unknown as { __orzSmilesTheme?: string }).__orzSmilesTheme)).toBe('dark');
+    // copy-as-Markdown works in the page
+    const copied = await p.evaluate(() => {
+      const para = Array.from(document.querySelectorAll('#doc p')).find((x) => x.textContent!.includes('bold'))!;
+      const range = document.createRange();
+      range.selectNodeContents(para);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+      const dt = new DataTransfer();
+      para.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+      return dt.getData('text/plain');
+    });
+    expect(copied).toContain('**bold**');
+    // idempotent: nothing drawn, loaded or added twice
+    expect(await enhance(p, { scheme: 'dark', nonce: 'n1' })).toEqual({ loaded: [], failed: [] });
+    expect(await state(p)).toEqual(s);
+    expect(await p.evaluate(() => document.querySelectorAll('#doc .tabs-bar').length)).toBe(1);
+    // a scheme change swaps highlight.js's stylesheet
+    await enhance(p, { scheme: 'light' });
+    expect((await state(p)).links).toEqual([[pa.cdn.katexCss, '', 'n1'], [pa.cdn.hljsLightCss, 'orz-hljs', 'n1']]);
+    // a re-render that needs the other libraries loads exactly those, once, and draws each construct once
+    await render(p, '```js\ny\n```\n\n{{mermaid\ngraph LR; A-->B\n}}\n\n{{smiles CCO}}\n\n{{chart\ndata: 1, 2\n}}\n');
+    const r2 = await enhance(p);
+    expect(r2.loaded.sort()).toEqual([pa.cdn.mermaidJs, pa.cdn.smilesJs, pa.cdn.chartJs].sort());
+    s = await state(p);
+    expect(s.loads).toBe(4);
+    expect(s.calls).toEqual({ hljs: 2, mermaid: 1, smiles: 1, chart: 1 });
+    expect(await p.evaluate(() => (window as unknown as { __mermaidInit?: unknown }).__mermaidInit)).toEqual({ startOnLoad: false });
+    await enhance(p);
+    expect((await state(p)).calls).toEqual({ hljs: 2, mermaid: 1, smiles: 1, chart: 1 });
+    expect(await p.evaluate(() => document.querySelectorAll('canvas.orz-chart').length)).toBe(1);
+    // the page's own elements are not touched
+    expect(await p.evaluate(() => document.getElementById('site')!.outerHTML)).toBe('<header id="site">Site</header>');
+    await context.close();
+  }, 60_000);
+
+  it('[M.24] enhanceDocument with assets: false fetches nothing (the runtime still installs); a library that cannot load is reported failed, the content stays as rendered, and the next call tries again', async () => {
+    const a = await enhancePage();
+    await render(a.p, '```js\nx\n```\n\n$x$\n');
+    expect(await enhance(a.p, { assets: false })).toEqual({ loaded: [], failed: [] });
+    expect(a.requests).toEqual([]);
+    expect((await state(a.p)).runtime).toBe('object');
+    await a.context.close();
+    const b = await enhancePage({ offline: [getPreviewFrameAssets().cdn.hljsJs] });
+    await render(b.p, '```js\nx\n```\n');
+    const r = await enhance(b.p);
+    expect(r).toEqual({ loaded: [], failed: [b.pa.cdn.hljsJs] });
+    expect(await b.p.evaluate(() => document.querySelector('#doc pre code')!.textContent)).toBe('x\n');
+    await enhance(b.p);
+    expect(b.requests.filter((u) => u === b.pa.cdn.hljsJs)).toHaveLength(2);
+    await b.context.close();
+  }, 60_000);
+});

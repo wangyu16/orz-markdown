@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.INCLUDE_DIRECTIVES = void 0;
 exports.resolveIncludePath = resolveIncludePath;
 exports.registerMarkdownInclude = registerMarkdownInclude;
 const registry_js_1 = require("../registry.js");
@@ -102,7 +103,13 @@ function readInclude(resolved, env) {
         return null;
     }
 }
-const INCLUDE_ALIASES = new Set(['markdown', 'md', 'md-include']);
+/**
+ * The include directive names — the ONE list: the renderer registers these
+ * aliases and `prepareSources` resolves URL includes written with any of them
+ * (claim M.11).
+ */
+exports.INCLUDE_DIRECTIVES = Object.freeze(['markdown', 'md', 'md-include']);
+const INCLUDE_ALIASES = new Set(exports.INCLUDE_DIRECTIVES);
 /** Characters of included files per render. */
 const MAX_INCLUDED = 5000000;
 /**
@@ -121,7 +128,7 @@ function registerMarkdownInclude(md, registry = true) {
     if (registry) {
         (0, registry_js_1.register)({
             type: 'block',
-            aliases: ['markdown', 'md', 'md-include'],
+            aliases: [...exports.INCLUDE_DIRECTIVES],
             // Reached only for directives the core rule did not expand: URL includes
             // (resolve them with prepareSources), unreadable or refused paths, nested.
             render() {

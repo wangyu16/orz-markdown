@@ -88,7 +88,6 @@ export declare function loadCodeMirror6(doc: EdDocument, options?: {
     timeoutMs?: number;
     nonce?: string;
 }): Promise<CodeMirror6Modules>;
-/** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
 export declare function codemirror6Adapter(options?: CodeMirror6Options): TextEditorAdapter;
 export {};
 //# sourceMappingURL=codemirror6.d.ts.map

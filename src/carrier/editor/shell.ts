@@ -42,7 +42,7 @@ import type { TextEditorAdapter } from './adapter.js';
 import { codemirror6Adapter } from './codemirror6.js';
 import { createPreview, lineToTop, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import { EDITOR_CSS } from './styles.js';
-import { createTextModel, toEditorText } from './text-model.js';
+import { createTextModel, detachString, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
 import type { EdDataTransfer, EdDocument, EdElement, EdEvent, EdFile, EdListener, EdResizeObserver, EdView, ShadowRootLike } from './types.js';
 
@@ -102,6 +102,12 @@ export interface RenderContext {
   twinLinks?: boolean;
   /** A scratch map that lives as long as the shell (e.g. fetched includes; `renderMarkdownPreviewWithIncludes`). */
   cache?: Map<string, unknown>;
+  /**
+   * The opened file's resolved includes (the shell's `includes` option, the
+   * `#orz-includes` record, FC-18 §8.3): `renderMarkdownPreview` reads file
+   * includes from it and `renderMarkdownPreviewWithIncludes` URL includes too.
+   */
+  includes?: Readonly<Record<string, string>>;
 }
 
 /** The shell's channel to the preview frame's bridge (FC-19 §8.4), for a carrier's own frame protocol. */
@@ -110,8 +116,8 @@ export interface EditorPreviewChannel {
   post(message: Readonly<Record<string, unknown>>): boolean;
   /** Listen to the frame's messages of one type (through the authenticated port, and a carrier's own types on the window — data only). Returns the unsubscribe. */
   on(type: string, fn: (message: PreviewMessage) => void): () => void;
-  /** Rebuild the frame document with another `head` and/or `scheme` (e.g. a theme change); the preview shows again. */
-  setOptions(options: { head?: string; scheme?: ColorScheme }): void;
+  /** Rebuild the frame document with another `head`, `scheme` and/or `articleClass` (e.g. a theme or measure change); the preview shows again. */
+  setOptions(options: { head?: string; scheme?: ColorScheme; articleClass?: string }): void;
 }
 
 /** The preview's scroll mapping context (`preview.mapLine` / `mapPosition`). */
@@ -203,6 +209,13 @@ export interface EditorShellOptions {
   /** The preview frame (theme links, scheme, article class, libraries, nonce, the carrier's frame/bridge/mapping) and its timing. */
   preview?: EditorPreviewOptions;
   /**
+   * FC-19 §3 `nonce` (added 2.2.0): an app's CSP nonce (FC-19 §8.4 recipe),
+   * stamped on the preview frame's scripts and styles (`preview.nonce` when
+   * that is not given) and, with the default adapter, on CodeMirror's
+   * `<script>` and `<style>` (`codemirror6Adapter({ nonce })`).
+   */
+  nonce?: string;
+  /**
    * A link clicked in the preview, after `hooks.resolveLink`. Default: an
    * `http(s):` / `mailto:` link is offered in a chip in the preview ("Open
    * <host>"), opened in a new tab when the reader clicks it.
@@ -216,6 +229,25 @@ export interface EditorShellOptions {
 
 /** How an AI request went. Never rejects. */
 export type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
+
+/**
+ * An AI proposal awaiting the reader's review (`proposeAi`; host-protocols §4:
+ * the document is untouched until the reader applies it). Frozen; only the
+ * shell that made it can apply it (`applyAi`).
+ */
+export interface AiProposal {
+  readonly op: string;
+  /** The replacement the hook proposed (as given; `applyAi` writes it in the document's line endings and BOM). */
+  readonly proposed: string;
+  /** What it replaces: offsets in the exact text at the time of the request — the selection, or the whole text. */
+  readonly range: Readonly<TextRange>;
+  /** The exact text in `range` when the request was made. */
+  readonly original: string;
+  /** A passage (selection) operation; else the proposal replaces the whole document. */
+  readonly passage: boolean;
+}
+/** How a proposal request went. Never rejects. */
+export type AiProposalOutcome = { ok: true; op: string; proposal: AiProposal } | { ok: false; error: string };
 /** How an upload went: the Markdown inserted for each uploaded file. Never rejects. */
 export type UploadOutcome = { ok: true; inserted: string[] } | { ok: false; inserted: string[]; error: string };
 
@@ -237,6 +269,22 @@ export interface EditorShell {
    * endings (and BOM). Refused when the text changed during the request.
    */
   requestAi(op: string, options?: { selection?: boolean }): Promise<AiOutcome>;
+  /**
+   * The review flow (added 2.2.0): run `hooks.ai.request` like `requestAi`
+   * but change nothing — resolve the proposal with the exact-text range it
+   * would replace. Refused when read-only, without a selection for a
+   * passage, on a hook failure, or when the shell became read-only or was
+   * destroyed meanwhile.
+   */
+  proposeAi(op: string, options?: { selection?: boolean }): Promise<AiProposalOutcome>;
+  /**
+   * Apply a proposal of this shell as ONE undoable edit — `proposed` (the
+   * reader's edited version, when given) in the document's line endings and
+   * BOM, in place of the proposal's range. Refused, changing nothing, when
+   * the text changed since the proposal was made (any edit), when read-only
+   * or destroyed, or for a proposal this shell did not make.
+   */
+  applyAi(proposal: AiProposal, options?: { proposed?: string }): AiOutcome;
   /** Upload files through `hooks.uploadAsset` and insert their Markdown at the selection (one undoable edit). */
   uploadAssets(files: ArrayLike<EdFile>): Promise<UploadOutcome>;
   /** The header `uid`; when there is none, mint one (`hooks.mintUid`, else the kit's) and set it (one undoable edit). */
@@ -304,6 +352,7 @@ const message = (e: unknown): string =>
   typeof e === 'object' && e !== null && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : String(e);
 
 const BOM = '﻿';
+const TEXT_CHANGED_SINCE = 'the text changed since the AI proposal was made';
 
 /** The header `format` of a text (default 1; a malformed value reads as 1, as `readDocument` does). */
 function formatOf(fields: Readonly<Record<string, string>> | undefined): number {
@@ -344,12 +393,13 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   const chromeLevel = options.chrome ?? 'full';
   const kind: HostKind = options.kind ?? 'md';
   const narrowWidth = options.narrowWidth ?? 640;
-  const previewOptions: EditorPreviewOptions = options.preview ?? {};
+  const nonce = typeof options.nonce === 'string' && options.nonce ? options.nonce : undefined;
+  const previewOptions: EditorPreviewOptions = { ...(nonce ? { nonce } : {}), ...(options.preview ?? {}) };
   const debounceMs = previewOptions.debounceMs ?? 150;
   const navigateMode = previewOptions.mode === 'navigate';
   const uid = options.uid ?? header?.fields['uid']?.trim();
   const prefs: PreferenceStore = options.preferences ?? createPreferenceStore(uid, options.storage);
-  const adapter = options.adapter ?? codemirror6Adapter();
+  const adapter = options.adapter ?? codemirror6Adapter(nonce ? { nonce } : {});
   const model = createTextModel(options.text);
   /** The text the shell was mounted with: what the page was opened with (the saver's proof of the opened file). */
   const openedText = options.text;
@@ -614,6 +664,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     // B#12: with the host's own link resolution, links stay as written so resolveLink gets the source href
     ...(hooks.resolveLink ? { twinLinks: false } : {}),
     cache: new Map<string, unknown>(),
+    ...(options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { includes: Object.freeze({ ...options.includes }) } : {}),
   };
   /** Wait for the frame to acknowledge a render (B#3), at most ACK_WAIT_MS; not at all for a frame that never does. */
   const waitAck = (acked: Promise<boolean>): Promise<boolean> => {
@@ -1021,6 +1072,8 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     api.setText(model.toExact(next));
     adapter.setSelection?.({ from: from + insert.length, to: from + insert.length });
   };
+  /** Proposals this shell made (`proposeAi`) → the exact text they were made on. */
+  const proposals = new WeakMap<AiProposal, string>();
   /** Text from a host (AI proposal) in the document's line endings. */
   const inDocumentStyle = (text: string): string => {
     const body = text.startsWith(BOM) ? text.slice(1) : text;
@@ -1047,6 +1100,13 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     markSaved() { if (!destroyed) { adoptBaseline(getText()); updateDirty(); } },
     save: () => save(false),
     async requestAi(op, o) {
+      const r = await api.proposeAi(op, o);
+      if (!r.ok) return r;
+      const a = api.applyAi(r.proposal);
+      // 2.1.0's wording, kept: here the text can only have changed during the request
+      return !a.ok && a.error === TEXT_CHANGED_SINCE ? { ok: false, error: 'the text changed during the AI request' } : a;
+    },
+    async proposeAi(op, o) {
       const ai = hooks.ai;
       if (!ai || typeof ai.request !== 'function') return { ok: false, error: 'no AI hook (hooks.ai)' };
       if (readOnly) return { ok: false, error: 'read-only' };
@@ -1072,10 +1132,29 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       // the shell may have been destroyed or made read-only (a quiet update) meanwhile (F3/#11)
       if (destroyed) return { ok: false, error: 'destroyed' };
       if (readOnly) return { ok: false, error: 'read-only' };
-      if (getText() !== before) return { ok: false, error: 'the text changed during the AI request' };
-      const styled = inDocumentStyle(proposed);
-      api.setText(selection ? before.slice(0, selection.from) + styled + before.slice(selection.to) : (model.bom ? BOM : '') + styled);
-      return { ok: true, op };
+      const range = selection ?? { from: 0, to: before.length };
+      const proposal: AiProposal = Object.freeze({
+        op,
+        proposed,
+        range: Object.freeze({ ...range }),
+        original: detachString(before.slice(range.from, range.to)),
+        passage: !!selection,
+      });
+      proposals.set(proposal, before);
+      return { ok: true, op, proposal };
+    },
+    applyAi(proposal, o) {
+      const before = proposal && typeof proposal === 'object' ? proposals.get(proposal) : undefined;
+      if (before === undefined) return { ok: false, error: 'not a proposal of this editor' };
+      if (destroyed) return { ok: false, error: 'destroyed' };
+      if (readOnly) return { ok: false, error: 'read-only' };
+      if (getText() !== before) return { ok: false, error: TEXT_CHANGED_SINCE };
+      const replacement = typeof o?.proposed === 'string' ? o.proposed : proposal.proposed;
+      const styled = inDocumentStyle(replacement);
+      const { from, to } = proposal.range;
+      api.setText(proposal.passage ? before.slice(0, from) + styled + before.slice(to) : (model.bom ? BOM : '') + styled);
+      proposals.delete(proposal);
+      return { ok: true, op: proposal.op };
     },
     async uploadAssets(files) {
       const list = Array.from(files ?? []);

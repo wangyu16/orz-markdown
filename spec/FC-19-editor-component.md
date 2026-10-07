@@ -71,6 +71,7 @@ interface EditorOptions {
   chrome?: "full" | "compact" | "none";   // labels / icon-only toolbar / none (the host drives the API)
   hooks?: EditorHooks;
   preferences?: PreferenceStore;      // reader preferences (FC-18 §6); default: localStorage
+  nonce?: string;                     // added 2.2.0: an app's CSP nonce (§8.4) for the preview and the editor's scripts and styles
 }
 
 interface EditorHooks {
@@ -109,9 +110,14 @@ interface Editor {
   ensureUid(): Promise<string>;                  // the header uid; minted (hooks.mintUid) and set as one undoable edit when absent
   setReadOnly(readOnly: boolean): void;          // a newer text format stays read-only (§8.3)
   isReadOnly(): boolean;
+  // added 2.2.0 (additive): the review flow (host-protocols §4)
+  proposeAi(op: string, options?: { selection?: boolean }): Promise<AiProposalOutcome>;  // hooks.ai, nothing changed; never rejects
+  applyAi(proposal: AiProposal, options?: { proposed?: string }): AiOutcome;          // one undoable edit; refused if the text changed
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
+type AiProposal = { op: string; proposed: string; range: Range; original: string; passage: boolean };  // frozen
+type AiProposalOutcome = { ok: true; op: string; proposal: AiProposal } | { ok: false; error: string };
 type UploadOutcome = { ok: true; inserted: string[] } | { ok: false; inserted: string[]; error: string };
 
 type SaveVia = "hook" | "host" | "file" | "download";
@@ -131,6 +137,23 @@ interface EditorEvents {
 `error` sources `format` (the text's header `format` is newer than the
 editor's, FC-18 §8.4: shown read-only, never saved) and `hook` (an upload, AI
 or uid hook failed) were added on 2026-10-06 (additive).
+
+**The review flow** (2.2.0, additive). host-protocols §4 says an AI result
+is a proposal the reader applies; `requestAi` applies at once (kept,
+unchanged: it is `proposeAi` then `applyAi`). `proposeAi(op, { selection? })`
+runs `hooks.ai.request` exactly as `requestAi` does and changes nothing: it
+resolves the proposal with the exact-text `range` it would replace (the
+selection, or the whole text) and the `original` passage. `applyAi(proposal,
+{ proposed? })` applies it — or the reader's edited version — as ONE undoable
+edit in the document's line endings and BOM, and refuses (changing nothing)
+when the text changed in any way since the proposal was made, when
+read-only or destroyed, a second time, or for another editor's proposal.
+The kit's AI menu and review panel (`orz-markdown/carrier/app`
+`attachAiMenu`, `reviewProposal`) use them.
+
+**`nonce`** (2.2.0, additive): the §8.4 CSP recipe needs one nonce for the
+preview frame and the editor's own `<script>`/`<style>`; before, it was the
+editor shell's `preview.nonce` and `codemirror6Adapter({ nonce })` only.
 
 `requestAi`, `uploadAssets`, `ensureUid`, `setReadOnly` and `isReadOnly` were
 added on 2026-10-06 (additive, closed loop 2 round 2): the shell had them
@@ -250,16 +273,17 @@ const shell = createEditorShell(element, {
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
   preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, readyTimeoutMs?, nonce?,
               frameDocument?, bridge?, diff?, mode?, mapLine?, mapPosition? },
+  nonce?,                            // FC-19 §3 (2.2.0): preview.nonce when that is not given, and the default adapter's
   onLink?, label?, narrowWidth?,
 });
 shell.getText() / setText(text, { resetHistory? }) / setHeader(changes) / isDirty() / markSaved()
 shell.save(): Promise<SaveOutcome>        // never rejects
-shell.requestAi(op, { selection? }) / uploadAssets(files) / ensureUid()   // §8.8
+shell.requestAi(op, { selection? }) / proposeAi(op, { selection? }) / applyAi(proposal, { proposed? }) / uploadAssets(files) / ensureUid()   // §8.8
 shell.setReadOnly(flag) / isReadOnly()    // run-time read-only (§8.3)
 shell.setMode(m) / getMode() / getView() / setSplitRatio(r) / getSplitRatio() / undo() / redo()
 shell.focus() / on(event, fn) → off / refreshPreview() / destroy()
 shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapter / shell.ready / shell.readOnly
-shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? })   // the frame channel (§8.4)
+shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, articleClass? })   // the frame channel (§8.4)
 ```
 
 ### 8.2 Layout, modes, keyboard
@@ -453,8 +477,9 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   bridge puts in the DOM; F5, round 3) — post nothing the document may not
   see;
   `shell.preview.on(type, fn) → off` hears the frame's messages of a type
-  (claims: data); `shell.preview.setOptions({ head?, scheme? })` rebuilds the
-  frame document (e.g. a theme change) and shows the last HTML again.
+  (claims: data); `shell.preview.setOptions({ head?, scheme?, articleClass? })`
+  rebuilds the frame document (e.g. a theme or measure change; `articleClass`
+  since 2.2.0) and shows the last HTML again.
 - Protocol (shell → frame): `orz-preview-port { channel }` (with the port),
   `orz-preview-render { id, html, diff? }`, `orz-preview-scroll { top }`,
   `orz-preview-navigate { line }`, and a carrier's own types; (frame →
@@ -625,10 +650,18 @@ standalone saves are now binding in §3–§4.
 The kind-independent §3 hooks live in the shell (`hooks`, shaped like
 `EditorHooks`; `hooks.save` as before):
 
+- `includes` (the shell option, the opened file's `#orz-includes`) — passed
+  to `render(text, ctx)` as `ctx.includes` (2.2.0): `renderMarkdownPreview`
+  reads file includes from it (the parser's `readFile` on a virtual root,
+  `includeRecordEnv`), `renderMarkdownPreviewWithIncludes` URL includes too
+  (the host's `fetchInclude` first, the record for what it does not answer),
+  so a file renders its stored includes offline.
 - `fetchInclude`, `resolveAsset` — passed to `render(text, ctx)` as `ctx`
   (`renderMarkdownPreview` accepts it, so it can be passed as `render`
   directly; `renderMarkdownPreviewWithIncludes` uses `ctx.fetchInclude` to
-  resolve URL includes with `prepareSources` first, each URL fetched once per
+  resolve URL includes with `prepareSources` first — passing the render env
+  as `includeEnv`, so a text with file includes gets its URL includes too
+  (2.2.0) — each URL fetched once per
   shell through `ctx.cache`, a per-shell map; anchors before the first
   include and after the last stay exact, included text anchors at the
   include). `ctx.twinLinks` is `false` when `hooks.resolveLink` is given
@@ -688,3 +721,13 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   option's second argument (§8.5); the default `openedHtml` computed at
   idle; `ReassembleOptions.includes` and `UpdateError` code `includes`
   (spec/shell-runtime.md §7.2).
+- 2.2.0 (additive; the gaps the orz-mdhtml 1.0 rebuild found): `nonce`
+  (§3, the shell option); `proposeAi` / `applyAi` and the types
+  `AiProposal`, `AiProposalOutcome` (§4); `preview.setOptions({ articleClass })`
+  (§8.4); the render context's `includes` and `includeRecordEnv`, and
+  `renderMarkdownPreviewWithIncludes` passing `includeEnv` (above); a
+  read-only CodeMirror stays focusable and selectable (`EditorState.readOnly`,
+  content not editable but `tabindex="0"`, `aria-readonly`), so the reader
+  can select, copy and press Cmd/Ctrl+S in it (§5 invariant 7: keyboard
+  operable). The standalone file's own runtime that mounts this shell is
+  `orz-markdown/carrier/app` ([carrier-app.md](carrier-app.md)).

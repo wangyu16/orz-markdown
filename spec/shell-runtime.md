@@ -325,7 +325,10 @@ reassemble({ text, kind, release, delivery?, includes?, fetch?, document?, windo
    exactly (opaque origin — **no** `allow-same-origin`: the bundle cannot
    reach the page, its storage or its cookies), `srcdoc` = the bundle as an
    inline script (passed through `escapeScriptText`, which leaves a
-   script-safe bundle unchanged) followed by a fixed listener. When the
+   script-safe bundle unchanged), with nothing after it in its `<script>`
+   (2.2.0: a bundle that reads its own script text — an inline assembly
+   without `engineSource` — gets exactly the verified bytes), followed by a
+   fixed listener. When the
    iframe's own window posts `orz-reassemble-ready`, the page posts
    `{ type: 'orz-reassemble', id, text, delivery, engineSource: bundle,
    includes? }`; the listener calls `OrzCarrier.assemble(text, { delivery,
@@ -437,7 +440,8 @@ shadow roots and does not compete with it.
   `.orz-toast`, `.orz-icon`, `.orz-visually-hidden`.
 - **`ICONS`** — inline SVG strings (24×24, stroke `currentColor`,
   `aria-hidden`, `focusable="false"`): `save`, `download`, `update`, `edit`,
-  `preview`, `split`, `theme`, `close`, `info`, `check`, `warning`, `more`.
+  `preview`, `split`, `theme`, `close`, `info`, `check`, `warning`, `more`,
+  and (2.2.0, the carrier app's chrome) `measure`, `new`, `copy`.
   A control is named by its `aria-label`, never by the icon.
 - **`createShadowRoot(host, { mode? })`** — attaches an (`open` by default)
   shadow root and installs `CHROME_CSS` as a constructed stylesheet (no

@@ -54,6 +54,15 @@ export interface CheckContext {
     }>;
     newPage(): Promise<Page>;
     of(type: string): Record_[];
+    /**
+     * Run `action` (a reload, a navigation) on a page the check means to leave
+     * while it is clean (2.2.0, spec/conformance.md §3): a `beforeunload`
+     * confirmation it raises meanwhile is accepted, so the navigation goes on
+     * (it is still recorded as a dialog, which the check's "no dialog"
+     * expectations report). Everywhere else a dialog is dismissed — a dismissed
+     * `beforeunload` keeps the page.
+     */
+    leave<T>(page: Page, action: () => Promise<T>): Promise<T>;
 }
 export declare class Session {
     readonly target: CarrierTarget;
@@ -110,6 +119,14 @@ export declare class Session {
     }): Release;
     /** The target's Node `assemble`, memoised per text and options. */
     assemble(text: string, o?: AssembleOptions): Promise<string>;
+    /**
+     * A request for this kind's release bundle: any file of `<pkg>-browser@<any
+     * version>/` but the manifest (`@latest/release.json`). The update checks
+     * count these — a file may fetch other resources (its theme, fonts, preview
+     * libraries: spec/conformance.md §3) but no bundle before the reader asks
+     * for the update (2.2.0; before, every request but the manifest counted).
+     */
+    isBundleRequest(url: string): boolean;
     /** The URL patterns of the jsDelivr routes for this kind. */
     private cdnUrls;
     /** A fresh browser context for one check: recorded dialogs, errors, picker writes, downloads and requests; closed network. */

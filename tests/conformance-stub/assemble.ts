@@ -2,7 +2,8 @@
  * The stub carrier's `assemble` (test scaffolding, not a product): one
  * function shared by its Node entry and its browser bundle, so Node and
  * Chrome write the same bytes (FC-18 law 2). The envelope is the kit's
- * `assembleEnvelope`; the shell parts are a brand, an app root and the
+ * `assembleEnvelope`; the shell parts are the read view's article, the
+ * chrome's mount point (`orz-markdown/carrier/app` fills both) and the
  * engine — inlined (`delivery: "inline"`, the bundle's exact text) or loaded
  * from the hard-coded jsDelivr URL (`cdn`).
  *
@@ -31,7 +32,9 @@ export type StubVariant =
   | 'r3-reload-picked' | 'r3-readonly-stuck' | 'r3-hook-markSaved' | 'r3-readonly-save-key' | 'r3-ungated-view-key'
   // option B (2026-10-06): the preview's port without the frame secret
   | 'port-without-secret'
-  | 'save-to-inline' | 'save-drops-includes' | 'update-drops-includes';
+  | 'save-to-inline' | 'save-drops-includes' | 'update-drops-includes'
+  // 2.2.0: a file that fetches a bundle before the reader asks for the update
+  | 'prefetch-bundle';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 
@@ -45,7 +48,10 @@ export interface StubAssembleOptions {
   includes?: Record<string, string>;
 }
 
-const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}.orz-stub-bar{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid #ddd}#orz-app{min-height:60vh}</style>';
+const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}#orz-app{min-height:60vh;padding:24px}</style>';
+
+/** The shell markup of the body: the read view's article (carrier/app renders into it) and the chrome's mount point. */
+export const STUB_BODY = '<main id="orz-app" class="orz-view"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>';
 
 export function stubAssemble(text: string, o: StubAssembleOptions): string {
   const delivery = o.delivery ?? 'inline';
@@ -54,9 +60,9 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
   let engine: string;
   if (delivery === 'inline') {
     if (typeof o.engineSource !== 'string' || o.engineSource === '') throw new Error('orz stub: inline delivery needs the engine source');
-    engine = `<script>${o.engineSource}</script>`;
+    engine = `<script id="orz-engine">${o.engineSource}</script>`;
   } else {
-    engine = `<script src="${bundleUrl({ kind: 'md', version: o.version, bundle: { path: STUB_BUNDLE_PATH, integrity: '' } })}"></script>`;
+    engine = `<script id="orz-engine" src="${bundleUrl({ kind: 'md', version: o.version, bundle: { path: STUB_BUNDLE_PATH, integrity: '' } })}"></script>`;
   }
   const html = assembleEnvelope(source, {
     kind: 'md',
@@ -64,7 +70,7 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
     delivery,
     ...(o.includes && Object.keys(o.includes).length > 0 ? { includes: o.includes } : {}),
     headHtml: HEAD,
-    bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `<header class="orz-stub-bar"><span id="orz-brand" tabindex="-1">orz stub</span></header>\n<main id="orz-app"></main>\n${engine}`, // BUG (mutation) date-stamp
+    bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `${STUB_BODY}\n${engine}`, // BUG (mutation) date-stamp
   });
   if (o.variant === 'no-generator') return html.replace(/<meta name="generator" content="[^"]*">\n/, ''); // BUG (mutation): no generator meta
   if (o.variant === 'no-eol-attr') return html.replace(/(<script type="text\/markdown" id="orz-src"[^>]*?) data-orz-eol="[a-z]+"/, '$1'); // BUG (mutation): the island does not say its line endings

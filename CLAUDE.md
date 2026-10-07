@@ -47,7 +47,15 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
 - `src/source-scan.ts` — `maskInertMarkdown`: blanks code/comments/HTML blocks so
   pre-render scanners (nyml, prepareSources) agree with the renderer.
 - `src/doc-meta.ts`, `src/nyml-blocks.ts` — the family's DocMeta API and nyml scanner.
-- `src/preview-frame.ts` — pinned content-library versions/URLs + `__orzEnhance`.
+- `src/preview-frame.ts` — pinned content-library versions/URLs + `__orzEnhance`
+  (the preview frame's markup) and `enhanceDocument(root, { scheme, assets,
+  nonce })` (2.2.0): the same enhancement for content rendered in a page (a
+  carrier's read view), loading only the libraries the content needs; keep
+  its pass (`enhanceRoot`) and `ENHANCE_BODY` doing the same thing (M.8, M.24).
+- `src/themes.ts` — `THEMES` (ids, picker names, colour schemes), `DEFAULT_THEME`,
+  `themeInfo`: the ONE theme list (main entry and `orz-markdown/themes`);
+  `tests/themes.test.ts` checks it against `themes/*.css` (M.25). Add a theme
+  file → add it here.
 - `src/carrier.ts` — `orz-markdown/carrier`, shared carrier building blocks (FD-03):
   the escaping helpers plus the carrier kit core in `src/carrier/` (FC-18 text
   format 1): `header.ts` (read/edit/lint the `{{nyml kind: document}}` header),
@@ -118,13 +126,35 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   strings the editor keeps go through `detachString` (V8 slices keep the whole
   text alive; E.21). `render-md.ts`
   (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`,
-  `data-src-line` anchors). It may import the
+  `includeRecordEnv`, `data-src-line` anchors; an `#orz-includes` record
+  renders offline, and URL includes pass the render env to `prepareSources`
+  as `includeEnv`). The AI review flow is `proposeAi` / `applyAi` (E.26;
+  `requestAi` = both at once, kept for 2.1.0 callers). A read-only
+  CodeMirror stays focusable (`tabindex="0"`, E.22). It may import the
   parser; `carrier/shell`, `carrier/read` and `carrier` must not import it
   (E.10). CodeMirror 6 is ONE pinned bundle, `vendor/codemirror6.js`
   (shipped in the package, loaded from jsDelivr `orz-markdown@<VERSION>` with
   SRI): the `@codemirror/*` devDependencies are pinned exactly; after changing
   one run `npm run build:codemirror` (E.11 fails otherwise). Never load
   per-package `+esm` URLs (they duplicate `@codemirror/state`).
+- `src/carrier/app/` — `orz-markdown/carrier/app` (2.2.0, spec/carrier-app.md),
+  the standalone assembled file's runtime every carrier bundle runs:
+  `startCarrier(kind)` sets `globalThis.OrzCarrier` and boots
+  `bootCarrierApp` in a file (`readOpenedFile`, the kind's read view, the
+  chrome in a shadow root, edit mode, Save / Download a copy / New document /
+  Save as new copy, `beforeunload` while dirty, the host connection with the
+  AI menu + review panel, the quiet update, reader preferences, the page
+  keymap, the `CarrierApp` handle = `OrzCarrier.standalone`). THE SEAM is
+  `StandaloneKind` (`types.ts`): never name a kind (md, slides, paged
+  specifics) in `src/carrier/app/` (A.4 greps for it). It may import
+  `carrier/shell`, `carrier/editor` (types only today) and `carrier/read`
+  plus the core modules the editor already loads (not `document.ts`); no
+  other entry imports it (A.1). DOM types are structural (`AppElement`, …):
+  a DOM-typed carrier must keep compiling against them (A.4 runs tsc with the
+  DOM lib). Kit services it calls are replaceable for tests only
+  (`services`); the conformance stub's broken builds use that seam.
+  `widgets.ts` holds the menu button, setting picker, `attachSettings`,
+  `reviewProposal`, `attachAiMenu`, `followPresentation`.
 - `src/carrier/conformance/` — `orz-markdown/carrier/conformance`, the
   Node-side conformance harness each carrier runs against itself
   (spec/conformance.md): `runConformance` / `registerConformance` over the
@@ -138,11 +168,17 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   answered; page-side code is plain JS strings in `page.ts` (it must not
   depend on how this file is compiled). No other entry may import it (H.4).
   Proved against the stub carrier in `tests/conformance-stub/` (built at test
-  time; test scaffolding, not a product) and broken builds of it (H.5). Its
-  default corpus is the shipped `tests/carrier-corpus/` (in `files`).
+  time; test scaffolding, not a product: since 2.2.0 `carrier/app` + a small
+  md kind in `carrier.ts`, its deliberate bugs in `mutants.ts`) and broken
+  builds of it (H.5). Its
+  default corpus is the shipped `tests/carrier-corpus/` (in `files`). The
+  update checks count only bundle requests (`Session.isBundleRequest`, H.7);
+  dialogs are dismissed except a `beforeunload` inside `CheckContext.leave`
+  (H.8). Its page helpers (`initScript`, `readOpfs`, `writeOpfs`,
+  `pageRecords`) are exported for carriers' own tests (H.6).
 - `spec/` — binding carrier specs owned here: FC-18 (text form and assembly)
   and FC-19 (editor component), plus the canonical host protocols (FC-12)
-  and the shell runtime (FC-11). Change them only through the family's
+  and the shell runtime (FC-11), and the carrier app (2.2.0, `carrier-app.md`). Change them only through the family's
   contract-change rules; the golden corpus is `tests/carrier-corpus/`.
 - `src/version.ts` — GENERATED by `scripts/sync-version.ts`; never edit.
 - `src/runtime.ts` — `browserRuntimeScript`, injected into output HTML. QR
@@ -197,7 +233,9 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
   `tests/carrier-editor.test.ts` (E.13, E.23 and the Chrome halves of E.1, E.3–E.11,
-  E.14, E.15, E.19–E.22, E.25) and `tests/conformance.test.ts` (H.2, the browser half of H.5).
+  E.14, E.15, E.19–E.22, E.25) and `tests/conformance.test.ts` (H.2, the browser half of H.5,
+  H.6–H.8) and `tests/carrier-app.test.ts` (A.13 and the Chrome halves of A.7–A.9; it builds
+  the stub carrier) and `tests/browser-copy.test.ts` (M.24).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its
   id in its title (`[M.16] …`), and `tests/claims.test.ts` fails on an unbound
   claim or an unknown id. Change a claim's wording when behaviour changes;

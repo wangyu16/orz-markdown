@@ -190,16 +190,18 @@ preview identically instead of re-deriving it.
 
 | Import | What it gives you |
 |---|---|
-| `orz-markdown` | the configured `md` instance, `createMarkdown()`, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `VERSION`, `KATEX_VERSION` |
+| `orz-markdown` | the configured `md` instance, `createMarkdown()`, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `THEMES`, `VERSION`, `KATEX_VERSION` |
 | `orz-markdown/runtime` | the browser runtime (tabs, QR expand, copy-as-Markdown) as a script string |
-| `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned) |
+| `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned), and `enhanceDocument(root, { scheme })` (≥ 2.2.0) for content rendered in a page |
 | `orz-markdown/doc-meta` | the DocMeta API on its own |
 | `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint, `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser) |
 | `orz-markdown/carrier/read` | `extract`, `readIslandFromDom`, `decodeText`, escape helpers — reads assembled files without the parser |
 | `orz-markdown/carrier/shell` | the browser runtime of every assembled file: save, reader preferences, host protocols, quiet update, chrome (parser-free, Node-safe to import) |
 | `orz-markdown/carrier/editor` | the editor shell every carrier's `mountEditor` wraps (FC-19 §8), with the pinned CodeMirror 6 bundle `vendor/codemirror6.js` |
-| `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`) |
+| `orz-markdown/carrier/app` | (≥ 2.2.0) the standalone assembled file's runtime every carrier bundle runs — `startCarrier(kind)`: read view, chrome, edit mode, saves, New document / Save as new copy, unsaved-changes warning, host connection with the AI review flow, quiet update — behind one seam, `StandaloneKind` ([spec/carrier-app.md](spec/carrier-app.md)) |
+| `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`), and its page helpers for a carrier's own tests (OPFS picker, `readOpfs`, `writeOpfs`) |
 | `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
+| `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes), `DEFAULT_THEME`, `themeInfo` |
 | `orz-markdown/themes/*` | the CSS themes |
 
 orz-markdown has no static Node dependencies: it bundles for the browser
@@ -211,8 +213,10 @@ The `orz-markdown/carrier*` entries are the shared kit the family's
 single-file carriers (orz-mdhtml, orz-slides, orz-paged) are being rebuilt on
 (family decisions FD-03, FD-05–07). Their binding specifications live in
 [`spec/`](spec/README.md): the text form and assembly (FC-18), the editor
-component (FC-19), the host protocols, the shell runtime, and the
-conformance harness; the golden corpus is
+component (FC-19), the host protocols, the shell runtime, the carrier app
+(≥ 2.2.0: the runtime of a standalone file, which a carrier adopts by
+supplying its kind — renderer, editor, read view, settings — to
+`startCarrier`), and the conformance harness; the golden corpus is
 [`tests/carrier-corpus/`](tests/carrier-corpus/) (shipped in the package).
 Authors only need the [document header](#the-document-header-text-format-1--210)
 above; everything else is for carrier and host builders.

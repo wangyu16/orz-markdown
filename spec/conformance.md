@@ -69,6 +69,19 @@ to the kind), `checkTimeoutMs` (default 120 s), `lanes`, `log`, `allowSkips`.
 | `previous?` | an older release whose files must update to this one exactly |
 | `firstRelease?` | `true` for a carrier's first release: there is no `previous`, and `C.update.from-previous` is `not-applicable` (without it, a missing `previous` is a skip) |
 
+### Page helpers for a carrier's own tests (2.2.0)
+
+The harness's page machinery is exported for a carrier's own browser tests
+(its standalone file: save in place, New document, Save as new copy, the
+update): `initScript(picker)` (`'stub'` / `'opfs'` / `'none'` / `'native'`;
+dialogs, errors, picks and writes recorded in the page log `PAGE_LOG`,
+`window.__orzConformanceLog`, also without the harness's binding),
+`readOpfs(page, { name, pathname?, folder? })`, `writeOpfs(page, place,
+data)` (the opened file "on disk" in the page's folder), `pageRecords(page,
+type?)`, `callPage`, the page-side sources (`OPFS_FOLDER`, `READ_OPFS`,
+`WRITE_OPFS`, `PAGE_HELPERS`, `DEFAULT_EDITOR_DRIVER`, `mountEditorScript`,
+`HOST_PAGE`) and `FILE_ACCESS_FLAG`, `CODEMIRROR_URL` (claim H.6).
+
 ## 2. What "conformant" means
 
 `conformant: true` — **every** check of `CHECK_IDS` ran and passed, or is
@@ -99,7 +112,19 @@ final `[conformant]` test without `allowSkips`.
   (`orz-markdown@<version>/vendor/codemirror6.js`, served from this package),
   so the editor checks run with CodeMirror loaded; `C.edit.exact` runs once
   more with that URL unreachable (the textarea fallback). A file that fetches
-  anything else (fonts, preview libraries) gets a network error, as offline.
+  anything else (fonts, preview libraries, its theme) gets a network error,
+  as offline. Where an update check requires "no bundle request" it counts
+  only requests for the kind's release package — any file of
+  `<pkg>-browser@<any version>/` but the manifest — so a file may load its
+  own resources, and none of its bundle before the reader asks for the
+  update (2.2.0; before, every request but the manifest counted; claim H.7).
+- **Dialogs** are recorded and dismissed — a dismissed `beforeunload` keeps
+  the page, so a file that asks before an unsaved page goes is never left
+  behind by accident. Where a check leaves a page it expects clean on
+  purpose (a reload: `C.update.once-a-day`), it accepts a `beforeunload` so
+  the navigation goes on, and the dialog is still recorded, so the check's
+  "no dialog" expectation reports a file that asks on a clean page
+  (2.2.0, `CheckContext.leave`; claim H.8).
 - An init script in every frame records `alert`/`confirm`/`prompt`/
   `showModal`, uncaught errors (console errors are recorded too) and, per
   check, replaces `showSaveFilePicker` with a recording stub (an in-memory
@@ -165,7 +190,7 @@ final `[conformant]` test without `allowSkips`.
 | `C.update.from-previous` | Chrome | a file of `previous` updates to exactly this release's Node `assemble(text)`; the written file, opened, gives back the text, and its editor saves exactly this release's `assemble` of an edit; `not-applicable` for a target with `firstRelease: true` |
 | `C.update.resigned` | Chrome | `next` with an appended snippet that alters the text in `assemble`, re-signed (integrity recomputed), and `next`'s bytes announced as a higher version: each is refused — nothing written or downloaded, the island unchanged, the refusal announced, no dialog |
 | `C.update.prerelease` | Chrome | `next` announced as `<version>-rc.1`: the manifest is fetched, no indicator appears, no bundle is requested |
-| `C.update.once-a-day` | Chrome | `next` advertised: the indicator appears on open, after a reload and in a second file of the kind, with one manifest request in all |
+| `C.update.once-a-day` | Chrome | `next` advertised: the indicator appears on open, after a reload and in a second file of the kind, with one manifest request in all; the clean page asks nothing when it is reloaded (no dialog) |
 | `C.update.hosted` | Chrome | a file in a host page that completed `orz-host-save@1`, `next` advertised: no manifest request, no indicator in the frame |
 | `C.update.cdn-delivery` | Chrome | a `cdn`-delivery file (its bundle from the jsDelivr URL): Update now writes exactly `next`'s Chrome `assemble(text, { delivery: 'cdn' })` — delivery `cdn`, shell `next.version`, exact text |
 | `C.update.keeps-includes` | Chrome | a file assembled with includes (`INCLUDE_TEXT`, `INCLUDES`; the corpus file `md/includes.md`): Update now writes exactly `next`'s Chrome `assemble(text, { includes })` — exact text, shell `next.version`, the file's `#orz-includes` exactly |

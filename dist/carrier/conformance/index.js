@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CONFORMANT_TITLE = exports.EXCLUSIVE_CHECKS = exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
+exports.CONFORMANT_TITLE = exports.EXCLUSIVE_CHECKS = exports.CODEMIRROR_URL = exports.FILE_ACCESS_FLAG = exports.pageRecords = exports.writeOpfs = exports.readOpfs = exports.callPage = exports.HOST_PAGE = exports.mountEditorScript = exports.DEFAULT_EDITOR_DRIVER = exports.RECORD_BINDING = exports.PAGE_LOG = exports.PAGE_HELPERS = exports.WRITE_OPFS = exports.READ_OPFS = exports.OPFS_FOLDER = exports.initScript = exports.derivedParts = exports.loadCorpus = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.CHECK_IDS = exports.CHECKS = void 0;
 exports.implementedChecks = implementedChecks;
 exports.openConformance = openConformance;
 exports.runConformance = runConformance;
@@ -37,6 +37,26 @@ var node_js_2 = require("./node.js");
 Object.defineProperty(exports, "loadCorpus", { enumerable: true, get: function () { return node_js_2.loadCorpus; } });
 var checks_js_2 = require("./checks.js");
 Object.defineProperty(exports, "derivedParts", { enumerable: true, get: function () { return checks_js_2.derivedParts; } });
+// page helpers for a carrier's own browser tests (2.2.0, claim H.6)
+var page_js_1 = require("./page.js");
+Object.defineProperty(exports, "initScript", { enumerable: true, get: function () { return page_js_1.initScript; } });
+Object.defineProperty(exports, "OPFS_FOLDER", { enumerable: true, get: function () { return page_js_1.OPFS_FOLDER; } });
+Object.defineProperty(exports, "READ_OPFS", { enumerable: true, get: function () { return page_js_1.READ_OPFS; } });
+Object.defineProperty(exports, "WRITE_OPFS", { enumerable: true, get: function () { return page_js_1.WRITE_OPFS; } });
+Object.defineProperty(exports, "PAGE_HELPERS", { enumerable: true, get: function () { return page_js_1.PAGE_HELPERS; } });
+Object.defineProperty(exports, "PAGE_LOG", { enumerable: true, get: function () { return page_js_1.PAGE_LOG; } });
+Object.defineProperty(exports, "RECORD_BINDING", { enumerable: true, get: function () { return page_js_1.RECORD_BINDING; } });
+Object.defineProperty(exports, "DEFAULT_EDITOR_DRIVER", { enumerable: true, get: function () { return page_js_1.DEFAULT_EDITOR_DRIVER; } });
+Object.defineProperty(exports, "mountEditorScript", { enumerable: true, get: function () { return page_js_1.mountEditorScript; } });
+Object.defineProperty(exports, "HOST_PAGE", { enumerable: true, get: function () { return page_js_1.HOST_PAGE; } });
+var helpers_js_1 = require("./helpers.js");
+Object.defineProperty(exports, "callPage", { enumerable: true, get: function () { return helpers_js_1.callPage; } });
+Object.defineProperty(exports, "readOpfs", { enumerable: true, get: function () { return helpers_js_1.readOpfs; } });
+Object.defineProperty(exports, "writeOpfs", { enumerable: true, get: function () { return helpers_js_1.writeOpfs; } });
+Object.defineProperty(exports, "pageRecords", { enumerable: true, get: function () { return helpers_js_1.pageRecords; } });
+var session_js_2 = require("./session.js");
+Object.defineProperty(exports, "FILE_ACCESS_FLAG", { enumerable: true, get: function () { return session_js_2.FILE_ACCESS_FLAG; } });
+Object.defineProperty(exports, "CODEMIRROR_URL", { enumerable: true, get: function () { return session_js_2.CODEMIRROR_URL; } });
 const DEFAULT_TIMEOUT = 120000;
 const DEFAULT_LANES = 3;
 /**

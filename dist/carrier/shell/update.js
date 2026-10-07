@@ -416,7 +416,7 @@ const BOOTSTRAP = [
 ].join('\n');
 /** The srcdoc of the sandbox: the bundle (escaped; script-safe bundles are unchanged) and the listener. */
 function sandboxDocument(bundle) {
-    return `<!doctype html><html><head><meta charset="utf-8"><title>orz update</title></head><body><script>${(0, read_js_1.escapeScriptText)(bundle)}\n</script><script>${BOOTSTRAP}</script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>orz update</title></head><body><script>${(0, read_js_1.escapeScriptText)(bundle)}</script><script>${BOOTSTRAP}</script></body></html>`;
 }
 let requestCounter = 0;
 const hasIncludes = (x) => !!x && typeof x === 'object' && Object.keys(x).length > 0;

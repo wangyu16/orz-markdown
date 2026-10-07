@@ -127,6 +127,22 @@ const THEME = {
     '.cm-panels': { backgroundColor: 'var(--orz-chrome-surface-2)', color: 'var(--orz-chrome-fg)' },
 };
 /** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
+/**
+ * Read-only in CodeMirror (claim E.22, FC-19 §5 invariant 7): the state is
+ * read-only (no command or input edits it) and the content is not editable,
+ * but it stays focusable (`tabindex="0"`) and selectable, so the reader can
+ * select, copy and press Cmd/Ctrl+S in a read-only editor (2.2.0; before,
+ * `editable: false` alone left nothing to focus).
+ */
+function readOnlyExtensions(m, flag) {
+    const { EditorState } = m.state;
+    const { EditorView } = m.view;
+    return [
+        EditorState.readOnly.of(flag),
+        EditorView.editable.of(!flag),
+        ...(flag && EditorView.contentAttributes ? [EditorView.contentAttributes.of({ tabindex: '0', 'aria-readonly': 'true' })] : []),
+    ];
+}
 function codemirror6Adapter(options = {}) {
     let fallback = (0, adapter_js_1.textareaAdapter)();
     let view = null;
@@ -145,7 +161,7 @@ function codemirror6Adapter(options = {}) {
         const c = m.commands;
         const l = m.language;
         const ro = readOnlyNow;
-        const roExtensions = (flag) => [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+        const roExtensions = (flag) => readOnlyExtensions(m, flag);
         roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
         const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
         return [
@@ -339,8 +355,7 @@ function codemirror6Adapter(options = {}) {
                 return;
             }
             const { EditorState } = cm.state;
-            const { EditorView } = cm.view;
-            const ext = [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+            const ext = readOnlyExtensions(cm, flag);
             if (roCompartment) {
                 view.dispatch({ effects: roCompartment.reconfigure(ext) });
                 return;

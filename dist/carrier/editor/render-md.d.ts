@@ -1,3 +1,4 @@
+import type { IncludeEnv } from '../../plugins/markdown-include.js';
 export interface MarkdownPreviewOptions {
     /**
      * Rewrite links to text twins (`x.md` → `x.md.html`), as an assembled file
@@ -17,18 +18,39 @@ export interface MarkdownPreviewOptions {
     resolveAsset?(path: string): string;
     /** The shell's per-instance scratch map (`ctx.cache`): fetched includes are kept there. */
     cache?: Map<string, unknown>;
+    /**
+     * The assembled file's resolved includes (`extract(html).includes`, the
+     * `#orz-includes` record): target as written → text. File includes render
+     * from it (`includeRecordEnv`); `renderMarkdownPreviewWithIncludes` also
+     * resolves URL includes from it when `fetchInclude` gives none. Entries of
+     * `env` (a host's own `readFile`) win over the record's reader.
+     */
+    includes?: Readonly<Record<string, string>>;
 }
+/**
+ * The parser env that reads file includes from an `#orz-includes` record (FC-18
+ * §8.3): `markdownBasePath` `/` and a `readFile` answering each file target of
+ * the record (its path as written, resolved on the virtual root `/`). URL
+ * entries are not files. An include the record lacks renders nothing, as in
+ * any page. Always an env — also for an empty record — so `prepareSources`
+ * can judge URL includes next to file includes (`includeEnv`).
+ */
+export declare function includeRecordEnv(includes: Readonly<Record<string, string>> | null | undefined): IncludeEnv;
 /** Render an `md` text for the editor preview (see the module comment). */
 export declare function renderMarkdownPreview(text: string, options?: MarkdownPreviewOptions): string;
 /**
  * Like {@link renderMarkdownPreview}, after resolving the body's URL includes
- * through `options.fetchInclude` (the host's trust policy; `prepareSources`
- * neutralises file includes and refuses unsafe splices). Without
- * `fetchInclude` it is `renderMarkdownPreview`. A fetched include is kept in
- * `options.cache` (the shell's `ctx.cache`) for the shell's life; a failed one
- * is fetched again next time. Anchor lines stay those of the text: lines
- * before the first include and after the last are exact, included content and
- * the text between two includes anchor at the first include's line.
+ * with `prepareSources`: through `options.fetchInclude` (the host's trust
+ * policy) and, for a URL it does not answer, the `includes` record. Without
+ * either it is `renderMarkdownPreview`. The render env (the record's reader,
+ * `options.env`) is passed to `prepareSources` as `includeEnv`, so a
+ * document with file includes gets its URL includes too (without it,
+ * `prepareSources` keeps every URL directive of such a document). A fetched
+ * include is kept in `options.cache` (the shell's `ctx.cache`) for the
+ * shell's life; a failed one is fetched again next time. Anchor lines stay
+ * those of the text: lines before the first include and after the last are
+ * exact, included content and the text between two includes anchor at the
+ * first include's line.
  */
 export declare function renderMarkdownPreviewWithIncludes(text: string, options?: MarkdownPreviewOptions): Promise<string>;
 //# sourceMappingURL=render-md.d.ts.map

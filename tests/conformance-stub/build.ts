@@ -10,9 +10,9 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { editHeader, mintUid } from '../../src/carrier';
 import type { BundleSource, CarrierTarget } from '../../src/carrier/conformance';
 import { stubAssemble, STUB_BUNDLE_PATH, type StubVariant } from './assemble';
+import { createStubText } from './document';
 
 /** What a release build does so the bundle can be inlined exactly. */
 export const scriptSafe = (code: string): string => code.replace(/<(\\*)(\/?script)/gi, '\\x3C$1$2');
@@ -80,9 +80,24 @@ export function buildStub(version: string, variant: StubVariant = 'good'): Promi
 }
 
 /** The stub's creation tool: a new document with a header that names the carrier and a freshly minted uid. */
-export function createStubDocument(title = 'Untitled'): string {
-  return editHeader(`# ${title}\n\nStart writing here.\n`, { carrier: 'md', title, uid: mintUid() });
-}
+export const createStubDocument = createStubText;
+
+/**
+ * The page-side editor driver: the opened file's own editor — `OrzCarrier.standalone.edit()`,
+ * the Edit button's path in carrier/app (the file's saver, host, includes and opened bytes) — and,
+ * for a text other than the file's (`C.edit.newer-format`), `OrzCarrier.mountEditor` on the file's
+ * context (attached to the app).
+ */
+export const STUB_EDITOR_DRIVER = `function (text) {
+  var C = globalThis.OrzCarrier;
+  var app = C && C.standalone;
+  if (app && app.getText() === text) return app.edit();
+  var el = document.createElement('div');
+  el.setAttribute('data-orz-conformance', 'editor');
+  el.style.cssText = 'width: 1100px; height: 640px;';
+  document.body.appendChild(el);
+  return C.mountEditor(el, { text: text });
+}`;
 
 /** The harness target for a built stub; `next`/`previous` are other builds of it. */
 export function stubTarget(stub: BuiltStub, rel: { next?: BuiltStub; previous?: BuiltStub } = {}): CarrierTarget {
@@ -95,6 +110,7 @@ export function stubTarget(stub: BuiltStub, rel: { next?: BuiltStub; previous?: 
     create: () => createStubDocument(),
     samples: { 'stub-sample': '# Stub sample\n\n- [ ] task\n- [x] done\n\n$E = mc^2$\n' },
     protocols: { ai: true, include: true },
+    editor: STUB_EDITOR_DRIVER,
     ...(rel.next ? { next: { bundle: rel.next.bundle, release: rel.next.release } } : {}),
     ...(rel.previous ? { previous: { bundle: rel.previous.bundle, release: rel.previous.release } } : {}),
   };

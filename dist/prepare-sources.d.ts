@@ -85,6 +85,6 @@ export interface PrepareSourcesOptions {
      */
     includeEnv?: IncludeEnv;
 }
-import type { IncludeEnv } from './plugins/markdown-include.js';
+import { type IncludeEnv } from './plugins/markdown-include.js';
 export declare function prepareSources(src: string, opts?: PrepareSourcesOptions): Promise<string>;
 //# sourceMappingURL=prepare-sources.d.ts.map

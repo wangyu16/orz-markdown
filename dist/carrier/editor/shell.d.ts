@@ -119,6 +119,12 @@ export interface RenderContext {
     twinLinks?: boolean;
     /** A scratch map that lives as long as the shell (e.g. fetched includes; `renderMarkdownPreviewWithIncludes`). */
     cache?: Map<string, unknown>;
+    /**
+     * The opened file's resolved includes (the shell's `includes` option, the
+     * `#orz-includes` record, FC-18 §8.3): `renderMarkdownPreview` reads file
+     * includes from it and `renderMarkdownPreviewWithIncludes` URL includes too.
+     */
+    includes?: Readonly<Record<string, string>>;
 }
 /** The shell's channel to the preview frame's bridge (FC-19 §8.4), for a carrier's own frame protocol. */
 export interface EditorPreviewChannel {
@@ -126,10 +132,11 @@ export interface EditorPreviewChannel {
     post(message: Readonly<Record<string, unknown>>): boolean;
     /** Listen to the frame's messages of one type (through the authenticated port, and a carrier's own types on the window — data only). Returns the unsubscribe. */
     on(type: string, fn: (message: PreviewMessage) => void): () => void;
-    /** Rebuild the frame document with another `head` and/or `scheme` (e.g. a theme change); the preview shows again. */
+    /** Rebuild the frame document with another `head`, `scheme` and/or `articleClass` (e.g. a theme or measure change); the preview shows again. */
     setOptions(options: {
         head?: string;
         scheme?: ColorScheme;
+        articleClass?: string;
     }): void;
 }
 /** The preview's scroll mapping context (`preview.mapLine` / `mapPosition`). */
@@ -221,6 +228,13 @@ export interface EditorShellOptions {
     /** The preview frame (theme links, scheme, article class, libraries, nonce, the carrier's frame/bridge/mapping) and its timing. */
     preview?: EditorPreviewOptions;
     /**
+     * FC-19 §3 `nonce` (added 2.2.0): an app's CSP nonce (FC-19 §8.4 recipe),
+     * stamped on the preview frame's scripts and styles (`preview.nonce` when
+     * that is not given) and, with the default adapter, on CodeMirror's
+     * `<script>` and `<style>` (`codemirror6Adapter({ nonce })`).
+     */
+    nonce?: string;
+    /**
      * A link clicked in the preview, after `hooks.resolveLink`. Default: an
      * `http(s):` / `mailto:` link is offered in a chip in the preview ("Open
      * <host>"), opened in a new tab when the reader clicks it.
@@ -235,6 +249,31 @@ export interface EditorShellOptions {
 export type AiOutcome = {
     ok: true;
     op: string;
+} | {
+    ok: false;
+    error: string;
+};
+/**
+ * An AI proposal awaiting the reader's review (`proposeAi`; host-protocols §4:
+ * the document is untouched until the reader applies it). Frozen; only the
+ * shell that made it can apply it (`applyAi`).
+ */
+export interface AiProposal {
+    readonly op: string;
+    /** The replacement the hook proposed (as given; `applyAi` writes it in the document's line endings and BOM). */
+    readonly proposed: string;
+    /** What it replaces: offsets in the exact text at the time of the request — the selection, or the whole text. */
+    readonly range: Readonly<TextRange>;
+    /** The exact text in `range` when the request was made. */
+    readonly original: string;
+    /** A passage (selection) operation; else the proposal replaces the whole document. */
+    readonly passage: boolean;
+}
+/** How a proposal request went. Never rejects. */
+export type AiProposalOutcome = {
+    ok: true;
+    op: string;
+    proposal: AiProposal;
 } | {
     ok: false;
     error: string;
@@ -270,6 +309,26 @@ export interface EditorShell {
     requestAi(op: string, options?: {
         selection?: boolean;
     }): Promise<AiOutcome>;
+    /**
+     * The review flow (added 2.2.0): run `hooks.ai.request` like `requestAi`
+     * but change nothing — resolve the proposal with the exact-text range it
+     * would replace. Refused when read-only, without a selection for a
+     * passage, on a hook failure, or when the shell became read-only or was
+     * destroyed meanwhile.
+     */
+    proposeAi(op: string, options?: {
+        selection?: boolean;
+    }): Promise<AiProposalOutcome>;
+    /**
+     * Apply a proposal of this shell as ONE undoable edit — `proposed` (the
+     * reader's edited version, when given) in the document's line endings and
+     * BOM, in place of the proposal's range. Refused, changing nothing, when
+     * the text changed since the proposal was made (any edit), when read-only
+     * or destroyed, or for a proposal this shell did not make.
+     */
+    applyAi(proposal: AiProposal, options?: {
+        proposed?: string;
+    }): AiOutcome;
     /** Upload files through `hooks.uploadAsset` and insert their Markdown at the selection (one undoable edit). */
     uploadAssets(files: ArrayLike<EdFile>): Promise<UploadOutcome>;
     /** The header `uid`; when there is none, mint one (`hooks.mintUid`, else the kit's) and set it (one undoable edit). */

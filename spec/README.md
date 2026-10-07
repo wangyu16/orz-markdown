@@ -9,6 +9,7 @@ Binding specifications owned by orz-markdown for the orz carrier family
 | [FC-19 · Editor component API](FC-19-editor-component.md) | the browser editor component that the files and web apps embed; §8 the shared editor shell (`orz-markdown/carrier/editor`) every carrier's `mountEditor` wraps |
 | [Host protocols](host-protocols.md) (FC-12, canonical) | `orz-host-save@1`, `orz-host-ai@1`, `orz-host-include@1`: the iframe handshake between an app and an embedded assembled file, the kind registry, the security rules, format-1 saves |
 | [Shell runtime](shell-runtime.md) (FC-11) | the standalone save (host → served notice → File System Access with a handle remembered by `uid` → download), reader preferences, the release manifest (`release.json`) and quiet update (once-a-day check, sandboxed transactional re-assembly, indicator), and the shell chrome (tokens, icons, toasts) |
+| [Carrier app](carrier-app.md) (2.2.0) | the standalone assembled file's runtime every carrier bundle runs (`orz-markdown/carrier/app`): reading the opened file, the read view and chrome, edit mode, Save / Download a copy / New document / Save as new copy, the unsaved-changes warning, the host connection with the AI review flow, the quiet update, the page keymap — behind one seam, `StandaloneKind`, with notes on how orz-paged and orz-slides fit |
 | [Conformance harness](conformance.md) | how a carrier runs `orz-markdown/carrier/conformance` against itself: the target it describes, the check ids (`C.<area>.<name>`) its claims bind to, what "conformant" means, and the assumptions it makes where the specs are open (implementation note, not binding) |
 
 The shared test corpus is in [`../tests/carrier-corpus/`](../tests/carrier-corpus/).
@@ -54,7 +55,7 @@ message protocol, asset rewriting, CSP
 nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.25, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.26, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).
@@ -69,6 +70,21 @@ the protocol host page), `texts.ts` (hazard texts), `node.ts` (Node built-ins
 through `process.getBuiltinModule`, the corpus loader, lazy `playwright-core`)
 — exported as `orz-markdown/carrier/conformance` (Node only; no other entry
 imports it; `playwright-core` is an optional peer dependency). Claims
-H.1–H.5, tests in `tests/conformance.test.ts` (the harness against the stub
+H.1–H.8, tests in `tests/conformance.test.ts` (the harness against the stub
 carrier of `tests/conformance-stub/`, built at test time, and broken builds
 of it that must fail).
+
+The carrier app is `src/carrier/app/` (2.2.0) — `app.ts` (`bootCarrierApp`,
+`APP_CSS`), `start.ts` (`startCarrier`, `carrierGlobal`: the FC-19 §2 global
+and the boot), `file.ts` (`readOpenedFile`, `openedFileName`, `copyName`),
+`engine-source.ts` (`captureEngineSource`), `widgets.ts` (`menuButton`,
+`settingPicker`, `attachSettings`, `reviewProposal`, `attachAiMenu`,
+`followPresentation`, `WIDGET_CSS`), `types.ts` (the seam: `StandaloneKind`,
+`StandaloneContext`, `CarrierReadView`, `SettingControl`, `CarrierAction`,
+`CarrierApp`, structural DOM types) — exported as `orz-markdown/carrier/app`
+(it may import `carrier/shell`, `carrier/editor` and `carrier/read`; none of
+them imports it; Node-safe at load). Claims A.1–A.12, tests in
+`tests/carrier-app.test.ts` (happy-dom against a fake kind; real Chrome
+against the stub carrier, which is built on it). In-page enhancement for a
+read view is `enhanceDocument` in `orz-markdown/preview-frame` (M.24); the
+theme list is `THEMES` (main entry and `orz-markdown/themes`, M.25).

@@ -114,6 +114,7 @@ function hasLocalInclude(text) {
 const ascii_js_1 = require("./ascii.js");
 const source_scan_js_1 = require("./source-scan.js");
 const doc_meta_js_1 = require("./doc-meta.js");
+const markdown_include_js_1 = require("./plugins/markdown-include.js");
 const toc_js_1 = require("./plugins/toc.js");
 const qrcode_js_1 = require("./plugins/qrcode.js");
 const index_js_1 = require("./index.js");
@@ -127,7 +128,11 @@ const indexModule = __importStar(require("./index.js"));
  * text or code example alike) but is no longer a plugin name, so no scanner /
  * renderer disagreement about what is "live" can reopen the hole (round 5).
  */
-const LOCAL_INCLUDE = /\{\{(?=(?:markdown|md-include|md)(?![A-Za-z0-9-])(?!\s+https?:\/\/))/g;
+/** The directive names as a regex alternation, longest first (`md-include` before `md`). */
+const DIRECTIVE_NAMES = [...markdown_include_js_1.INCLUDE_DIRECTIVES].sort((a, b) => b.length - a.length).map((n) => n.replace(/[-]/g, '\\-')).join('|');
+/** A URL scheme prepareSources fetches, in any case (`HTTPS://` is a URL to the renderer too). */
+const HTTP_SCHEME = '[Hh][Tt][Tt][Pp][Ss]?:\\/\\/';
+const LOCAL_INCLUDE = new RegExp(`\\{\\{(?=(?:${DIRECTIVE_NAMES})(?![A-Za-z0-9-])(?!\\s+${HTTP_SCHEME}))`, 'g');
 function neutralizeLocalIncludes(text) {
     let out = text.replace(LOCAL_INCLUDE, '{{\u2060');
     // A "{{" left open at the end could join with what follows it in the host.
@@ -199,8 +204,8 @@ function closeTrailingFence(text, mark) {
     }
     return text;
 }
-const INCLUDE_ALIASES = new Set(['markdown', 'md', 'md-include']);
-const DIRECTIVE = /\{\{(?:markdown|md-include|md)\s+(https?:\/\/[^\s}]+)\s*\}\}/g;
+const INCLUDE_ALIASES = new Set(markdown_include_js_1.INCLUDE_DIRECTIVES);
+const DIRECTIVE = new RegExp(`\\{\\{(?:${DIRECTIVE_NAMES})\\s+(${HTTP_SCHEME}[^\\s}]+)\\s*\\}\\}`, 'g');
 /** Private-use placeholders for directives while checking inline nesting. */
 const PH_OPEN = String.fromCharCode(0xe000), PH_CLOSE = String.fromCharCode(0xe001);
 /**

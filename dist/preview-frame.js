@@ -27,6 +27,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
+exports.enhanceDocument = enhanceDocument;
 const runtime_js_1 = require("./runtime.js");
 const version_js_1 = require("./version.js");
 /**
@@ -101,5 +102,196 @@ function getPreviewFrameAssets() {
                 '<script>window.__orzEnhance=function(){' + ENHANCE_BODY + '\n};</script>');
         },
     };
+}
+/** The libraries in-page enhancement may load: each with the selector of the content that needs it and the global it sets. */
+const PAGE_LIBS = [
+    { url: exports.PREVIEW_CDN.hljsJs, needs: 'pre code', global: 'hljs' },
+    { url: exports.PREVIEW_CDN.mermaidJs, needs: '.mermaid', global: 'mermaid', setup: (w) => { w.mermaid?.initialize?.({ startOnLoad: false }); } },
+    { url: exports.PREVIEW_CDN.smilesJs, needs: 'canvas[data-smiles]', global: 'SmilesDrawer' },
+    { url: exports.PREVIEW_CDN.chartJs, needs: 'canvas.orz-chart', global: 'Chart' },
+];
+/** Library loads per window (a page loads each library once). */
+const pageLoads = new WeakMap();
+/**
+ * Enhance content rendered IN A PAGE (a carrier's read view, an app's own
+ * view) the way the preview frame enhances its article: highlight.js,
+ * Mermaid, SMILES and Chart.js from their pinned URLs (`PREVIEW_CDN`) —
+ * each loaded once per window and only when `root` holds something it draws
+ * — KaTeX's stylesheet when there is math, the highlight.js stylesheet of the
+ * scheme (`#orz-hljs`, swapped on a scheme change), and the orz browser
+ * runtime (copy-as-Markdown, QR expansion, tab bars). Scoped to `root`;
+ * idempotent (claim M.24): calling it again after a re-render draws only what
+ * is new. No `eval`; the runtime is one inline `<script>` (carrying `nonce`).
+ * Resolves when every needed library has loaded or failed (offline: the
+ * content stays as rendered) and the last pass ran. Touches nothing at module
+ * load; without a document it resolves at once.
+ */
+async function enhanceDocument(root, options = {}) {
+    const result = { loaded: [], failed: [] };
+    const doc = (root.ownerDocument ?? root);
+    const win = doc?.defaultView;
+    if (!doc || typeof doc.createElement !== 'function' || !win)
+        return result;
+    const scheme = options.scheme === 'dark' ? 'dark' : 'light';
+    const assets = options.assets !== false;
+    const nonce = typeof options.nonce === 'string' && options.nonce ? options.nonce : undefined;
+    const has = (sel) => { try {
+        return !!root.querySelector(sel);
+    }
+    catch {
+        return false;
+    } };
+    const head = (doc.head ?? doc.documentElement);
+    win.__orzSmilesTheme = scheme;
+    // stylesheets the content needs (KaTeX's, highlight.js's of the scheme)
+    if (assets) {
+        const links = () => Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+        const ensure = (href, id) => {
+            if (id) {
+                const el = doc.getElementById(id);
+                if (el && String(el.tagName).toUpperCase() === 'LINK') {
+                    if (el.getAttribute('href') !== href)
+                        el.setAttribute('href', href);
+                    return;
+                }
+            }
+            if (links().some((l) => l.getAttribute('href') === href))
+                return;
+            const l = doc.createElement('link');
+            l.setAttribute('rel', 'stylesheet');
+            l.setAttribute('href', href);
+            if (id)
+                l.setAttribute('id', id);
+            if (nonce)
+                l.setAttribute('nonce', nonce);
+            head.appendChild(l);
+        };
+        if (has('.katex'))
+            ensure(exports.PREVIEW_CDN.katexCss);
+        if (has('pre code'))
+            ensure(scheme === 'dark' ? exports.PREVIEW_CDN.hljsDarkCss : exports.PREVIEW_CDN.hljsLightCss, 'orz-hljs');
+    }
+    // the runtime: once per window
+    if (options.runtime !== false) {
+        if (!win.OrzMarkdownRuntime) {
+            const s = doc.createElement('script');
+            if (nonce)
+                s.setAttribute('nonce', nonce);
+            s.textContent = (0, runtime_js_1.getBrowserRuntimeScript)({ autoInit: false });
+            head.appendChild(s);
+        }
+        try {
+            win.OrzMarkdownRuntime?.init?.(root);
+        }
+        catch { /* the runtime's own error */ }
+    }
+    const pass = async () => { await enhanceRoot(root, win); };
+    await pass();
+    if (!assets)
+        return result;
+    let loads = pageLoads.get(win);
+    if (!loads) {
+        loads = new Map();
+        pageLoads.set(win, loads);
+    }
+    const pending = [];
+    for (const lib of PAGE_LIBS) {
+        if (!has(lib.needs) || win[lib.global])
+            continue;
+        let p = loads.get(lib.url);
+        if (!p) {
+            p = new Promise((resolve) => {
+                const s = doc.createElement('script');
+                s.setAttribute('src', lib.url);
+                if (nonce)
+                    s.setAttribute('nonce', nonce);
+                s.async = true;
+                s.addEventListener('load', () => { try {
+                    lib.setup?.(win);
+                }
+                catch { /* the library's own error */ } resolve(true); });
+                s.addEventListener('error', () => { loads.delete(lib.url); resolve(false); }); // offline: try again next time
+                head.appendChild(s);
+            });
+            loads.set(lib.url, p);
+        }
+        pending.push(p.then(async (ok) => { (ok ? result.loaded : result.failed).push(lib.url); if (ok)
+            await pass(); }));
+    }
+    await Promise.all(pending);
+    return result;
+}
+/** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
+async function enhanceRoot(root, w) {
+    const all = (sel) => { try {
+        return Array.from(root.querySelectorAll(sel));
+    }
+    catch {
+        return [];
+    } };
+    try {
+        if (w.hljs)
+            for (const b of all('pre code:not(.hljs)'))
+                w.hljs.highlightElement(b);
+    }
+    catch { /* highlight.js's own error */ }
+    let drawn = null;
+    try {
+        const nodes = all('.mermaid:not([data-processed])');
+        if (w.mermaid && nodes.length)
+            drawn = w.mermaid.run({ nodes });
+    }
+    catch { /* Mermaid's own error */ }
+    try {
+        if (w.SmilesDrawer) {
+            for (const v of all('canvas[data-smiles]')) {
+                if (v.__d)
+                    continue;
+                v.__d = 1;
+                if (v.__ow === undefined) {
+                    v.__ow = v.width;
+                    v.__oh = v.height;
+                }
+                v.width = v.__ow;
+                v.height = v.__oh;
+                const d = new w.SmilesDrawer.Drawer({ width: v.__ow, height: v.__oh });
+                w.SmilesDrawer.parse(v.getAttribute('data-smiles'), (t) => { try {
+                    d.draw(t, v, w.__orzSmilesTheme || 'light', false);
+                }
+                catch { /* a bad SMILES */ } });
+            }
+        }
+    }
+    catch { /* SmilesDrawer's own error */ }
+    try {
+        if (w.Chart) {
+            for (const v of all('canvas.orz-chart[data-chart]')) {
+                if (v.__d)
+                    continue;
+                v.__d = 1;
+                const wrap = v.ownerDocument.createElement('div');
+                wrap.style.cssText = 'position:relative;width:100%;max-width:440px;margin:.4em auto';
+                v.parentNode.insertBefore(wrap, v);
+                wrap.appendChild(v);
+                v.removeAttribute('width');
+                v.removeAttribute('height');
+                try {
+                    const g = JSON.parse(v.getAttribute('data-chart') || '{}');
+                    g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
+                    if (!((g.data && g.data.datasets) || []).some((d) => d && d.label))
+                        g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
+                    new w.Chart(v, g); // eslint-disable-line no-new
+                }
+                catch { /* a bad chart */ }
+            }
+        }
+    }
+    catch { /* Chart.js's own error */ }
+    if (drawn && typeof drawn.then === 'function') {
+        try {
+            await drawn;
+        }
+        catch { /* Mermaid's own error */ }
+    }
 }
 //# sourceMappingURL=preview-frame.js.map

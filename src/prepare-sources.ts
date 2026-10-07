@@ -119,7 +119,7 @@ function hasLocalInclude(text: string): boolean {
 import { asciiLower } from './ascii.js';
 import { maskInlineCode } from './source-scan.js';
 import { extractDocMeta } from './doc-meta.js';
-import type { IncludeEnv } from './plugins/markdown-include.js';
+import { INCLUDE_DIRECTIVES, type IncludeEnv } from './plugins/markdown-include.js';
 import { MAX_TOC_ENTRIES, MAX_TOC_BYTES } from './plugins/toc.js';
 import { MAX_QR_OUTPUT } from './plugins/qrcode.js';
 import { MAX_TEX_TOTAL, MAX_CHEM_TOTAL, MAX_KATEX_OUTPUT } from './index.js';
@@ -134,7 +134,11 @@ import * as indexModule from './index.js';
  * text or code example alike) but is no longer a plugin name, so no scanner /
  * renderer disagreement about what is "live" can reopen the hole (round 5).
  */
-const LOCAL_INCLUDE = /\{\{(?=(?:markdown|md-include|md)(?![A-Za-z0-9-])(?!\s+https?:\/\/))/g;
+/** The directive names as a regex alternation, longest first (`md-include` before `md`). */
+const DIRECTIVE_NAMES = [...INCLUDE_DIRECTIVES].sort((a, b) => b.length - a.length).map((n) => n.replace(/[-]/g, '\\-')).join('|');
+/** A URL scheme prepareSources fetches, in any case (`HTTPS://` is a URL to the renderer too). */
+const HTTP_SCHEME = '[Hh][Tt][Tt][Pp][Ss]?:\\/\\/';
+const LOCAL_INCLUDE = new RegExp(`\\{\\{(?=(?:${DIRECTIVE_NAMES})(?![A-Za-z0-9-])(?!\\s+${HTTP_SCHEME}))`, 'g');
 
 function neutralizeLocalIncludes(text: string): string {
   let out = text.replace(LOCAL_INCLUDE, '{{\u2060');
@@ -230,8 +234,8 @@ function closeTrailingFence(text: string, mark: string): string {
   return text;
 }
 
-const INCLUDE_ALIASES = new Set(['markdown', 'md', 'md-include']);
-const DIRECTIVE = /\{\{(?:markdown|md-include|md)\s+(https?:\/\/[^\s}]+)\s*\}\}/g;
+const INCLUDE_ALIASES: ReadonlySet<string> = new Set(INCLUDE_DIRECTIVES);
+const DIRECTIVE = new RegExp(`\\{\\{(?:${DIRECTIVE_NAMES})\\s+(${HTTP_SCHEME}[^\\s}]+)\\s*\\}\\}`, 'g');
 
 type Located = {
   index: number;

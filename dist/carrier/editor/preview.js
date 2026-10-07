@@ -613,7 +613,12 @@ function createPreview(doc, parent, options, events) {
             return () => { set.delete(fn); };
         },
         setOptions(o) {
-            reload({ ...frameOptions, ...(o.head !== undefined ? { head: o.head } : {}), ...(o.scheme !== undefined ? { scheme: o.scheme } : {}) });
+            reload({
+                ...frameOptions,
+                ...(o.head !== undefined ? { head: o.head } : {}),
+                ...(o.scheme !== undefined ? { scheme: o.scheme } : {}),
+                ...(typeof o.articleClass === 'string' ? { articleClass: o.articleClass } : {}),
+            });
         },
         get acknowledges() { return acknowledges; },
         get authenticated() { return portBridge; },

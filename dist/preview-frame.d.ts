@@ -70,4 +70,45 @@ export interface PreviewFrameAssets {
  * See `references/embedding.md`.
  */
 export declare function getPreviewFrameAssets(): PreviewFrameAssets;
+/** Options of {@link enhanceDocument}. */
+export interface EnhanceOptions {
+    /** Colour scheme of the content: the highlight.js stylesheet and SMILES drawing. Default `light`. */
+    scheme?: ColorScheme;
+    /**
+     * Load the pinned libraries and stylesheets the content needs (default
+     * `true`). `false`: nothing is fetched; only libraries the page already
+     * has run.
+     */
+    assets?: boolean;
+    /** A CSP nonce stamped on every `<script>` and `<link>` this adds. */
+    nonce?: string;
+    /** Install the orz browser runtime (copy-as-Markdown, QR expansion, tab bars) once per window and run it on `root`. Default `true`. */
+    runtime?: boolean;
+}
+/** What {@link enhanceDocument} did: the library URLs it loaded now (or found loading) and those that failed. */
+export interface EnhanceResult {
+    loaded: string[];
+    failed: string[];
+}
+/** A rendered region (an `.markdown-body` article) in a page, structurally. */
+export interface EnhanceRoot {
+    querySelector(selector: string): unknown;
+    querySelectorAll(selector: string): ArrayLike<unknown>;
+    readonly ownerDocument?: unknown;
+}
+/**
+ * Enhance content rendered IN A PAGE (a carrier's read view, an app's own
+ * view) the way the preview frame enhances its article: highlight.js,
+ * Mermaid, SMILES and Chart.js from their pinned URLs (`PREVIEW_CDN`) —
+ * each loaded once per window and only when `root` holds something it draws
+ * — KaTeX's stylesheet when there is math, the highlight.js stylesheet of the
+ * scheme (`#orz-hljs`, swapped on a scheme change), and the orz browser
+ * runtime (copy-as-Markdown, QR expansion, tab bars). Scoped to `root`;
+ * idempotent (claim M.24): calling it again after a re-render draws only what
+ * is new. No `eval`; the runtime is one inline `<script>` (carrying `nonce`).
+ * Resolves when every needed library has loaded or failed (offline: the
+ * content stays as rendered) and the last pass ran. Touches nothing at module
+ * load; without a document it resolves at once.
+ */
+export declare function enhanceDocument(root: EnhanceRoot, options?: EnhanceOptions): Promise<EnhanceResult>;
 //# sourceMappingURL=preview-frame.d.ts.map

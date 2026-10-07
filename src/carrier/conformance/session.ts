@@ -73,6 +73,15 @@ export interface CheckContext {
   downloads: Array<{ name: string; data: string }>;
   newPage(): Promise<Page>;
   of(type: string): Record_[];
+  /**
+   * Run `action` (a reload, a navigation) on a page the check means to leave
+   * while it is clean (2.2.0, spec/conformance.md §3): a `beforeunload`
+   * confirmation it raises meanwhile is accepted, so the navigation goes on
+   * (it is still recorded as a dialog, which the check's "no dialog"
+   * expectations report). Everywhere else a dialog is dismissed — a dismissed
+   * `beforeunload` keeps the page.
+   */
+  leave<T>(page: Page, action: () => Promise<T>): Promise<T>;
 }
 
 function readRelease(label: Release['label'], src: BundleSource): Release {
@@ -240,6 +249,19 @@ export class Session {
     return p;
   }
 
+  /**
+   * A request for this kind's release bundle: any file of `<pkg>-browser@<any
+   * version>/` but the manifest (`@latest/release.json`). The update checks
+   * count these — a file may fetch other resources (its theme, fonts, preview
+   * libraries: spec/conformance.md §3) but no bundle before the reader asks
+   * for the update (2.2.0; before, every request but the manifest counted).
+   */
+  isBundleRequest(url: string): boolean {
+    const u = url.split(/[?#]/)[0];
+    const prefix = `https://cdn.jsdelivr.net/npm/${KIND_PACKAGE[this.target.kind]}-browser@`;
+    return u.startsWith(prefix) && u !== this.cdnUrls().manifest && u.indexOf('/', prefix.length) > prefix.length;
+  }
+
   /** The URL patterns of the jsDelivr routes for this kind. */
   private cdnUrls(): { manifest: string; bundle(r: Release): string } {
     const pkg = `${KIND_PACKAGE[this.target.kind]}-browser`;
@@ -286,8 +308,13 @@ export class Session {
       }
       return route.abort('internetdisconnected');
     });
+    /** Pages the check is leaving on purpose while clean: their beforeunload is accepted (A.14 of 2.2.0). */
+    const leaving = new Set<Page>();
     const watch = (page: Page) => {
-      page.on('dialog', (d) => { records.push({ type: 'dialog', data: { kind: d.type(), message: d.message() }, url: page.url() }); void d.dismiss().catch(() => undefined); });
+      page.on('dialog', (d) => {
+        records.push({ type: 'dialog', data: { kind: d.type(), message: d.message() }, url: page.url() });
+        void (d.type() === 'beforeunload' && leaving.has(page) ? d.accept() : d.dismiss()).catch(() => undefined);
+      });
       page.on('pageerror', (e) => { records.push({ type: 'pageerror', data: e.message, url: page.url() }); });
       page.on('console', (m) => { if (m.type() === 'error') records.push({ type: 'console-error', data: m.text(), url: page.url() }); });
       page.on('download', (d) => {
@@ -304,6 +331,10 @@ export class Session {
       downloads,
       newPage: async () => context.newPage(),
       of: (type) => records.filter((r) => r.type === type),
+      async leave(page, action) {
+        leaving.add(page);
+        try { return await action(); } finally { leaving.delete(page); }
+      },
     };
   }
 

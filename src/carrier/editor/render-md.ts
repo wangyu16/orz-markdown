@@ -9,13 +9,24 @@
  * all); the tokens are stamped between parse and render, so the shared
  * instance is not changed.
  *
- * `renderMarkdownPreviewWithIncludes` first resolves URL includes
- * (`{{md https://…}}`) through the host's `fetchInclude` with
+ * Includes (FC-18 §8.3, D4): an assembled file carries the includes its last
+ * assembly resolved in `#orz-includes` — file includes under the path written
+ * in the directive, URL includes under the URL. A page cannot read local
+ * files or (standalone) fetch URLs, so `includes` (that record) is read here:
+ * file includes through the parser's host-supplied reader
+ * (`includeRecordEnv`: `readFile` on a virtual root `/`), URL includes by
+ * `renderMarkdownPreviewWithIncludes` (the host's `fetchInclude` first —
+ * fresher, and the host owns the trust policy — then the record).
+ *
+ * `renderMarkdownPreviewWithIncludes` resolves URL includes with
  * `prepareSources` (each URL fetched once per shell when the shell's
- * `ctx.cache` is passed), then renders the expanded text the same way.
+ * `ctx.cache` is passed), passing the render env as `includeEnv` so a
+ * document that also has file includes gets its URL includes too, then
+ * renders the expanded text the same way.
  */
 import { md } from '../../index.js';
 import { prepareSources } from '../../prepare-sources.js';
+import type { IncludeEnv } from '../../plugins/markdown-include.js';
 import { withoutHeader } from '../header.js';
 import { registerTwinLinks } from '../links.js';
 
@@ -38,6 +49,52 @@ export interface MarkdownPreviewOptions {
   resolveAsset?(path: string): string;
   /** The shell's per-instance scratch map (`ctx.cache`): fetched includes are kept there. */
   cache?: Map<string, unknown>;
+  /**
+   * The assembled file's resolved includes (`extract(html).includes`, the
+   * `#orz-includes` record): target as written → text. File includes render
+   * from it (`includeRecordEnv`); `renderMarkdownPreviewWithIncludes` also
+   * resolves URL includes from it when `fetchInclude` gives none. Entries of
+   * `env` (a host's own `readFile`) win over the record's reader.
+   */
+  includes?: Readonly<Record<string, string>>;
+}
+
+const isUrl = (t: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
+
+/** A relative include target on the virtual root `/` (POSIX; a Windows drive and backslashes read as `/`). */
+function rootPath(target: string): string {
+  const out: string[] = [];
+  for (const seg of target.replace(/^[A-Za-z]:/, '').split(/[\\/]/)) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') out.pop();
+    else out.push(seg);
+  }
+  return `/${out.join('/')}`;
+}
+
+/**
+ * The parser env that reads file includes from an `#orz-includes` record (FC-18
+ * §8.3): `markdownBasePath` `/` and a `readFile` answering each file target of
+ * the record (its path as written, resolved on the virtual root `/`). URL
+ * entries are not files. An include the record lacks renders nothing, as in
+ * any page. Always an env — also for an empty record — so `prepareSources`
+ * can judge URL includes next to file includes (`includeEnv`).
+ */
+export function includeRecordEnv(includes: Readonly<Record<string, string>> | null | undefined): IncludeEnv {
+  const files = new Map<string, string>();
+  if (includes && typeof includes === 'object') {
+    for (const key of Object.keys(includes)) {
+      const v = includes[key];
+      if (!isUrl(key) && typeof v === 'string') files.set(rootPath(key), v);
+    }
+  }
+  return { markdownBasePath: '/', readFile: (abs: string): string | null => files.get(rootPath(abs)) ?? null };
+}
+
+/** The render env: the record's reader (when `includes` is given) under the caller's own `env`. */
+function renderEnv(options: MarkdownPreviewOptions): Record<string, unknown> | undefined {
+  if (options.includes === undefined) return options.env;
+  return { ...includeRecordEnv(options.includes), ...(options.env ?? {}) };
 }
 
 /** Block tokens without nesting that render their attributes. */
@@ -46,36 +103,54 @@ const STAMPED_LEAVES = new Set(['fence', 'code_block', 'hr']);
 /** Render an `md` text for the editor preview (see the module comment). */
 export function renderMarkdownPreview(text: string, options: MarkdownPreviewOptions = {}): string {
   const { body, offset } = withoutHeader(text);
-  return renderBody(body, linesIn(text.slice(0, offset)), options, null);
+  return renderBody(body, linesIn(text.slice(0, offset)), renderEnv(options), options, null);
 }
 
 /**
  * Like {@link renderMarkdownPreview}, after resolving the body's URL includes
- * through `options.fetchInclude` (the host's trust policy; `prepareSources`
- * neutralises file includes and refuses unsafe splices). Without
- * `fetchInclude` it is `renderMarkdownPreview`. A fetched include is kept in
- * `options.cache` (the shell's `ctx.cache`) for the shell's life; a failed one
- * is fetched again next time. Anchor lines stay those of the text: lines
- * before the first include and after the last are exact, included content and
- * the text between two includes anchor at the first include's line.
+ * with `prepareSources`: through `options.fetchInclude` (the host's trust
+ * policy) and, for a URL it does not answer, the `includes` record. Without
+ * either it is `renderMarkdownPreview`. The render env (the record's reader,
+ * `options.env`) is passed to `prepareSources` as `includeEnv`, so a
+ * document with file includes gets its URL includes too (without it,
+ * `prepareSources` keeps every URL directive of such a document). A fetched
+ * include is kept in `options.cache` (the shell's `ctx.cache`) for the
+ * shell's life; a failed one is fetched again next time. Anchor lines stay
+ * those of the text: lines before the first include and after the last are
+ * exact, included content and the text between two includes anchor at the
+ * first include's line.
  */
 export async function renderMarkdownPreviewWithIncludes(text: string, options: MarkdownPreviewOptions = {}): Promise<string> {
-  const fetchInclude = options.fetchInclude;
-  if (typeof fetchInclude !== 'function') return renderMarkdownPreview(text, options);
+  const host = typeof options.fetchInclude === 'function' ? options.fetchInclude : undefined;
+  const rec = options.includes;
+  const recorded = rec && typeof rec === 'object' ? Object.keys(rec).filter((k) => isUrl(k) && typeof rec[k] === 'string') : [];
+  if (!host && recorded.length === 0) return renderMarkdownPreview(text, options);
+  const fromRecord = (url: string): string | null => (rec && Object.prototype.hasOwnProperty.call(rec, url) && typeof rec[url] === 'string' ? rec[url] : null);
+  const resolve = async (url: string): Promise<string | null> => {
+    if (host) {
+      try {
+        const t = await host(url);
+        if (typeof t === 'string') return t;
+      } catch { /* the record, if any */ }
+    }
+    return fromRecord(url);
+  };
   const cache = options.cache;
   const fetcher = (url: string): Promise<string | null> => {
     const key = `orz-include:${url}`;
     const hit = cache?.get(key) as Promise<string | null> | undefined;
     if (hit) return hit;
-    const p = Promise.resolve().then(() => fetchInclude(url)).then((t) => (typeof t === 'string' ? t : null), () => null);
+    const p = Promise.resolve().then(() => resolve(url)).then((t) => (typeof t === 'string' ? t : null), () => null);
     cache?.set(key, p);
     void p.then((t) => { if (t === null && cache?.get(key) === p) cache.delete(key); });
     return p;
   };
+  const env = renderEnv(options);
+  const includeEnv = env && (typeof env['readFile'] === 'function' || typeof env['markdownBasePath'] === 'string') ? (env as IncludeEnv) : undefined;
   const { body, offset } = withoutHeader(text);
-  const expanded = await prepareSources(body, { fetcher });
+  const expanded = await prepareSources(body, { fetcher, ...(includeEnv ? { includeEnv } : {}) });
   const lineOffset = linesIn(text.slice(0, offset));
-  if (expanded === body) return renderBody(body, lineOffset, options, null);
+  if (expanded === body) return renderBody(body, lineOffset, env, options, null);
   // expanded line → body line: the common head and tail are exact, the changed middle anchors at its start
   const a = body.split(/\r\n?|\n/);
   const b = expanded.split(/\r\n?|\n/);
@@ -84,7 +159,7 @@ export async function renderMarkdownPreviewWithIncludes(text: string, options: M
   let tail = 0;
   while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
   const shift = b.length - a.length;
-  return renderBody(expanded, lineOffset, options, (l) => (l < head ? l : l >= b.length - tail ? l - shift : head));
+  return renderBody(expanded, lineOffset, env, options, (l) => (l < head ? l : l >= b.length - tail ? l - shift : head));
 }
 
 /** Line breaks in a string (CR LF, CR and LF each count once). */
@@ -98,9 +173,9 @@ function linesIn(s: string): number {
   return n;
 }
 
-function renderBody(body: string, lineOffset: number, options: MarkdownPreviewOptions, mapLine: ((line: number) => number) | null): string {
+function renderBody(body: string, lineOffset: number, baseEnv: Record<string, unknown> | undefined, options: MarkdownPreviewOptions, mapLine: ((line: number) => number) | null): string {
   registerTwinLinks(md); // idempotent; links.ts registers it on load as well
-  const env: Record<string, unknown> = { ...(options.env ?? {}), orzTwinLinks: options.twinLinks !== false };
+  const env: Record<string, unknown> = { ...(baseEnv ?? {}), orzTwinLinks: options.twinLinks !== false };
   const tokens = md.parse(body, env);
   for (const t of tokens) {
     if (!t.map || !t.block) continue;

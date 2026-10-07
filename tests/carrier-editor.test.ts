@@ -27,7 +27,7 @@ import {
   createEditorShell, textareaAdapter, codemirror6Adapter, createTextModel, toEditorText, minimalChange, createPreview, previewFrameDocument,
   lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_SECRET_ATTRIBUTE, previewFrameParts, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
   CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS, PREVIEW_BRIDGE_HASH, previewScriptHashes,
-  previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
+  previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, includeRecordEnv, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
   type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
 } from '../src/carrier/editor';
 import { historyChars, undoTexts } from '../src/carrier/editor/adapter';
@@ -1360,6 +1360,62 @@ describe('FC-19 §3 hooks (B-10)', () => {
     ro.shell.destroy();
   });
 
+  it('[E.26] proposeAi runs hooks.ai.request like requestAi but changes nothing: it resolves a frozen proposal with the exact-text range (the selection, or the whole text) and the original passage; applyAi applies it (or the reader\'s edit of it) as ONE undoable edit in the document\'s line endings and BOM, and refuses — changing nothing — after any edit since, when read-only, after destroy, twice, or for another editor\'s proposal', async () => {
+    const calls: Array<{ op: string; text: string; selection?: { from: number; to: number } }> = [];
+    const hooks = { ai: { operations: [{ id: 'rewrite', title: 'Rewrite', selection: true }, { id: 'tidy', title: 'Tidy', selection: false }], request: async (op: string, c: { text: string; selection?: { from: number; to: number } }) => { calls.push({ op, ...c }); return { proposed: op === 'tidy' ? 'Tidied\nwhole\n' : 'NEW\nPASSAGE' }; } } };
+    const m = mount({ hooks });
+    const before = m.shell.getText();
+    const at = before.indexOf('# Week 3\r\n') + 2;
+    const ta = m.ta();
+    const d = ta.value;
+    ta.setSelectionRange(d.indexOf('# Week 3') + 2, d.indexOf('# Week 3') + 2 + 'Week 3'.length);
+    const p = await m.shell.proposeAi('rewrite');
+    expect(p.ok).toBe(true);
+    if (!p.ok) return;
+    expect(m.shell.getText()).toBe(before); // nothing changed yet
+    expect(m.shell.isDirty()).toBe(false);
+    expect(p.proposal).toMatchObject({ op: 'rewrite', proposed: 'NEW\nPASSAGE', passage: true, range: { from: at, to: at + 6 }, original: 'Week 3' });
+    expect(Object.isFrozen(p.proposal)).toBe(true);
+    expect(calls[0]).toEqual({ op: 'rewrite', text: before, selection: { from: at, to: at + 6 } });
+    // apply the reader's edit of it: one undoable edit, CR LF kept
+    expect(m.shell.applyAi(p.proposal, { proposed: 'EDITED\nBY READER' })).toEqual({ ok: true, op: 'rewrite' });
+    expect(m.shell.getText()).toBe(`${before.slice(0, at)}EDITED\r\nBY READER${before.slice(at + 6)}`);
+    expect(m.shell.applyAi(p.proposal)).toEqual({ ok: false, error: 'not a proposal of this editor' }); // once
+    expect(m.shell.undo()).toBe(true);
+    expect(m.shell.getText()).toBe(before);
+    // a whole-document proposal keeps the BOM; an edit made meanwhile refuses it
+    const w = await m.shell.proposeAi('tidy');
+    expect(w.ok && w.proposal.range).toEqual({ from: 0, to: before.length });
+    type(m, 'x');
+    expect(w.ok && m.shell.applyAi(w.proposal)).toEqual({ ok: false, error: 'the text changed since the AI proposal was made' });
+    expect(m.shell.getText()).toBe(`${before}x`);
+    const w2 = await m.shell.proposeAi('tidy');
+    expect(w2.ok && m.shell.applyAi(w2.proposal)).toEqual({ ok: true, op: 'tidy' });
+    expect(m.shell.getText()).toBe('﻿Tidied\r\nwhole\r\n');
+    // another editor's proposal, read-only, destroyed
+    const other = mount({ hooks });
+    const op = await other.shell.proposeAi('tidy');
+    expect(op.ok && m.shell.applyAi(op.proposal)).toEqual({ ok: false, error: 'not a proposal of this editor' });
+    const rp = await other.shell.proposeAi('tidy');
+    other.shell.setReadOnly(true);
+    expect(rp.ok && other.shell.applyAi(rp.proposal)).toEqual({ ok: false, error: 'read-only' });
+    expect(await other.shell.proposeAi('tidy')).toEqual({ ok: false, error: 'read-only' });
+    other.shell.setReadOnly(false);
+    const dp = await other.shell.proposeAi('tidy');
+    other.shell.destroy();
+    expect(dp.ok && other.shell.applyAi(dp.proposal)).toEqual({ ok: false, error: 'destroyed' });
+    // a passage operation without a selection, a failing hook
+    ta.setSelectionRange(0, 0);
+    expect(await m.shell.proposeAi('rewrite')).toEqual({ ok: false, error: 'no selection' });
+    const failing = mount({ hooks: { ai: { operations: [], request: async () => { throw new Error('quota'); } } } });
+    expect(await failing.shell.proposeAi('x')).toEqual({ ok: false, error: 'quota' });
+    // requestAi is unchanged: propose + apply at once
+    const r = mount({ hooks });
+    expect(await r.shell.requestAi('tidy')).toEqual({ ok: true, op: 'tidy' });
+    expect(r.shell.getText()).toBe('﻿Tidied\r\nwhole\r\n');
+    for (const x of [m, failing, r]) x.shell.destroy();
+  });
+
   it('[E.18] ensureUid returns the header uid, or mints one (hooks.mintUid, else the kit\'s) and sets it as one undoable header edit; a malformed minted uid is refused', async () => {
     const withUid = mount();
     const mint = vi.fn(async () => 'doc-hostminted00001');
@@ -1891,6 +1947,23 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     expect(m.shell.preview.post({ type: 'x' })).toBe(false);
   });
 
+  it('[E.25] (2.2.0) shell.preview.setOptions({ articleClass }) changes the frame\'s article class (a measure change), keeping head and scheme; the frame shows the last HTML again', async () => {
+    const m = mount({ render: () => '<p>x</p>', preview: { articleClass: 'markdown-body', head: '<link rel="stylesheet" href="t.css">', debounceMs: 10 } });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(30);
+    const iframe = m.root.querySelector('iframe')!;
+    m.shell.preview.setOptions({ articleClass: 'markdown-body measure-wide' });
+    expect(iframe.srcdoc).toContain('<article class="markdown-body measure-wide" id="orz-doc">');
+    expect(iframe.srcdoc).toContain('href="t.css"');
+    m.shell.preview.setOptions({ articleClass: '"><script>x</script>' });
+    expect(iframe.srcdoc).toContain('<article class="&quot;&gt;&lt;script&gt;x&lt;/script&gt;" id="orz-doc">');
+    const f2 = frameOf(m);
+    f2.say({ type: 'orz-preview-ready' });
+    expect(f2.posted).toContainEqual(expect.objectContaining({ type: 'orz-preview-render', html: '<p>x</p>' }));
+    m.shell.destroy();
+  });
+
   it('[E.25] the default bridge goes before every stylesheet and finds #orz-doc when a render arrives; it calls the page hooks __orzPreviewApply / __orzPreviewNavigate / __orzPreviewMessage and exposes __orzPreview.report; a carrier\'s own bridge keeps its place after the article', () => {
     const full = previewFrameDocument({ head: '<link rel="stylesheet" href="slow.css">' });
     const bridgeAt = full.indexOf(PREVIEW_BRIDGE);
@@ -2194,6 +2267,94 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
     await tick(60);
     expect(String(f.posted.find((x) => x.type === 'orz-preview-render')!.html)).toContain('Second included paragraph.');
     m.shell.destroy();
+  });
+
+  it('[E.12] (2.2.0) renderMarkdownPreviewWithIncludes passes the render env to prepareSources as includeEnv: a text with a live FILE include gets its URL includes too (corpus md/includes.md); the directive names are the renderer\'s (md, markdown, md-include)', async () => {
+    const manifest = JSON.parse(readFileSync('tests/carrier-corpus/manifest.json', 'utf8')) as { files: Array<{ path: string; includes?: Record<string, string> }> };
+    const entry = manifest.files.find((f) => f.path === 'md/includes.md')!;
+    const text = readFileSync('tests/carrier-corpus/md/includes.md', 'utf8');
+    const url = Object.keys(entry.includes!).find((k) => /^https:/.test(k))!;
+    const file = Object.keys(entry.includes!).find((k) => !/^https:/.test(k))!;
+    const fetchInclude = vi.fn(async (u: string) => (u === url ? 'HOST-RESOLVED glossary\n' : null));
+    // a host reader for the file include (env.readFile): before 2.2.0 the URL include then stayed a directive
+    const env = { markdownBasePath: '/', readFile: (p: string) => (p === `/${file}` ? 'FROM THE HOST READER\n' : null) };
+    const html = await renderMarkdownPreviewWithIncludes(text, { fetchInclude, env });
+    expect(fetchInclude).toHaveBeenCalledWith(url);
+    expect(html).toContain('HOST-RESOLVED glossary');
+    expect(html).toContain('FROM THE HOST READER');
+    for (const name of ['md', 'markdown', 'md-include']) {
+      const t = `# T\n\n{{${name} parts/a.md}}\n\n{{${name} https://inc.test/${name}.md}}\n`;
+      const out = await renderMarkdownPreviewWithIncludes(t, { fetchInclude: async (u) => `URL-${u.split('/').pop()!.replace('.md', '')}-RESOLVED\n`, env: { markdownBasePath: '/', readFile: () => 'FILE A\n' } });
+      expect(out, name).toContain(`URL-${name}-RESOLVED`);
+      expect(out, name).toContain('FILE A');
+    }
+  });
+
+  it('[E.12] (2.2.0) the #orz-includes record renders offline: renderMarkdownPreview(text, { includes }) reads file includes from it (includeRecordEnv: readFile on a virtual root), renderMarkdownPreviewWithIncludes URL includes too — the host\'s fetchInclude first, the record for what it does not answer; the shell passes its includes option as ctx.includes', async () => {
+    const manifest = JSON.parse(readFileSync('tests/carrier-corpus/manifest.json', 'utf8')) as { files: Array<{ path: string; includes?: Record<string, string> }> };
+    const includes = manifest.files.find((f) => f.path === 'md/includes.md')!.includes!;
+    const text = readFileSync('tests/carrier-corpus/md/includes.md', 'utf8');
+    const firstLine = (s: string) => s.split(/\r?\n/).find((l) => /\w/.test(l))!.replace(/^#+\s*|^- /, '').slice(0, 14);
+    const [url, file] = [Object.keys(includes).find((k) => /^https:/.test(k))!, Object.keys(includes).find((k) => !/^https:/.test(k))!];
+    // sync: file includes from the record; URL includes need the async pass
+    const sync = renderMarkdownPreview(text, { includes });
+    expect(sync).toContain(firstLine(includes[file]).replace(/[<>]/g, ''));
+    expect(sync).not.toContain(firstLine(includes[url]));
+    expect(renderMarkdownPreview(text)).not.toContain(firstLine(includes[file]).replace(/[<>]/g, ''));
+    // async: both, offline (no fetchInclude) — and the anchors of the lines outside the includes stay exact
+    const both = await renderMarkdownPreviewWithIncludes(text, { includes });
+    expect(both).toContain(firstLine(includes[file]).replace(/[<>]/g, ''));
+    expect(both).toContain(firstLine(includes[url]));
+    expect(both).toMatch(/<h1[^>]*data-src-line="7"/);
+    // the host wins where it answers; the record for the rest
+    const host = await renderMarkdownPreviewWithIncludes(text, { includes, fetchInclude: async (u) => (u === url ? 'FRESH FROM THE HOST\n' : null) });
+    expect(host).toContain('FRESH FROM THE HOST');
+    expect(host).not.toContain(firstLine(includes[url]));
+    const fallback = await renderMarkdownPreviewWithIncludes(text, { includes, fetchInclude: async () => { throw new Error('offline'); } });
+    expect(fallback).toContain(firstLine(includes[url]));
+    // the reader: paths as written resolve on a virtual root; URL entries are not files; a missing file renders nothing
+    const env = includeRecordEnv({ 'parts/x.md': 'X', './y.md': 'Y', 'https://a.test/z.md': 'Z' });
+    expect([env.markdownBasePath, env.readFile!('/parts/x.md'), env.readFile!('/y.md'), env.readFile!('/https:/a.test/z.md'), env.readFile!('/nope.md')]).toEqual(['/', 'X', 'Y', null, null]);
+    expect(includeRecordEnv(undefined).readFile!('/x')).toBeNull();
+    expect(renderMarkdownPreview('# T\n\n{{md missing.md}}\n', { includes: {} })).not.toContain('missing');
+    // the shell gives its includes option to render as ctx.includes
+    const ctxs: RenderContext[] = [];
+    const m = mount({ text, includes: { ...includes }, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreviewWithIncludes(t, ctx); } });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(80);
+    expect(ctxs[0].includes).toEqual(includes);
+    expect(String(f.posted.find((x) => x.type === 'orz-preview-render')!.html)).toContain(firstLine(includes[url]));
+    m.shell.destroy();
+    const plain = mount({ render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t); } });
+    frameOf(plain).say({ type: 'orz-preview-ready' });
+    await tick(40);
+    expect(ctxs.at(-1)!.includes).toBeUndefined();
+    plain.shell.destroy();
+  });
+
+  it('[E.19] (2.2.0) FC-19 §3 nonce: createEditorShell({ nonce }) stamps it on the preview frame (preview.nonce when that is not given) and gives it to the default CodeMirror adapter', async () => {
+    const ctx = page();
+    const appended: Array<{ tag: string; src: string; nonce: string | null }> = [];
+    const head = ctx.document.head;
+    const append = head.append.bind(head);
+    head.append = (...nodes: Array<string | Node>) => {
+      for (const n of nodes) if (typeof n !== 'string' && (n as Element).tagName) appended.push({ tag: (n as Element).tagName, src: (n as HTMLScriptElement).src ?? '', nonce: (n as Element).getAttribute('nonce') });
+      append(...nodes);
+    };
+    const m = mount({ render: () => '<p>x</p>', nonce: 'app-nonce', adapter: undefined, preview: { debounceMs: 10 } }, ctx);
+    const srcdoc = m.root.querySelector('iframe')!.srcdoc;
+    const tags = srcdoc.match(/<(script|style|link)\b[^>]*>/gi)!;
+    expect(tags.length).toBeGreaterThan(3);
+    for (const t of tags) expect(t).toContain('nonce="app-nonce"');
+    // the default adapter asks for CodeMirror with the nonce on its <script>
+    expect(m.shell.adapter.name).toBe('textarea'); // at once; it upgrades when the bundle arrives
+    expect(appended.find((x) => x.src.includes('codemirror6.js'))?.nonce).toBe('app-nonce');
+    m.shell.destroy();
+    const own = mount({ render: () => '<p>x</p>', nonce: 'app-nonce', preview: { nonce: 'frame-only', debounceMs: 10 } });
+    expect(own.root.querySelector('iframe')!.srcdoc).toContain('nonce="frame-only"');
+    expect(own.root.querySelector('iframe')!.srcdoc).not.toContain('nonce="app-nonce"');
+    own.shell.destroy();
   });
 
   it('[E.19] a nonce is stamped on stylesheet links too, and codemirror6Adapter / loadCodeMirror6 take one: on the bundle\'s <script> and for CodeMirror\'s own <style> (EditorView.cspNonce)', async () => {
@@ -2739,7 +2900,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(runs).toBeGreaterThanOrEqual(9);
     await p.close();
   }, 120_000);
-  it('[E.13] [E.22] setReadOnly switches CodeMirror at run time, also when set while CodeMirror was still loading', async () => {
+  it('[E.13] [E.22] setReadOnly switches CodeMirror at run time, also when set while CodeMirror was still loading; read-only CodeMirror stays focusable and selectable (2.2.0) and the shell\'s keys still work', async () => {
     const T = '# RO\n\nbody\n';
     const p = await open();
     await p.evaluate(`void (window.__r = mountOpts('c', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6-slow.js`)}))`);
@@ -2749,6 +2910,29 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await p.locator('#c .cm-content').click();
     await p.keyboard.type('blocked');
     expect(await p.evaluate('[shell_c.getText(), shell_c.isReadOnly(), shell_c.root.querySelector(".cm-content").getAttribute("contenteditable")]')).toEqual([T, true, 'false']);
+    // 2.2.0: read-only stays focusable and selectable (FC-19 §5 invariant 7): the content takes the focus,
+    // the reader selects with the keyboard, and the shell's keymap still hears keys (nothing is edited)
+    expect(await p.evaluate('[shell_c.root.activeElement && shell_c.root.activeElement.className.includes("cm-content"), shell_c.root.querySelector(".cm-content").getAttribute("tabindex"), shell_c.root.querySelector(".cm-content").getAttribute("aria-readonly")]')).toEqual([true, '0', 'true']);
+    await p.keyboard.press('ControlOrMeta+a');
+    expect(await p.evaluate('shell_c.adapter.getSelection()')).toEqual({ from: 0, to: T.length });
+    // copy: CodeMirror puts the selection on the clipboard from the read-only content
+    expect(await p.evaluate(`(function () {
+      var c = shell_c.root.querySelector('.cm-content');
+      var dt = new DataTransfer();
+      c.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+      return dt.getData('text/plain');
+    })()`)).toBe(T);
+    const was = await p.evaluate('shell_c.getMode()');
+    await p.keyboard.press('ControlOrMeta+\\');
+    expect(await p.evaluate('shell_c.getMode()')).toBe(was === 'split' ? 'editor' : was === 'editor' ? 'preview' : 'split');
+    await p.evaluate('shell_c.setMode("split")');
+    await p.locator('#c .cm-content').click();
+    await p.keyboard.press('Backspace');
+    expect(await p.evaluate('shell_c.getText()')).toBe(T);
+    await p.evaluate('shell_c.blur && shell_c.blur()');
+    await p.evaluate('document.activeElement && document.activeElement.blur()');
+    await p.evaluate('shell_c.focus()');
+    expect(await p.evaluate('!!(shell_c.root.activeElement && shell_c.root.activeElement.className.includes("cm-content"))')).toBe(true);
     await p.evaluate('shell_c.setReadOnly(false)');
     await p.locator('#c .cm-content').click();
     await p.keyboard.press('ControlOrMeta+ArrowDown');

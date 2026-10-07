@@ -1,0 +1,390 @@
+/**
+ * Types of `orz-markdown/carrier/app` (spec/carrier-app.md): THE SEAM between
+ * the kind-independent runtime of a standalone assembled file and a carrier
+ * (`StandaloneKind`), the context the app gives a kind's editor
+ * (`StandaloneContext`), the read view a kind renders into the page
+ * (`CarrierReadView`), its header settings and extra actions, and the
+ * page-side handle (`CarrierApp`, `OrzCarrier.standalone`).
+ *
+ * Like the rest of the kit the package compiles without the DOM lib: browser
+ * objects are typed structurally (`AppElement`, `AppDocument`, `AppWindow`);
+ * a real `HTMLElement`, `Document` or `Window` satisfies them.
+ */
+import type { HeaderChange } from '../header.js';
+import type { Extracted } from '../envelope.js';
+import type { DocumentInfo } from '../document.js';
+import type { EditorHooks, EditorShell } from '../editor/shell.js';
+import type { TextEditorAdapter } from '../editor/adapter.js';
+import type { IconName } from '../shell/chrome.js';
+import type { HostConnection, ConnectHostOptions } from '../shell/file-side.js';
+import type { PreferenceStore } from '../shell/preferences.js';
+import type { Saver, SaverOptions, SaveResult } from '../shell/save.js';
+import type { CheckOptions, PerformUpdateOptions, PerformUpdateResult, UpdateInfo } from '../shell/update.js';
+import type { IndicatorHandlers, UpdateIndicator } from '../shell/indicator.js';
+import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
+
+// ── structural DOM ─────────────────────────────────────────────────────────
+
+/** A DOM event as the app reads it (`KeyboardEvent`, `MouseEvent`, `BeforeUnloadEvent`, …). */
+export interface AppEvent {
+  readonly type?: string;
+  readonly key?: string;
+  readonly metaKey?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly shiftKey?: boolean;
+  readonly altKey?: boolean;
+  readonly isComposing?: boolean;
+  readonly defaultPrevented?: boolean;
+  readonly target?: unknown;
+  returnValue?: unknown;
+  preventDefault(): void;
+  stopPropagation?(): void;
+  composedPath?(): unknown[];
+}
+export type AppListener = (event: AppEvent) => void;
+
+export interface AppClassList {
+  add(...tokens: string[]): void;
+  remove(...tokens: string[]): void;
+  contains(token: string): boolean;
+}
+
+/** An element as the app uses it (an `HTMLElement` satisfies it). */
+export interface AppElement {
+  id: string;
+  className: string;
+  hidden: boolean;
+  title: string;
+  tabIndex: number;
+  textContent: string | null;
+  readonly tagName: string;
+  readonly classList: AppClassList;
+  readonly style: { cssText: string; setProperty(name: string, value: string): void };
+  readonly ownerDocument: AppDocument;
+  readonly isContentEditable?: boolean;
+  disabled?: boolean;
+  setAttribute(name: string, value: string): void;
+  getAttribute(name: string): string | null;
+  removeAttribute(name: string): void;
+  hasAttribute(name: string): boolean;
+  append(...nodes: unknown[]): void;
+  prepend(...nodes: unknown[]): void;
+  appendChild(node: unknown): unknown;
+  replaceChildren(...nodes: unknown[]): void;
+  remove(): void;
+  focus(options?: { preventScroll?: boolean }): void;
+  contains(node: unknown): boolean;
+  querySelectorAll(selector: string): ArrayLike<AppElement>;
+  addEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean; passive?: boolean }): void;
+  removeEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
+  getRootNode?(): unknown;
+  scrollIntoView?(): void;
+  attachShadow?(init: { mode: 'open' | 'closed' }): unknown;
+}
+
+/** A `ShadowRoot` as the app uses it. */
+export interface AppShadowRoot {
+  readonly host: unknown;
+  readonly activeElement: unknown;
+  adoptedStyleSheets?: unknown[];
+  readonly ownerDocument: AppDocument;
+  append(...nodes: unknown[]): void;
+  appendChild(node: unknown): unknown;
+  querySelector(selector: string): AppElement | null;
+  querySelectorAll(selector: string): ArrayLike<AppElement>;
+  contains(node: unknown): boolean;
+}
+
+export interface AppDocument {
+  title: string;
+  readonly body: AppElement;
+  readonly head: AppElement;
+  readonly documentElement: AppElement;
+  readonly defaultView: AppWindow | null;
+  readonly activeElement?: unknown;
+  readonly currentScript?: unknown;
+  createElement(tag: string): AppElement;
+  createTextNode(text: string): unknown;
+  getElementById(id: string): AppElement | null;
+  querySelector(selector: string): AppElement | null;
+}
+
+/** The window of the page (a real `Window` satisfies it). */
+export interface AppWindow {
+  readonly document: AppDocument;
+  readonly parent: unknown;
+  readonly location: { readonly protocol: string; readonly href: string; readonly pathname: string; readonly hash: string; reload(): void };
+  readonly navigator?: { readonly platform?: string; readonly userAgent?: string };
+  /** The reader preferences' and the update check's storage (its getter may throw: opaque origins). */
+  readonly localStorage?: StorageLike | null;
+  readonly CSSStyleSheet?: new () => { replaceSync(css: string): void };
+  setTimeout(handler: () => void, ms?: number): unknown;
+  clearTimeout(id: unknown): void;
+  requestIdleCallback?(cb: () => void, options?: { timeout: number }): unknown;
+  addEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
+  removeEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
+  matchMedia?(query: string): { matches: boolean };
+}
+
+// ── the opened file ────────────────────────────────────────────────────────
+
+export type CarrierKindName = 'md' | 'slides' | 'paged';
+
+/** What the page knows about the assembled file it was opened from (read from its own DOM at boot). */
+export interface OpenedFile {
+  /** The text, exact (`readIslandFromDom(#orz-src)`: line endings and BOM restored). */
+  text: string;
+  /** The header `uid` when well-formed. */
+  uid?: string;
+  /** The header `format` (default 1). */
+  format: number;
+  /** The file's delivery (`#orz-shell`), kept by every save (B#7). */
+  delivery: 'inline' | 'cdn';
+  /** The file's resolved includes (`#orz-includes`, D4): a page cannot resolve them again. */
+  includes?: Record<string, string>;
+  /** The inline engine's exact text (`#orz-engine` without `src`), or null (a cdn file). */
+  engine: string | null;
+  /** The opened file's name (`<x>.md.html`), else `document` + the kind's extension. */
+  fileName: string;
+}
+
+// ── the seam ───────────────────────────────────────────────────────────────
+
+/** Options of a kind's `assemble` (FC-19 §2). */
+export interface AppAssembleOptions {
+  delivery?: 'inline' | 'cdn';
+  engineSource?: string;
+  includes?: Record<string, string>;
+}
+
+/** FC-19 §3 `EditorOptions`, as a kind's `mountEditor` takes them. */
+export interface KindEditorOptions {
+  text: string;
+  kind?: CarrierKindName;
+  readOnly?: boolean;
+  mode?: 'split' | 'editor' | 'preview';
+  chrome?: 'full' | 'compact' | 'none';
+  hooks?: EditorHooks;
+  preferences?: PreferenceStore;
+  /** FC-19 §3 `nonce` (2.2.0): the app's CSP nonce (FC-19 §8.4). */
+  nonce?: string;
+}
+
+/**
+ * What the standalone file gives an editor mounted on itself (FC-19 §4: its
+ * saves use the file's saver and host connection; a carrier never opens a
+ * second connection). A kind's `mountEditor` passes these to
+ * `createEditorShell` (`assemble`, `fileName`, `saver`, `host`, `includes`,
+ * `openedHtml`, `standalone`, `hooks.ai`, `hooks.fetchInclude`,
+ * `preferences`, `adapter`).
+ */
+export interface StandaloneContext {
+  /** The opened file's name (the saver's suggested name). */
+  fileName: string;
+  /** The file's assemble: its delivery, its engine, the given includes (FC-19 §8.5). */
+  assemble(text: string, options?: { includes?: Record<string, string> }): Promise<string>;
+  /** The page's one saver (its session handle, its content proof, its host). */
+  saver: Saver;
+  host?: HostConnection;
+  /** The opened file's `#orz-includes`. */
+  includes?: Record<string, string>;
+  /** The opened file's bytes (the saver's content proof, shell-runtime §1 step 3). */
+  openedHtml?: () => Promise<string>;
+  /** The page is this file, top-level, with no host (the preview's `file:` sandbox rule, FC-19 §8.4). */
+  standalone: boolean;
+  /** The host's AI operations (`orz-host-ai@1`) as an FC-19 AI hook (the app adds the AI menu and its review panel). */
+  ai?: EditorHooks['ai'];
+  /** The host's include resolution (`orz-host-include@1`). */
+  fetchInclude?: EditorHooks['fetchInclude'];
+  /** The reader preferences of this document (by its uid). */
+  preferences?: PreferenceStore;
+  /** The editing engine (tests; default the kind's). */
+  adapter?: TextEditorAdapter;
+}
+
+/** What a read view render gets besides the text. */
+export interface ReadViewContext {
+  /** The file's resolved includes (`#orz-includes`). */
+  includes?: Readonly<Record<string, string>>;
+  /** A connected host's include resolution (it wins over the record, spec/shell-runtime.md §5). */
+  fetchInclude?(url: string): Promise<string | null>;
+}
+
+/** The kind's read view of the page (md: the document in the page; paged: Paged.js pages; slides: the deck). */
+export interface CarrierReadView {
+  /** Render a text into the page (its presentation follows its header); resolves when it shows. A newer call supersedes an older one. */
+  render(text: string, ctx: ReadViewContext): void | Promise<void>;
+  /** Apply a text's presentation without re-rendering (theme, measure, page size…); returns the chrome's colour scheme. */
+  present(text: string): { scheme: 'light' | 'dark' };
+  /** The read view's root element: hidden while editing (unless `setVisible` handles it). */
+  readonly element?: AppElement | null;
+  /** Show or hide the read view (edit mode hides it); default: `element.hidden`. */
+  setVisible?(visible: boolean): void;
+  /**
+   * A key in the read view that the app's keymap did not take (no modifier
+   * shortcut, not typing in a field, not `defaultPrevented`): slides' arrows
+   * and Page Up/Down. Return true when handled (the app prevents the default).
+   */
+  onKey?(event: AppEvent): boolean;
+  /** Release what it holds (the app's `dispose`). */
+  destroy?(): void;
+}
+
+/**
+ * A header setting the chrome offers (FC-18 §5.1 user choices — document
+ * data, owner decision 4 of REBUILD §3a): its key, its choices, and how a
+ * text's current value reads. md: theme, measure; paged: theme, page size,
+ * template; slides: theme, ratio. Choosing writes the header
+ * (`setHeader` / `editHeader`, one undoable edit).
+ */
+export interface SettingControl {
+  key: string;
+  /** Accessible name of the picker ("Theme"). */
+  label: string;
+  icon?: IconName;
+  choices: ReadonlyArray<{ value: string; label: string; swatch?: string }>;
+  /** The value a text has now (its default when the header has none). */
+  current(text: string): string;
+}
+
+/**
+ * An extra chrome action of a kind (slides: Present; paged: Print). It acts
+ * on the read view: in the bar (`placement: 'bar'`) or the More menu
+ * (default), in the read view only unless `inEdit`.
+ */
+export interface CarrierAction {
+  /** Stable id (`present`, `print`). */
+  id: string;
+  /** Label and accessible name. */
+  label: string;
+  icon?: IconName;
+  placement?: 'bar' | 'menu';
+  /** Offered in edit mode too (default: read view only). */
+  inEdit?: boolean;
+  run(app: CarrierApp): void | Promise<void>;
+}
+
+/** A carrier as the standalone runtime sees it — everything kind-specific is behind this interface. */
+export interface StandaloneKind {
+  kind: CarrierKindName;
+  /** The shell version (= the package version, FC-19 §7). */
+  version: string;
+  /** The text formats it reads and writes. */
+  formats: readonly number[];
+  /** The brand text in the chrome bar (default `orz`). */
+  brand?: string;
+  /** The carrier's isomorphic assemble (FC-19 §2). */
+  assemble(text: string, options?: AppAssembleOptions): string | Promise<string>;
+  /** A new document text (the carrier's creation tool: header with `carrier` and a fresh `uid`). */
+  newDocument(): string | Promise<string>;
+  /**
+   * The carrier's FC-19 `mountEditor`: the kit's editor shell with the kind's
+   * renderer, preview and tools. `ctx` is given when the editor is mounted on
+   * the standalone file (the Edit button, or `OrzCarrier.mountEditor` without
+   * `hooks.save` in an assembled file); absent in an app host.
+   */
+  mountEditor(element: AppElement, options: KindEditorOptions, ctx?: StandaloneContext): EditorShell;
+  /** The page's read view. */
+  createReadView(doc: AppDocument): CarrierReadView;
+  /** The header settings the chrome offers. */
+  settings?: readonly SettingControl[];
+  /** Extra chrome actions. */
+  actions?: readonly CarrierAction[];
+  /** FC-19 §2 `extract` (default: the kit's). */
+  extract?(html: string): Extracted | null;
+  /** FC-19 §2 `readDocument` (typically the kit's `readDocument(text, { kind })`). */
+  readDocument(text: string): DocumentInfo;
+  /** FC-19 §2 `renderPreview`. */
+  renderPreview?(text: string, options?: Record<string, unknown>): Promise<string>;
+}
+
+// ── the app ────────────────────────────────────────────────────────────────
+
+/** Kit services the app calls; replaceable for tests (a carrier's own, the conformance stub's broken builds). */
+export interface AppServices {
+  createSaver(options: SaverOptions): Saver;
+  connectHost(options: ConnectHostOptions): HostConnection;
+  checkForUpdate(options: CheckOptions): Promise<UpdateInfo | null>;
+  performUpdate(options: PerformUpdateOptions): Promise<PerformUpdateResult>;
+  mountUpdateIndicator(anchor: UiElement, info: UpdateInfo, handlers: IndicatorHandlers, options?: { document?: UiDocument }): UpdateIndicator;
+  skipVersion(kind: CarrierKindName, version: string): boolean;
+}
+
+export interface CarrierAppOptions {
+  /** The page (default: the global window). */
+  window?: AppWindow;
+  /** The Edit button's editing engine (tests; default the kind's). */
+  adapter?: TextEditorAdapter;
+  /** Replace kit services (tests only; production passes none). */
+  services?: Partial<AppServices>;
+}
+
+/** How a save from the page went (the editor's `SaveOutcome` while editing, else the saver's result). */
+export type AppSaveOutcome = { ok: boolean; via?: string; error?: string; cancelled?: boolean };
+
+/** The page-side handle of a booted file (`OrzCarrier.standalone`; tests and the conformance driver use it). */
+export interface CarrierApp {
+  readonly kind: StandaloneKind;
+  readonly file: Readonly<OpenedFile>;
+  /** The current text: the document being edited (an editor mounted on the file), else the page's. */
+  getText(): string;
+  isDirty(): boolean;
+  /** Enter edit mode (mounting the kind's editor once) and return the editor. */
+  edit(): EditorShell;
+  /** Leave edit mode (the read view shows the current text). */
+  leave(): Promise<void>;
+  /** The Edit button's editor while editing, else null. */
+  editor(): EditorShell | null;
+  /** Write header settings (as the pickers do): one undoable edit. */
+  setSetting(changes: Record<string, HeaderChange>): void;
+  /** Undo / redo the last header setting made outside edit mode. */
+  undo(): boolean;
+  redo(): boolean;
+  /** Save the document (the editor's save while editing). Never rejects. */
+  save(): Promise<AppSaveOutcome>;
+  /** Download a copy of the current text's file. */
+  download(): Promise<SaveResult>;
+  /** Save a new document (the kind's creation tool) as a new file through the picker. */
+  newDocument(): Promise<SaveResult>;
+  /** Save the current text with a new uid as a new file through the picker. */
+  saveAsCopy(): Promise<SaveResult>;
+  /** The context the file gives an editor mounted on it. */
+  editorContext(): StandaloneContext;
+  /**
+   * Register an editor mounted on this file's context (it saves through the
+   * file's saver): while one is attached it is the document being edited —
+   * Cmd/Ctrl+S on the page saves it, its unsaved changes count for leaving
+   * the page, the quiet update reads its text and makes it read-only, and the
+   * host's AI operations appear in its toolbar. Returns the detach function.
+   */
+  attach(editor: EditorShell): () => void;
+  /** Show a toast in the chrome. */
+  toast(message: string, tone?: 'info' | 'success' | 'warning' | 'error'): void;
+  /** Show or hide the chrome (slides' presenter hides it). */
+  setChromeVisible(visible: boolean): void;
+  /** The read view. */
+  readonly view: CarrierReadView;
+  /** The chrome's shadow root. */
+  readonly root: AppShadowRoot;
+  readonly host: HostConnection | undefined;
+  /** True while a quiet update runs (the document is read-only). */
+  readonly updating: boolean;
+  /** Resolves when the first read view is in the page. */
+  readonly ready: Promise<void>;
+  /** Remove the app's listeners and chrome (tests). */
+  dispose(): void;
+}
+
+/** The FC-19 §2 global every carrier bundle sets (`globalThis.OrzCarrier`), plus the booted file's handle. */
+export interface OrzCarrierGlobal {
+  readonly kind: CarrierKindName;
+  readonly version: string;
+  readonly formats: number[];
+  assemble(text: string, options?: AppAssembleOptions): Promise<string>;
+  extract(html: string): Extracted | null;
+  readDocument(text: string): DocumentInfo;
+  mountEditor(element: AppElement, options: KindEditorOptions): EditorShell;
+  renderPreview?(text: string, options?: Record<string, unknown>): Promise<string>;
+  /** The booted file's handle (null outside an assembled file). Not part of FC-19: tests and the conformance driver use it. */
+  readonly standalone: CarrierApp | null;
+}

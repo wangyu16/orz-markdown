@@ -427,7 +427,7 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     expect(page.log).toEqual([]);
   });
 
-  it('[U.6] the bundle runs in a hidden iframe whose sandbox is exactly "allow-scripts" (no same-origin), inlined exactly, with the request sent only after the iframe says ready', async () => {
+  it('[U.6] the bundle runs in a hidden iframe whose sandbox is exactly "allow-scripts" (no same-origin), inlined exactly (no byte after it), with the request sent only after the iframe says ready', async () => {
     const s = served(BUNDLE);
     const seen: Array<{ text: string; delivery: string; engineSource: string }> = [];
     const page = fakePage((text, o) => { seen.push({ text, ...o }); return assembleEnvelope(text, PARTS('1.1.0', { delivery: o.delivery as 'inline' })); });
@@ -439,10 +439,12 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     expect(f.attrs.sandbox.split(/\s+/)).not.toContain('allow-same-origin');
     expect(f.attrs['aria-hidden']).toBe('true');
     expect(f.srcdoc).toBe(sandboxDocument(BUNDLE));
-    expect(f.srcdoc).toContain(`<script>${BUNDLE}\n</script>`); // the verified bytes, unchanged
+    // the verified bytes, unchanged and exactly — no newline after them (2.2.0), so a bundle that reads its
+    // own <script> text (an inline assembly without engineSource) inlines exactly the verified bundle
+    expect(f.srcdoc).toContain(`<script>${BUNDLE}</script>`);
     expect(escapeScriptText(BUNDLE)).toBe(BUNDLE);
     expect(f.srcdoc.match(/<script>/g)).toHaveLength(2);
-    expect(f.srcdoc.toLowerCase().indexOf('</script')).toBe(f.srcdoc.indexOf(`${BUNDLE}\n</script>`) + BUNDLE.length + 1);
+    expect(f.srcdoc.toLowerCase().indexOf('</script')).toBe(f.srcdoc.indexOf(`${BUNDLE}</script>`) + BUNDLE.length);
     expect(seen).toEqual([{ text: TEXTS[0], delivery: 'inline', engineSource: BUNDLE }]);
   });
 
@@ -845,8 +847,8 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     }
   });
 
-  it('[V.2] ICONS: the twelve shell icons, each one inline 24×24 SVG in currentColor, aria-hidden and unfocusable, with no script, handler or external reference', () => {
-    expect(Object.keys(ICONS).sort()).toEqual(['check', 'close', 'download', 'edit', 'info', 'more', 'preview', 'save', 'split', 'theme', 'update', 'warning']);
+  it('[V.2] ICONS: the fifteen shell icons, each one inline 24×24 SVG in currentColor, aria-hidden and unfocusable, with no script, handler or external reference', () => {
+    expect(Object.keys(ICONS).sort()).toEqual(['check', 'close', 'copy', 'download', 'edit', 'info', 'measure', 'more', 'new', 'preview', 'save', 'split', 'theme', 'update', 'warning']);
     for (const [name, s] of Object.entries(ICONS)) {
       expect(s, name).toMatch(/^<svg viewBox="0 0 24 24"[^>]* stroke="currentColor"[^>]* aria-hidden="true" focusable="false">.*<\/svg>$/s);
       expect(s.match(/<svg/g), name).toHaveLength(1);

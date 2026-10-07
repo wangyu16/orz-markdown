@@ -273,7 +273,7 @@ describe('module and package boundaries', () => {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/conformance')), entry).toEqual([]);
     }
     const files = [...valueImports('src/carrier/conformance/index.ts')].filter((f) => f.includes('carrier/conformance'));
-    expect(files.sort()).toEqual(['catalog.ts', 'checks.ts', 'index.ts', 'node.ts', 'page.ts', 'session.ts', 'texts.ts'].map((f) => `src/carrier/conformance/${f}`));
+    expect(files.sort()).toEqual(['catalog.ts', 'checks.ts', 'helpers.ts', 'index.ts', 'node.ts', 'page.ts', 'session.ts', 'texts.ts'].map((f) => `src/carrier/conformance/${f}`));
     for (const f of files) {
       const src = readFileSync(f, 'utf8');
       expect(src, f).not.toMatch(/^\s*import\s+(?!type\b)[^;]*from\s*['"](node:|fs|path|os|http|crypto|child_process)/m);
@@ -400,12 +400,124 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['r3-ungated-view-key', 'C.edit.preview-isolation', /forged messages: view changes/],
     // option B (2026-10-06): a shell that hands the preview's port to any ready, without the frame secret
     ['port-without-secret', 'C.edit.preview-isolation', /replaced preview \((meta refresh http|meta refresh data|document\.open)\): a document that replaced or nested the preview got its port/],
+    // 2.2.0 (claim H.7): only bundle requests count — and a file that fetches its bundle early is still caught
+    ['prefetch-bundle', 'C.update.indicator', /bundle requests before the reader asked for the update/],
+    ['prefetch-bundle', 'C.update.prerelease', /bundle requests/],
   ];
   for (const [variant, id, why] of caught) {
-    it(`[H.5] the ${variant} mutant fails ${id}`, async () => {
+    it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''} the ${variant} mutant fails ${id}`, async () => {
       const r = await mutant(variant, [id]);
       expect(result(r, id).status).toBe('failed');
       expect(result(r, id).message).toMatch(why);
     }, 240_000);
   }
+});
+
+// ── 2.2.0: page helpers, bundle-request counting, the dialog policy ──────
+
+describe('harness additions of 2.2.0', () => {
+  it('[H.6] the harness exports its page helpers for a carrier\'s own tests: the init script (stub / opfs / none pickers, recorded in the page log without the harness\'s binding), the OPFS folder, readOpfs / writeOpfs / pageRecords / callPage, the page helpers, the editor driver and the host page; in Chrome an opfs picker writes a real file that readOpfs reads back', async () => {
+    const h = await import('../src/carrier/conformance');
+    for (const name of ['initScript', 'readOpfs', 'writeOpfs', 'pageRecords', 'callPage', 'mountEditorScript']) expect(typeof (h as Record<string, unknown>)[name], name).toBe('function');
+    for (const name of ['OPFS_FOLDER', 'READ_OPFS', 'WRITE_OPFS', 'PAGE_HELPERS', 'PAGE_LOG', 'RECORD_BINDING', 'DEFAULT_EDITOR_DRIVER', 'HOST_PAGE', 'FILE_ACCESS_FLAG', 'CODEMIRROR_URL']) expect(typeof (h as Record<string, unknown>)[name], name).toBe('string');
+    expect(h.initScript('opfs')).toContain(h.PAGE_LOG);
+    if (!browser) return;
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'orz-h6-'));
+    const file = join(dir, 'notes.md.html');
+    writeFileSync(file, '<!doctype html><meta charset="utf-8"><title>notes</title><body>notes</body>', 'utf8');
+    for (const mode of ['opfs', 'stub'] as const) {
+      const context = await browser.newContext();
+      await context.addInitScript({ content: h.initScript(mode) });
+      const page = await context.newPage();
+      await page.goto(`file://${file}`);
+      if (mode === 'opfs') await h.writeOpfs(page, { name: 'notes.md.html' }, 'OPENED BYTES');
+      if (mode === 'opfs') expect(await h.readOpfs(page, { name: 'notes.md.html' })).toBe('OPENED BYTES');
+      await page.evaluate(async () => {
+        const handle = await (window as unknown as { showSaveFilePicker(o: unknown): Promise<{ createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }> }> }).showSaveFilePicker({ suggestedName: 'notes.md.html' });
+        const w = await handle.createWritable();
+        await w.write('SAVED BYTES');
+        await w.close();
+      });
+      expect(await h.pageRecords(page, 'picker'), mode).toHaveLength(1);
+      if (mode === 'opfs') {
+        expect(await h.readOpfs(page, { name: 'notes.md.html' })).toBe('SAVED BYTES');
+        expect(await h.readOpfs(page, { name: 'notes.md.html', folder: 'elsewhere' })).toBeNull();
+      } else {
+        expect((await h.pageRecords(page, 'write')).map((r) => (r.data as { data: string }).data)).toEqual(['SAVED BYTES']);
+      }
+      await page.evaluate(() => alert('x'));
+      expect((await h.pageRecords(page, 'dialog')).map((r) => r.data)).toEqual([{ kind: 'alert', message: 'x' }]);
+      await context.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }, 120_000);
+
+  it('[H.7] the update checks count only BUNDLE requests — any file of <pkg>-browser@<any version>/ but the manifest — so a file may load its own stylesheets: the stub\'s read view requests its theme from jsDelivr and still passes C.update.indicator, C.update.other-format and C.update.prerelease (the prefetch-bundle mutant fails them, H.5)', async () => {
+    const { Session } = await import('../src/carrier/conformance/session');
+    const [current, next] = await Promise.all([buildStub('1.1.0'), buildStub('1.2.0')]);
+    const s = await Session.open(stubTarget(current, { next }), {}, false);
+    try {
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.2.0/orz-stub.browser.js')).toBe(true);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@9.9.9-rc.1/orz-stub.browser.js?x=1')).toBe(true);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.1.0/other-file.js')).toBe(true);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@latest/release.json')).toBe(false);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-markdown@2.2.0/themes/light-neat-3.css')).toBe(false);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-slides-browser@1.2.0/orz-stub.browser.js')).toBe(false);
+      expect(s.isBundleRequest('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js')).toBe(false);
+      expect(s.isBundleRequest('https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@')).toBe(false);
+    } finally {
+      await s.close();
+    }
+    expect(current.code).toContain('/themes/');
+    if (!browser) return;
+    const r = await runConformance(stubTarget(current, { next }), { only: ['C.update.indicator', 'C.update.other-format', 'C.update.prerelease'], browser, corpus: false });
+    expect(r.results.map((x) => [x.id, x.status])).toEqual([['C.update.indicator', 'passed'], ['C.update.other-format', 'passed'], ['C.update.prerelease', 'passed']]);
+    // the stub's file really requests its theme stylesheet (a non-bundle resource) while it is open
+    const context = await browser.newContext();
+    const requests: string[] = [];
+    await context.route(/^https:/, (route) => { requests.push(route.request().url()); return route.abort('internetdisconnected'); });
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'orz-h7-'));
+    writeFileSync(join(dir, 'theme.md.html'), await stubTarget(current).assemble('# Themed\n'), 'utf8');
+    const page = await context.newPage();
+    await page.goto(`file://${join(dir, 'theme.md.html')}`);
+    await page.waitForFunction(() => !!(globalThis as { OrzCarrier?: { standalone?: unknown } }).OrzCarrier?.standalone);
+    expect(requests.some((u) => /\/npm\/orz-markdown@[^/]+\/themes\/light-neat-3\.css$/.test(u))).toBe(true);
+    await context.close();
+    rmSync(dir, { recursive: true, force: true });
+  }, 240_000);
+
+  it('[H.8] dialogs are recorded and dismissed — a dismissed beforeunload keeps the page — except where a check leaves a page it expects clean (CheckContext.leave): there a beforeunload is accepted so the navigation goes on, and it is still recorded', async () => {
+    if (!browser) return;
+    const { Session } = await import('../src/carrier/conformance/session');
+    const s = await Session.open(stubTarget(await buildStub('1.1.0')), { browser }, true);
+    try {
+      const ctx = await s.context({ picker: 'none' });
+      const url = s.serve('leave.html', '<!doctype html><meta charset="utf-8"><title>leave</title><body><button id="b">b</button><script>window.__alive = 1; addEventListener("beforeunload", function (e) { e.preventDefault(); e.returnValue = ""; });</script></body>');
+      const page = await ctx.newPage();
+      await page.goto(url);
+      await page.click('#b'); // sticky user activation: Chrome asks only after an interaction
+      await page.close({ runBeforeUnload: true });
+      await new Promise((r) => setTimeout(r, 600));
+      expect(page.isClosed()).toBe(false); // dismissed: the page stays
+      expect(await page.evaluate('window.__alive')).toBe(1);
+      expect(ctx.of('dialog').map((r) => (r.data as { kind: string }).kind)).toEqual(['beforeunload']);
+      // leaving on purpose: accepted, the reload happens, the dialog is recorded
+      await ctx.leave(page, () => page.reload());
+      expect(await page.evaluate('window.__alive')).toBe(1); // a new document
+      expect(ctx.of('dialog').map((r) => (r.data as { kind: string }).kind)).toEqual(['beforeunload', 'beforeunload']);
+      // outside leave() a later dialog is dismissed again
+      await page.click('#b');
+      await page.close({ runBeforeUnload: true });
+      await new Promise((r) => setTimeout(r, 600));
+      expect(page.isClosed()).toBe(false);
+    } finally {
+      await s.close();
+    }
+  }, 120_000);
 });

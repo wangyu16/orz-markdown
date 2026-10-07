@@ -168,3 +168,32 @@ describe('common.css stays a structure layer', () => {
     }
   });
 });
+
+describe('the theme list (2.2.0)', () => {
+  it('[M.25] THEMES (main entry and orz-markdown/themes) lists exactly the theme files in themes/ — ids, unique names, each theme\'s scheme as its stylesheet declares (color-scheme) — with DEFAULT_THEME among them; themeInfo falls back to the default; the package exports ./themes', async () => {
+    const { THEMES, DEFAULT_THEME, themeInfo, isThemeId } = await import('../src/themes.js');
+    const main = await import('../src/index.js');
+    expect(main.THEMES).toBe(THEMES);
+    expect(main.DEFAULT_THEME).toBe(DEFAULT_THEME);
+    expect(THEMES.map((t) => `${t.id}.css`).sort()).toEqual([...THEME_FILES].sort());
+    expect(new Set(THEMES.map((t) => t.name)).size).toBe(THEMES.length);
+    for (const t of THEMES) {
+      const css = readFileSync(`themes/${t.id}.css`, 'utf8');
+      // the screen declaration (outside @media print, where a dark theme may print light)
+      const screen = css.replace(/@media\s+print\s*\{[\s\S]*?\n\}/g, '');
+      const declared = [...screen.matchAll(/color-scheme:\s*(light|dark)\b/g)].map((m) => m[1]);
+      expect(declared.length, t.id).toBeGreaterThan(0);
+      expect(new Set(declared), t.id).toEqual(new Set([t.scheme]));
+      expect(Object.isFrozen(t), t.id).toBe(true);
+    }
+    expect(Object.isFrozen(THEMES)).toBe(true);
+    expect(isThemeId(DEFAULT_THEME)).toBe(true);
+    expect(themeInfo('dark-elegant-3')).toMatchObject({ id: 'dark-elegant-3', scheme: 'dark', name: 'Nocturne' });
+    expect(themeInfo('no-such-theme').id).toBe(DEFAULT_THEME);
+    expect(themeInfo(undefined).id).toBe(DEFAULT_THEME);
+    expect(isThemeId('common')).toBe(false);
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { exports: Record<string, string> };
+    expect(pkg.exports['./themes']).toBe('./dist/themes.js');
+    expect(pkg.exports['./themes/*']).toBe('./themes/*');
+  });
+});

@@ -4,6 +4,11 @@ export type { CheckInfo } from './catalog.js';
 export { HAZARD_TEXTS, REFUSED_TEXTS, EDIT_TEXT } from './texts.js';
 export { loadCorpus } from './node.js';
 export { derivedParts } from './checks.js';
+export { initScript, OPFS_FOLDER, READ_OPFS, WRITE_OPFS, PAGE_HELPERS, PAGE_LOG, RECORD_BINDING, DEFAULT_EDITOR_DRIVER, mountEditorScript, HOST_PAGE } from './page.js';
+export type { PickerMode } from './page.js';
+export { callPage, readOpfs, writeOpfs, pageRecords } from './helpers.js';
+export type { OpfsPlace } from './helpers.js';
+export { FILE_ACCESS_FLAG, CODEMIRROR_URL } from './session.js';
 export type { AssembleOptions, BundleSource, CarrierTarget, CheckResult, CheckStatus, ConformanceOptions, ConformanceReport, TestApi, BrowserLike } from './types.js';
 /**
  * Checks that run alone (no other check runs beside them): they time the

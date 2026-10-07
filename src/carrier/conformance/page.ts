@@ -3,8 +3,15 @@
  * Chrome, never in Node, and must not depend on how this file is compiled).
  */
 
-/** The binding every frame reports through (`context.exposeBinding`). */
+/** The binding every frame reports through (`context.exposeBinding`); absent in a carrier's own test, where only the page log records. */
 export const RECORD_BINDING = '__orzConformanceRecord';
+
+/**
+ * Where every frame also keeps what the init script recorded (`{ type, data,
+ * url }`: `dialog`, `pageerror`, `picker`, `write`), for a carrier's own tests
+ * that install {@link initScript} without the harness's binding (2.2.0).
+ */
+export const PAGE_LOG = '__orzConformanceLog';
 
 export type PickerMode = 'stub' | 'none' | 'native' | 'opfs';
 
@@ -35,7 +42,13 @@ export const OPFS_FOLDER = `function (pathname) {
 export function initScript(picker: PickerMode): string {
   return `(() => {
   var picker = ${JSON.stringify(picker)};
-  var rec = function (type, data) { try { window[${JSON.stringify(RECORD_BINDING)}]({ type: type, data: data, url: String(location.href) }); } catch (e) {} };
+  var log = [];
+  try { Object.defineProperty(window, ${JSON.stringify(PAGE_LOG)}, { configurable: true, value: log }); } catch (e) {}
+  var rec = function (type, data) {
+    var r = { type: type, data: data, url: String(location.href) };
+    try { log.push(r); } catch (e) {}
+    try { window[${JSON.stringify(RECORD_BINDING)}](r); } catch (e) {}
+  };
   ['alert', 'confirm', 'prompt'].forEach(function (n) {
     try { Object.defineProperty(window, n, { configurable: true, writable: true, value: function (m) { rec('dialog', { kind: n, message: String(m) }); return n === 'confirm' ? false : null; } }); } catch (e) {}
   });

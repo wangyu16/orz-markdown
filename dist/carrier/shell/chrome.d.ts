@@ -38,6 +38,9 @@ export declare const ICONS: {
     readonly check: string;
     readonly warning: string;
     readonly more: string;
+    readonly measure: string;
+    readonly new: string;
+    readonly copy: string;
 };
 export type IconName = keyof typeof ICONS;
 /** An icon element (`span.orz-icon` holding one of {@link ICONS}). */

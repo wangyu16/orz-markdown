@@ -14,7 +14,7 @@
 export { createEditorShell } from './shell.js';
 export type {
   EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext,
-  EditorPreviewOptions, PreviewMapContext, AiOutcome, UploadOutcome, TextRange, EditorPreviewChannel,
+  EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, EditorPreviewChannel,
 } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
 export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition } from './adapter.js';
@@ -28,7 +28,7 @@ export {
   PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS,
 } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';
-export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes } from './render-md.js';
+export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes, includeRecordEnv } from './render-md.js';
 export type { MarkdownPreviewOptions } from './render-md.js';
 export { EDITOR_CSS } from './styles.js';
 export type { EdElement, EdDocument, EdView, EdEvent, EdFile, EdDataTransfer, EdPort } from './types.js';

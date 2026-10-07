@@ -12,7 +12,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
  * `beforeAll` took over 10 s under that load. They are not claims; bounded
  * claims carry their own explicit limits.
  */
-const CHROME = ['tests/browser-copy.test.ts', 'tests/carrier-editor.test.ts', 'tests/carrier-shell.test.ts', 'tests/carrier-update.test.ts'];
+const CHROME = ['tests/browser-copy.test.ts', 'tests/carrier-editor.test.ts', 'tests/carrier-shell.test.ts', 'tests/carrier-update.test.ts', 'tests/carrier-app.test.ts'];
 const HEAVY = ['tests/conformance.test.ts'];
 
 export default defineConfig({

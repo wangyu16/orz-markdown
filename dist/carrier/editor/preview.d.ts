@@ -223,10 +223,11 @@ export interface PreviewController {
      * Returns the unsubscribe.
      */
     on(type: string, fn: (message: PreviewMessage) => void): () => void;
-    /** Rebuild the frame document with another `head` / `scheme` (e.g. a theme change); the last HTML is shown again. */
+    /** Rebuild the frame document with another `head` / `scheme` / `articleClass` (e.g. a theme or measure change); the last HTML is shown again. */
     setOptions(options: {
         head?: string;
         scheme?: ColorScheme;
+        articleClass?: string;
     }): void;
     /** The frame has acknowledged a render by its id since it last said ready (its bridge paces). */
     readonly acknowledges: boolean;

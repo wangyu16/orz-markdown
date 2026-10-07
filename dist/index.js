@@ -17,7 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.KATEX_VERSION = exports.VERSION = exports.resolveIncludePath = exports.maskInertMarkdown = exports.md = exports.MAX_KATEX_OUTPUT = exports.MAX_CHEM_TOTAL = exports.MAX_TEX_TOTAL = exports.prepareSources = exports.register = void 0;
+exports.KATEX_VERSION = exports.VERSION = exports.resolveIncludePath = exports.maskInertMarkdown = exports.md = exports.MAX_KATEX_OUTPUT = exports.MAX_CHEM_TOTAL = exports.MAX_TEX_TOTAL = exports.themeInfo = exports.isThemeId = exports.DEFAULT_THEME = exports.THEMES = exports.prepareSources = exports.register = void 0;
 exports.createMarkdown = createMarkdown;
 require("katex/contrib/mhchem");
 const markdown_it_1 = __importDefault(require("markdown-it"));
@@ -60,6 +60,11 @@ var registry_js_2 = require("./registry.js");
 Object.defineProperty(exports, "register", { enumerable: true, get: function () { return registry_js_2.register; } });
 var prepare_sources_js_1 = require("./prepare-sources.js");
 Object.defineProperty(exports, "prepareSources", { enumerable: true, get: function () { return prepare_sources_js_1.prepareSources; } });
+var themes_js_1 = require("./themes.js");
+Object.defineProperty(exports, "THEMES", { enumerable: true, get: function () { return themes_js_1.THEMES; } });
+Object.defineProperty(exports, "DEFAULT_THEME", { enumerable: true, get: function () { return themes_js_1.DEFAULT_THEME; } });
+Object.defineProperty(exports, "isThemeId", { enumerable: true, get: function () { return themes_js_1.isThemeId; } });
+Object.defineProperty(exports, "themeInfo", { enumerable: true, get: function () { return themes_js_1.themeInfo; } });
 /**
  * TeX characters rendered per document, and of them inside `\ce{…}`/`\pu{…}`
  * arguments (4,000 small reactions are ~80,000).

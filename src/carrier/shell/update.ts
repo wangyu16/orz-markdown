@@ -479,7 +479,7 @@ const BOOTSTRAP = [
 
 /** The srcdoc of the sandbox: the bundle (escaped; script-safe bundles are unchanged) and the listener. */
 export function sandboxDocument(bundle: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>orz update</title></head><body><script>${escapeScriptText(bundle)}\n</script><script>${BOOTSTRAP}</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>orz update</title></head><body><script>${escapeScriptText(bundle)}</script><script>${BOOTSTRAP}</script></body></html>`;
 }
 
 /** The iframe the re-assembly runs in. */

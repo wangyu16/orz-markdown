@@ -102,7 +102,9 @@ A host replies `ok: false` with an `error` to a save whose `html` is empty.
 - `proposed` — the replacement text. The file shows it; the document is
   untouched until the user applies it, and an applied result is ordinary
   text that then saves through `orz-host-save` (or the file's own save), so it
-  passes the host's save validation.
+  passes the host's save validation. (Kit, 2.2.0: the editor's `proposeAi`
+  / `applyAi`, FC-19 §4, and the AI menu with its review panel that
+  `orz-markdown/carrier/app` puts in every editor of a hosted file.)
 - Hello cadence as in §3. A request with no result within **30 s** fails; a
   result whose `ok` is not `true` or whose `proposed` is not a string is a
   failure.

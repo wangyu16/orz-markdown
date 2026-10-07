@@ -40,6 +40,16 @@ There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
 > scopes to `.markdown-body`, so it works whatever id/wrapper you use. The rest of
 > this page is what that helper does under the hood — read it if you hand-roll the
 > wiring or need to understand a failure.
+>
+> **Rendering in the page itself (no iframe) — `enhanceDocument()`** (≥ 2.2.0).
+> After `article.innerHTML = md.render(src)` call
+> `await enhanceDocument(article, { scheme })` (from `orz-markdown/preview-frame`):
+> it loads only the libraries the content needs (highlight.js, Mermaid, SMILES,
+> Chart.js, KaTeX's and highlight.js's stylesheets) from the same pinned URLs,
+> installs the runtime once (copy-as-Markdown, tabs, QR) and is idempotent —
+> call it again after every render. `nonce` stamps what it adds (CSP);
+> `assets: false` fetches nothing. The theme list for a picker is `THEMES`
+> (`orz-markdown/themes`: ids, names, light/dark).
 
 ---
 

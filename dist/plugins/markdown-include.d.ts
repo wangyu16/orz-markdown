@@ -34,6 +34,12 @@ export interface IncludeEnv {
 /** Resolve an include target to an absolute path, or null if not permitted. */
 export declare function resolveIncludePath(target: string, env: IncludeEnv): string | null;
 /**
+ * The include directive names — the ONE list: the renderer registers these
+ * aliases and `prepareSources` resolves URL includes written with any of them
+ * (claim M.11).
+ */
+export declare const INCLUDE_DIRECTIVES: readonly string[];
+/**
  * File includes are spliced in at PARSE time: the included file's block tokens
  * replace the directive in the token stream, before inline parsing. The
  * included text therefore takes part in the one document — its footnotes join

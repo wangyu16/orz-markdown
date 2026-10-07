@@ -8,6 +8,7 @@
     ".": "./dist/index.js",
     "./runtime": "./dist/runtime.js",
     "./preview-frame": "./dist/preview-frame.js",
+    "./themes": "./dist/themes.js",
     "./themes/*": "./themes/*",
     "./doc-meta": "./dist/doc-meta.js",
     "./version": "./dist/version.js",
@@ -15,6 +16,7 @@
     "./carrier/read": "./dist/carrier/read.js",
     "./carrier/shell": "./dist/carrier/shell/index.js",
     "./carrier/editor": "./dist/carrier/editor/index.js",
+    "./carrier/app": "./dist/carrier/app/index.js",
     "./carrier/conformance": "./dist/carrier/conformance/index.js",
     "./package.json": "./package.json"
   },

@@ -152,6 +152,23 @@ const THEME = {
 };
 
 /** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
+/**
+ * Read-only in CodeMirror (claim E.22, FC-19 §5 invariant 7): the state is
+ * read-only (no command or input edits it) and the content is not editable,
+ * but it stays focusable (`tabindex="0"`) and selectable, so the reader can
+ * select, copy and press Cmd/Ctrl+S in a read-only editor (2.2.0; before,
+ * `editable: false` alone left nothing to focus).
+ */
+function readOnlyExtensions(m: CodeMirror6Modules, flag: boolean): Any[] {
+  const { EditorState } = m.state;
+  const { EditorView } = m.view;
+  return [
+    EditorState.readOnly.of(flag),
+    EditorView.editable.of(!flag),
+    ...(flag && EditorView.contentAttributes ? [EditorView.contentAttributes.of({ tabindex: '0', 'aria-readonly': 'true' })] : []),
+  ];
+}
+
 export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditorAdapter {
   let fallback: TextEditorAdapter | null = textareaAdapter();
   let view: Any = null;
@@ -171,7 +188,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     const c = m.commands;
     const l = m.language;
     const ro = readOnlyNow;
-    const roExtensions = (flag: boolean): Any[] => [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+    const roExtensions = (flag: boolean): Any[] => readOnlyExtensions(m, flag);
     roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
     const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
     return [
@@ -336,8 +353,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       readOnlyNow = flag;
       if (!view) { fallback?.setReadOnly?.(flag); return; }
       const { EditorState } = cm!.state;
-      const { EditorView } = cm!.view;
-      const ext = [EditorState.readOnly.of(flag), EditorView.editable.of(!flag)];
+      const ext = readOnlyExtensions(cm!, flag);
       if (roCompartment) { view.dispatch({ effects: roCompartment.reconfigure(ext) }); return; }
       // modules without Compartment: rebuild the state (text and selection kept; the history starts over)
       extensions = build(cm!, mountOptions ?? { doc: '', onChange() {} });
