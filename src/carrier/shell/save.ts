@@ -101,10 +101,12 @@ export interface StoredHandle {
    */
   location?: string;
   /**
-   * SHA-256 (lowercase hex) of the bytes last written through the handle.
-   * When present, the file must still hold exactly them (and the opened
-   * file's bytes) for the handle to be reused: a file another tab or tool
-   * wrote since is never overwritten silently.
+   * SHA-256 (lowercase hex) of the bytes last written through the handle — a
+   * record, not a condition: the handle is reused when its file holds the
+   * opened file's bytes, whoever wrote them (a CLI that assembled the same
+   * text again writes the file the page then opens; B#8, closed loop 2
+   * round 3). A file another tab or tool changed since this page opened it no
+   * longer holds the opened bytes and gets the picker.
    */
   sha256?: string;
 }
@@ -300,7 +302,8 @@ export function createSaver(opts: SaverOptions): Saver {
     const name = stored.handle.name ?? stored.name;
     if (opened !== undefined && name !== undefined && name !== opened) return null;
     // A name proves nothing (a save-as into another folder keeps it): the file must hold
-    // the opened file's bytes — and, when the record says, what was last written through it.
+    // the opened file's bytes. Whoever wrote them last (this page, or a CLI that assembled
+    // the same text again: B#8) does not matter — the page was opened from those bytes.
     const mine = await openedBytes();
     if (mine === undefined) return null;
     const h = stored.handle;
@@ -314,10 +317,6 @@ export function createSaver(opts: SaverOptions): Saver {
     }
     const now = await readText(h);
     if (now === null || now !== mine) return null;
-    if (typeof stored.sha256 === 'string') {
-      const sum = await sha256Hex(now);
-      if (sum !== undefined && sum !== stored.sha256) return null;
-    }
     return h;
   };
 

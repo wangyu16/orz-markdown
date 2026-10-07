@@ -269,8 +269,10 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
 
 ### 8.2 Options
 
-`assemble(text, { delivery: "inline" | "cdn" })`. Inline is the default
-(FD-02). Nothing else changes the output.
+`assemble(text, { delivery: "inline" | "cdn", includes? })`. Inline is the
+default (FD-02). `includes` (added 2026-10-06, closed loop 2 round 3;
+additive) are resolved includes to store in `#orz-includes` as given instead
+of resolving the text's directives (§8.3). Nothing else changes the output.
 
 ### 8.3 Links, assets, includes
 
@@ -289,6 +291,15 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
   assembly, file and URL includes are resolved under the 2.0.0 trust model and
   stored in a shell island (`#orz-includes`, derived data); the text keeps the
   directives. A web-app host supplies a `fetchInclude` hook instead (FC-19).
+  A page cannot resolve local includes again, so every re-assembly in the
+  browser — the editor's save and the quiet update — carries the opened
+  file's island over exactly (`assemble(text, { includes:
+  extract(html).includes })`, FC-19 §2, §8.5; spec/shell-runtime.md §7.2,
+  which refuses an update whose file does not hold them exactly). The island
+  is what the last assembly that could read the files resolved: a directive
+  added in the browser is resolved at the next such assembly (the CLI).
+  Before closed loop 2 round 3 (2026-10-06) the browser dropped the island
+  on every save and update.
 
 ### 8.4 Formats across shells
 

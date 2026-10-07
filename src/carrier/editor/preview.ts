@@ -71,14 +71,19 @@ export interface PreviewFrameParts {
    * For `<head>`: the pinned libraries' stylesheet links (with `assets`), the
    * carrier's `head`, the base style (nonce-stamped). While the document's
    * scripts are paused it starts with the `<meta>` Content-Security-Policy
-   * that pauses them: place it in `<head>`, before any other script.
+   * that pauses them: place it in `<head>`, before the article and
+   * `scripts` (the policy must precede the document's content and every
+   * library script; the nonce-stamped `bridge` may come before it or right
+   * after it — FC-19 §8.4).
    */
   head: string;
   /**
    * The bridge `<script>` element (nonce-stamped). The default bridge finds
    * `#orz-doc` when a render arrives, so it can (and should) come before the
-   * stylesheets: a script after a pending stylesheet waits for it. A
-   * carrier's own bridge goes wherever that bridge expects.
+   * stylesheets — first in `<head>`, or right after the pausing `<meta>` that
+   * `head` may start with, as the default document puts it: a script after a
+   * pending stylesheet waits for it. A carrier's own bridge goes wherever
+   * that bridge expects.
    */
   bridge: string;
   /** The pinned preview libraries' `<script>` elements and their ready call (nonce-stamped; empty without `assets`). */
@@ -86,6 +91,11 @@ export interface PreviewFrameParts {
   scheme: ColorScheme;
   /** The article class (`articleClass`, default `markdown-body`), attribute-escaped. */
   articleClass: string;
+  /**
+   * The nonce stamped on the frame's scripts and styles. A carrier's own
+   * `<script>` (or `<style>`) in its frame document must carry it: the
+   * pausing policy (and an app's nonce policy) runs nothing else (B#5).
+   */
   nonce?: string;
 }
 

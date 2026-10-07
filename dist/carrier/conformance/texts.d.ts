@@ -31,4 +31,12 @@ export declare const LONG_TEXT: string;
 export declare const THEFT_SCRIPT: string;
 /** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
 export declare const THEFT_TEXT: string;
+/**
+ * A document with includes (FC-18 §8.3, D4) and the resolved includes its file carries in
+ * `#orz-includes` (keys in code-unit order, as the island stores them). A page cannot resolve local
+ * includes again: its saves and its quiet update must carry these over exactly. The same text and
+ * includes are the corpus file `md/includes.md` and its manifest entry.
+ */
+export declare const INCLUDE_TEXT = "{{nyml\nkind: document\nformat: 1\ntitle: Titration lab \u2014 with includes\nuid: doc-conformance1i2n3c\n}}\n\n# Titration lab\n\n{{md parts/safety-rules.md}}\n\nProcedure follows.\n\n{{md https://example.org/notes/glossary.md}}\n";
+export declare const INCLUDES: Readonly<Record<string, string>>;
 //# sourceMappingURL=texts.d.ts.map

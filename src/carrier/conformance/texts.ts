@@ -60,3 +60,15 @@ export const THEFT_SCRIPT = "(function(){if(window.__orzTheft)return;window.__or
 
 /** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
 export const THEFT_TEXT = `{{nyml\nkind: document\ntitle: Focus theft\nuid: doc-conformance7t8u9v\n}}\n\n# Focus theft\n\nA picture <img src="x-missing.png" alt="" onerror="${THEFT_SCRIPT}">\n\n${Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of the text the reader edits.\n`).join('\n')}`;
+
+/**
+ * A document with includes (FC-18 §8.3, D4) and the resolved includes its file carries in
+ * `#orz-includes` (keys in code-unit order, as the island stores them). A page cannot resolve local
+ * includes again: its saves and its quiet update must carry these over exactly. The same text and
+ * includes are the corpus file `md/includes.md` and its manifest entry.
+ */
+export const INCLUDE_TEXT = `{{nyml\nkind: document\nformat: 1\ntitle: Titration lab — with includes\nuid: doc-conformance1i2n3c\n}}\n\n# Titration lab\n\n{{md parts/safety-rules.md}}\n\nProcedure follows.\n\n{{md https://example.org/notes/glossary.md}}\n`;
+export const INCLUDES: Readonly<Record<string, string>> = {
+  'https://example.org/notes/glossary.md': '## Glossary\r\n\r\nTitrant — 𝒳 the solution of known concentration.\r\n',
+  'parts/safety-rules.md': '## Safety rules\n\n- Goggles on. A literal </script> stays text.\n- No food in the lab.\n',
+};

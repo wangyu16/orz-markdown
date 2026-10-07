@@ -362,12 +362,20 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     const f3 = fakeSaverWindow({ href: PAGE, picker: async () => docs });
     expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f3.win, handleStore: stale.store, openedHtml: 'v0+2' }).save({ text: 't3', html: 'v3' })).toMatchObject({ picked: true, opened: true });
     expect(downloads.content).toBe('v1b');
-    // a remembered handle whose file another tab or tool wrote since (hash differs) is not reused, even when it equals the opened bytes
+    // B#8 (round 3): a remembered handle whose file another tool wrote since (the recorded hash differs) IS
+    // reused when it holds the opened bytes — a CLI re-assembly of the same text is the file this page opened
     const shared = fakeHandle('notes.md.html', { query: 'granted' }, 'external');
     const hashed = memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: shared, name: 'notes.md.html', location: PAGE, sha256: createHash('sha256').update('what this page wrote').digest('hex') } });
     const f4 = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
-    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f4.win, handleStore: hashed.store, openedHtml: 'external' }).save({ text: 't4', html: 'v4' });
-    expect([f4.picks.length, shared.content]).toEqual([1, 'external']);
+    expect(await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f4.win, handleStore: hashed.store, openedHtml: 'external' }).save({ text: 't4', html: 'v4' })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect([f4.picks.length, shared.content]).toEqual([0, 'v4']);
+    // ... and the record now holds the hash of what this page wrote
+    expect(hashed.map.get(`${UID} ${PAGE}`)).toMatchObject({ sha256: createHash('sha256').update('v4').digest('hex') });
+    // but a file changed since the page opened it (it no longer holds the opened bytes) gets the picker, whatever the hash says
+    const moved = fakeHandle('notes.md.html', { query: 'granted' }, 'v4');
+    const f4b = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
+    await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f4b.win, handleStore: memoryHandleStore({ [`${UID} ${PAGE}`]: { handle: moved, name: 'notes.md.html', location: PAGE, sha256: createHash('sha256').update('v4').digest('hex') } }).store, openedHtml: 'external' }).save({ text: 't4b', html: 'v4b' });
+    expect([f4b.picks.length, moved.content]).toEqual([1, 'v4']);
     // no opened bytes (the carrier did not say): a remembered handle is never reused across page loads; no permission is asked
     const proven = fakeHandle('notes.md.html', { query: 'prompt', request: 'granted' }, 'v0');
     const f5 = fakeSaverWindow({ href: PAGE, picker: async () => fakeHandle() });
@@ -386,6 +394,17 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     mine.content = 'changed by another tab';
     await s7.save({ text: 'b', html: 'B' });
     expect(f7.picks.length).toBe(2);
+    // round 3 (m24): a session file picked as NOT the opened one that later holds the opened bytes again
+    // (the original copied over it) is proved by its content: opened: true, and it is remembered
+    const mem8 = memoryHandleStore();
+    const elsewhere = fakeHandle('notes.md.html', { query: 'granted' });
+    const f8 = fakeSaverWindow({ href: PAGE, picker: async () => elsewhere });
+    const s8 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f8.win, handleStore: mem8.store, openedHtml: 'v0' });
+    expect(await s8.save({ text: 'a', html: 'A' })).toMatchObject({ picked: true, opened: false });
+    expect(mem8.map.size).toBe(0);
+    elsewhere.content = 'v0';
+    expect(await s8.save({ text: 'b', html: 'B' })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect([f8.picks.length, elsewhere.content, mem8.map.size]).toEqual([1, 'B', 1]);
   });
 
   it('[S.4] the save never reads the live DOM: no shell module names a DOM-reading or serializing API, and save writes exactly the html it is given', async () => {

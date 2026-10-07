@@ -51,7 +51,7 @@ owner decision B-2, FC-19 §8.4 — its bridge and message protocol, asset rewri
 nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.22, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.25, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).

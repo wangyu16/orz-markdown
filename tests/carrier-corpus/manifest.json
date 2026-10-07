@@ -368,6 +368,39 @@
       "defect": null
     },
     {
+      "path": "md/includes.md",
+      "kind": "md",
+      "hasHeader": true,
+      "legacyHeader": false,
+      "header": {
+        "title": "Titration lab — with includes",
+        "author": null,
+        "license": null,
+        "theme": null,
+        "uid": "doc-conformance1i2n3c"
+      },
+      "keys": [
+        "format",
+        "title",
+        "uid"
+      ],
+      "derivedTitle": "Titration lab — with includes",
+      "byteSensitive": false,
+      "purpose": "A file include and a URL include, with the resolved includes its assembled file carries in #orz-includes (`includes`, keys in code-unit order: CR LF, an astral character and a literal </script> in the included texts). A page cannot resolve local includes again: saves and the quiet update carry them over exactly (closed loop 2 round 3).",
+      "checks": [
+        "FC-18 law 1 round trip",
+        "FC-18 law 3 idempotence",
+        "FC-18 §8.3 includes (D4) kept by assemble, save and update",
+        "FC-19 save keeps includes",
+        "FC-19 update keeps includes"
+      ],
+      "defect": null,
+      "includes": {
+        "https://example.org/notes/glossary.md": "## Glossary\r\n\r\nTitrant — 𝒳 the solution of known concentration.\r\n",
+        "parts/safety-rules.md": "## Safety rules\n\n- Goggles on. A literal </script> stays text.\n- No food in the lab.\n"
+      }
+    },
+    {
       "path": "slides/minimal.slides.md",
       "kind": "slides",
       "hasHeader": true,

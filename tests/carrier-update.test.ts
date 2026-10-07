@@ -89,7 +89,7 @@ const TEXTS = [
 
 // ── a fake page + sandbox for reassemble ─────────────────────────────────
 
-type Assemble = (text: string, o: { delivery: string; engineSource: string }) => unknown;
+type Assemble = (text: string, o: { delivery: string; engineSource: string; includes?: Record<string, string> }) => unknown;
 
 /**
  * A page document and window; appending an iframe "boots" it: its window
@@ -127,7 +127,7 @@ function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: b
       const attrs: Record<string, string> = {};
       const rec = { attrs, srcdoc: '', removed: false, contentWindow: null as unknown };
       const contentWindow = {
-        postMessage(msg: { type: string; id: string; text: string; delivery: string; engineSource: string }, target: string) {
+        postMessage(msg: { type: string; id: string; text: string; delivery: string; engineSource: string; includes?: Record<string, string> }, target: string) {
           if (rec.removed) return;
           expect(target).toBe('*');
           posted.push(msg);
@@ -138,7 +138,7 @@ function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: b
           if (opts.stale) for (const id of ['u0', `${msg.id}x`, 'x', '']) emit({ type: 'orz-reassembled', id, ok: true, html: 'STALE' }, contentWindow);
           setTimeout(async () => {
             try {
-              const html = await assemble!(msg.text, { delivery: msg.delivery, engineSource: msg.engineSource });
+              const html = await assemble!(msg.text, { delivery: msg.delivery, engineSource: msg.engineSource, ...(msg.includes ? { includes: msg.includes } : {}) });
               emit({ type: 'orz-reassembled', id: msg.id, ok: typeof html === 'string', html }, contentWindow);
             } catch (e) {
               emit({ type: 'orz-reassembled', id: msg.id, ok: false, error: String((e as Error).message) }, contentWindow);
@@ -170,7 +170,7 @@ function served(bundle: string, over: Partial<ReleaseManifest> = {}, serveBytes?
   return { m, url, ...f };
 }
 
-const goodAssemble = (version = '1.1.0', over: Partial<ShellParts> = {}): Assemble => (text, o) => assembleEnvelope(text, PARTS(version, { delivery: o.delivery as 'inline' | 'cdn', ...over }));
+const goodAssemble = (version = '1.1.0', over: Partial<ShellParts> = {}): Assemble => (text, o) => assembleEnvelope(text, PARTS(version, { delivery: o.delivery as 'inline' | 'cdn', ...(o.includes ? { includes: o.includes } : {}), ...over }));
 
 // ── U.1 manifest and URLs ────────────────────────────────────────────────
 
@@ -510,6 +510,43 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
         expect(extract(html)).toMatchObject({ text, kind: 'md', shell: '1.1.0', delivery });
       }
     }
+  });
+
+  it('[U.7] [U.12] the resolved includes (#orz-includes, FC-18 D4) are carried over and verified: reassemble passes them to the bundle\'s assemble and accepts the file only when it holds exactly them; a bundle that drops, alters or adds one is refused (code includes); performUpdate passes them on', async () => {
+    const s = served(BUNDLE);
+    const includes = { 'parts/safety.md': '## Safety\n\nGoggles on.\n', 'https://example.org/x.md': 'x\r\n', __proto__x: '' } as Record<string, string>;
+    const seen: unknown[] = [];
+    const ok = fakePage((t, o) => { seen.push(o.includes); return goodAssemble()(t, o); });
+    const html = await reassemble({ text: TEXTS[0], kind: 'md', release: s.m, includes, fetch: s.fetch, document: ok.document, window: ok.window });
+    expect(extract(html)).toMatchObject({ text: TEXTS[0], includes });
+    expect(seen).toEqual([includes]);
+    // none given: the request carries no includes key, and a file with none is right
+    const none = fakePage((t, o) => { seen.push('includes' in o); return goodAssemble()(t, o); });
+    expect(extract(await reassemble({ text: 'a\n', kind: 'md', release: s.m, fetch: s.fetch, document: none.document, window: none.window }))!.includes).toBeUndefined();
+    expect(seen.at(-1)).toBe(false);
+    const bad: Assemble[] = [
+      (t, o) => goodAssemble()(t, { delivery: o.delivery, engineSource: o.engineSource }), // an older bundle that ignores them
+      (t, o) => goodAssemble('1.1.0', { includes: { ...o.includes, 'parts/safety.md': 'changed' } })(t, o),
+      (t, o) => goodAssemble('1.1.0', { includes: { ...o.includes, 'extra.md': 'x' } })(t, o),
+    ];
+    for (const assemble of bad) {
+      const page = fakePage(assemble);
+      const err = await reassemble({ text: 'a\n', kind: 'md', release: s.m, includes, fetch: s.fetch, document: page.document, window: page.window }).catch((e) => e);
+      expect([err.code, page.frames[0].removed]).toEqual(['includes', true]);
+    }
+    // a bundle that adds includes the file did not have is refused too
+    const adds = fakePage(goodAssemble('1.1.0', { includes: { 'a.md': 'a' } }));
+    expect((await reassemble({ text: 'a\n', kind: 'md', release: s.m, fetch: s.fetch, document: adds.document, window: adds.window }).catch((e) => e)).code).toBe('includes');
+    // performUpdate: the includes reach the saved file; a bundle that drops them saves nothing
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const saved: string[] = [];
+    const saver = { save: async (i: { text: string; html: string }): Promise<SaveResult> => { saved.push(i.html); return { via: 'file', ok: true, picked: false, opened: true }; } };
+    const p1 = fakePage(goodAssemble());
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'b\n', includes, saver, fetch: s.fetch, document: p1.document, window: p1.window })).toMatchObject({ status: 'updated', reload: true });
+    expect(extract(saved[0])!.includes).toEqual(includes);
+    const p2 = fakePage(bad[0]);
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'b\n', includes, saver, fetch: s.fetch, document: p2.document, window: p2.window })).toMatchObject({ status: 'failed', code: 'includes' });
+    expect(saved).toHaveLength(1);
   });
 
   it('[U.8] the transaction touches nothing in the page but its own iframe, which is removed on success and on every failure', async () => {

@@ -164,8 +164,18 @@ export interface EditorShellOptions {
   storage?: StorageLike;
   /** FC-19 §3 hooks (`hooks.save` = app host). */
   hooks?: EditorHooks;
-  /** Standalone host: the assembled file for a text (the carrier's `assemble`), saved through `createSaver`. */
-  assemble?(text: string): string | Promise<string>;
+  /**
+   * Standalone host: the assembled file for a text (the carrier's `assemble`), saved through
+   * `createSaver`. It must keep the opened file's delivery (FC-19 §8.5); the shell passes
+   * `{ includes }` when the `includes` option holds some.
+   */
+  assemble?(text: string, options?: { includes?: Record<string, string> }): string | Promise<string>;
+  /**
+   * The opened file's resolved includes (`extract(html).includes`, the `#orz-includes` island,
+   * FC-18 §8.3 D4). A page cannot resolve local includes again, so every standalone save (and
+   * the default `openedHtml`) passes them to `assemble(text, { includes })`. Default: none.
+   */
+  includes?: Record<string, string>;
   /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
   fileName?: string;
   /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml })`. */
@@ -173,8 +183,11 @@ export interface EditorShellOptions {
   /**
    * The bytes of the file this page was opened from (`createSaver`'s
    * `openedHtml`: how a remembered file handle is proved to be that file).
-   * Default: `assemble(text)` of the text the shell was mounted with, which
-   * reproduces an assembled file (FC-18 law 3).
+   * Default: `assemble(text, { includes })` of the text the shell was mounted
+   * with, which reproduces an assembled file (FC-18 law 3) — computed once,
+   * when the page is first idle after mount, so a save click runs one
+   * `assemble` and the picker or permission prompt still has the click's
+   * user activation on a large document (round 3, B#6).
    */
   openedHtml?: SaverOptions['openedHtml'];
   /** A connected app host (`connectHost`): saves go to it, and the dirty state is posted to it. */
@@ -1074,6 +1087,23 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   applyMode();
 
   // ── save ──
+  const includes = options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { ...options.includes } : null;
+  /** The carrier's `assemble`, with the opened file's includes (FC-18 D4). */
+  const assembleText = (t: string): Promise<string> => Promise.resolve().then(() => (includes ? options.assemble!(t, { includes }) : options.assemble!(t))).then(String);
+  let openedMemo: Promise<string> | null = null;
+  /** `assemble` of the text the shell was mounted with — the default opened bytes — once. */
+  const openedAssembled = (): Promise<string> => (openedMemo ??= assembleText(openedText));
+  /** The file for a text; the unchanged text reuses the opened bytes (one `assemble` per save click). */
+  const assembleFor = (t: string): Promise<string> => (t === openedText ? openedAssembled() : assembleText(t));
+  if (!hooks.save && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
+    // B#6: the default opened bytes are ready before the first save click (at idle after mount)
+    const warm = (): void => { if (!destroyed) void openedAssembled().catch(() => undefined); };
+    const idle = win.requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => unknown) | undefined;
+    if (typeof idle === 'function') {
+      const id = idle.call(win, warm, { timeout: 2000 });
+      cleanups.push(() => { try { (win.cancelIdleCallback as ((x: unknown) => void) | undefined)?.call(win, id); } catch { /* gone */ } });
+    } else later(warm, 300);
+  }
   let saver: Saver | null = options.saver ?? null;
   let saving: Promise<SaveOutcome> | null = null;
   const toast = (text: string, tone: 'success' | 'error' | 'warning' | 'info'): void => { if (!destroyed) showToast(root, text, { tone }); };
@@ -1106,7 +1136,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       void (async () => {
         try {
           const t = getText();
-          const r = await saver!.download({ html: await options.assemble!(t) });
+          const r = await saver!.download({ html: await assembleFor(t) });
           if (r.via === 'download' && r.ok) { dismissNotice(); succeed(t, 'download'); } else fail('error' in r && r.error ? r.error : 'The download failed.', 'download');
         } catch (e) { fail(e, 'download'); }
       })();
@@ -1131,14 +1161,14 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     }
     if (!options.assemble) return fail(new Error('no save route (pass hooks.save or assemble)'));
     let html: string;
-    try { html = String(await options.assemble(text)); } catch (e) { return fail(e); }
+    try { html = await assembleFor(text); } catch (e) { return fail(e); }
     if (destroyed) return { ok: false, error: 'destroyed' }; // nothing new starts after destroy
     saver ??= createSaver({
       ...(uid ? { uid } : {}),
       suggestedName: options.fileName ?? `document${KIND_EXTENSIONS[kind] ?? '.html'}`,
       kind,
       ...(options.host ? { host: options.host } : {}),
-      openedHtml: options.openedHtml ?? (async () => String(await options.assemble!(openedText))),
+      openedHtml: options.openedHtml ?? openedAssembled,
     });
     const r = await saver.save({ text, html });
     if (r.via === 'served-notice') {

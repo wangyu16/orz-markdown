@@ -43,6 +43,7 @@ md/
 - `script-close.md` — `</script>`, `<script`, `<!--`, `<!--<script>`, `]]>` and case variants in header values, prose, code and raw HTML; no trailing newline. **Byte-sensitive.**
 - `unicode.md` — CJK, RTL and bidi marks, emoji sequences, combining marks (NFC/NFD), astral-plane characters, special spaces.
 - `large.md` — about 2,000 lines plus one ~30,000-character line (generated; see below).
+- `includes.md` — a file include and a URL include; its manifest entry lists the resolved includes its assembled file carries in `#orz-includes` (FC-18 §8.3, D4). A page cannot resolve local includes again, so saves and the quiet update must carry them over exactly (conformance `C.save.keeps-includes`, `C.update.keeps-includes`; the harness's `INCLUDE_TEXT` / `INCLUDES` are the same).
 
 slides/
 
@@ -102,6 +103,7 @@ corpus file; every file here is compared byte for byte.
 | `purpose` | what the file is for |
 | `checks` | FC-18 laws / sections and FC-19 checks it targets |
 | `defect` | `D-46` / `D-48` when it reproduces a STATUS display defect, else `null` |
+| `includes` | optional: the resolved includes (target → text, keys in code-unit order) its assembled file carries in `#orz-includes` |
 
 ## How `large.md` was made
 

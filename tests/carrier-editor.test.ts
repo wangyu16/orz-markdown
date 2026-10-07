@@ -1456,6 +1456,36 @@ describe('memory (round 2: F4, MED3, cost-1, cost-2)', () => {
     expect(model.toExact('a\nb\nc')).not.toBe('a\r\nb\nc');
   });
 
+  it('[E.1] [E.2] [E.24] one editor form, two exact texts (round 3, F4): after setText of an LF text over a BOM + CR LF document with the same editor form, that editor text reads back as the LF text and dirty — right away (the window is searched before the pinned initial/saved text) and after 17 more edits undone back (the pinned text it shadowed is not found for that form any more)', () => {
+    const X = '﻿A\r\nB';
+    const Y = 'A\nB';
+    const model = createTextModel(X);
+    model.adopt(Y);
+    expect([model.toExact('A\nB'), model.isSaved('A\nB'), model.bom, model.eol]).toEqual([Y, false, false, '\n']);
+    expect(model.toExactOffset('A\nB', 2)).toBe(2); // Y's offsets, not X's (BOM, CR LF)
+    for (let i = 0; i < 17; i++) model.adopt(`A\nB${i}`);
+    expect([model.toExact('A\nB'), model.isSaved('A\nB')]).toEqual([Y, false]);
+    expect(model.savedText()).toBe(X); // still the saved text; only not read back for that editor form
+    // the saved text adopted again is clean again
+    model.adopt(X);
+    expect([model.toExact('A\nB'), model.isSaved('A\nB')]).toEqual([X, true]);
+    // a save that finishes after the editor moved to another exact text of the same editor form (markSaved of the
+    // text captured when the save started): the editor's text is the one given last, dirty — also after the window moves on
+    const m2 = createTextModel('A\r\nB\r\n');
+    m2.adopt('A\nB\n');
+    m2.markSaved('A\r\nB\r\n');
+    expect([m2.toExact('A\nB\n'), m2.isSaved('A\nB\n')]).toEqual(['A\nB\n', false]);
+    for (let i = 0; i < 17; i++) m2.adopt(`A\nB\n${i}`);
+    expect([m2.toExact('A\nB\n'), m2.isSaved('A\nB\n')]).toEqual(['A\nB\n', false]);
+    // the same through the shell: setText, 17 more, undo back
+    const m = mount({ text: X });
+    m.shell.setText(Y);
+    for (let i = 0; i < 17; i++) m.shell.setText(`A\nB${i}`);
+    for (let i = 0; i < 17; i++) m.shell.undo();
+    expect([m.shell.getText(), m.shell.isDirty()]).toEqual([Y, true]);
+    m.shell.destroy();
+  });
+
   it('[E.24] a remembered text costs one copy unless its line endings are mixed: 60 setText of a 1.25 MB CR LF text keep under 24 copies (they kept 32 before), and destroy() lets them go', () => {
     const gc = exposeGc();
     const crlf = asciiBig(1_250_000).replace(/\n/g, '\r\n');
@@ -1578,6 +1608,52 @@ describe('the standalone save proves the opened file (round 2)', () => {
       if (had) g.window = prev; else delete g.window;
     }
   });
+
+  it('[E.8] round 3 (B#6, D4): the default opened bytes are assembled once, when the page is idle after mount — a save click then runs one assemble (none for an unchanged text) — and the includes option goes to every assemble, so a save keeps the file\'s #orz-includes', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const includes = { 'parts/a.md': 'Included A\n' };
+    const assembled = (t: string, o?: { includes?: Record<string, string> }) => `<html>${t}|${JSON.stringify(o?.includes ?? null)}</html>`;
+    const written: string[] = [];
+    let onDisk = assembled('a\r\n', { includes });
+    const handle = {
+      name: 'doc.md.html',
+      getFile: async () => ({ text: async () => onDisk }),
+      createWritable: async () => ({ write: async (h: string) => { written.push(h); onDisk = h; }, close: async () => {} }),
+    };
+    g.window = { location: { protocol: 'file:', href: 'file:///d/doc.md.html', pathname: '/d/doc.md.html', origin: 'null' }, showSaveFilePicker: async () => handle };
+    try {
+      const assemble = vi.fn(assembled);
+      const m = mount({ text: 'a\r\n', assemble, includes, fileName: 'doc.md.html' });
+      expect(assemble).not.toHaveBeenCalled(); // not during mount
+      for (let i = 0; i < 60 && assemble.mock.calls.length === 0; i++) await tick(50);
+      expect(assemble.mock.calls).toEqual([['a\r\n', { includes }]]); // at idle, before any save
+      // an unchanged text: the save reuses it (no assemble at the click); the opened file is proved by it
+      expect(await m.shell.save()).toEqual({ ok: true, via: 'file' });
+      expect(assemble).toHaveBeenCalledTimes(1);
+      expect(written).toEqual([assembled('a\r\n', { includes })]);
+      // an edit: one assemble per click, with the includes
+      type(m, 'b');
+      expect(await m.shell.save()).toEqual({ ok: true, via: 'file' });
+      expect(assemble.mock.calls).toEqual([['a\r\n', { includes }], ['a\r\nb', { includes }]]);
+      expect(written.at(-1)).toBe(assembled('a\r\nb', { includes }));
+      m.shell.destroy();
+      // without includes the carrier's assemble gets the text alone (FC-19 §2's one-argument form still works)
+      const plain = vi.fn(assembled);
+      const n = mount({ text: 'c\n', assemble: plain, fileName: 'doc.md.html' });
+      for (let i = 0; i < 60 && plain.mock.calls.length === 0; i++) await tick(50);
+      expect(plain.mock.calls).toEqual([['c\n']]);
+      n.shell.destroy();
+      // a shell destroyed before it is idle assembles nothing
+      const none = vi.fn(assembled);
+      mount({ text: 'd\n', assemble: none }).shell.destroy();
+      await tick(2500);
+      expect(none).not.toHaveBeenCalled();
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
+  });
 });
 
 describe('work in flight and after destroy (round 2: F3/#11, LOW7)', () => {
@@ -1682,6 +1758,31 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     expect(most).toBe(1);
     expect(during).toBeGreaterThanOrEqual(2); // and the preview does not wait for the typing to stop (LOW6)
     expect(during).toBeLessThanOrEqual(5); // without the frame's time it rendered after almost every key
+    m.shell.destroy();
+  });
+
+  it('[E.16] an acknowledgement of an earlier render id does not count (round 3, m15): a frame that answers each render at once with a stale id and with the right one 200 ms later never holds two renders at once', async () => {
+    const m = mount({ render: (t) => `<p>${t.length}</p>`, preview: { assets: false, debounceMs: 10 } });
+    const f = frameOf(m);
+    let inFrame = 0;
+    let most = 0;
+    let renders = 0;
+    const cw = m.root.querySelector('iframe')!.contentWindow as unknown as { postMessage(x: Record<string, unknown>): void };
+    cw.postMessage = (msg: Record<string, unknown>) => {
+      if (msg.type !== 'orz-preview-render') return;
+      renders++;
+      inFrame++;
+      most = Math.max(most, inFrame);
+      f.say({ type: 'orz-preview-rendered', id: (msg.id as number) - 1, anchors: [], max: 0 }); // a late answer to the previous render
+      setTimeout(() => { inFrame--; f.say({ type: 'orz-preview-rendered', id: msg.id, anchors: [], max: 0 }); }, 200);
+    };
+    f.say({ type: 'orz-preview-ready' });
+    await tick(300);
+    const before = renders;
+    for (let i = 0; i < 40; i++) { type(m, 'x'); await tick(30); }
+    await tick(1200);
+    expect(renders - before).toBeGreaterThanOrEqual(2);
+    expect(most).toBe(1);
     m.shell.destroy();
   });
 

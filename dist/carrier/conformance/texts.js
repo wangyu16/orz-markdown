@@ -6,7 +6,7 @@
  * checks open.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
+exports.INCLUDES = exports.INCLUDE_TEXT = exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
 /** Uids used by the browser checks (well-formed, FC-18 §5.1). */
 exports.UID_A = 'doc-conformance0a1b2c';
 exports.UID_B = 'doc-conformance9z8y7x';
@@ -53,4 +53,15 @@ exports.THEFT_SCRIPT = "(function(){if(window.__orzTheft)return;window.__orzThef
     + "setInterval(function(){P.postMessage({type:'orz-conformance-theft'},'*');if(document.activeElement!==i)i.focus()},40)})()";
 /** A document whose preview runs {@link THEFT_SCRIPT} (from an image error handler, as a document script would). */
 exports.THEFT_TEXT = `{{nyml\nkind: document\ntitle: Focus theft\nuid: doc-conformance7t8u9v\n}}\n\n# Focus theft\n\nA picture <img src="x-missing.png" alt="" onerror="${exports.THEFT_SCRIPT}">\n\n${Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of the text the reader edits.\n`).join('\n')}`;
+/**
+ * A document with includes (FC-18 §8.3, D4) and the resolved includes its file carries in
+ * `#orz-includes` (keys in code-unit order, as the island stores them). A page cannot resolve local
+ * includes again: its saves and its quiet update must carry these over exactly. The same text and
+ * includes are the corpus file `md/includes.md` and its manifest entry.
+ */
+exports.INCLUDE_TEXT = `{{nyml\nkind: document\nformat: 1\ntitle: Titration lab — with includes\nuid: doc-conformance1i2n3c\n}}\n\n# Titration lab\n\n{{md parts/safety-rules.md}}\n\nProcedure follows.\n\n{{md https://example.org/notes/glossary.md}}\n`;
+exports.INCLUDES = {
+    'https://example.org/notes/glossary.md': '## Glossary\r\n\r\nTitrant — 𝒳 the solution of known concentration.\r\n',
+    'parts/safety-rules.md': '## Safety rules\n\n- Goggles on. A literal </script> stays text.\n- No food in the lab.\n',
+};
 //# sourceMappingURL=texts.js.map

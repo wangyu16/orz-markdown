@@ -231,7 +231,8 @@ function createSaver(opts) {
         if (opened !== undefined && name !== undefined && name !== opened)
             return null;
         // A name proves nothing (a save-as into another folder keeps it): the file must hold
-        // the opened file's bytes — and, when the record says, what was last written through it.
+        // the opened file's bytes. Whoever wrote them last (this page, or a CLI that assembled
+        // the same text again: B#8) does not matter — the page was opened from those bytes.
         const mine = await openedBytes();
         if (mine === undefined)
             return null;
@@ -251,11 +252,6 @@ function createSaver(opts) {
         const now = await readText(h);
         if (now === null || now !== mine)
             return null;
-        if (typeof stored.sha256 === 'string') {
-            const sum = await sha256Hex(now);
-            if (sum !== undefined && sum !== stored.sha256)
-                return null;
-        }
         return h;
     };
     const write = async (h, html) => {

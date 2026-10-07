@@ -8,7 +8,11 @@
  * the file: connects to an embedding host (`connectHost`, all three
  * protocols) and, standalone, runs the quiet update check with the indicator.
  * Its saver gets `openedHtml` — this bundle's `assemble` of the text the page
- * loaded — so a handle is proved by its content (spec/shell-runtime.md §1).
+ * loaded, with the file's delivery and includes, computed when the page is
+ * first idle — so a handle is proved by its content (spec/shell-runtime.md §1).
+ * Saves and the quiet update keep the file's delivery and its resolved
+ * includes (`#orz-includes`, FC-18 §8.3 D4); the editor is read-only while an
+ * update runs and editable again when it settles.
  *
  * Built by build.ts with esbuild; `__STUB_VERSION__` and `__STUB_VARIANT__`
  * are compile-time constants. Variants other than `good` are deliberate bugs
@@ -39,12 +43,12 @@ const SELF: string | null = (() => {
   }
 })();
 
-interface AssembleOptions { delivery?: 'inline' | 'cdn'; engineSource?: string }
+interface AssembleOptions { delivery?: 'inline' | 'cdn'; engineSource?: string; includes?: Record<string, string> }
 
 function assemble(text: string, o: AssembleOptions = {}): Promise<string> {
   try {
     // BUG (mutation) browser-shell-lie: the browser bundle writes a stale shell version
-    return Promise.resolve(stubAssemble(text, { version: VARIANT === 'browser-shell-lie' ? '1.0.0' : VERSION, variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? SELF }));
+    return Promise.resolve(stubAssemble(text, { version: VARIANT === 'browser-shell-lie' ? '1.0.0' : VERSION, variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? SELF, ...(o.includes ? { includes: o.includes } : {}) }));
   } catch (e) {
     // BUG (mutation) browser-no-refusal: the browser bundle writes texts the Node assemble refuses
     if (VARIANT === 'browser-no-refusal') return Promise.resolve(`<!doctype html>\n<script type="application/json" id="orz-shell">{"kind":"md","format":1,"shell":"${VERSION}","delivery":"inline"}</script>\n<script type="text/markdown" id="orz-src" data-orz-format="1" data-orz-eol="lf">${text}</script>\n`);
@@ -127,6 +131,23 @@ function fileDelivery(): 'inline' | 'cdn' {
   }
 }
 
+/** The opened file's resolved includes (`#orz-includes`, read as `extract` reads it), or undefined. */
+function fileIncludes(): Record<string, string> | undefined {
+  try {
+    const el = document.getElementById('orz-includes');
+    if (!el) return undefined;
+    const parsed = JSON.parse(el.textContent ?? '') as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === 'string') Object.defineProperty(out, k, { value: v, enumerable: true, writable: true, configurable: true });
+    }
+    return Object.keys(out).length ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface MountOptions {
   text: string;
   readOnly?: boolean;
@@ -147,7 +168,12 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     st.textContent = 'body, button, input, p { font: 19px/1.2 Georgia, serif !important; color: #135 !important; } [data-orz-conformance] { outline: 3px solid red; }';
     document.head.appendChild(st);
   }
-  const plainAssemble = (t: string) => assemble(t);
+  // the file's delivery (FC-18 §8.2) and its resolved includes (D4) are kept by every save
+  const plainAssemble = (t: string, o?: { includes?: Record<string, string> }) => assemble(t, {
+    delivery: VARIANT === 'save-to-inline' ? 'inline' : fileDelivery(), // BUG (mutation) save-to-inline: a cdn file is saved inline (B#7)
+    ...(o?.includes ? { includes: o.includes } : {}),
+  });
+  const includes = VARIANT === 'save-drops-includes' ? undefined : fileIncludes(); // BUG (mutation) save-drops-includes
   const shell = createEditorShell(element as never, {
     text: options.text,
     render: (t) => renderMarkdownPreview(t),
@@ -169,6 +195,7 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
           }
           : plainAssemble,
       ...(host ? { host: VARIANT === 'no-dirty-post' ? { ...host, setDirty() { /* BUG (mutation): dirty never posted */ } } : host } : {}),
+      ...(includes ? { includes } : {}),
       saver: fileSaver(uid),
       // the file's own boot says the page is this standalone file (an assembled file: its island was read at boot)
       ...(openedHtml && !host ? { standalone: true } : {}),
@@ -176,6 +203,10 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
     preview: { assets: false },
   });
   current = shell;
+  if (VARIANT === 'r3-readonly-save-key' && app) {
+    // BUG (mutation) r3: the carrier's own Cmd/Ctrl+S handler saves through the app hook even when read-only
+    element.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void options.hooks!.save!(shell.getText()); } }, true);
+  }
   if (VARIANT === 'preview-same-origin') {
     // BUG (mutation): the preview frame gets the page's origin
     const f = (shell.root as unknown as ShadowRoot).querySelector('iframe');
@@ -208,11 +239,13 @@ function mountEditor(element: HTMLElement, options: MountOptions): EditorShell {
       if (d?.type === 'orz-preview-link' && typeof d.href === 'string') window.open(d.href, '_blank');
     });
   }
-  if (['crlf-after-edit', 'setheader-two-steps', 'shared-undo', 'global-mode-key'].includes(VARIANT)) {
+  if (['crlf-after-edit', 'setheader-two-steps', 'shared-undo', 'global-mode-key', 'r3-hook-markSaved'].includes(VARIANT)) {
     const out = Object.create(shell) as EditorShell & Record<string, unknown>;
     if (VARIANT === 'crlf-after-edit') out.getText = () => { const t = shell.getText(); return shell.isDirty() ? t.replace(/\r\n/g, '\n') : t; }; // BUG (mutation)
     if (VARIANT === 'setheader-two-steps') out.setHeader = (ch) => { const [k] = Object.keys(ch); shell.setHeader({ [k]: ch[k] }); shell.setHeader(ch); }; // BUG (mutation): two undo steps
     if (VARIANT === 'shared-undo') out.undo = () => (current ?? shell).undo(); // BUG (mutation): undo acts on the last mounted instance
+    // BUG (mutation) r3-hook-markSaved: after a successful save the carrier marks whatever the editor holds as saved (an edit made during the save counts as saved)
+    if (VARIANT === 'r3-hook-markSaved') out.save = async () => { const r = await shell.save(); if (r.ok) shell.markSaved(); return r; };
     if (VARIANT === 'global-mode-key') { // BUG (mutation): the view mode is one global key, and getMode is not exposed
       out.getMode = undefined;
       out.setMode = (m) => { try { localStorage.setItem('orz-stub-mode', m); } catch { /* none */ } shell.setMode(m); };
@@ -255,9 +288,26 @@ async function partlyVerified(info: UpdateInfo, text: string, delivery: 'inline'
 }
 
 async function update(info: UpdateInfo, island: Element, uid: string | undefined): Promise<void> {
+  // the editor is read-only while the update runs (spec/shell-runtime.md §7.2) and editable again when it settles
+  const editor = current;
+  const wasReadOnly = editor ? editor.isReadOnly() : true;
+  editor?.setReadOnly(true);
+  let reloading = false;
+  try {
+    reloading = await runUpdateNow(info, island, uid);
+  } finally {
+    // BUG (mutation) r3-readonly-stuck: read-only while updating, never given back
+    if (!reloading && !wasReadOnly && VARIANT !== 'r3-readonly-stuck') editor?.setReadOnly(false);
+  }
+  if (reloading) location.reload();
+}
+
+/** The update itself; true when the page should reload (the opened file itself was written and the text did not move on). */
+async function runUpdateNow(info: UpdateInfo, island: Element, uid: string | undefined): Promise<boolean> {
   const base = fileSaver(uid);
   const saver = VARIANT === 'update-download' ? { ...base, save: (x: { html: string }) => base.download({ html: x.html }) } : base; // BUG (mutation): the update is always a downloaded copy
   const delivery = fileDelivery();
+  const includes = VARIANT === 'update-drops-includes' ? undefined : fileIncludes(); // BUG (mutation) update-drops-includes
   let r: PerformUpdateResult;
   if (VARIANT === 'accept-tampered' || VARIANT === 'no-roundtrip' || VARIANT === 'no-version-check') {
     const text = currentText(island);
@@ -267,7 +317,7 @@ async function update(info: UpdateInfo, island: Element, uid: string | undefined
       const res = await fetch(bundleUrl(info.manifest), { credentials: 'omit' });
       const integrity = await sha384Integrity(new Uint8Array(await res.arrayBuffer()));
       const release = { ...info.manifest, bundle: { ...info.manifest.bundle, integrity } };
-      html = await reassemble({ text, kind: 'md', release, delivery });
+      html = await reassemble({ text, kind: 'md', release, delivery, ...(includes ? { includes } : {}) });
     } else {
       html = await partlyVerified(info, text, delivery);
     }
@@ -276,18 +326,20 @@ async function update(info: UpdateInfo, island: Element, uid: string | undefined
   } else {
     // The text is read when the update starts and again before the save (spec/shell-runtime.md §7.2).
     r = VARIANT === 'update-stale-text'
-      ? await performUpdate({ info, kind: 'md', current: VERSION, text: currentText(island), saver: saver as never, delivery, openedName: fileName() } as never) // BUG (mutation): the text read once
-      : await performUpdate({ info, kind: 'md', current: VERSION, getText: () => currentText(island), saver: saver as never, delivery, openedName: fileName() });
+      ? await performUpdate({ info, kind: 'md', current: VERSION, text: currentText(island), saver: saver as never, delivery, ...(includes ? { includes } : {}), openedName: fileName() } as never) // BUG (mutation): the text read once
+      : await performUpdate({ info, kind: 'md', current: VERSION, getText: () => currentText(island), saver: saver as never, delivery, ...(includes ? { includes } : {}), openedName: fileName() });
   }
   if (r.status === 'failed') throw new Error(r.error);
-  if (r.status !== 'updated') return;
+  if (r.status !== 'updated') return false;
   if (r.save.via === 'served-notice') {
     const d = await saver.download({ html: r.html });
     if (!('ok' in d) || !d.ok) throw new Error('The update could not be downloaded.');
-    return; // a copy: this page keeps running (and keeps its text)
+    return false; // a copy: this page keeps running (and keeps its text)
   }
   if (!r.save.ok) throw new Error(r.save.error ?? 'The update could not be saved.');
-  if (r.reload) location.reload(); // only when the opened file itself was written and the text did not move on
+  // only when the opened file itself was written and the text did not move on
+  // BUG (mutation) r3-reload-picked: reloads after any written file
+  return r.reload || (VARIANT === 'r3-reload-picked' && r.save.via === 'file' && r.save.ok);
 }
 
 /** BUG (mutation) `offer-prerelease` / `no-once-a-day` / `update-any-format`: a carrier's own update check. */
@@ -314,8 +366,13 @@ function boot(): void {
   const doc = readDocument(loaded, { kind: 'md' });
   const uid = doc.meta.uid;
   const delivery = fileDelivery();
+  const includes = fileIncludes();
   let opened: Promise<string> | null = null;
-  openedHtml = () => (opened ??= assemble(loaded, { delivery }));
+  openedHtml = () => (opened ??= assemble(loaded, { delivery, ...(includes ? { includes } : {}) }));
+  // computed when the page is first idle, so a save click does not wait for it (round 3, B#6)
+  const warm = () => { void openedHtml?.().catch(() => undefined); };
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  if (typeof idle === 'function') idle.call(window, warm, { timeout: 2000 }); else setTimeout(warm, 300);
   const framed = window.parent !== window;
   if (framed) {
     let win: Window | undefined;

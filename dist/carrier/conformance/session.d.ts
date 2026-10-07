@@ -130,7 +130,7 @@ export declare class Session {
     /** A page of the harness origin that loaded a release's bundle by URL (one per release within a scope). */
     bundlePage(r: Release): Promise<Page>;
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
-    chromeAssemble(r: Release, texts: string[], delivery: 'inline' | 'cdn', hash?: boolean): Promise<string[]>;
+    chromeAssemble(r: Release, texts: string[], delivery: 'inline' | 'cdn', hash?: boolean, includes?: Record<string, string>): Promise<string[]>;
     close(): Promise<void>;
 }
 /** Evaluate a page-side function source with one JSON argument. */

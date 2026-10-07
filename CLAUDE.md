@@ -73,7 +73,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   sides of `orz-host-save/-ai/-include@1`), the quiet update in `update.ts`
   (`checkForUpdate` once a day per kind, `reassemble` — SHA-384-verified,
   script-safe bundle run in a `sandbox="allow-scripts"` iframe, accepted only
-  when `extract` gives back the exact text/kind/version — and
+  when `extract` gives back the exact text/kind/version/delivery and the
+  file's `#orz-includes` (a page cannot resolve local includes again) — and
   `performUpdate`, which re-reads the text before saving and says when a
   reload is safe; no check in a framed/hosted or served page) with
   `mountUpdateIndicator` in `indicator.ts`, and the

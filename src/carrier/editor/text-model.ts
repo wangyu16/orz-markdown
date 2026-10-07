@@ -28,6 +28,15 @@
  * line ending cannot rebuild it (mixed line endings), so a CR LF document
  * costs one copy per remembered text, not two. `clear()` forgets all of it.
  *
+ * One editor form, several exact texts (round 3, F4): the window is searched
+ * first, newest first, so a text given later wins over a pinned one (the
+ * initial or the saved text) with the same editor form; and once such a later
+ * text leaves the window, the pinned text it shadowed is no longer found for
+ * that form (the initial one is dropped; the saved one stays the saved text
+ * but is not read back for it) — undoing back to that editor text then gives
+ * the document's style, never the older exact text, and is dirty unless that
+ * is the saved text.
+ *
  * Pure and deterministic; no browser API.
  */
 import { eolStyle } from '../text.js';
@@ -110,11 +119,19 @@ export function createTextModel(initial: string): TextModel {
   /** The initial and the saved text: remembered whatever the window holds. */
   let first: Known | null = null;
   let saved: Known | null = null;
+  /** False once a later text with the saved text's editor form but another exact form left the window (F4). */
+  let savedFound = true;
   const find = (editorText: string): Known | undefined => {
+    // the window first: a text given later wins over a pinned one with the same editor form
     for (const k of known) if (k.editor === editorText) return k;
-    if (saved && saved.editor === editorText) return saved;
+    if (saved && savedFound && saved.editor === editorText) return saved;
     if (first && first.editor === editorText) return first;
     return undefined;
+  };
+  /** A remembered text leaves the window: a pinned text it shadowed (same editor form, other exact form) is not found for that form any more. */
+  const forget = (gone: Known): void => {
+    if (first && first !== gone && first.editor === gone.editor && exactOf(first) !== exactOf(gone)) first = null;
+    if (saved && saved !== gone && savedFound && saved.editor === gone.editor && exactOf(saved) !== exactOf(gone)) savedFound = false;
   };
   /** Walk an exact text to the exact offset of an editor offset. */
   const walk = (exact: string, at: number): number => {
@@ -127,7 +144,9 @@ export function createTextModel(initial: string): TextModel {
       const k = know(text);
       bom = k.bom;
       eol = k.eol;
-      known = [k, ...known.filter((x) => x.editor !== k.editor)].slice(0, REMEMBERED);
+      const next = [k, ...known.filter((x) => x.editor !== k.editor)];
+      for (const gone of next.slice(REMEMBERED)) forget(gone);
+      known = next.slice(0, REMEMBERED);
       return k.editor;
     },
     toExact(editorText) {
@@ -157,17 +176,21 @@ export function createTextModel(initial: string): TextModel {
       // the same text as one already known costs nothing more
       const k = find(toEditorText(text));
       saved = k && exactOf(k) === text ? k : know(text);
+      savedFound = true;
     },
     isSaved(editorText) {
       if (!saved || editorText !== saved.editor) return false;
-      const k = find(editorText)!;
-      return k === saved || exactOf(k) === exactOf(saved);
+      const k = find(editorText);
+      if (k === saved) return true;
+      // what toExact would read back for this editor text
+      return (k ? exactOf(k) : rebuild(editorText, bom, eol)) === exactOf(saved);
     },
     savedText: () => (saved ? exactOf(saved) : ''),
     clear() {
       known = [];
       first = null;
       saved = null;
+      savedFound = true;
     },
     get eol() { return eol; },
     get bom() { return bom; },

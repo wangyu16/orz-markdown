@@ -26,7 +26,10 @@ export type StubVariant =
   | 'prefs-in-file' | 'setheader-two-steps' | 'date-stamp' | 'browser-no-refusal' | 'global-mode-key' | 'update-download'
   | 'update-stale-text' | 'download-fixed-name' | 'readonly-ignored' | 'silent-refusal'
   // closed loop 2 round 2 (harness sub-probe): more subtly non-conformant carriers
-  | 'meta-from-body' | 'no-eol-attr' | 'no-generator' | 'update-any-format' | 'note-when-hosted' | 'prefs-in-text' | 'name-handle';
+  | 'meta-from-body' | 'no-eol-attr' | 'no-generator' | 'update-any-format' | 'note-when-hosted' | 'prefs-in-text' | 'name-handle'
+  // closed loop 2 round 3: carriers that passed the harness (the claims adversary's r3-* and the save/update gaps)
+  | 'r3-reload-picked' | 'r3-readonly-stuck' | 'r3-hook-markSaved' | 'r3-readonly-save-key'
+  | 'save-to-inline' | 'save-drops-includes' | 'update-drops-includes';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 
@@ -36,6 +39,8 @@ export interface StubAssembleOptions {
   delivery?: 'inline' | 'cdn';
   /** The bundle's exact text (required for inline delivery). */
   engineSource?: string | null;
+  /** Resolved includes, stored in `#orz-includes` as given (FC-18 §8.3, D4). */
+  includes?: Record<string, string>;
 }
 
 const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}.orz-stub-bar{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid #ddd}#orz-app{min-height:60vh}</style>';
@@ -55,6 +60,7 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
     kind: 'md',
     shellVersion: o.version,
     delivery,
+    ...(o.includes && Object.keys(o.includes).length > 0 ? { includes: o.includes } : {}),
     headHtml: HEAD,
     bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `<header class="orz-stub-bar"><span id="orz-brand" tabindex="-1">orz stub</span></header>\n<main id="orz-app"></main>\n${engine}`, // BUG (mutation) date-stamp
   });

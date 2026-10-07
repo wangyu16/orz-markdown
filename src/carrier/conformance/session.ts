@@ -230,7 +230,7 @@ export class Session {
   /** The target's Node `assemble`, memoised per text and options. */
   assemble(text: string, o: AssembleOptions = {}): Promise<string> {
     const engine = o.engineSource === undefined ? '-' : o.engineSource === this.releases.target.code ? 'own' : `sha256:${sha256hex(o.engineSource)}`;
-    const key = `${o.delivery ?? ''}|${engine}|${text}`;
+    const key = `${o.delivery ?? ''}|${engine}|${o.includes ? JSON.stringify(Object.entries(o.includes).sort()) : '-'}|${text}`;
     let p = this.memo.get(key);
     if (!p) {
       p = callAssemble((t, x) => this.target.assemble(t, x), text, o);
@@ -373,7 +373,7 @@ export class Session {
   }
 
   /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
-  async chromeAssemble(r: Release, texts: string[], delivery: 'inline' | 'cdn', hash = false): Promise<string[]> {
+  async chromeAssemble(r: Release, texts: string[], delivery: 'inline' | 'cdn', hash = false, includes?: Record<string, string>): Promise<string[]> {
     const page = await this.bundlePage(r);
     return call<string[]>(page, `async function (a) {
       var C = globalThis.OrzCarrier;
@@ -385,11 +385,13 @@ export class Session {
         return Array.prototype.map.call(d, function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
       };
       for (var i = 0; i < a.texts.length; i++) {
-        var html = await C.assemble(a.texts[i], a.inline ? { delivery: 'inline', engineSource: src } : { delivery: 'cdn' });
+        var o = a.inline ? { delivery: 'inline', engineSource: src } : { delivery: 'cdn' };
+        if (a.includes) o.includes = a.includes;
+        var html = await C.assemble(a.texts[i], o);
         out.push(a.hash && typeof html === 'string' ? 'sha256:' + await hex(html) : html);
       }
       return out;
-    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash });
+    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash, ...(includes ? { includes } : {}) });
   }
 
   async close(): Promise<void> {

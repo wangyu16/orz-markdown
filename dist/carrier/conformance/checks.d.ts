@@ -14,6 +14,8 @@ export declare class Probe {
 export type CheckFn = (s: Session, p: Probe) => Promise<void>;
 /** Where two strings first differ, for a readable failure. */
 export declare function firstDiff(a: string, b: string): string;
+/** The same resolved includes (keys and values; absent and empty are the same). */
+export declare function sameIncludes(a: Record<string, string> | undefined | null, b: Record<string, string> | undefined | null): boolean;
 /** The parts of a file derived from its text (FC-18 §8.1): everything before `#orz-shell` except the generator, the island and `#orz-includes`. */
 export declare function derivedParts(html: string): {
     head: string;

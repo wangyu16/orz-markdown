@@ -180,8 +180,20 @@ export interface EditorShellOptions {
     storage?: StorageLike;
     /** FC-19 §3 hooks (`hooks.save` = app host). */
     hooks?: EditorHooks;
-    /** Standalone host: the assembled file for a text (the carrier's `assemble`), saved through `createSaver`. */
-    assemble?(text: string): string | Promise<string>;
+    /**
+     * Standalone host: the assembled file for a text (the carrier's `assemble`), saved through
+     * `createSaver`. It must keep the opened file's delivery (FC-19 §8.5); the shell passes
+     * `{ includes }` when the `includes` option holds some.
+     */
+    assemble?(text: string, options?: {
+        includes?: Record<string, string>;
+    }): string | Promise<string>;
+    /**
+     * The opened file's resolved includes (`extract(html).includes`, the `#orz-includes` island,
+     * FC-18 §8.3 D4). A page cannot resolve local includes again, so every standalone save (and
+     * the default `openedHtml`) passes them to `assemble(text, { includes })`. Default: none.
+     */
+    includes?: Record<string, string>;
     /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
     fileName?: string;
     /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml })`. */
@@ -189,8 +201,11 @@ export interface EditorShellOptions {
     /**
      * The bytes of the file this page was opened from (`createSaver`'s
      * `openedHtml`: how a remembered file handle is proved to be that file).
-     * Default: `assemble(text)` of the text the shell was mounted with, which
-     * reproduces an assembled file (FC-18 law 3).
+     * Default: `assemble(text, { includes })` of the text the shell was mounted
+     * with, which reproduces an assembled file (FC-18 law 3) — computed once,
+     * when the page is first idle after mount, so a save click runs one
+     * `assemble` and the picker or permission prompt still has the click's
+     * user activation on a large document (round 3, B#6).
      */
     openedHtml?: SaverOptions['openedHtml'];
     /** A connected app host (`connectHost`): saves go to it, and the dirty state is posted to it. */

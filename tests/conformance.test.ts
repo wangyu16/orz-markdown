@@ -33,8 +33,13 @@
  *
  * and, from round 2 of closed loop 2, the carriers that passed the whole
  * harness as conformant (the audit's 16 and 6 more of the sub-probe), plus
- * the round-2 audit mutants that were already caught — each fails a named
- * check (the table `caught` below says which and why).
+ * the round-2 audit mutants that were already caught, and from round 3 the
+ * claims adversary's carriers (a reload after an unproved picked-file update,
+ * an editor left read-only after an update, an edit during a hook save
+ * marked saved, Cmd/Ctrl+S saving a read-only app editor) and the save and
+ * update gaps (a cdn file saved inline, includes dropped by a save or an
+ * update) — each fails a named check (the table `caught` below says which
+ * and why).
  *
  * One file, one Chrome, shared stub builds (the suite is heavy; a second
  * file running in parallel pushed other suites' default timeouts over).
@@ -382,6 +387,14 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['no-dirty-post', 'C.host.save', /no orz-host-dirty \{ dirty: true \}/],
     ['setheader-two-steps', 'C.edit.set-header', /one undo does not restore the exact text/],
     ['silent-refusal', 'C.update.tampered', /the refusal is not announced/],
+    // round 3 of closed loop 2: carriers that passed the whole harness (the claims adversary's r3-* and the save/update gaps)
+    ['r3-reload-picked', 'C.update.reassemble', /page loads after an update written to a picked file not proved to be the opened one/],
+    ['r3-readonly-stuck', 'C.update.edit-during', /typing after the update settled changed nothing/],
+    ['r3-hook-markSaved', 'C.edit.app-host', /isDirty\(\) after a hook save during which the text was edited/],
+    ['r3-readonly-save-key', 'C.edit.app-host', /saves of an editor mounted with readOnly: true \(save\(\) and Cmd\/Ctrl\+S\)/],
+    ['save-to-inline', 'C.save.keeps-delivery', /cdn-delivery file/],
+    ['save-drops-includes', 'C.save.keeps-includes', /lost or changed the file's #orz-includes/],
+    ['update-drops-includes', 'C.update.keeps-includes', /lost or changed the file's #orz-includes/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5] the ${variant} mutant fails ${id}`, async () => {

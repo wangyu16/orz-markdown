@@ -13,7 +13,7 @@ import { isScriptSafe, parseManifest, MAX_BUNDLE_BYTES, type ReleaseKind } from 
 import { callAssemble, decodeStrict, path, sha256hex, sha384 } from './node.js';
 import { DEFAULT_EDITOR_DRIVER, PAGE_HELPERS, READ_OPFS, WRITE_OPFS, mountEditorScript } from './page.js';
 import { call, type CheckContext, type Release, type Session } from './session.js';
-import { EDIT_TEXT, HAZARD_TEXTS, LIVE_DOM_MARKER, LONG_TEXT, NEWER_TEXT, OTHER_TEXT, REFUSED_TEXTS, THEFT_TEXT, UID_A, UID_B } from './texts.js';
+import { EDIT_TEXT, HAZARD_TEXTS, INCLUDES, INCLUDE_TEXT, LIVE_DOM_MARKER, LONG_TEXT, NEWER_TEXT, OTHER_TEXT, REFUSED_TEXTS, THEFT_TEXT, UID_A, UID_B } from './texts.js';
 
 type Page = import('playwright-core').Page;
 type Frame = import('playwright-core').Frame;
@@ -51,6 +51,13 @@ export function firstDiff(a: string, b: string): string {
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
   return `offset ${i}: ${JSON.stringify(a.slice(Math.max(0, i - 12), i + 24))} vs ${JSON.stringify(b.slice(Math.max(0, i - 12), i + 24))} (lengths ${a.length}, ${b.length})`;
+}
+
+/** The same resolved includes (keys and values; absent and empty are the same). */
+export function sameIncludes(a: Record<string, string> | undefined | null, b: Record<string, string> | undefined | null): boolean {
+  const ea = Object.entries(a ?? {}).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0));
+  const eb = Object.entries(b ?? {}).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0));
+  return JSON.stringify(ea) === JSON.stringify(eb);
 }
 
 /** The parts of a file derived from its text (FC-18 §8.1): everything before `#orz-shell` except the generator, the island and `#orz-includes`. */
@@ -628,9 +635,11 @@ export const editChecks: Record<string, CheckFn> = {
     const t0 = Date.now();
     await call(page, `async function (a) {
       window.__saves = [[], [], []];
-      var mk = function () { var el = document.createElement('div'); el.style.cssText = 'width: 1000px; height: 300px;'; document.body.appendChild(el); return el; };
+      window.__saveDelay = 0;
+      window.__els = [];
+      var mk = function () { var el = document.createElement('div'); el.style.cssText = 'width: 1000px; height: 300px;'; document.body.appendChild(el); window.__els.push(el); return el; };
       var mount = async function (i, text, extra) {
-        var o = { text: text, mode: 'editor', hooks: { save: function (t) { window.__saves[i].push(t); return Promise.resolve(); } } };
+        var o = { text: text, mode: 'editor', hooks: { save: function (t) { window.__saves[i].push(t); return new Promise(function (r) { setTimeout(r, window.__saveDelay); }); } } };
         for (var k in extra) o[k] = extra[k];
         var e = await globalThis.OrzCarrier.mountEditor(mk(), o);
         if (e && e.ready && typeof e.ready.then === 'function') { try { await e.ready; } catch (x) {} }
@@ -663,13 +672,40 @@ export const editChecks: Record<string, CheckFn> = {
     await ed(page, 'window.__B.undo()');
     p.check((await ed<string>(page, 'window.__B.getText()')) === OTHER_TEXT, 'undo on the second editor does not return to its own text');
     p.check((await ed<string>(page, 'window.__A.getText()')) === EDIT_TEXT, 'undo on the second editor changed the first editor');
-    // readOnly: true keeps the reader's keys out
+    // an edit made while a slow hook save runs is not saved: the editor stays dirty (FC-19 §8.5; closed loop 2 round 3)
+    const slow = `${EDITED}Saved slowly.\r\n`;
+    const during = `${slow}Typed during the save.\r\n`;
+    await ed(page, '(window.__saveDelay = 800, true)');
+    await ed(page, `window.__A.setText(${JSON.stringify(slow)})`);
+    await ed(page, '(window.__slow = window.__A.save(), true)');
+    await page.waitForTimeout(200);
+    await ed(page, `window.__A.setText(${JSON.stringify(during)})`);
+    const slowOutcome = await ed<Record<string, unknown>>(page, 'window.__slow');
+    await ed(page, '(window.__saveDelay = 0, true)');
+    p.eq(slowOutcome && [slowOutcome.ok, slowOutcome.via], [true, 'hook'], 'the outcome of a slow hook save');
+    const hooked = (await ed<string[][]>(page, 'window.__saves'))[0];
+    p.check(hooked[hooked.length - 1] === slow, 'the slow hook save did not get the text of the moment save() was called');
+    p.eq(await ed(page, 'window.__A.isDirty()'), true, 'isDirty() after a hook save during which the text was edited (the edit was not saved: it must stay dirty)');
+    p.check((await ed<string>(page, 'window.__A.getText()')) === during, 'the edit made during the hook save is not in the editor any more');
+    // readOnly: true keeps the reader's keys out, Cmd/Ctrl+S included
     await ed(page, 'window.__R.focus()');
     await page.keyboard.type('Zq1');
     await page.keyboard.press('Enter');
     p.check((await ed<string>(page, 'window.__R.getText()')) === OTHER_TEXT, 'typing changed an editor mounted with readOnly: true');
+    // Cmd/Ctrl+S with the focus in the read-only editor's own controls (a read-only text may not take the focus)
+    await ed(page, `(function () {
+      var el = window.__els[2];
+      var a = document.activeElement;
+      var inside = a && (el.contains(a) || (a.shadowRoot && el.contains(a)));
+      if (inside) return true;
+      var f = window.__orzC.deepAll(el, 'button:not([hidden]), [tabindex], textarea, [contenteditable="true"], input').filter(function (n) { return n.offsetParent !== null || n.getClientRects().length > 0; })[0];
+      if (f) f.focus();
+      return true;
+    })()`);
+    await page.keyboard.press('ControlOrMeta+s');
     await ed(page, 'window.__R.save()');
-    p.eq((await ed<string[][]>(page, 'window.__saves'))[2].length, 0, 'saves of an editor mounted with readOnly: true');
+    await page.waitForTimeout(300);
+    p.eq((await ed<string[][]>(page, 'window.__saves'))[2].length, 0, 'saves of an editor mounted with readOnly: true (save() and Cmd/Ctrl+S)');
     // no update check, no indicator
     await page.waitForTimeout(Math.max(0, 3_000 - (Date.now() - t0)));
     p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 0, 'manifest requests from an editor in an app host (the app owns the version)');
@@ -907,6 +943,41 @@ export const saveChecks: Record<string, CheckFn> = {
     p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after a successful download');
   },
 
+  async 'C.save.keeps-delivery'(s, p) {
+    needBrowser(s);
+    // closed loop 2 round 3 (B#7): a cdn-delivery file stays cdn when it is saved
+    const ctx = await s.context({ picker: 'stub' });
+    const url = s.writeFile(fileName(s, 'keeps-cdn'), await s.assemble(EDIT_TEXT, { delivery: 'cdn' }));
+    const page = await editedPage(s, ctx, url, p);
+    await ed(page, 'window.__orzEditor.save()');
+    await until(() => ctx.of('write').length > 0 || ctx.downloads.length > 0, 10_000);
+    const saved = firstSaved(ctx);
+    if (!p.check(saved !== undefined, 'the save of a cdn-delivery file wrote nothing')) return;
+    p.eq(extract(saved!)?.delivery, 'cdn', 'the delivery of the file saved from a cdn-delivery file (a save keeps the file\'s delivery)');
+    savedBytes(p, 'the save of a cdn-delivery file', saved!, await s.assemble(EDITED, { delivery: 'cdn' }));
+  },
+
+  async 'C.save.keeps-includes'(s, p) {
+    needBrowser(s);
+    // closed loop 2 round 3: a page cannot resolve local includes again — a save carries #orz-includes over
+    const file = await s.assemble(INCLUDE_TEXT, { delivery: 'inline', includes: { ...INCLUDES } });
+    if (!p.check(sameIncludes(extract(file)?.includes, INCLUDES), 'assemble(text, { includes }) does not write exactly those includes in #orz-includes (FC-19 §2, FC-18 §8.3 D4)')) return;
+    const ctx = await s.context({ picker: 'stub' });
+    const page = await ctx.newPage();
+    await openEditor(s, page, s.writeFile(fileName(s, 'keeps-includes'), file));
+    const edited = `${INCLUDE_TEXT}\nEdited below the includes.\n`;
+    await ed(page, `window.__orzEditor.setText(${JSON.stringify(edited)})`);
+    await ed(page, 'window.__orzEditor.save()');
+    await until(() => ctx.of('write').length > 0 || ctx.downloads.length > 0, 10_000);
+    const saved = firstSaved(ctx);
+    if (!p.check(saved !== undefined, 'the save of a file with includes wrote nothing')) return;
+    const x = extract(saved!);
+    p.check(x?.text === edited, `the saved file does not give back the edited text — ${firstDiff(x?.text ?? '', edited)}`);
+    p.check(sameIncludes(x?.includes, INCLUDES), `the saved file lost or changed the file's #orz-includes (a save keeps the resolved includes): ${clip(JSON.stringify(x?.includes ?? null))}`);
+    const expected = await s.assemble(edited, { delivery: 'inline', includes: { ...INCLUDES } });
+    p.check(saved === expected, `the saved bytes are not assemble(text, { includes }) — ${firstDiff(saved!, expected)}`);
+  },
+
   async 'C.save.copy-elsewhere'(s, p) {
     needBrowser(s);
     // real FileSystemFileHandles (origin-private file system) stored in the one IndexedDB every file: page shares
@@ -1087,6 +1158,8 @@ export const updateChecks: Record<string, CheckFn> = {
     const [expected] = await s.chromeAssemble(next, [EDIT_TEXT], 'inline');
     const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
     const page = await ctx.newPage();
+    let loads = 0;
+    page.on('load', () => { loads++; });
     await page.goto(s.writeFile(fileName(s, 'update'), await s.assemble(EDIT_TEXT, { delivery: 'inline' })));
     if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20_000), 'no update indicator')) return;
     const r = await runUpdate(page, ctx, next.version);
@@ -1096,8 +1169,10 @@ export const updateChecks: Record<string, CheckFn> = {
     p.check(x?.text === EDIT_TEXT, `the updated file does not give back the exact text — ${firstDiff(x?.text ?? '', EDIT_TEXT)}`);
     p.eq(x && [x.kind, x.shell, x.delivery], [s.target.kind, next.version, 'inline'], 'the updated file\'s kind, shell, delivery');
     p.check(saved === expected, `the updated file is not the new release's assemble(text) — ${firstDiff(saved, expected)}`);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1_000);
     p.eq([ctx.of('write').length, ctx.downloads.length], [1, 0], 'writes and downloads of the update (the picker is available: the file is written in place, once — not handed out as a downloaded copy)');
+    // the harness's picker made a new file: nothing proved it to be the opened file, so the page must not reload (spec/shell-runtime.md §7.2)
+    p.eq(loads, 1, 'page loads after an update written to a picked file not proved to be the opened one (the page must not reload)');
     p.eq(ctx.of('dialog').length, 0, 'dialogs during the update');
   },
 
@@ -1139,6 +1214,16 @@ export const updateChecks: Record<string, CheckFn> = {
         // the carrier kept the editor read-only while updating: the update may save, and then exactly the text the editor holds
         const saved = firstSaved(ctx);
         p.check(saved === undefined || extract(saved)?.text === (await ed<string>(page, 'window.__orzEditor.getText()')), 'the update saved a text other than the editor\'s');
+      }
+      // once the update settled the reader can type again (a carrier that makes the editor read-only while updating gives it back)
+      if (loads === 1) {
+        const before = await ed<string>(page, 'window.__orzEditor.getText()');
+        await ed(page, 'window.__orzEditor.focus()');
+        await page.keyboard.press('ControlOrMeta+End');
+        await page.keyboard.type('Zq9');
+        await page.waitForTimeout(200);
+        const after = await ed<string>(page, 'window.__orzEditor.getText()');
+        p.check(after !== before && after.includes('Zq9'), 'typing after the update settled changed nothing (the editor was left read-only)');
       }
       p.eq(ctx.of('dialog').length, 0, 'dialogs');
     } finally {
@@ -1304,6 +1389,25 @@ export const updateChecks: Record<string, CheckFn> = {
     p.check(saved === expected, `the updated file is not the new release's assemble(text, { delivery: 'cdn' }) — ${firstDiff(saved, expected)}`);
     await page.waitForTimeout(500);
     p.eq([ctx.of('write').length, ctx.downloads.length], [1, 0], 'writes and downloads of the update (written in place, once)');
+  },
+
+  async 'C.update.keeps-includes'(s, p) {
+    const next = needNext(s);
+    // closed loop 2 round 3: the page cannot resolve the file's local includes again — the update carries #orz-includes over
+    const file = await s.assemble(INCLUDE_TEXT, { delivery: 'inline', includes: { ...INCLUDES } });
+    if (!p.check(sameIncludes(extract(file)?.includes, INCLUDES), 'assemble(text, { includes }) does not write exactly those includes in #orz-includes (FC-19 §2, FC-18 §8.3 D4)')) return;
+    const [expected] = await s.chromeAssemble(next, [INCLUDE_TEXT], 'inline', false, { ...INCLUDES });
+    const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+    const page = await ctx.newPage();
+    await page.goto(s.writeFile(fileName(s, 'update-includes'), file));
+    if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20_000), 'a file with includes shows no update indicator')) return;
+    const r = await runUpdate(page, ctx, next.version);
+    if (!p.check(r === 'saved', `Update now saved nothing (${r})`)) return;
+    const saved = firstSaved(ctx)!;
+    const x = extract(saved);
+    p.eq(x && [x.text === INCLUDE_TEXT, x.shell], [true, next.version], 'the updated file\'s text exact, shell');
+    p.check(sameIncludes(x?.includes, INCLUDES), `the updated file lost or changed the file's #orz-includes (the update keeps the resolved includes): ${clip(JSON.stringify(x?.includes ?? null))}`);
+    p.check(saved === expected, `the updated file is not the new release's assemble(text, { includes }) — ${firstDiff(saved, expected)}`);
   },
 };
 

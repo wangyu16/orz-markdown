@@ -1030,6 +1030,29 @@ function createEditorShell(element, options) {
     measure();
     applyMode();
     // ── save ──
+    const includes = options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { ...options.includes } : null;
+    /** The carrier's `assemble`, with the opened file's includes (FC-18 D4). */
+    const assembleText = (t) => Promise.resolve().then(() => (includes ? options.assemble(t, { includes }) : options.assemble(t))).then(String);
+    let openedMemo = null;
+    /** `assemble` of the text the shell was mounted with — the default opened bytes — once. */
+    const openedAssembled = () => (openedMemo ?? (openedMemo = assembleText(openedText)));
+    /** The file for a text; the unchanged text reuses the opened bytes (one `assemble` per save click). */
+    const assembleFor = (t) => (t === openedText ? openedAssembled() : assembleText(t));
+    if (!hooks.save && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
+        // B#6: the default opened bytes are ready before the first save click (at idle after mount)
+        const warm = () => { if (!destroyed)
+            void openedAssembled().catch(() => undefined); };
+        const idle = win.requestIdleCallback;
+        if (typeof idle === 'function') {
+            const id = idle.call(win, warm, { timeout: 2000 });
+            cleanups.push(() => { try {
+                win.cancelIdleCallback?.call(win, id);
+            }
+            catch { /* gone */ } });
+        }
+        else
+            later(warm, 300);
+    }
     let saver = options.saver ?? null;
     let saving = null;
     const toast = (text, tone) => { if (!destroyed)
@@ -1065,7 +1088,7 @@ function createEditorShell(element, options) {
             void (async () => {
                 try {
                     const t = getText();
-                    const r = await saver.download({ html: await options.assemble(t) });
+                    const r = await saver.download({ html: await assembleFor(t) });
                     if (r.via === 'download' && r.ok) {
                         dismissNotice();
                         succeed(t, 'download');
@@ -1107,7 +1130,7 @@ function createEditorShell(element, options) {
             return fail(new Error('no save route (pass hooks.save or assemble)'));
         let html;
         try {
-            html = String(await options.assemble(text));
+            html = await assembleFor(text);
         }
         catch (e) {
             return fail(e);
@@ -1119,7 +1142,7 @@ function createEditorShell(element, options) {
             suggestedName: options.fileName ?? `document${protocol_js_1.KIND_EXTENSIONS[kind] ?? '.html'}`,
             kind,
             ...(options.host ? { host: options.host } : {}),
-            openedHtml: options.openedHtml ?? (async () => String(await options.assemble(openedText))),
+            openedHtml: options.openedHtml ?? openedAssembled,
         }));
         const r = await saver.save({ text, html });
         if (r.via === 'served-notice') {

@@ -15,8 +15,8 @@ wants (FD-06).
 
 ```ts
 mountEditor(element: HTMLElement, options: EditorOptions): Editor
-assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string }): Promise<string>
-extract(html: string): { text: string; kind: Kind; format: number; shell: string } | null
+assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string; includes?: Record<string, string> }): Promise<string>
+extract(html: string): { text: string; kind: Kind; format: number; shell: string; delivery: string; includes?: Record<string, string> } | null
 readDocument(text: string): DocumentInfo        // header + derived facts, no rendering
 renderPreview(text: string, options?): Promise<string>  // sandboxable HTML for thumbnails / read-only views
 version: string                                  // the shell version
@@ -29,6 +29,15 @@ kind, `uid`, theme) without rendering — what Alembic's discovery space needs.
 assembly (`delivery: "inline"`) inlines it instead of fetching or embedding a
 copy of its own — the quiet update (spec/shell-runtime.md §7) passes the
 bundle it has just verified, so the new file carries exactly those bytes.
+
+`includes` (optional; added 2026-10-06, closed loop 2 round 3, additive) are
+resolved includes to store in `#orz-includes` exactly as given (FC-18 §8.3,
+D4) instead of resolving the text's include directives. A page cannot read
+local files, so the browser's re-assemblies pass the opened file's
+(`extract(html).includes`): the editor's standalone save (§8.5) and the
+quiet update, which refuses a new file that does not hold them exactly
+(spec/shell-runtime.md §7.2). Absent or empty: no `#orz-includes`. A bundle
+that ignores the option loses the includes and cannot update such a file.
 
 **The standard bundle global** (binding addition, 2026-10-05). Every carrier
 browser bundle (`orz-<x>.browser.js`, the file named by `bundle.path` in its
@@ -225,8 +234,9 @@ const shell = createEditorShell(element, {
   mode?, readOnly?, chrome?,         // as FC-19 §3
   formats?,                          // text formats it reads and writes (default [1]; the carrier's OrzCarrier.formats)
   hooks?,                            // FC-19 §3 EditorHooks: save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid
-  assemble?, fileName?, kind?, host?, saver?,   // standalone host: assemble(text) → html, then createSaver
-  openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text)
+  assemble?, fileName?, kind?, host?, saver?,   // standalone host: assemble(text, { includes }?) → html, then createSaver
+  includes?,                         // the opened file's #orz-includes, passed to every assemble (§8.5); default none
+  openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text), once, at idle
   standalone?,                       // the assembled file's own boot passes true (§8.4 sandbox)
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
   preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, readyTimeoutMs?, nonce?,
@@ -368,8 +378,14 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   writes the whole frame document from `parts = { head, bridge, scripts,
   scheme, articleClass, nonce? }` (the bridge and library `<script>`s and the
   stylesheet links, nonce-stamped; put `parts.bridge` before the stylesheets
-  and `parts.head` in `<head>`: while the document's scripts are paused it
-  starts with the pausing `<meta>` policy); `preview.bridge` replaces the
+  and `parts.head` in `<head>`, before the article and `parts.scripts`:
+  while the document's scripts are paused `parts.head` starts with the
+  pausing `<meta>` policy, which must precede the document's content and
+  every library script — the bridge, nonce-stamped, may come before it or
+  right after it, as the default document puts it; a carrier's own
+  `<script>` in the frame document must carry `parts.nonce` (B#5: without
+  it the pausing policy, or an app's nonce policy, blocks it — and with it,
+  it runs while the document's scripts are paused); `preview.bridge` replaces the
   bridge script (script-safe, speaking the protocol below);
   `preview.diff: false` makes every render replace the content whole, keeping
   the scroll position (a renderer that reflows nodes);
@@ -391,7 +407,11 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
   hooks share the frame with the document's scripts, which can define them
   too: they gain nothing they could not do to the frame's DOM already.
 - **The channel API.** `shell.preview.post(msg)` posts a carrier's own
-  message to the bridge (false while the frame is not ready);
+  message to the bridge (false while the frame is not ready). The frame is
+  the document's: whatever a carrier posts there is readable by the
+  document's scripts (they can define `__orzPreviewMessage`, or read what the
+  bridge puts in the DOM; F5, round 3) — post nothing the document may not
+  see;
   `shell.preview.on(type, fn) → off` hears the frame's messages of a type
   (claims: data); `shell.preview.setOptions({ head?, scheme? })` rebuilds the
   frame document (e.g. a theme change) and shows the last HTML again.
@@ -491,13 +511,23 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme? }) 
 - App host (`hooks.save`): `hooks.save(getText())`.
 - Standalone host: `assemble(getText())` → `createSaver({ uid, suggestedName:
   fileName, kind, host, openedHtml }).save({ text, html })`
-  (spec/shell-runtime.md §1). `openedHtml` — the bytes of the file the page
+  (spec/shell-runtime.md §1). **A save keeps the file's form** (closed loop
+  2 round 3): the carrier's `assemble` writes the opened file's delivery
+  (`#orz-shell` `delivery`: a `cdn` file stays `cdn`, B#7), and the shell
+  passes the `includes` option — the opened file's `#orz-includes` — as
+  `assemble(text, { includes })` (FC-18 §8.3, D4; without includes the
+  call is `assemble(text)`). `openedHtml` — the bytes of the file the page
   was opened from, which prove that a remembered file handle still points at
   that file (shell-runtime §1, steps 3.1–3.3) — is the `openedHtml` option
   (a string or a function; the assembled file's own HTML as loaded), else
   `assemble` of the text the shell was mounted with, which reproduces an
   assembled file (FC-18 law 3). Without it every reload would get the picker
-  and a quiet update would never reload. A
+  and a quiet update would never reload. The default is computed once, when
+  the page is first idle after mount (B#6): a save click then runs one
+  `assemble` (none for the unchanged text, which reuses it), so the picker or
+  Chrome's permission prompt still has the click's user activation on a
+  large document. A carrier passing its own `openedHtml` function should
+  start it early the same way. A
   served page shows the `#orz-served-note` notice — on Cmd/Ctrl+S only when
   there are unsaved edits (the Save button and `save()` always show it);
   "Download a copy" calls `saver.download`. A cancelled picker is not an
@@ -624,3 +654,8 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   `onActive`);
   exports `renderMarkdownPreviewWithIncludes`, `mapSrcset`, `undoSteps`,
   `detachString`, `CODEMIRROR6_HISTORY_STEPS`.
+- Round 3 of closed loop 2 (2026-10-06, additive): `assemble`'s `includes`
+  option (§2) and the shell's `includes` option, passed as the `assemble`
+  option's second argument (§8.5); the default `openedHtml` computed at
+  idle; `ReassembleOptions.includes` and `UpdateError` code `includes`
+  (spec/shell-runtime.md §7.2).

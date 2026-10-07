@@ -30,6 +30,7 @@ interface Entry {
   header: { title: string | null; author: string | null; license: string | null; theme: string | null; uid: string | null };
   keys: string[];
   derivedTitle: string;
+  includes?: Record<string, string>;
 }
 const manifest = JSON.parse(readFileSync(`${ROOT}/manifest.json`, 'utf8')) as { files: Entry[] };
 const entries = manifest.files;
@@ -141,6 +142,20 @@ describe('envelope laws (FC-18 §2)', () => {
       }
     }
   }, 60_000);
+
+  it('[K.3] a corpus file with resolved includes (manifest `includes`, FC-18 §8.3 D4): its file carries them in #orz-includes, extract gives them back with the text, and assembling extract(F).text with extract(F).includes reproduces F', () => {
+    const withIncludes = corpus.filter(({ e }) => e.includes);
+    expect(withIncludes.length).toBeGreaterThan(0);
+    for (const { e, text } of withIncludes) {
+      for (const p of PARTS) {
+        const f = assembleEnvelope(text, { ...p, includes: e.includes });
+        const x = extract(f)!;
+        expect([x.text === text, x.includes], `${e.path} / ${p.kind}`).toEqual([true, e.includes]);
+        expect(assembleEnvelope(x.text, { ...p, includes: x.includes })).toBe(f);
+        expect(assembleEnvelope(x.text, p)).not.toBe(f); // without them the file is another file: the includes must be passed on
+      }
+    }
+  });
 
   it('[K.1] round trip holds for seeded random text (Unicode, astral, consistent LF/CRLF/CR, BOM, </script, <!--, <script, ]]>, empty, long lines)', () => {
     for (const [i, t] of RANDOM_TEXTS.entries()) {

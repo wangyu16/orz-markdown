@@ -110,10 +110,12 @@ export interface StoredHandle {
      */
     location?: string;
     /**
-     * SHA-256 (lowercase hex) of the bytes last written through the handle.
-     * When present, the file must still hold exactly them (and the opened
-     * file's bytes) for the handle to be reused: a file another tab or tool
-     * wrote since is never overwritten silently.
+     * SHA-256 (lowercase hex) of the bytes last written through the handle — a
+     * record, not a condition: the handle is reused when its file holds the
+     * opened file's bytes, whoever wrote them (a CLI that assembled the same
+     * text again writes the file the page then opens; B#8, closed loop 2
+     * round 3). A file another tab or tool changed since this page opened it no
+     * longer holds the opened bytes and gets the picker.
      */
     sha256?: string;
 }

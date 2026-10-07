@@ -138,6 +138,8 @@ export interface CheckOptions {
  */
 export declare function checkForUpdate(opts: CheckOptions): Promise<UpdateInfo | null>;
 export type UpdateErrorCode = 'manifest' | 'download' | 'too-large' | 'integrity' | 'no-crypto' | 'encoding' | 'unsafe-bundle' | 'no-document' | 'timeout' | 'bundle' | 'roundtrip' | 'kind' | 'version' | 'delivery'
+/** The new file does not carry exactly the given resolved includes (`#orz-includes`, FC-18 §8.3 D4). */
+ | 'includes'
 /** performUpdate: the text changed while the update ran (nothing was saved). */
  | 'changed'
 /** performUpdate: the page is framed or has a connected host, which owns the version. */
@@ -175,6 +177,12 @@ export interface ReassembleOptions {
     release: ReleaseManifest;
     /** FC-18 §8.2: keep the file's delivery (`extract(currentHtml).delivery`). Default `inline`. */
     delivery?: 'inline' | 'cdn';
+    /**
+     * FC-18 §8.3 (D4): keep the file's resolved includes — `extract(currentHtml).includes`
+     * (`#orz-includes`). A page cannot resolve local includes again, so they are carried over
+     * as they are; the new file must hold exactly these (none when absent or empty).
+     */
+    includes?: Record<string, string>;
     fetch?: FetchLike;
     /** The document the hidden iframe is created in (default: the global document). */
     document?: UiDocument;
@@ -191,10 +199,10 @@ export interface ReassembleOptions {
  *   1. download the bundle from the hard-coded CDN URL; its SHA-384 must
  *      equal `release.bundle.integrity`, it must be UTF-8 and script-safe;
  *   2. in a hidden `sandbox="allow-scripts"` iframe (opaque origin), call the
- *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource })`;
+ *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes? })`;
  *      only messages from that iframe's window are read;
  *   3. accept the html only if `extract(html)` gives exactly `text`, the
- *      kind, the release's version and the delivery;
+ *      kind, the release's version, the delivery and the `includes`;
  *   4. remove the iframe in every outcome.
  *
  * Resolves the new file's html; rejects with an {@link UpdateError}. The

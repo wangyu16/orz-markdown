@@ -61,13 +61,22 @@ caller words it "Download started", never "Saved". Its `name` is
 - `uid` — the header `uid` (FC-18 §5.1, §10). `suggestedName` — the assembled
   file's name, i.e. the twin name of the text (`twinName('week3.md')` =
   `week3.md.html`). `kind` — `md`, `slides`, `paged` or `poster`.
-- `text` — the text twin, exact; `html` — the assembled file.
+- `text` — the text twin, exact; `html` — the assembled file. **It keeps
+  the opened file's form** (closed loop 2 round 3): the caller assembles
+  with the file's delivery (`#orz-shell` `delivery`: a `cdn` file is saved
+  `cdn`, B#7) and its resolved includes (`#orz-includes`, passed as
+  `assemble(text, { includes })`: a page cannot resolve local includes
+  again; FC-18 §8.3, D4).
 - `openedHtml` — the bytes of the file the page was opened from, as text: a
   string, or a function (sync or async, read at most once, when a handle has
   to be proved). For an assembled file the carrier passes its `assemble` of
-  the text the page loaded (`readIslandFromDom(#orz-src)` at boot), which
-  reproduces the file (FC-18 law 3). Without it no remembered handle is reused
-  across page loads and no picked file counts as the opened one.
+  the text the page loaded (`readIslandFromDom(#orz-src)` at boot, with the
+  file's delivery and includes), which reproduces the file (FC-18 law 3).
+  Without it no remembered handle is reused across page loads and no picked
+  file counts as the opened one. A function is best started when the page is
+  first idle: computed only at a save click on a large document, it can
+  outlast the click's user activation, which the permission prompt and the
+  picker need (B#6).
 
 **Order** (the first that applies):
 
@@ -88,7 +97,9 @@ caller words it "Download started", never "Saved". Its `name` is
    (`openedHtml`); a handle that cannot be read proves nothing.
    1. the session's handle, if any, while its file still holds what this
       page last wrote to it (or the opened bytes): a second save never
-      prompts. Its `opened` is that of its first save. A file someone else
+      prompts. Its `opened` is that of its first save, or `true` when the
+      file holds the opened bytes (again: e.g. the opened file copied over
+      the one picked earlier — proved by content like any). A file someone else
       wrote since (another tab, another tool) gets the picker;
    2. else the handle remembered under the handle key (below), used only
       when **the record's page location equals this page's** (the URL
@@ -97,8 +108,11 @@ caller words it "Download started", never "Saved". Its `name` is
       URL, only with `openedHtml` given, only if `queryPermission({ mode:
       'readwrite' })` is `granted` or `requestPermission` grants it (Chrome's
       one-click prompt naming the file), and only if its file holds exactly
-      the opened bytes — and, when the record has a `sha256`, exactly the
-      bytes last written through it. Every `file:` page shares one IndexedDB,
+      the opened bytes — whoever wrote them: the record's `sha256` (what was
+      last written through it) is not a condition, because a tool that
+      assembled the same text again (the CLI) writes exactly the file the
+      page then opens (closed loop 2 round 3, B#8); a file changed since the
+      page opened it does not hold the opened bytes. Every `file:` page shares one IndexedDB,
       and a copy of a file carries the same `uid` and often the same name: a
       copy in another folder must get the picker and never write over the
       original. A record without a location (written before this rule) is
@@ -300,7 +314,7 @@ skipVersion(kind, version, storage?): boolean
 ### 7.2 Re-assembly (transactional)
 
 ```ts
-reassemble({ text, kind, release, delivery?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
+reassemble({ text, kind, release, delivery?, includes?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
 ```
 
 1. **Download and verify.** Fetch the bundle URL (§6; `credentials: omit`),
@@ -313,15 +327,20 @@ reassemble({ text, kind, release, delivery?, fetch?, document?, window?, cdnBase
    inline script (passed through `escapeScriptText`, which leaves a
    script-safe bundle unchanged) followed by a fixed listener. When the
    iframe's own window posts `orz-reassemble-ready`, the page posts
-   `{ type: 'orz-reassemble', id, text, delivery, engineSource: bundle }`;
-   the listener calls `OrzCarrier.assemble(text, { delivery, engineSource })`
+   `{ type: 'orz-reassemble', id, text, delivery, engineSource: bundle,
+   includes? }`; the listener calls `OrzCarrier.assemble(text, { delivery,
+   engineSource, includes? })` (`includes` only when given)
    and posts back `orz-reassembled` with the html. The page reads **only
    messages whose `source` is that iframe's `contentWindow`**. Default timeout
    30 s.
 3. **Verify the round trip** with the parser-free `extract`:
    `extract(html).text === text` exactly, `kind` is the document's kind,
-   `shell === release.version`, and `delivery` is the requested one (default
-   `inline`; keep the file's own, `extract(currentHtml).delivery`). Anything
+   `shell === release.version`, `delivery` is the requested one (default
+   `inline`; keep the file's own, `extract(currentHtml).delivery`), and the
+   new file's `#orz-includes` holds exactly the `includes` given (keep the
+   file's own, `extract(currentHtml).includes`; absent or empty = none: a
+   page cannot resolve local includes again, FC-18 §8.3 D4 — before closed
+   loop 2 round 3 every update dropped them, and the check passed). Anything
    else rejects with a clear message ("…nothing was changed").
 4. **Clean up.** The iframe and the message listener are removed in every
    outcome. Nothing else in the page is touched.
@@ -329,7 +348,8 @@ reassemble({ text, kind, release, delivery?, fetch?, document?, window?, cdnBase
 Failures reject with `UpdateError` and a `code`: `manifest`, `download`,
 `too-large`, `integrity`, `no-crypto`, `encoding`, `unsafe-bundle`,
 `no-document`, `timeout`, `bundle`, `roundtrip`, `kind`, `version`,
-`delivery`; `performUpdate` adds `changed` and `hosted` (below).
+`delivery`, `includes`; `performUpdate` adds `changed` and `hosted` (below).
+`performUpdate` passes `delivery` and `includes` on to `reassemble`.
 
 The **caller** then saves the returned html through `createSaver` (§1) and
 reloads the page so the new shell runs — but only when that is safe.
@@ -344,7 +364,8 @@ never rejects and never reloads.
   `changed`). (The older `text` option, read once, still works.) **The editor
   is read-only while the update runs** ("Updating…"): the carrier makes it so
   (the re-check is the guard if it does not), so nothing typed then can be
-  lost by the reload.
+  lost by the reload — and editable again when the update settles without a
+  reload (refused, a copy, a file not proved to be the opened one).
 - **Reload only when** `reload` is `true`: the save wrote the opened file —
   `via: 'host'` with `ok`, or `via: 'file'` with `ok` and `opened: true`
   (the written file proved by its content to be the opened one, §1 step 3;

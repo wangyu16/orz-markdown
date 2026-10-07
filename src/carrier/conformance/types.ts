@@ -16,6 +16,12 @@ export interface AssembleOptions {
   delivery?: 'inline' | 'cdn';
   /** The exact text of the browser bundle, for an inline file. */
   engineSource?: string;
+  /**
+   * Resolved includes to store in `#orz-includes` as given (FC-18 §8.3, D4), instead of resolving
+   * the text's include directives: the browser has no files, so its saves and the quiet update
+   * pass the opened file's (`extract(html).includes`). Absent or empty: none.
+   */
+  includes?: Record<string, string>;
 }
 
 /** The carrier under test. */

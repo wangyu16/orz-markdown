@@ -91,7 +91,7 @@ export function stubTarget(stub: BuiltStub, rel: { next?: BuiltStub; previous?: 
     version: stub.version,
     bundle: stub.bundle,
     release: stub.release,
-    assemble: (text, o) => stubAssemble(text, { version: stub.version, variant: stub.variant, delivery: o?.delivery ?? 'inline', engineSource: o?.engineSource ?? stub.code }),
+    assemble: (text, o) => stubAssemble(text, { version: stub.version, variant: stub.variant, delivery: o?.delivery ?? 'inline', engineSource: o?.engineSource ?? stub.code, ...(o?.includes ? { includes: o.includes } : {}) }),
     create: () => createStubDocument(),
     samples: { 'stub-sample': '# Stub sample\n\n- [ ] task\n- [x] done\n\n$E = mc^2$\n' },
     protocols: { ai: true, include: true },

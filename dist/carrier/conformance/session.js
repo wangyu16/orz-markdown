@@ -187,7 +187,7 @@ class Session {
     /** The target's Node `assemble`, memoised per text and options. */
     assemble(text, o = {}) {
         const engine = o.engineSource === undefined ? '-' : o.engineSource === this.releases.target.code ? 'own' : `sha256:${(0, node_js_1.sha256hex)(o.engineSource)}`;
-        const key = `${o.delivery ?? ''}|${engine}|${text}`;
+        const key = `${o.delivery ?? ''}|${engine}|${o.includes ? JSON.stringify(Object.entries(o.includes).sort()) : '-'}|${text}`;
         let p = this.memo.get(key);
         if (!p) {
             p = (0, node_js_1.callAssemble)((t, x) => this.target.assemble(t, x), text, o);
@@ -344,7 +344,7 @@ class Session {
         return p;
     }
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
-    async chromeAssemble(r, texts, delivery, hash = false) {
+    async chromeAssemble(r, texts, delivery, hash = false, includes) {
         const page = await this.bundlePage(r);
         return call(page, `async function (a) {
       var C = globalThis.OrzCarrier;
@@ -356,11 +356,13 @@ class Session {
         return Array.prototype.map.call(d, function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
       };
       for (var i = 0; i < a.texts.length; i++) {
-        var html = await C.assemble(a.texts[i], a.inline ? { delivery: 'inline', engineSource: src } : { delivery: 'cdn' });
+        var o = a.inline ? { delivery: 'inline', engineSource: src } : { delivery: 'cdn' };
+        if (a.includes) o.includes = a.includes;
+        var html = await C.assemble(a.texts[i], o);
         out.push(a.hash && typeof html === 'string' ? 'sha256:' + await hex(html) : html);
       }
       return out;
-    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash });
+    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash, ...(includes ? { includes } : {}) });
     }
     async close() {
         await this.closeContexts();

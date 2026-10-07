@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { scanNymlBlocks } from '../src/nyml-blocks';
 import { md } from '../src/index';
+import { INCLUDES, INCLUDE_TEXT } from '../src/carrier/conformance/texts';
 
 const ROOT = 'tests/carrier-corpus';
 
@@ -37,6 +38,8 @@ interface Entry {
   purpose: string;
   checks: string[];
   defect: string | null;
+  /** Resolved includes its assembled file carries in `#orz-includes` (target → text, FC-18 §8.3 D4). */
+  includes?: Record<string, string>;
 }
 
 const manifest = JSON.parse(readFileSync(`${ROOT}/manifest.json`, 'utf8')) as { format: number; files: Entry[] };
@@ -109,6 +112,22 @@ describe('carrier corpus manifest', () => {
       'slides/title-v2-long-title.slides.md': 'D-46',
       'paged/columns-across-pages.paged.md': 'D-48',
     });
+  });
+
+  it('gives the resolved includes only to includes.md: each a {{md …}} target of its text, keys in code-unit order (as #orz-includes stores them), texts non-empty', () => {
+    const withIncludes = entries.filter((e) => e.includes);
+    expect(withIncludes.map((e) => e.path)).toEqual(['md/includes.md']);
+    for (const e of withIncludes) {
+      const text = readText(e.path);
+      const keys = Object.keys(e.includes!);
+      expect(keys.length).toBeGreaterThan(1);
+      expect(keys).toEqual([...keys].sort());
+      const targets = [...text.matchAll(/^\{\{(?:md|markdown|md-include) +(\S+)\}\}$/gm)].map((m) => m[1]).sort();
+      expect(targets).toEqual(keys);
+      for (const k of keys) expect(typeof e.includes![k] === 'string' && e.includes![k].length > 0, k).toBe(true);
+    }
+    // the conformance harness opens the same document with the same includes
+    expect([readText('md/includes.md'), withIncludes[0].includes]).toEqual([INCLUDE_TEXT, INCLUDES]);
   });
 
   it('gives every entry a purpose and at least one check', () => {
