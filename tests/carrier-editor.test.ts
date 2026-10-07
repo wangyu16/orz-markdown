@@ -2245,6 +2245,14 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
     plain.shell.destroy();
   });
 
+  it('[E.12] with only fetchInclude (no include record), a URL include next to a file include still resolves; the unreadable file include renders nothing', async () => {
+    const text = '{{md parts/a.md}}\n\n{{md https://x.example/b.md}}\n';
+    const fetchInclude = async (u: string) => (u.includes('b.md') ? 'URL CONTENT' : null);
+    const html = await renderMarkdownPreviewWithIncludes(text, { fetchInclude });
+    expect(html).toContain('URL CONTENT');
+    expect(html).toBe(await renderMarkdownPreviewWithIncludes(text, { fetchInclude, includes: {} }));
+  });
+
   it('[E.12] renderMarkdownPreviewWithIncludes resolves URL includes through ctx.fetchInclude (each URL once per shell cache; a failed one again next time), and keeps the anchors of the lines before and after the include', async () => {
     const text = '{{nyml\nkind: document\n}}\n\n# Top\n\n{{md https://inc.test/part.md}}\n\nAfter the include.\n';
     const fetchInclude = vi.fn(async (u: string) => (u.includes('part') ? 'Included **text**.\n\nSecond included paragraph.\n' : null));

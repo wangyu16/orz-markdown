@@ -123,7 +123,9 @@ async function renderMarkdownPreviewWithIncludes(text, options = {}) {
             cache.delete(key); });
         return p;
     };
-    const env = renderEnv(options);
+    // a missing record is an empty one: without a reader, prepareSources keeps every URL include of a
+    // text that also has a file include (it cannot tell them apart from a reader's point of view)
+    const env = renderEnv(options.includes === undefined ? { ...options, includes: {} } : options);
     const includeEnv = env && (typeof env['readFile'] === 'function' || typeof env['markdownBasePath'] === 'string') ? env : undefined;
     const { body, offset } = (0, header_js_1.withoutHeader)(text);
     const expanded = await (0, prepare_sources_js_1.prepareSources)(body, { fetcher, ...(includeEnv ? { includeEnv } : {}) });
