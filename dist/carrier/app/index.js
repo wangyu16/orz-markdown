@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.copyName = exports.openedFileName = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.APP_CSS = exports.bootCarrierApp = void 0;
+exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.copyName = exports.openedFileName = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = exports.bootCarrierApp = void 0;
 /**
  * `orz-markdown/carrier/app` — the standalone assembled file's runtime
  * (spec/carrier-app.md): kind-independent, used by every carrier's browser
@@ -18,6 +18,7 @@ exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exp
 var app_js_1 = require("./app.js");
 Object.defineProperty(exports, "bootCarrierApp", { enumerable: true, get: function () { return app_js_1.bootCarrierApp; } });
 Object.defineProperty(exports, "APP_CSS", { enumerable: true, get: function () { return app_js_1.APP_CSS; } });
+Object.defineProperty(exports, "UPDATE_CONFLICT_MESSAGE", { enumerable: true, get: function () { return app_js_1.UPDATE_CONFLICT_MESSAGE; } });
 var start_js_1 = require("./start.js");
 Object.defineProperty(exports, "startCarrier", { enumerable: true, get: function () { return start_js_1.startCarrier; } });
 Object.defineProperty(exports, "carrierGlobal", { enumerable: true, get: function () { return start_js_1.carrierGlobal; } });

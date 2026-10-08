@@ -4,6 +4,7 @@
  * the end; rounds recorded in notes/carrier-kit-loop.md). The golden corpus (tests/carrier-corpus/) is the shared
  * oracle; random text comes from a small seeded PRNG (no fast-check).
  */
+import { THEMES } from '../src/themes';
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
@@ -900,6 +901,18 @@ describe('round 1: header findings', () => {
       expect(scanNymlBlocks(t)[0].kind === 'document', JSON.stringify(t)).toBe(md.render(t) === '');
       expect(readHeader(t) !== null && readHeader(t)!.legacy === null, JSON.stringify(t)).toBe(md.render(t) === '');
     }
+  });
+
+  it('[K.10] lint warns unknown-theme for a md header theme that is not in THEMES (with its line), not for a bundled one, and not for slides or paged (their themes are their own)', () => {
+    const t = (theme: string) => `{{nyml\nkind: document\ntheme: ${theme}\n}}\n\n# x\n`;
+    const codes = (text: string, kind?: 'md' | 'slides' | 'paged') => lintHeader(text, kind).filter((l) => l.code === 'unknown-theme');
+    expect(codes(t('no-such-theme'), 'md')).toEqual([expect.objectContaining({ level: 'warning', key: 'theme', line: 3 })]);
+    expect(codes(t(THEMES[0].id), 'md')).toEqual([]);
+    expect(codes(t(` ${THEMES[1].id} `), 'md')).toEqual([]);
+    expect(codes(t('chalk'), 'slides')).toEqual([]);
+    expect(codes(t('chalk'), 'paged')).toEqual([]);
+    expect(codes(`{{nyml\nkind: document\ncarrier: md\ntheme: nope\n}}\n`)).toHaveLength(1); // the kind from carrier
+    expect(codes(t('nope'))).toEqual([]); // no kind known
   });
 
   it('[K.10] lint: stray kind: document blocks, opener sharing a line, front matter, lang/measure/ratio shapes, with line positions', () => {

@@ -1131,6 +1131,62 @@ export const saveChecks: Record<string, CheckFn> = {
     p.check((await read(a2.page, b.pathname)) === (await s.assemble(textB)), 'the reopened original wrote over the copy');
   },
 
+  async 'C.save.conflict'(s, p) {
+    needBrowser(s);
+    // round 1–2 of the carrier-app loop: an agent (or another program) rewrote the opened file between two
+    // saves; the next save must not write over it silently — the kit's question decides (S.14, A.15)
+    const ctx = await s.context({ picker: 'opfs' });
+    const name = fileName(s, 'conflict');
+    const html = await s.assemble(EDIT_TEXT, { delivery: 'inline' });
+    const page = await ctx.newPage();
+    await openEditor(s, page, s.writeFile(name, html));
+    const pathname = await ed<string>(page, 'location.pathname');
+    await call(page, WRITE_OPFS, { pathname, name, data: html }); // the opened file, on disk
+    const read = () => call<string | null>(page, READ_OPFS, { pathname, name });
+    const save = async (text: string): Promise<{ ok?: boolean; conflict?: boolean } | null> => {
+      await ed(page, `window.__orzEditor.setText(${JSON.stringify(text)})`);
+      return ed(page, 'window.__orzEditor.save()');
+    };
+    const choose = (label: string): Promise<boolean> => ed<boolean>(page, `(function () { var b = window.__orzC.deepAll(document, 'button').filter(function (x) { return (x.textContent || '').trim() === ${JSON.stringify(label)}; })[0]; if (!b) return false; b.click(); return true; })()`);
+    const text1 = `${EDIT_TEXT}First save.\r\n`;
+    const r1 = await save(text1);
+    if (!p.check(r1?.ok === true && (await read()) === (await s.assemble(text1)), `the first save did not write assemble(text) to the opened file (${clip(JSON.stringify(r1))})`)) return;
+    // the agent's edit on disk, then a save of the page's text
+    const agent = await s.assemble(`${EDIT_TEXT}The agent's edit on disk.\r\n`);
+    await call(page, WRITE_OPFS, { pathname, name, data: agent });
+    const text2 = `${EDIT_TEXT}The page's second save.\r\n`;
+    const r2 = await save(text2);
+    await page.waitForTimeout(300);
+    p.check(r2?.ok === false && r2.conflict === true, `the save after the file changed on disk did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r2))})`);
+    p.check((await read()) === agent, 'the save wrote over the file that changed on disk without asking (the agent\'s edit is lost)');
+    p.eq(ctx.downloads.length, 0, 'downloads before the reader answered');
+    p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() while the reader has not answered');
+    const picks = ctx.of('picker').length;
+    // "Replace it" writes the page's text into that file, with no second picker
+    if (p.check(await choose('Replace it'), 'no "Replace it" button (the kit\'s askSaveConflict question) after the conflicting save')) {
+      const want = await s.assemble(text2);
+      await until(async () => (await read()) === want, 10_000);
+      p.check((await read()) === want, 'Replace it did not write assemble(text) into the file that changed on disk');
+      p.eq(ctx.of('picker').length, picks, 'pickers opened by Replace it (it writes the file picked for the conflicting save)');
+      await until(async () => !(await ed<boolean>(page, 'window.__orzEditor.isDirty()')), 5_000);
+      p.eq(await ed(page, 'window.__orzEditor.isDirty()'), false, 'isDirty() after Replace it');
+    }
+    // again: "Download a copy instead" downloads the page's file and leaves the agent's
+    const agent2 = await s.assemble(`${EDIT_TEXT}The agent again.\r\n`);
+    await call(page, WRITE_OPFS, { pathname, name, data: agent2 });
+    const text3 = `${EDIT_TEXT}The page's third save.\r\n`;
+    const r3 = await save(text3);
+    p.check(r3?.conflict === true, `the second conflicting save did not resolve conflict: true (${clip(JSON.stringify(r3))})`);
+    if (p.check(await choose('Download a copy instead'), 'no "Download a copy instead" button after the second conflicting save')) {
+      await until(() => ctx.downloads.length > 0, 10_000);
+      if (p.check(ctx.downloads.length === 1, `${ctx.downloads.length} downloads after Download a copy instead`)) {
+        p.check(ctx.downloads[0].data === (await s.assemble(text3)), `the download is not assemble(text) — ${firstDiff(ctx.downloads[0].data, await s.assemble(text3))}`);
+      }
+      p.check((await read()) === agent2, 'Download a copy instead changed the file on disk');
+      p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after Download a copy instead (the file on disk is not the page\'s text)');
+    }
+  },
+
   async 'C.save.save-as-elsewhere'(s, p) {
     needBrowser(s);
     // closed loop 2 round 2, F2: the real picker opens in the last folder used (Downloads) with the

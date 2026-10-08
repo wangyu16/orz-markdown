@@ -34,7 +34,9 @@ export type StubVariant =
   | 'port-without-secret'
   | 'save-to-inline' | 'save-drops-includes' | 'update-drops-includes'
   // 2.2.0: a file that fetches a bundle before the reader asks for the update
-  | 'prefetch-bundle';
+  | 'prefetch-bundle'
+  // round 2 of the carrier-app loop: a save that writes over a file changed on disk without asking
+  | 'save-ignores-conflict';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 

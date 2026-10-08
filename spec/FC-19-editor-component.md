@@ -73,6 +73,7 @@ interface EditorOptions {
   preferences?: PreferenceStore;      // reader preferences (FC-18 §6); default: localStorage
   nonce?: string;                     // added 2.2.0: an app's CSP nonce (§8.4) for the preview and the editor's scripts and styles
   includes?: Record<string, string>;  // added 2.2.0: resolved includes for the renderer (target as written → text), like a file's #orz-includes
+  fileName?: string;                  // added 2.2.0 (round 2): the suggested name of the standalone save of an app's editor without hooks.save (picker and download)
 }
 
 interface EditorHooks {
@@ -114,6 +115,9 @@ interface Editor {
   // added 2.2.0 (additive): the review flow (host-protocols §4)
   proposeAi(op: string, options?: { selection?: boolean }): Promise<AiProposalOutcome>;  // hooks.ai, nothing changed; never rejects
   applyAi(proposal: AiProposal, options?: { proposed?: string }): AiOutcome;          // one undoable edit; refused if the text changed
+  // added 2.2.0 (additive, round 2 of the carrier-app loop)
+  readonly ready: Promise<{ engine: string; error?: unknown }>;   // the engine is final (e.g. "codemirror6", or "textarea" with the load error); never rejects
+  refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;  // render now; with includes: replace the record, forget fetched includes
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -167,6 +171,25 @@ changed on disk since the page opened it (spec/shell-runtime.md §1 step
 3.4) writes nothing and resolves `{ ok: false, via: "file", error:
 "conflict", conflict: true }` while the reader is asked to replace the file
 or download a copy.
+
+**`fileName`** (2.2.0, additive, round 2 of the carrier-app loop): an app's
+editor without `hooks.save` saves through the picker or a download (§8.5);
+`fileName` is the name they offer (default `document` + the kind's
+extension). An editor mounted on an assembled file uses the file's own name.
+
+**`ready`** (documented 2.2.0; the shell always had it): resolves when the
+editing engine is final — `{ engine: "codemirror6" }` once CodeMirror has
+loaded, or `{ engine: "textarea", error }` when it could not (the textarea
+stays); it never rejects. An app waits for it before measuring or focusing
+the engine's own elements; the API works before it.
+
+**`refreshPreview({ includes? })`** (2.2.0, additive): renders the preview
+now, also when the text has not changed (an include became available). With
+`includes`, the renderer's include record is replaced by it (`null` or `{}`:
+none) and the includes fetched so far (`fetchInclude`) are forgotten, so
+every include is read again — an app that resolved new includes hands them
+over without remounting. Saves keep the includes the editor was mounted
+with (an assembled file's `#orz-includes`).
 
 **`nonce`** (2.2.0, additive): the §8.4 CSP recipe needs one nonce for the
 preview frame and the editor's own `<script>`/`<style>`; before, it was the

@@ -20,10 +20,12 @@ export declare const SHELL_UID_PATTERN: RegExp;
  *   landed (it may be blocked or cancelled); `ok` means it was started.
  * - `served-notice`: nothing was saved (spec/shell-runtime.md §1 step 2).
  * - `file` with `conflict: true` (2.2.0): nothing was written — the picked
- *   file is an orz file of this document (its header `uid`) whose text is
- *   neither the opened text nor what this page last wrote: it changed on disk
- *   since the page opened it (another program, an agent). The caller asks the
- *   reader: replace it (`save(input, { overwrite: true })`) or download a copy.
+ *   file is an orz file of this document (the same header `uid`, or no uid on
+ *   either side) whose content — text, resolved includes and delivery — is
+ *   neither the opened file's, what this page last wrote, nor what is being
+ *   saved: it changed on disk since the page opened it (another program, an
+ *   agent). The caller asks the reader: replace it (`save(input, { overwrite:
+ *   true })`) or download a copy.
  */
 export type SaveResult = {
     via: 'host';
@@ -78,8 +80,11 @@ export interface SaverOptions {
      * The bytes of the file this page was opened from, as text — for an
      * assembled file, the carrier's `assemble` of the text the page loaded
      * (`readIslandFromDom(#orz-src)` at boot), which reproduces the file
-     * (FC-18 law 3). A string, or a function (sync or async) read at most once,
-     * when a handle has to be proved. It is how a handle is proved to point at
+     * (FC-18 law 3). A string, or a function (sync or async) called when a
+     * handle has to be proved, until it gives a string (that string is kept; a
+     * rejection or a non-string is not, so a failed assembly is tried again at
+     * the next save and never disables the conflict check of step 3.4). It is
+     * how a handle is proved to point at
      * the opened file: without it a remembered handle is never reused across
      * page loads (the picker opens), and no picked file counts as the opened
      * one (`opened: false`, so an update never reloads).
@@ -93,6 +98,14 @@ export interface SaverOptions {
      * else a download.
      */
     servedNotice?: boolean;
+    /**
+     * The header `uid` of a text (2.2.0, round 2 of the carrier-app loop): how
+     * the conflict check (step 3.4) reads the uid of the file on disk. Pass the
+     * reader the page reads its own uid with (the kit's `readHeader(text)
+     * .fields.uid`, well-formed), so both sides agree on quoted, block-scalar
+     * and other header forms. Default: {@link headerUidOf} (parser-free).
+     */
+    readUid?(text: string): string | undefined;
 }
 export interface Saver {
     /** Save in the order above. Never rejects. */
@@ -134,9 +147,13 @@ export declare const HANDLE_STORE = "handles";
 /** The IndexedDB handle store (structured clone keeps a real `FileSystemFileHandle`). */
 export declare function createIndexedDbHandleStore(factory?: IdbFactoryLike): HandleStore;
 /**
- * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
- * undefined — a parser-free reading, enough to tell whether a file on disk is
- * this document (the shell does not load the kit's header tools).
+ * The `uid` of an FC-18 header at the start of a text, or undefined — a
+ * parser-free reading of the first `{{nyml` block (after a BOM and blank
+ * lines; a `kind: document` on the opener line is allowed): a top-level
+ * `uid:` line whose value — unquoted (`"…"`, `'…'`), or the first line of a
+ * `|` block — is a well-formed uid. Enough to tell whether a file on disk is
+ * this document when the caller does not pass its own reader
+ * (`createSaver({ readUid })`); the kit's `readHeader` is the reference.
  */
 export declare function headerUidOf(text: string): string | undefined;
 export declare function createSaver(opts: SaverOptions): Saver;

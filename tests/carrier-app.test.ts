@@ -25,7 +25,7 @@ import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, readDocumen
 import { createEditorShell, renderMarkdownPreview, textareaAdapter, type EditorShell } from '../src/carrier/editor';
 import type { HostConnection, PerformUpdateOptions, PerformUpdateResult, SaveResult, Saver, SaverOptions, UpdateInfo } from '../src/carrier/shell';
 import {
-  APP_CSS, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
+  APP_CSS, UPDATE_CONFLICT_MESSAGE, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
   menuButton, settingPicker, reviewProposal, attachAiMenu, attachSettings, followPresentation, installCss, WIDGET_CSS,
   type AppServices, type CarrierApp, type CarrierReadView, type KindEditorOptions, type SettingControl, type StandaloneContext, type StandaloneKind, type AppDocument, type AppWindow,
 } from '../src/carrier/app';
@@ -1005,6 +1005,129 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
   });
 });
 
+// ── round 2 of the carrier-app loop (2.2.0) ──────────────────────────────
+
+describe('round 2: the conflict question, the update, presenting, bar actions', () => {
+  const byLabel = (root: ParentNode, label: string) => [...root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === label || x.textContent === label) as HTMLButtonElement;
+  /** A saver that reports a conflict for every save without overwrite, recording what each call wrote. */
+  const conflictServices = (log: Array<{ text: string; overwrite: boolean }>, readUid?: (o: SaverOptions) => void): Partial<AppServices> => ({
+    createSaver: (o: SaverOptions): Saver => {
+      readUid?.(o);
+      return {
+        async save(i, c) {
+          log.push({ text: i.text, overwrite: c?.overwrite === true });
+          await tick(2);
+          return c?.overwrite ? { via: 'file', ok: true, picked: true, opened: false } : { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false };
+        },
+        async download() { return { via: 'download', ok: true, confirmed: false }; },
+        handleKey: () => null,
+      };
+    },
+  });
+
+  it('[A.15] round 2: one conflict question per page and per editor — a save while it is open calls no saver (no second picker), focuses the question and makes it answer for the newer text (the older text is never written); the question focuses "Download a copy instead", and the focus goes back after the answer', async () => {
+    const log: Array<{ text: string; overwrite: boolean }> = [];
+    let saverOpts: SaverOptions | null = null;
+    const b = boot(undefined, { services: conflictServices(log, (o) => { saverOpts ??= o; }) });
+    await b.app.ready;
+    // the saver reads the disk file's uid as the page reads its own (quoted: still this document)
+    expect(saverOpts!.readUid!(`{{nyml\nkind: document\nuid: "${UID}"\n}}\n`)).toBe(UID);
+    expect(saverOpts!.readUid!('# no header\n')).toBeUndefined();
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    const save = byLabel(b.root, 'Save');
+    save.focus();
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    const older = b.app.getText();
+    expect(b.root.activeElement).toBe(byLabel(b.root, 'Download a copy instead'));
+    b.app.setSetting({ theme: 'beige-decent-1' });
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    expect(log).toEqual([{ text: older, overwrite: false }]); // the second save asked no saver
+    expect(b.root.querySelectorAll('.orz-toast__action')).toHaveLength(2); // one question
+    byLabel(b.root, 'Replace it').click();
+    await tick(20);
+    expect(log).toEqual([{ text: older, overwrite: false }, { text: b.app.getText(), overwrite: true }]); // the newer text, once
+    expect(b.app.isDirty()).toBe(false);
+    expect(b.root.activeElement).toBe(save); // back where it was
+    // the editor: the same, and Escape dismisses (nothing written)
+    const ed = b.app.edit();
+    const n0 = log.length;
+    ed.setText(`${ed.getText()}one\r\n`);
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    ed.setText(`${ed.getText()}two\r\n`);
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    expect(log.length).toBe(n0 + 1); // the second editor save asked no saver
+    const edRoot = ed.root as unknown as ShadowRoot;
+    expect(edRoot.querySelectorAll('.orz-toast__action')).toHaveLength(2);
+    const n = log.length;
+    byLabel(edRoot, 'Download a copy instead').dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    await tick(20);
+    expect([log.length, n, edRoot.querySelectorAll('.orz-toast__action').length, ed.isDirty()]).toEqual([n, n, 0, true]);
+    // after a dismissal the next save asks the saver again
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    expect(log.length).toBe(n + 1);
+    byLabel(edRoot, 'Replace it').click();
+    await tick(20);
+    expect(log.at(-1)).toEqual({ text: ed.getText(), overwrite: true });
+    b.app.dispose();
+  });
+
+  it('[A.9] round 2: an update whose save finds the file changed on disk writes nothing and the indicator gets a clear message (UPDATE_CONFLICT_MESSAGE), not "conflict"; the editors are given back', async () => {
+    let handlers: { onUpdate(i: UpdateInfo): unknown } | null = null;
+    const b = boot(undefined, {
+      services: {
+        checkForUpdate: async () => INFO,
+        mountUpdateIndicator: (a, _i, h) => { handlers = h; return { dispose() {} } as never; },
+        performUpdate: async () => ({ status: 'updated', info: INFO, html: '<html>', text: TEXT, save: { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false }, reload: false }),
+      },
+    });
+    await tick(10);
+    const ed = b.app.edit();
+    await expect(handlers!.onUpdate(INFO) as Promise<void>).rejects.toThrow(UPDATE_CONFLICT_MESSAGE);
+    expect(UPDATE_CONFLICT_MESSAGE).toMatch(/changed on disk[\s\S]*wrote nothing[\s\S]*Reload the page/);
+    expect([b.app.updating, ed.isReadOnly()]).toEqual([false, false]);
+    b.app.dispose();
+  });
+
+  it('[A.19] presenting hides the bar and the editor, not the toasts: with setChromeVisible(false) the toast stack still shows (the hidden host keeps no box over the page); a pointer click on a bar action leaves the focus to the page (the keyboard\'s stays on the button), so the read view\'s Space and Enter reach onKey', async () => {
+    expect(APP_CSS).not.toMatch(/:host\(\[data-hidden\]\)\s*\{[^}]*display:\s*none/);
+    expect(APP_CSS).toMatch(/:host\(\[data-hidden\]\) \.orz-app__bar, :host\(\[data-hidden\]\) \.orz-app__editor[^{]*\{ display: none !important; \}/);
+    const b = boot();
+    await b.app.ready;
+    const print = b.root.querySelector('[data-orz-action="print"]') as HTMLButtonElement;
+    // the keyboard: the focus stays on the button
+    print.focus();
+    b.key('Tab');
+    print.click();
+    expect(b.root.activeElement).toBe(print);
+    // a pointer: the focus is the page's, and Space reaches the read view
+    b.root.host.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event);
+    print.focus();
+    print.click();
+    expect(b.root.activeElement).not.toBe(print);
+    await tick();
+    expect(b.rec.actions).toEqual(['print', 'print']);
+    // Space where the focus is (as the browser sends it): it reaches the read view
+    b.key(' ', {}, (b.root.activeElement as Element | null) ?? (b.doc.activeElement as Element | null) ?? b.doc.body);
+    expect(b.rec.keys).toEqual(['Tab', ' ']);
+    b.app.dispose();
+  });
+
+  it('[A.10] round 2 (K14): keys from a chrome element that is not a button (the brand, the title, a toast\'s text) never reach the read view; from a button, navigation keys do', async () => {
+    const b = boot();
+    await b.app.ready;
+    const brand = b.root.querySelector('#orz-brand') as HTMLElement;
+    brand.focus();
+    for (const k of ['ArrowRight', 'PageDown', 'x']) brand.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    b.app.toast('A message');
+    const msg = b.root.querySelector('.orz-toast__message') as HTMLElement;
+    msg.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    expect(b.rec.keys).toEqual([]);
+    byLabel(b.root, 'Edit').dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    expect(b.rec.keys).toEqual(['ArrowRight']);
+    b.app.dispose();
+  });
+});
+
 // ── A.11 widgets ─────────────────────────────────────────────────────────
 
 describe('chrome widgets', () => {
@@ -1315,6 +1438,76 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.keyboard.press(`${MOD}+s`);
     await page.waitForFunction(`!${APP}.editor().isDirty()`);
     expect(await page.evaluate(() => (window as unknown as { __prevented?: boolean }).__prevented)).toBe(true);
+    await ctx.close();
+  }, 120_000);
+
+  it('[A.15] [S.14] round 2 in Chrome: the agent\'s edit between two editor saves is kept (the reader is asked) for every header form — no uid at all, a quoted uid, a | block uid after a blank line with kind: document on the opener — and for the same text re-assembled with new includes or cdn delivery; the same text re-assembled by another shell version is no conflict', async () => {
+    const ctx = await context();
+    const edSave = (page: Page, add: string) => page.evaluate(async (a) => {
+      const app = (globalThis as unknown as { OrzCarrier: { standalone: CarrierApp } }).OrzCarrier.standalone;
+      const ed = app.editor() ?? app.edit();
+      await ed.ready;
+      ed.setText(ed.getText() + a);
+      return ed.save();
+    }, add);
+    const cases: Array<[string, string, (cur: string) => Promise<string>, boolean]> = [
+      ['no uid', '# Plain\n\nBody.\n', (cur) => assembleStub(`${cur}Agent line.\n`), true],
+      ['quoted uid', '{{nyml\nkind: document\ncarrier: md\nuid: "doc-quotedquoted0001"\n}}\n\n# Q\n', (cur) => assembleStub(`${cur}Agent line.\n`), true],
+      ['block uid', '\n{{nyml kind: document\nuid: |\n  doc-blockblockbl0002\n}}\n\n# B\n', (cur) => assembleStub(`${cur}Agent line.\n`), true],
+      ['new includes', '{{nyml\nkind: document\nuid: doc-includesinclu0003\n}}\n\n# I\n\n{{md part.md}}\n', (cur) => assembleStub(cur, { includes: { 'part.md': 'NEW PART\n' } }), true],
+      ['cdn delivery', '{{nyml\nkind: document\nuid: doc-deliverydeliv0004\n}}\n\n# D\n', (cur) => assembleStub(cur, { delivery: 'cdn' }), true],
+      ['another shell version', '{{nyml\nkind: document\nuid: doc-shellshellshe0005\n}}\n\n# S\n', (cur) => assembleNext(cur), false],
+    ];
+    for (const [i, [what, text, agent, conflict]] of cases.entries()) {
+      const name = `variant-${i}.md.html`;
+      const html = await assembleStub(text, what === 'new includes' ? { includes: { 'part.md': 'OLD PART\n' } } : {});
+      const page = await ctx.newPage();
+      await page.goto(write(name, html));
+      await bootDone(page);
+      await writeOpfs(page, { name }, html);
+      expect(await edSave(page, 'Browser one.\n'), what).toMatchObject({ ok: true, via: 'file' });
+      const cur = extract((await readOpfs(page, { name }))!)!.text;
+      const onDisk = await agent(cur);
+      await writeOpfs(page, { name }, onDisk);
+      const r = await edSave(page, 'Browser two.\n');
+      if (conflict) {
+        expect(r, what).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
+        expect((await readOpfs(page, { name })) === onDisk, what).toBe(true);
+      } else {
+        expect(r, what).toMatchObject({ ok: true, via: 'file' });
+        expect(extract((await readOpfs(page, { name }))!)!.text, what).toBe(`${cur}Browser two.\n`);
+      }
+      await page.close();
+    }
+    await ctx.close();
+  }, 180_000);
+
+  it('[A.19] in Chrome: presenting (setChromeVisible(false)) hides the bar but a toast still shows; [E.28] an app page\'s editor (no hooks.save) offers its fileName to the picker', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\nuid: doc-presentprese0006\n}}\n\n# Present\n';
+    const page = await ctx.newPage();
+    await page.goto(write('present.md.html', await assembleStub(text)));
+    await bootDone(page);
+    await page.evaluate(`${APP}.setChromeVisible(false)`);
+    await page.evaluate(`${APP}.toast('Shown while presenting')`);
+    expect(await page.getByText('Shown while presenting').isVisible()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Edit', exact: true }).isVisible()).toBe(false);
+    const box = await page.locator('#orz-chrome').boundingBox();
+    expect((box?.width ?? 0) * (box?.height ?? 0)).toBe(0); // no box over the page
+    await page.evaluate(`${APP}.setChromeVisible(true)`);
+    expect(await page.getByRole('button', { name: 'Edit', exact: true }).isVisible()).toBe(true);
+    // an app's page (not an assembled file): its editor saves through the picker under fileName
+    extra.set('app-page.html', `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="m" style="width:900px;height:500px"></div><script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${stub.version}/orz-stub.browser.js"></script></body></html>`);
+    const app = await ctx.newPage();
+    await app.goto(`${origin}/app-page.html`);
+    await app.waitForFunction(() => typeof (globalThis as { OrzCarrier?: { mountEditor?: unknown } }).OrzCarrier?.mountEditor === 'function');
+    const r = await app.evaluate(async (t) => {
+      const ed = (globalThis as unknown as { OrzCarrier: { mountEditor(el: Element, o: unknown): EditorShell } }).OrzCarrier.mountEditor(document.getElementById('m')!, { text: t, fileName: 'mine.md.html' });
+      ed.setText(`${t}Edited.\n`);
+      return ed.save();
+    }, text);
+    expect(r, JSON.stringify(r)).toMatchObject({ ok: true, via: 'file' });
+    expect((await pageRecords(app, 'picker')).map((x) => (x.data as { suggestedName: string }).suggestedName)).toEqual(['mine.md.html']);
     await ctx.close();
   }, 120_000);
 

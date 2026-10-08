@@ -100,14 +100,19 @@ export interface ToastOptions {
         label: string;
         run(): void;
         primary?: boolean;
+        autofocus?: boolean;
     }>;
     /** Called once when the toast goes without an action chosen (Dismiss, the timeout, `dismiss()`). */
     onDismiss?(): void;
-    /** Focus the first action (a question the reader must answer). */
+    /** Focus an action (a question the reader must answer): the one marked `autofocus`, else the first. */
     focus?: boolean;
 }
 export interface Toast {
     dismiss(): void;
+    /** Focus the toast's default action again (the one `focus` took), if it has actions and is still shown (2.2.0). */
+    focus(): void;
+    /** Change the message (text, never HTML) of a toast still shown (2.2.0). */
+    setMessage(message: string): void;
 }
 /**
  * Show a toast in a chrome root (a shadow root from {@link createShadowRoot},
@@ -118,11 +123,25 @@ export interface Toast {
 export declare function showToast(root: ShadowRootLike | UiElement, message: string, options?: ToastOptions): Toast;
 /** What the reader is asked when the file changed on disk since the page opened it (a save's `conflict` result, 2.2.0). */
 export declare const SAVE_CONFLICT_MESSAGE = "This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?";
+/** Options of {@link askSaveConflict} (2.2.0). */
+export interface SaveConflictOptions {
+    /** Where the focus goes back to after the reader answers or dismisses (the element focused before the save). */
+    returnFocus?: {
+        focus?(options?: {
+            preventScroll?: boolean;
+        }): void;
+    } | null;
+}
 /**
  * Ask the reader about a save that found the file changed on disk (2.2.0,
- * shell-runtime §1): a toast that stays, with "Replace it" and "Download a
- * copy instead"; the focus goes to the first. Resolves the choice, or null
- * when the toast is dismissed. Writes text only.
+ * shell-runtime §1 step 3.4): a toast that stays, with "Replace it" and
+ * "Download a copy instead"; the focus goes to the non-destructive "Download
+ * a copy instead", Escape dismisses it (nothing chosen), and after a choice
+ * or a dismissal the focus goes back to `returnFocus`. Resolves the choice,
+ * or null when the toast is dismissed. One question per root: asked again
+ * while one is open, the open one is focused and answers the newer call —
+ * the older call resolves null (a caller then writes nothing: an older text
+ * is never written over the newer one). Writes text only.
  */
-export declare function askSaveConflict(root: ShadowRootLike | UiElement, name?: string): Promise<'replace' | 'download' | null>;
+export declare function askSaveConflict(root: ShadowRootLike | UiElement, name?: string, options?: SaveConflictOptions): Promise<'replace' | 'download' | null>;
 //# sourceMappingURL=chrome.d.ts.map

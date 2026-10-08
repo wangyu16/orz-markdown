@@ -161,7 +161,8 @@ export declare function removeHeaderKey(text: string, key: string): string;
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
- * `bad-ratio` (warnings: value shapes). Text codes, with or without a header:
+ * `bad-ratio` (warnings: value shapes), `unknown-theme` (warning, kind md: a
+ * `theme` not in `THEMES`, 2.2.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a

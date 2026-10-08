@@ -47,6 +47,12 @@ import { createTextModel, detachString, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
 import type { EdDataTransfer, EdDocument, EdElement, EdEvent, EdFile, EdListener, EdResizeObserver, EdView, ShadowRootLike } from './types.js';
 
+/** A text's well-formed header uid, as the editor reads its own (`readHeader`). */
+const headerUid = (text: string): string | undefined => {
+  const u = readHeader(text)?.fields['uid']?.trim();
+  return u && UID_PATTERN.test(u) ? u : undefined;
+};
+
 export type EditorMode = 'split' | 'editor' | 'preview';
 export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error';
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
@@ -305,8 +311,15 @@ export interface EditorShell {
   redo(): boolean;
   focus(): void;
   on<E extends EditorEventName>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
-  /** Render the preview now (normally after a pause in typing). */
-  refreshPreview(): Promise<void>;
+  /**
+   * Render the preview now (normally after a pause in typing), also when the
+   * text has not changed (e.g. an include became available). With `includes`
+   * (2.2.0, FC-19 §4): the renderer's include record is replaced by it (`null`
+   * or `{}`: none) and the fetched-include cache is cleared first, so every
+   * include is read again from the new record or `fetchInclude`. Saves keep the
+   * includes the shell was mounted with (the opened file's `#orz-includes`).
+   */
+  refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;
   /** Read-only now: asked for (`readOnly`, `setReadOnly`), or forced by a newer text format. */
   readonly readOnly: boolean;
   /**
@@ -976,12 +989,20 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   /** The carrier's `assemble`, with the opened file's includes (FC-18 D4). */
   const assembleText = (t: string): Promise<string> => Promise.resolve().then(() => (includes ? options.assemble!(t, { includes }) : options.assemble!(t))).then(String);
   let openedMemo: Promise<string> | null = null;
-  /** `assemble` of the text the shell was mounted with — the default opened bytes — once. */
-  const openedAssembled = (): Promise<string> => (openedMemo ??= assembleText(openedText));
+  /** `assemble` of the text the shell was mounted with — the default opened bytes — once it succeeds (a failure is tried again). */
+  const openedAssembled = (): Promise<string> => {
+    if (openedMemo) return openedMemo;
+    const run = assembleText(openedText);
+    openedMemo = run;
+    run.catch(() => { if (openedMemo === run) openedMemo = null; });
+    return run;
+  };
   /** The file for a text; the unchanged text reuses the opened bytes (one `assemble` per save click). */
   const assembleFor = (t: string): Promise<string> => (t === openedText ? openedAssembled() : assembleText(t));
-  if (!hooks.save && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
-    // B#6: the default opened bytes are ready before the first save click (at idle after mount)
+  if (!hooks.save && options.standalone === true && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
+    // B#6: in an assembled file the default opened bytes are ready before the first save click (at idle
+    // after mount); an app's editor (not standalone) assembles them only at its first save (the
+    // assemble may fetch the carrier's engine: not on every mount)
     const warm = (): void => { if (!destroyed) void openedAssembled().catch(() => undefined); };
     const idle = win.requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => unknown) | undefined;
     if (typeof idle === 'function') {
@@ -1056,7 +1077,14 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       openedHtml: options.openedHtml ?? openedAssembled,
       // the served notice is for an assembled file opened from the web, not for an app's page
       servedNotice: options.standalone === true || options.openedHtml !== undefined,
+      // the file on disk's uid, read as this editor reads its own (a quoted or block uid is one)
+      readUid: headerUid,
     });
+    if (conflictOpen) {
+      // a conflict question is open: no second picker; the question (focused) now answers for this text
+      if (!destroyed) resolveConflict(text, html, conflictName);
+      return { ok: false, via: 'file', error: 'conflict', conflict: true };
+    }
     const r = await saver.save({ text, html });
     if (r.via === 'served-notice') {
       // Cmd/Ctrl+S on a served page with nothing unsaved stays quiet (B-16); the Save button and save() show the notice
@@ -1072,9 +1100,30 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     }
     return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
   };
+  /** A conflict question is open (one per editor): later saves update it instead of asking again. */
+  let conflictOpen = false;
+  let conflictName: string | undefined;
+  let conflictAsk = 0;
+  /** The focused element (through shadow roots) when a question opens: where the focus goes back. */
+  const focusedNow = (): EdElement | null => {
+    let a = (doc as unknown as { activeElement?: EdElement | null }).activeElement ?? null;
+    for (let i = 0; i < 16 && a; i++) {
+      const inner = (a as unknown as { shadowRoot?: { activeElement?: EdElement | null } | null }).shadowRoot?.activeElement;
+      if (!inner) break;
+      a = inner;
+    }
+    return a;
+  };
   /** The reader's answer to a save that found the file changed on disk: replace it, or download a copy. */
   const resolveConflict = (text: string, html: string, name: string | undefined): void => {
-    void askSaveConflict(root, name).then(async (choice) => {
+    const ask = ++conflictAsk;
+    const back = conflictOpen ? null : focusedNow();
+    conflictOpen = true;
+    conflictName = name;
+    void askSaveConflict(root, name, back ? { returnFocus: back as never } : {}).then(async (choice) => {
+      // superseded by a newer save's question: this (older) text is never written
+      if (ask !== conflictAsk) return;
+      conflictOpen = false;
       if (destroyed || !saver) return;
       if (choice === 'replace') {
         const r = await saver.save({ text, html }, { overwrite: true });
@@ -1258,8 +1307,15 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       set.add(fn as (e: never) => void);
       return () => { set!.delete(fn as (e: never) => void); };
     },
-    async refreshPreview() {
+    async refreshPreview(o) {
+      if (destroyed) return;
+      if (o && typeof o === 'object' && 'includes' in o) {
+        const next = o.includes && typeof o.includes === 'object' && Object.keys(o.includes).length > 0 ? Object.freeze({ ...o.includes }) : null;
+        if (next) renderCtx.includes = next; else delete renderCtx.includes;
+        renderCtx.cache?.clear();
+      }
       if (renderRunning) await renderRunning;
+      lastRendered = null; // render even when the text is the same (an include, a record changed)
       return renderNow();
     },
     get readOnly() { return readOnly; },

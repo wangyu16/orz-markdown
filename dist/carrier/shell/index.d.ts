@@ -22,6 +22,6 @@ export type { MessageEventLike, MessageWindow, PostTarget, IframeLike, SaverWind
 export * from './update.js';
 export * from './indicator.js';
 export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE } from './chrome.js';
-export type { IconName, KindIcon, ToastTone, ToastOptions, Toast } from './chrome.js';
+export type { IconName, KindIcon, ToastTone, ToastOptions, Toast, SaveConflictOptions } from './chrome.js';
 export type { UiElement, UiDocument, UiView, UiEventLike, UiListener, ShadowRootLike, TextLike, StyleLike } from './types.js';
 //# sourceMappingURL=index.d.ts.map

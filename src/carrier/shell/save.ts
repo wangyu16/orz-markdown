@@ -43,10 +43,12 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  *   landed (it may be blocked or cancelled); `ok` means it was started.
  * - `served-notice`: nothing was saved (spec/shell-runtime.md §1 step 2).
  * - `file` with `conflict: true` (2.2.0): nothing was written — the picked
- *   file is an orz file of this document (its header `uid`) whose text is
- *   neither the opened text nor what this page last wrote: it changed on disk
- *   since the page opened it (another program, an agent). The caller asks the
- *   reader: replace it (`save(input, { overwrite: true })`) or download a copy.
+ *   file is an orz file of this document (the same header `uid`, or no uid on
+ *   either side) whose content — text, resolved includes and delivery — is
+ *   neither the opened file's, what this page last wrote, nor what is being
+ *   saved: it changed on disk since the page opened it (another program, an
+ *   agent). The caller asks the reader: replace it (`save(input, { overwrite:
+ *   true })`) or download a copy.
  */
 export type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
@@ -88,8 +90,11 @@ export interface SaverOptions {
    * The bytes of the file this page was opened from, as text — for an
    * assembled file, the carrier's `assemble` of the text the page loaded
    * (`readIslandFromDom(#orz-src)` at boot), which reproduces the file
-   * (FC-18 law 3). A string, or a function (sync or async) read at most once,
-   * when a handle has to be proved. It is how a handle is proved to point at
+   * (FC-18 law 3). A string, or a function (sync or async) called when a
+   * handle has to be proved, until it gives a string (that string is kept; a
+   * rejection or a non-string is not, so a failed assembly is tried again at
+   * the next save and never disables the conflict check of step 3.4). It is
+   * how a handle is proved to point at
    * the opened file: without it a remembered handle is never reused across
    * page loads (the picker opens), and no picked file counts as the opened
    * one (`opened: false`, so an update never reloads).
@@ -103,6 +108,14 @@ export interface SaverOptions {
    * else a download.
    */
   servedNotice?: boolean;
+  /**
+   * The header `uid` of a text (2.2.0, round 2 of the carrier-app loop): how
+   * the conflict check (step 3.4) reads the uid of the file on disk. Pass the
+   * reader the page reads its own uid with (the kit's `readHeader(text)
+   * .fields.uid`, well-formed), so both sides agree on quoted, block-scalar
+   * and other header forms. Default: {@link headerUidOf} (parser-free).
+   */
+  readUid?(text: string): string | undefined;
 }
 
 export interface Saver {
@@ -246,19 +259,47 @@ async function sha256Hex(text: string): Promise<string | undefined> {
 }
 
 /**
- * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
- * undefined — a parser-free reading, enough to tell whether a file on disk is
- * this document (the shell does not load the kit's header tools).
+ * The `uid` of an FC-18 header at the start of a text, or undefined — a
+ * parser-free reading of the first `{{nyml` block (after a BOM and blank
+ * lines; a `kind: document` on the opener line is allowed): a top-level
+ * `uid:` line whose value — unquoted (`"…"`, `'…'`), or the first line of a
+ * `|` block — is a well-formed uid. Enough to tell whether a file on disk is
+ * this document when the caller does not pass its own reader
+ * (`createSaver({ readUid })`); the kit's `readHeader` is the reference.
  */
 export function headerUidOf(text: string): string | undefined {
-  const m = /^\uFEFF?\{\{nyml[ \t]*\r?\n([\s\S]*?)(?:\r?\n|\r)?\}\}/.exec(text);
+  const m = /^\uFEFF?[ \t\r\n]*\{\{nyml(?![A-Za-z0-9_-])([^\r\n]*)(?:\r\n|\r|\n)([\s\S]*?)\}\}/.exec(text);
   if (!m) return undefined;
-  for (const line of m[1].split(/\r\n|\r|\n/)) {
-    const u = /^uid[ \t]*:[ \t]*(\S+)[ \t]*$/.exec(line);
-    if (u && SHELL_UID_PATTERN.test(u[1])) return u[1];
+  const lines = [m[1], ...m[2].split(/\r\n|\r|\n/)];
+  for (let i = 0; i < lines.length; i++) {
+    const u = /^[ \t]*uid[ \t]*[:\uFF1A][ \t]*(.*?)[ \t]*$/.exec(i === 0 ? lines[0].replace(/^[ \t]*kind[ \t]*:[ \t]*document[ \t]*/, '') : lines[i]);
+    if (!u || (i > 0 && /^[ \t]/.test(lines[i]))) continue;
+    let v = u[1];
+    if (v === '|' || v === '|-' || v === '>') v = (lines[i + 1] ?? '').trim();
+    else if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v[v.length - 1] === v[0]) v = v.slice(1, -1);
+    return SHELL_UID_PATTERN.test(v) ? v : undefined;
   }
   return undefined;
 }
+
+/** The parts of an orz file a save keeps: its text, resolved includes and delivery (what "the same file" means for a conflict). */
+interface FileContent { text: string; includes: string; delivery: string }
+
+/** An orz file's content (`extract`), or null for anything else. Includes compare as sorted entries. */
+function contentOf(html: string | null | undefined): FileContent | null {
+  if (typeof html !== 'string') return null;
+  try {
+    const x = extract(html);
+    if (!x) return null;
+    const inc = x.includes ? Object.keys(x.includes).sort().map((k) => [k, x.includes![k]]) : [];
+    return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery };
+  } catch {
+    return null;
+  }
+}
+
+const sameContent = (a: FileContent | null, b: FileContent | null): boolean =>
+  !!a && !!b && a.text === b.text && a.includes === b.includes && a.delivery === b.delivery;
 
 const DESCRIPTIONS: Record<HostKind, string> = {
   md: 'orz document',
@@ -312,9 +353,10 @@ export function createSaver(opts: SaverOptions): Saver {
 
   // ── proving which file a handle points at (content, never names) ──────
   let openedMemo: Promise<string | undefined> | null = null;
-  /** The opened file's bytes as text, or undefined when the caller did not say. */
+  /** The opened file's bytes as text, or undefined when the caller did not say (a failure is not kept: tried again next time). */
   const openedBytes = (): Promise<string | undefined> => {
-    openedMemo ??= (async () => {
+    if (openedMemo) return openedMemo;
+    const run = (async () => {
       const src = opts.openedHtml;
       try {
         const v = typeof src === 'function' ? await src() : src;
@@ -323,7 +365,9 @@ export function createSaver(opts: SaverOptions): Saver {
         return undefined;
       }
     })();
-    return openedMemo;
+    openedMemo = run;
+    void run.then((v) => { if (v === undefined && openedMemo === run && typeof opts.openedHtml === 'function') openedMemo = null; });
+    return run;
   };
 
   /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
@@ -333,20 +377,39 @@ export function createSaver(opts: SaverOptions): Saver {
   /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
   let conflicted: FileHandleLike | null = null;
 
+  /** The opened file's content (`extract` of the opened bytes), once per opened bytes. */
+  let openedContent: { of: string; content: FileContent | null } | null = null;
+  const contentOfOpened = (mine: string): FileContent | null => {
+    if (openedContent?.of !== mine) openedContent = { of: mine, content: contentOf(mine) };
+    return openedContent.content;
+  };
+  const uidOf = (text: string): string | undefined => {
+    try {
+      const u = opts.readUid ? opts.readUid(text) : headerUidOf(text);
+      return typeof u === 'string' && SHELL_UID_PATTERN.test(u) ? u : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   /**
-   * The picked file's bytes (`before`) are an orz file of this document (its
-   * header uid is this saver's) whose text is neither the opened text, this
-   * page's last write nor the text being saved: it changed on disk since the
-   * page opened it. Needs the opened bytes (without them nothing is known).
+   * The picked file's bytes (`before`) are an orz file of this document — its
+   * header uid is this saver's, or either side has none (a document without a
+   * uid is still this document; only two different well-formed uids are two
+   * documents) — whose content (text, includes, delivery: not the raw bytes,
+   * so a tool that re-encoded the same file is no change) is neither the
+   * opened file's, this page's last write nor the file being saved: it
+   * changed on disk since the page opened it. Needs the opened bytes (without
+   * them nothing is known).
    */
-  const changedOnDisk = (before: string | null, mine: string | undefined, text: string): boolean => {
-    if (before === null || mine === undefined || before === mine || before === lastWritten) return false;
-    if (typeof opts.uid !== 'string' || !SHELL_UID_PATTERN.test(opts.uid)) return false;
-    let disk: string;
-    try { const x = extract(before); if (!x) return false; disk = x.text; } catch { return false; }
-    if (headerUidOf(disk) !== opts.uid || disk === text) return false;
-    const known = (html: string | null): string | null => { if (html === null) return null; try { return extract(html)?.text ?? null; } catch { return null; } };
-    return disk !== known(mine) && disk !== known(lastWritten);
+  const changedOnDisk = (before: string | null, mine: string | undefined, html: string): boolean => {
+    if (before === null || mine === undefined || before === mine || before === lastWritten || before === html) return false;
+    const disk = contentOf(before);
+    if (!disk) return false;
+    const mineUid = typeof opts.uid === 'string' && SHELL_UID_PATTERN.test(opts.uid) ? opts.uid : undefined;
+    const diskUid = uidOf(disk.text);
+    if (mineUid && diskUid && diskUid !== mineUid) return false; // another document
+    return !sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
   };
 
   /** A remembered handle proved to be the opened file, or null. */
@@ -391,7 +454,7 @@ export function createSaver(opts: SaverOptions): Saver {
     await w.close();
   };
 
-  const saveToFile = async (html: string, text: string, win: SaverWindow, overwrite: boolean): Promise<SaveResult> => {
+  const saveToFile = async (html: string, win: SaverWindow, overwrite: boolean): Promise<SaveResult> => {
     const k = key();
     let h: FileHandleLike | null = null;
     let opened = false;
@@ -430,7 +493,7 @@ export function createSaver(opts: SaverOptions): Saver {
       const before = mine === undefined ? null : await readText(h);
       opened = before !== null && before === mine;
       // this document's file, changed on disk since the page opened it: never written silently
-      if (!overwrite && changedOnDisk(before, mine, text)) {
+      if (!overwrite && changedOnDisk(before, mine, html)) {
         conflicted = h;
         return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
       }
@@ -466,7 +529,7 @@ export function createSaver(opts: SaverOptions): Saver {
       }
       const win = winOf();
       if (isServed(win) && !session && opts.servedNotice !== false) return { via: 'served-notice' };
-      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, input.text, win, call?.overwrite === true);
+      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, win, call?.overwrite === true);
       return download(input.html);
     },
     download: (input) => download(input.html),

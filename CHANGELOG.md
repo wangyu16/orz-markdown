@@ -156,6 +156,62 @@ Findings of the design audit and the adversary, fixed on the kit side
 - Size bounds re-measured on what ships (S.11 68 KB / 61.6 KB, U.10 45 KB /
   40.9 KB, V.5 19 KB / 16.9 KB, E.10 75 KB / 68.5 KB, A.2 36 KB / 32.9 KB).
 
+### Round 2 of the carrier-app loop (kit side)
+
+The closed loop on orz-mdhtml 1.0 and this kit, round 2 (claims in
+`notes/CLAIMS.md`; additive unless noted).
+
+- **A conflict was missed for most header forms** (S.14, A.15; HIGH): the
+  saver read the disk file's uid with a narrow parser-free reader, so a
+  document without a uid, a quoted (`uid: "doc-…"`) or `|` block uid, a
+  blank line before `{{nyml` or a `{{nyml kind: document` opener got no
+  conflict and an agent's edit on disk was overwritten. Now `createSaver({
+  readUid })` takes the page's own reader (the app and the editor pass
+  `readHeader`'s well-formed uid), `headerUidOf` reads all those forms, and
+  a file is this document unless both sides have different well-formed uids
+  (no uid on either side: this document).
+- **"Changed on disk" compares content, not bytes** (S.14): text, resolved
+  includes (as entries) and delivery. An agent that re-assembled the same
+  text with new includes or `cdn` delivery is now asked about (the next
+  save would have written back the page's old ones); the same content in
+  other bytes (another shell version, CR LF) is no change. Changed: such a
+  file was a conflict before when its text was not byte-identical.
+- **The conflict question** (V.6, A.15): focuses "Download a copy instead"
+  (non-destructive); Escape dismisses it (nothing written); the focus goes
+  back where it was; one question per page and per editor — a save while it
+  is open calls no saver (no second picker) and makes the open question
+  answer for the newer text (an older text is never written).
+  `askSaveConflict(root, name?, { returnFocus? })`; `showToast` actions take
+  `autofocus`, Escape dismisses a toast, and `Toast` gains `focus()` and
+  `setMessage()`. The conflict's picked file serves only the save that
+  answers it.
+- **An update that finds the file changed on disk** (A.9) writes nothing and
+  the indicator says so (`UPDATE_CONFLICT_MESSAGE`), not "conflict".
+- **Opened bytes** (E.8, S.14): an app's editor (not an assembled file) no
+  longer assembles the opened bytes at idle on every mount (its `assemble`
+  may fetch the carrier's engine) — only at its first save; a failed
+  assembly or `openedHtml` is not memoized, so it no longer disables the
+  conflict check for the page's life.
+- **Presenting** (A.19): `setChromeVisible(false)` hides the bar and the
+  editor, not the toast stack. A bar action clicked with the pointer leaves
+  the focus to the page, so the read view's Space/Enter work at once; keys
+  from a non-button chrome element never reach the read view (A.10).
+- **Editor** (FC-19 §3/§4, additive): `refreshPreview({ includes? })`
+  replaces the include record and forgets fetched includes (E.31), and
+  renders even for an unchanged text; `fileName` documented as an
+  `EditorOptions` field and `KindEditorOptions.fileName` added (an app's
+  editor's save name, E.28); `Editor.ready` documented.
+- **`enhanceDocument`** (M.24): a library that failed to load is retried
+  only after 15 s (doubled per failure), at most 3 times per window
+  (`ENHANCE_RETRY_MS`, `ENHANCE_MAX_ATTEMPTS`); re-renders meanwhile do not
+  inject it again.
+- **Lint** (K.10): `unknown-theme` — a md header `theme` not in `THEMES`.
+- **Harness** (H.5): `C.save.conflict` (an agent's edit between two saves:
+  nothing written until the reader answers; Replace it writes, Download a
+  copy instead downloads); the stub mutant `save-ignores-conflict` fails it.
+- Sizes (what ships): shell 63.0 KB (S.11 bound 68 KB), app 34.1 KB (A.2
+  bound 36 KB).
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers

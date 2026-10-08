@@ -337,3 +337,33 @@ S.1, S.11, U.10, V.2, V.5, E.8, E.10, E.12, M.24, A.2, A.7, A.9, A.10, A.12).
 
 Size bounds re-measured on what ships and raised ~10 % above the new
 measurements (S.11, U.10, V.5, E.10, A.2).
+
+### Round 2 — 2026-10-08, kit-side fixes
+
+An adversary against the round-1 fixes (probes `/tmp/adv2`: B1 uid-less, B1b
+quoted uid, B2 includes/delivery changed on disk; 22 kit mutations, 5
+survived: K01, K03–K05, K14) and a design audit (`/tmp/aB`). Fixed in
+`orz-markdown` (orz-mdhtml fixed its side in parallel); each bound to a claim
+(new: E.31, A.19; reworded: S.11, S.14, V.6, A.2, A.9, A.10, A.15, E.8,
+E.28, M.24, K.10, H.5).
+
+| Finding | Sev | Fix (claim) |
+|---|---|---|
+| conflict missed: no uid, a quoted or block uid, a blank line before the header, the `{{nyml kind: document` opener → `headerUidOf` undefined → an agent's edit lost | HIGH | `readUid` (the page's `readHeader`), `headerUidOf` reads every form, no uid on either side is this document (S.14, A.15; Chrome probes per form) |
+| an agent re-assembled the same text with new includes or cdn delivery: the next save wrote the old ones back | MED | content = text + includes + delivery; a differing one asks (S.14) |
+| same text in other bytes (CR LF, another shell) raised a conflict; K03/K04 survived | MED | content comparison, tested both ways (S.14) |
+| the conflict's picked file was never cleared (K05 survived) | LOW | test: a later save asks the picker; `overwrite` then writes the session's file (S.14) |
+| an update after an on-disk change showed "conflict" | MED | `UPDATE_CONFLICT_MESSAGE` (A.9) |
+| the question focused "Replace it", ignored Escape, stacked a second question (which could write the older text), lost the focus | MED | non-destructive default, Escape, one per root/editor answering the newest text, focus returned (V.6, A.15) |
+| toasts hidden while presenting | MED | only the bar and editor hide (A.19, real Chrome) |
+| after a pointer's bar action, Space/Enter went to the button; K14 survived (non-button chrome keys) | LOW | focus left to the page (A.19); test from the brand, title and toast text (A.10) |
+| `refreshPreview` could not take new includes (and did nothing for the same text) | LOW | `refreshPreview({ includes })`, FC-19 §4 (E.31) |
+| an app editor assembled (fetched the IIFE) at idle on every mount; a failed opened-bytes assembly was memoized, disabling conflict detection | MED | lazy for apps, failures not kept (E.8, S.14) |
+| enhancement re-injected failed libraries on every re-render | LOW | 15 s back-off, doubled, ≤ 3 attempts per window (M.24) |
+| unknown md theme not linted | LOW | `unknown-theme` (K.10) |
+| harness had no conflict check | MED | `C.save.conflict` + `save-ignores-conflict` mutant (H.5); `KindEditorOptions.fileName`; `Editor.ready` documented |
+
+Not done (optional): a third choice "Show the file's version" in the
+conflict question (it needs the saver to hand out the disk bytes; left for
+an owner call).
+

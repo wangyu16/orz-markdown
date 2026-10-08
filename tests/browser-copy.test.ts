@@ -872,7 +872,7 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     await context.close();
   }, 60_000);
 
-  it('[M.24] enhanceDocument with assets: false fetches nothing (the runtime still installs); a library that cannot load is reported failed, the content stays as rendered, and the next call tries again', async () => {
+  it('[M.24] enhanceDocument with assets: false fetches nothing (the runtime still installs); a library that cannot load is reported failed, the content stays as rendered, and it is tried again only after a pause (15 s, doubled after each failure) and at most 3 times per window — re-renders while offline do not inject it again', async () => {
     const a = await enhancePage();
     await render(a.p, '```js\nx\n```\n\n$x$\n');
     expect(await enhance(a.p, { assets: false })).toEqual({ loaded: [], failed: [] });
@@ -884,8 +884,26 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     const r = await enhance(b.p);
     expect(r).toEqual({ loaded: [], failed: [b.pa.cdn.hljsJs] });
     expect(await b.p.evaluate(() => document.querySelector('#doc pre code')!.textContent)).toBe('x\n');
+    const hl = () => b.requests.filter((u) => u === b.pa.cdn.hljsJs).length;
+    const scripts = () => b.p.evaluate((u) => document.querySelectorAll(`script[src="${u}"]`).length, b.pa.cdn.hljsJs);
+    expect(await scripts()).toBe(0); // the failed element goes
+    // re-renders right after: reported failed, not injected again
+    for (let i = 0; i < 5; i++) expect(await enhance(b.p)).toEqual({ loaded: [], failed: [b.pa.cdn.hljsJs] });
+    expect(hl()).toBe(1);
+    const shift = (ms: number) => b.p.evaluate((d) => { const w = window as unknown as { __realNow?: () => number }; w.__realNow ??= Date.now.bind(Date); Date.now = () => w.__realNow!() + d; }, ms);
+    await shift(16_000); // past the pause: tried again (and fails again)
+    expect(await enhance(b.p)).toEqual({ loaded: [], failed: [b.pa.cdn.hljsJs] });
+    expect(hl()).toBe(2);
+    await shift(16_000 + 20_000); // the pause doubled (30 s): not yet
     await enhance(b.p);
-    expect(b.requests.filter((u) => u === b.pa.cdn.hljsJs)).toHaveLength(2);
+    expect(hl()).toBe(2);
+    await shift(16_000 + 31_000);
+    await enhance(b.p);
+    expect(hl()).toBe(3);
+    await shift(10 * 3600_000); // three attempts: never again in this window
+    await enhance(b.p);
+    await enhance(b.p);
+    expect(hl()).toBe(3);
     await b.context.close();
   }, 60_000);
 });

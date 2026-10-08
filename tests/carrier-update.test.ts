@@ -933,6 +933,44 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect([isKindIcon({ paths: ['M1 2L3 4z'] }), isKindIcon(null)]).toEqual([true, false]);
   });
 
+  it('[V.6] round 2: askSaveConflict focuses "Download a copy instead" (it changes nothing on disk), Escape dismisses it (null) and goes no further, the focus goes back to returnFocus after an answer; one question per root — asked again while open, the open one is focused, takes the newer name and answers the newer call while the older resolves null', async () => {
+    const { win, document } = await dom();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createShadowRoot(host as unknown as UiElement) as unknown as ShadowRoot;
+    const pageBtn = document.getElementById('page-btn') as HTMLButtonElement;
+    const actions = () => [...root.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[];
+    const action = (label: string) => actions().find((b) => b.textContent === label)!;
+    pageBtn.focus();
+    const asked = askSaveConflict(root as never, 'a.md.html', { returnFocus: pageBtn as never });
+    expect(root.activeElement).toBe(action('Download a copy instead'));
+    // Escape: dismissed, nothing chosen, the key goes no further; the focus is back
+    let reached = 0;
+    document.body.addEventListener('keydown', () => { reached++; });
+    const esc = new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true });
+    action('Download a copy instead').dispatchEvent(esc as unknown as Event);
+    expect([await asked, esc.defaultPrevented, reached, root.querySelectorAll('.orz-toast').length]).toEqual([null, true, 0, 0]);
+    expect(document.activeElement).toBe(pageBtn);
+    // one question per root: a second ask focuses the open one and answers the newer call
+    const older = askSaveConflict(root as never, 'old.md.html', { returnFocus: pageBtn as never });
+    (document.getElementById('content') as HTMLElement).tabIndex = -1;
+    (document.getElementById('content') as HTMLElement).focus();
+    const newer = askSaveConflict(root as never, 'new.md.html');
+    expect(root.querySelectorAll('.orz-toast')).toHaveLength(1);
+    expect(await older).toBeNull();
+    expect(root.activeElement).toBe(action('Download a copy instead'));
+    expect(root.querySelector('.orz-toast__message')!.textContent).toContain(`new.md.html: ${SAVE_CONFLICT_MESSAGE}`);
+    action('Replace it').click();
+    expect(await newer).toBe('replace');
+    expect(document.activeElement).toBe(pageBtn); // where the focus was when the question first opened
+    // a toast's Escape without actions dismisses too; setMessage/focus on a gone toast do nothing
+    const t = showToast(root as never, 'Plain');
+    root.querySelector('.orz-toast')!.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }) as unknown as Event);
+    expect(root.querySelectorAll('.orz-toast')).toHaveLength(0);
+    t.setMessage('x');
+    t.focus();
+  });
+
   it('[V.4] createShadowRoot installs CHROME_CSS (constructed sheet, else <style>), and the chrome writes only into its own shadow root: no DOM-reading API, innerHTML only from ICONS', async () => {
     const { document } = await dom();
     const host = document.createElement('span');

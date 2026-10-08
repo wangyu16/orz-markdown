@@ -108,6 +108,8 @@ function mountEditor(element: AppElement, options: KindEditorOptions, ctx?: Stan
     ...(options.nonce ? { nonce: options.nonce } : {}),
     ...(options.preferences ?? ctx?.preferences ? { preferences: options.preferences ?? ctx!.preferences! } : {}),
     ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
+    // FC-19 §3 includes (an app's resolved includes); a file's own record (ctx) wins below
+    ...(options.includes ? { includes: options.includes } : {}),
     hooks: appHost ? options.hooks! : { ...otherHooks, ...(ctx?.ai ? { ai: ctx.ai } : {}), ...(ctx?.fetchInclude ? { fetchInclude: ctx.fetchInclude } : {}) },
     ...(appHost ? {} : ctx ? {
       // the standalone file's context: its saver, host, delivery, includes and opened bytes (FC-19 §4)
@@ -119,8 +121,10 @@ function mountEditor(element: AppElement, options: KindEditorOptions, ctx?: Stan
       ...(ctx.openedHtml ? { openedHtml: ctx.openedHtml } : {}),
       standalone: ctx.standalone,
     } : {
-      // an app page without hooks.save: an inline file of the text, through the picker or a download
-      assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, o?.includes ? { includes: o.includes } : {}),
+      // an app page without hooks.save: a file of the text, through the picker or a download — inline when
+      // the page holds the engine, else cdn (the stub does not fetch its own bundle, as a carrier would)
+      assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(engine.inline ? {} : { delivery: 'cdn' as const }), ...(o?.includes ? { includes: o.includes } : {}) }),
+      ...(options.fileName ? { fileName: options.fileName } : {}),
     }),
     preview: { assets: false, head: themeLink(options.text), scheme: themeOf(options.text).scheme },
   }, { appHost, options, ...(ctx ? { ctx } : {}), ...(uid ? { uid } : {}) });

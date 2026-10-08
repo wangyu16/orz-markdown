@@ -25,7 +25,7 @@
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
+exports.ENHANCE_MAX_ATTEMPTS = exports.ENHANCE_RETRY_MS = exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
 exports.enhanceDocument = enhanceDocument;
 exports.disposeEnhancement = disposeEnhancement;
@@ -114,6 +114,16 @@ const PAGE_LIBS = [
 ];
 /** Library loads per window (a page loads each library once). */
 const pageLoads = new WeakMap();
+/** Failed library loads per window: how many attempts failed, and when the last one did. */
+const pageFailures = new WeakMap();
+/**
+ * A library that failed to load is tried again only after this pause (doubled
+ * after each further failure), and at most {@link ENHANCE_MAX_ATTEMPTS} times
+ * per window (2.2.0): a re-render while offline does not inject its script
+ * again each time.
+ */
+exports.ENHANCE_RETRY_MS = 15000;
+exports.ENHANCE_MAX_ATTEMPTS = 3;
 /**
  * Enhance content rendered IN A PAGE (a carrier's read view, an app's own
  * view) the way the preview frame enhances its article: highlight.js,
@@ -199,11 +209,29 @@ async function enhanceDocument(root, options = {}) {
         loads = new Map();
         pageLoads.set(win, loads);
     }
+    let failures = pageFailures.get(win);
+    if (!failures) {
+        failures = new Map();
+        pageFailures.set(win, failures);
+    }
+    const now = () => { try {
+        const t = Number(win.Date?.now?.());
+        return Number.isFinite(t) ? t : Date.now();
+    }
+    catch {
+        return Date.now();
+    } };
     const pending = [];
     for (const lib of PAGE_LIBS) {
         if (!has(lib.needs) || win[lib.global])
             continue;
         let p = loads.get(lib.url);
+        const failed = failures.get(lib.url);
+        if (!p && failed && (failed.attempts >= exports.ENHANCE_MAX_ATTEMPTS || now() - failed.at < exports.ENHANCE_RETRY_MS * 2 ** (failed.attempts - 1))) {
+            // failed before, and not yet due again (or never again in this window): reported, not injected
+            result.failed.push(lib.url);
+            continue;
+        }
         if (!p) {
             p = new Promise((resolve) => {
                 const s = doc.createElement('script');
@@ -211,11 +239,21 @@ async function enhanceDocument(root, options = {}) {
                 if (nonce)
                     s.setAttribute('nonce', nonce);
                 s.async = true;
-                s.addEventListener('load', () => { try {
+                s.addEventListener('load', () => { failures.delete(lib.url); try {
                     lib.setup?.(win);
                 }
                 catch { /* the library's own error */ } resolve(true); });
-                s.addEventListener('error', () => { loads.delete(lib.url); resolve(false); }); // offline: try again next time
+                s.addEventListener('error', () => {
+                    // offline: tried again after a pause, a bounded number of times (the failed element goes)
+                    loads.delete(lib.url);
+                    const prev = failures.get(lib.url);
+                    failures.set(lib.url, { attempts: (prev?.attempts ?? 0) + 1, at: now() });
+                    try {
+                        s.remove();
+                    }
+                    catch { /* gone */ }
+                    resolve(false);
+                });
                 head.appendChild(s);
             });
             loads.set(lib.url, p);

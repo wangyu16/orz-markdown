@@ -196,6 +196,14 @@ export interface KindEditorOptions {
      * The kind passes them to `createEditorShell({ includes })`.
      */
     includes?: Record<string, string>;
+    /**
+     * FC-19 §3 `fileName` (2.2.0, round 2 of the carrier-app loop): the
+     * suggested name of an app's editor's saves when it has no `hooks.save`
+     * (the picker's name and the download's). The kind passes it to
+     * `createEditorShell({ fileName })`; in an assembled file the file's own
+     * name (`StandaloneContext.fileName`) is used.
+     */
+    fileName?: string;
 }
 /**
  * What the standalone file gives an editor mounted on itself (FC-19 §4: its

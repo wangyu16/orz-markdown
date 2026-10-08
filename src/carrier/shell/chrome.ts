@@ -358,15 +358,19 @@ export interface ToastOptions {
    * it. A toast with actions stays until chosen or dismissed (default
    * `timeoutMs` 0) and takes the focus on its first action when `focus` is set.
    */
-  actions?: ReadonlyArray<{ label: string; run(): void; primary?: boolean }>;
+  actions?: ReadonlyArray<{ label: string; run(): void; primary?: boolean; autofocus?: boolean }>;
   /** Called once when the toast goes without an action chosen (Dismiss, the timeout, `dismiss()`). */
   onDismiss?(): void;
-  /** Focus the first action (a question the reader must answer). */
+  /** Focus an action (a question the reader must answer): the one marked `autofocus`, else the first. */
   focus?: boolean;
 }
 
 export interface Toast {
   dismiss(): void;
+  /** Focus the toast's default action again (the one `focus` took), if it has actions and is still shown (2.2.0). */
+  focus(): void;
+  /** Change the message (text, never HTML) of a toast still shown (2.2.0). */
+  setMessage(message: string): void;
 }
 
 const TONE_ICON: Record<ToastTone, IconName> = { info: 'info', success: 'check', warning: 'warning', error: 'warning' };
@@ -380,7 +384,7 @@ const stacks = new WeakMap<object, UiElement>();
  */
 export function showToast(root: ShadowRootLike | UiElement, message: string, options: ToastOptions = {}): Toast {
   const doc = documentOf((root as { host?: UiElement }).host ?? (root as UiElement));
-  if (!doc) return { dismiss() { /* no document */ } };
+  if (!doc) return { dismiss() { /* no document */ }, focus() { /* no document */ }, setMessage() { /* no document */ } };
   const view = viewOf(doc);
   let stack = stacks.get(root);
   if (!stack) {
@@ -405,6 +409,7 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   close.setAttribute('aria-label', 'Dismiss');
   close.append(iconElement(doc, 'close'));
   const buttons: UiElement[] = [];
+  let preferred: UiElement | undefined;
   let chosen = false;
   if (actions.length) {
     const row = doc.createElement('span');
@@ -421,16 +426,18 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
         try { a.run(); } catch { /* the action's own error */ }
       });
       buttons.push(b);
+      if (a.autofocus && !preferred) preferred = b;
       row.append(b);
     }
     msg.el.append(row);
   }
   toast.append(iconElement(doc, TONE_ICON[tone]), msg.el, close);
   stack.append(toast);
-  if (options.focus && buttons[0]) buttons[0].focus?.();
-
   let timer: unknown = null;
   let gone = false;
+  const focusDefault = (): void => { if (!gone) (preferred ?? buttons[0])?.focus?.(); };
+  if (options.focus) focusDefault();
+
   const clear = (): void => { if (timer !== null && view) view.clearTimeout(timer); timer = null; };
   const arm = (): void => { clear(); if (timeout > 0 && view && !gone) timer = view.setTimeout(dismiss, timeout); };
   function dismiss(): void {
@@ -441,33 +448,74 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
     if (!chosen) { try { options.onDismiss?.(); } catch { /* the caller's own error */ } }
   }
   close.addEventListener('click', dismiss);
+  // Escape in a toast dismisses it (no choice made); it goes no further (2.2.0)
+  toast.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation?.();
+    dismiss();
+  });
   toast.addEventListener('pointerenter', clear);
   toast.addEventListener('pointerleave', arm);
   toast.addEventListener('focusin', clear);
   toast.addEventListener('focusout', arm);
   arm();
-  return { dismiss };
+  return { dismiss, focus: focusDefault, setMessage: (m: string) => { if (!gone) msg.text.data = String(m); } };
 }
 
 /** What the reader is asked when the file changed on disk since the page opened it (a save's `conflict` result, 2.2.0). */
 export const SAVE_CONFLICT_MESSAGE = 'This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?';
 
+/** Options of {@link askSaveConflict} (2.2.0). */
+export interface SaveConflictOptions {
+  /** Where the focus goes back to after the reader answers or dismisses (the element focused before the save). */
+  returnFocus?: { focus?(options?: { preventScroll?: boolean }): void } | null;
+}
+
+/** The open conflict question of a root: one at a time. */
+const conflictQuestions = new WeakMap<object, { toast: Toast; settle(choice: 'replace' | 'download' | null): void }>();
+
 /**
  * Ask the reader about a save that found the file changed on disk (2.2.0,
- * shell-runtime §1): a toast that stays, with "Replace it" and "Download a
- * copy instead"; the focus goes to the first. Resolves the choice, or null
- * when the toast is dismissed. Writes text only.
+ * shell-runtime §1 step 3.4): a toast that stays, with "Replace it" and
+ * "Download a copy instead"; the focus goes to the non-destructive "Download
+ * a copy instead", Escape dismisses it (nothing chosen), and after a choice
+ * or a dismissal the focus goes back to `returnFocus`. Resolves the choice,
+ * or null when the toast is dismissed. One question per root: asked again
+ * while one is open, the open one is focused and answers the newer call —
+ * the older call resolves null (a caller then writes nothing: an older text
+ * is never written over the newer one). Writes text only.
  */
-export function askSaveConflict(root: ShadowRootLike | UiElement, name?: string): Promise<'replace' | 'download' | null> {
+export function askSaveConflict(root: ShadowRootLike | UiElement, name?: string, options: SaveConflictOptions = {}): Promise<'replace' | 'download' | null> {
+  const message = name ? `${name}: ${SAVE_CONFLICT_MESSAGE}` : SAVE_CONFLICT_MESSAGE;
+  const back = (): void => { try { options.returnFocus?.focus?.({ preventScroll: true }); } catch { /* gone */ } };
   return new Promise((resolve) => {
-    showToast(root, name ? `${name}: ${SAVE_CONFLICT_MESSAGE}` : SAVE_CONFLICT_MESSAGE, {
+    const open = conflictQuestions.get(root);
+    if (open) {
+      // the open question now answers this call; the older one gets null (it must not write)
+      open.settle(null);
+      open.settle = (choice) => { resolve(choice); };
+      open.toast.setMessage(message);
+      open.toast.focus();
+      return;
+    }
+    const entry: { toast: Toast; settle(choice: 'replace' | 'download' | null): void } = { toast: null as unknown as Toast, settle: (choice) => { resolve(choice); } };
+    const answer = (choice: 'replace' | 'download' | null): void => {
+      if (conflictQuestions.get(root) === entry) conflictQuestions.delete(root);
+      const settle = entry.settle;
+      entry.settle = () => undefined;
+      back();
+      settle(choice);
+    };
+    conflictQuestions.set(root, entry);
+    entry.toast = showToast(root, message, {
       tone: 'warning',
       focus: true,
       actions: [
-        { label: 'Replace it', primary: true, run: () => resolve('replace') },
-        { label: 'Download a copy instead', run: () => resolve('download') },
+        { label: 'Replace it', primary: true, run: () => answer('replace') },
+        { label: 'Download a copy instead', autofocus: true, run: () => answer('download') },
       ],
-      onDismiss: () => resolve(null),
+      onDismiss: () => answer(null),
     });
   });
 }

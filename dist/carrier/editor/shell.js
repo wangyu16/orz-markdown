@@ -44,6 +44,11 @@ const codemirror6_js_1 = require("./codemirror6.js");
 const preview_js_1 = require("./preview.js");
 const styles_js_1 = require("./styles.js");
 const text_model_js_1 = require("./text-model.js");
+/** A text's well-formed header uid, as the editor reads its own (`readHeader`). */
+const headerUid = (text) => {
+    const u = (0, header_js_1.readHeader)(text)?.fields['uid']?.trim();
+    return u && header_js_1.UID_PATTERN.test(u) ? u : undefined;
+};
 const MODES = ['split', 'editor', 'preview'];
 const MODE_META = {
     editor: { label: 'Editor', icon: 'edit' },
@@ -820,12 +825,22 @@ function createEditorShell(element, options) {
     /** The carrier's `assemble`, with the opened file's includes (FC-18 D4). */
     const assembleText = (t) => Promise.resolve().then(() => (includes ? options.assemble(t, { includes }) : options.assemble(t))).then(String);
     let openedMemo = null;
-    /** `assemble` of the text the shell was mounted with — the default opened bytes — once. */
-    const openedAssembled = () => (openedMemo ?? (openedMemo = assembleText(openedText)));
+    /** `assemble` of the text the shell was mounted with — the default opened bytes — once it succeeds (a failure is tried again). */
+    const openedAssembled = () => {
+        if (openedMemo)
+            return openedMemo;
+        const run = assembleText(openedText);
+        openedMemo = run;
+        run.catch(() => { if (openedMemo === run)
+            openedMemo = null; });
+        return run;
+    };
     /** The file for a text; the unchanged text reuses the opened bytes (one `assemble` per save click). */
     const assembleFor = (t) => (t === openedText ? openedAssembled() : assembleText(t));
-    if (!hooks.save && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
-        // B#6: the default opened bytes are ready before the first save click (at idle after mount)
+    if (!hooks.save && options.standalone === true && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
+        // B#6: in an assembled file the default opened bytes are ready before the first save click (at idle
+        // after mount); an app's editor (not standalone) assembles them only at its first save (the
+        // assemble may fetch the carrier's engine: not on every mount)
         const warm = () => { if (!destroyed)
             void openedAssembled().catch(() => undefined); };
         const idle = win.requestIdleCallback;
@@ -931,7 +946,15 @@ function createEditorShell(element, options) {
             openedHtml: options.openedHtml ?? openedAssembled,
             // the served notice is for an assembled file opened from the web, not for an app's page
             servedNotice: options.standalone === true || options.openedHtml !== undefined,
+            // the file on disk's uid, read as this editor reads its own (a quoted or block uid is one)
+            readUid: headerUid,
         }));
+        if (conflictOpen) {
+            // a conflict question is open: no second picker; the question (focused) now answers for this text
+            if (!destroyed)
+                resolveConflict(text, html, conflictName);
+            return { ok: false, via: 'file', error: 'conflict', conflict: true };
+        }
         const r = await saver.save({ text, html });
         if (r.via === 'served-notice') {
             // Cmd/Ctrl+S on a served page with nothing unsaved stays quiet (B-16); the Save button and save() show the notice
@@ -951,9 +974,32 @@ function createEditorShell(element, options) {
         }
         return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
     };
+    /** A conflict question is open (one per editor): later saves update it instead of asking again. */
+    let conflictOpen = false;
+    let conflictName;
+    let conflictAsk = 0;
+    /** The focused element (through shadow roots) when a question opens: where the focus goes back. */
+    const focusedNow = () => {
+        let a = doc.activeElement ?? null;
+        for (let i = 0; i < 16 && a; i++) {
+            const inner = a.shadowRoot?.activeElement;
+            if (!inner)
+                break;
+            a = inner;
+        }
+        return a;
+    };
     /** The reader's answer to a save that found the file changed on disk: replace it, or download a copy. */
     const resolveConflict = (text, html, name) => {
-        void (0, chrome_js_2.askSaveConflict)(root, name).then(async (choice) => {
+        const ask = ++conflictAsk;
+        const back = conflictOpen ? null : focusedNow();
+        conflictOpen = true;
+        conflictName = name;
+        void (0, chrome_js_2.askSaveConflict)(root, name, back ? { returnFocus: back } : {}).then(async (choice) => {
+            // superseded by a newer save's question: this (older) text is never written
+            if (ask !== conflictAsk)
+                return;
+            conflictOpen = false;
             if (destroyed || !saver)
                 return;
             if (choice === 'replace') {
@@ -1192,9 +1238,20 @@ function createEditorShell(element, options) {
             set.add(fn);
             return () => { set.delete(fn); };
         },
-        async refreshPreview() {
+        async refreshPreview(o) {
+            if (destroyed)
+                return;
+            if (o && typeof o === 'object' && 'includes' in o) {
+                const next = o.includes && typeof o.includes === 'object' && Object.keys(o.includes).length > 0 ? Object.freeze({ ...o.includes }) : null;
+                if (next)
+                    renderCtx.includes = next;
+                else
+                    delete renderCtx.includes;
+                renderCtx.cache?.clear();
+            }
             if (renderRunning)
                 await renderRunning;
+            lastRendered = null; // render even when the text is the same (an include, a record changed)
             return renderNow();
         },
         get readOnly() { return readOnly; },

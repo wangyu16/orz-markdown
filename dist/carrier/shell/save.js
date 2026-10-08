@@ -145,21 +145,48 @@ async function sha256Hex(text) {
     }
 }
 /**
- * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
- * undefined — a parser-free reading, enough to tell whether a file on disk is
- * this document (the shell does not load the kit's header tools).
+ * The `uid` of an FC-18 header at the start of a text, or undefined — a
+ * parser-free reading of the first `{{nyml` block (after a BOM and blank
+ * lines; a `kind: document` on the opener line is allowed): a top-level
+ * `uid:` line whose value — unquoted (`"…"`, `'…'`), or the first line of a
+ * `|` block — is a well-formed uid. Enough to tell whether a file on disk is
+ * this document when the caller does not pass its own reader
+ * (`createSaver({ readUid })`); the kit's `readHeader` is the reference.
  */
 function headerUidOf(text) {
-    const m = /^\uFEFF?\{\{nyml[ \t]*\r?\n([\s\S]*?)(?:\r?\n|\r)?\}\}/.exec(text);
+    const m = /^\uFEFF?[ \t\r\n]*\{\{nyml(?![A-Za-z0-9_-])([^\r\n]*)(?:\r\n|\r|\n)([\s\S]*?)\}\}/.exec(text);
     if (!m)
         return undefined;
-    for (const line of m[1].split(/\r\n|\r|\n/)) {
-        const u = /^uid[ \t]*:[ \t]*(\S+)[ \t]*$/.exec(line);
-        if (u && exports.SHELL_UID_PATTERN.test(u[1]))
-            return u[1];
+    const lines = [m[1], ...m[2].split(/\r\n|\r|\n/)];
+    for (let i = 0; i < lines.length; i++) {
+        const u = /^[ \t]*uid[ \t]*[:\uFF1A][ \t]*(.*?)[ \t]*$/.exec(i === 0 ? lines[0].replace(/^[ \t]*kind[ \t]*:[ \t]*document[ \t]*/, '') : lines[i]);
+        if (!u || (i > 0 && /^[ \t]/.test(lines[i])))
+            continue;
+        let v = u[1];
+        if (v === '|' || v === '|-' || v === '>')
+            v = (lines[i + 1] ?? '').trim();
+        else if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v[v.length - 1] === v[0])
+            v = v.slice(1, -1);
+        return exports.SHELL_UID_PATTERN.test(v) ? v : undefined;
     }
     return undefined;
 }
+/** An orz file's content (`extract`), or null for anything else. Includes compare as sorted entries. */
+function contentOf(html) {
+    if (typeof html !== 'string')
+        return null;
+    try {
+        const x = (0, read_js_1.extract)(html);
+        if (!x)
+            return null;
+        const inc = x.includes ? Object.keys(x.includes).sort().map((k) => [k, x.includes[k]]) : [];
+        return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery };
+    }
+    catch {
+        return null;
+    }
+}
+const sameContent = (a, b) => !!a && !!b && a.text === b.text && a.includes === b.includes && a.delivery === b.delivery;
 const DESCRIPTIONS = {
     md: 'orz document',
     slides: 'orz slides',
@@ -217,9 +244,11 @@ function createSaver(opts) {
     };
     // ── proving which file a handle points at (content, never names) ──────
     let openedMemo = null;
-    /** The opened file's bytes as text, or undefined when the caller did not say. */
+    /** The opened file's bytes as text, or undefined when the caller did not say (a failure is not kept: tried again next time). */
     const openedBytes = () => {
-        openedMemo ?? (openedMemo = (async () => {
+        if (openedMemo)
+            return openedMemo;
+        const run = (async () => {
             const src = opts.openedHtml;
             try {
                 const v = typeof src === 'function' ? await src() : src;
@@ -228,8 +257,11 @@ function createSaver(opts) {
             catch {
                 return undefined;
             }
-        })());
-        return openedMemo;
+        })();
+        openedMemo = run;
+        void run.then((v) => { if (v === undefined && openedMemo === run && typeof opts.openedHtml === 'function')
+            openedMemo = null; });
+        return run;
     };
     /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
     let session = null;
@@ -237,37 +269,43 @@ function createSaver(opts) {
     let lastWritten = null;
     /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
     let conflicted = null;
-    /**
-     * The picked file's bytes (`before`) are an orz file of this document (its
-     * header uid is this saver's) whose text is neither the opened text, this
-     * page's last write nor the text being saved: it changed on disk since the
-     * page opened it. Needs the opened bytes (without them nothing is known).
-     */
-    const changedOnDisk = (before, mine, text) => {
-        if (before === null || mine === undefined || before === mine || before === lastWritten)
-            return false;
-        if (typeof opts.uid !== 'string' || !exports.SHELL_UID_PATTERN.test(opts.uid))
-            return false;
-        let disk;
+    /** The opened file's content (`extract` of the opened bytes), once per opened bytes. */
+    let openedContent = null;
+    const contentOfOpened = (mine) => {
+        if (openedContent?.of !== mine)
+            openedContent = { of: mine, content: contentOf(mine) };
+        return openedContent.content;
+    };
+    const uidOf = (text) => {
         try {
-            const x = (0, read_js_1.extract)(before);
-            if (!x)
-                return false;
-            disk = x.text;
+            const u = opts.readUid ? opts.readUid(text) : headerUidOf(text);
+            return typeof u === 'string' && exports.SHELL_UID_PATTERN.test(u) ? u : undefined;
         }
         catch {
-            return false;
+            return undefined;
         }
-        if (headerUidOf(disk) !== opts.uid || disk === text)
+    };
+    /**
+     * The picked file's bytes (`before`) are an orz file of this document — its
+     * header uid is this saver's, or either side has none (a document without a
+     * uid is still this document; only two different well-formed uids are two
+     * documents) — whose content (text, includes, delivery: not the raw bytes,
+     * so a tool that re-encoded the same file is no change) is neither the
+     * opened file's, this page's last write nor the file being saved: it
+     * changed on disk since the page opened it. Needs the opened bytes (without
+     * them nothing is known).
+     */
+    const changedOnDisk = (before, mine, html) => {
+        if (before === null || mine === undefined || before === mine || before === lastWritten || before === html)
             return false;
-        const known = (html) => { if (html === null)
-            return null; try {
-            return (0, read_js_1.extract)(html)?.text ?? null;
-        }
-        catch {
-            return null;
-        } };
-        return disk !== known(mine) && disk !== known(lastWritten);
+        const disk = contentOf(before);
+        if (!disk)
+            return false;
+        const mineUid = typeof opts.uid === 'string' && exports.SHELL_UID_PATTERN.test(opts.uid) ? opts.uid : undefined;
+        const diskUid = uidOf(disk.text);
+        if (mineUid && diskUid && diskUid !== mineUid)
+            return false; // another document
+        return !sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
     };
     /** A remembered handle proved to be the opened file, or null. */
     const remembered = async (k, win) => {
@@ -322,7 +360,7 @@ function createSaver(opts) {
         }
         await w.close();
     };
-    const saveToFile = async (html, text, win, overwrite) => {
+    const saveToFile = async (html, win, overwrite) => {
         const k = key();
         let h = null;
         let opened = false;
@@ -371,7 +409,7 @@ function createSaver(opts) {
             const before = mine === undefined ? null : await readText(h);
             opened = before !== null && before === mine;
             // this document's file, changed on disk since the page opened it: never written silently
-            if (!overwrite && changedOnDisk(before, mine, text)) {
+            if (!overwrite && changedOnDisk(before, mine, html)) {
                 conflicted = h;
                 return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
             }
@@ -410,7 +448,7 @@ function createSaver(opts) {
             if (isServed(win) && !session && opts.servedNotice !== false)
                 return { via: 'served-notice' };
             if (typeof win.showSaveFilePicker === 'function')
-                return saveToFile(input.html, input.text, win, call?.overwrite === true);
+                return saveToFile(input.html, win, call?.overwrite === true);
             return download(input.html);
         },
         download: (input) => download(input.html),

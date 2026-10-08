@@ -137,7 +137,14 @@ has loaded, so a theme change does not flash unstyled.
 current(text) }` — a header key the chrome offers (FC-18 §5.1 user choices
 are document data, owner decision 4). `CarrierAction { id, label, icon?,
 placement?: 'bar' | 'menu', inEdit?, run(app) }` — run with the app handle
-(a presenter hides the chrome: `app.setChromeVisible(false)`).
+(a presenter hides the chrome: `app.setChromeVisible(false)` hides the bar
+and the editor but not the toast stack, so a save's or an action's message
+and the conflict question still show while presenting — round 2 of the
+carrier-app loop; a kind that presents in the browser's full screen shows
+its own element only, so it shows its own messages there). A bar action
+clicked with the pointer leaves the focus to the page afterwards (with the
+keyboard it stays on the button), so the read view's keys — slides' Space
+and Enter — work at once.
 
 **Icons** (decided in round 1 of the carrier-app loop). A setting's icon is
 a kit icon (`ICONS`; `theme`, `measure`, `pageSize`, …). An action's icon is
@@ -212,7 +219,15 @@ read view's keys — slides' Space — then work at once).
   true }` and the reader is asked (`askSaveConflict`): **Replace it** saves
   over it (`save(input, { overwrite: true })`, the document is then saved),
   **Download a copy instead** downloads the file and leaves the document
-  unsaved. The editor's save asks the same.
+  unsaved. The editor's save asks the same. The question focuses Download a
+  copy instead (non-destructive), Escape dismisses it (nothing written) and
+  the focus goes back where it was; one question per page or editor: a
+  save while it is open does not call the saver (no second picker), focuses
+  it and makes it answer for the newer text — the older text is never
+  written. The saver reads the disk file's uid as the page reads its own
+  (`readUid` = `readHeader`'s well-formed `uid`), so a quoted or block uid,
+  or no uid on either side, is still this document (shell-runtime §1 step
+  3.4).
 - **Download a copy:** the current text's file through `saver.download`.
 - **New document:** `kind.newDocument()` saved as a new file
   (`Untitled<ext>`), **Save as new copy:** the current text with a new
@@ -270,6 +285,11 @@ settles without a reload (success or failure), and one that was read-only
 before stays so. The page reloads only when `performUpdate` says so (the opened
 file itself was written and the text did not move on), and nothing is asked
 then. A served page's update is downloaded. Skip this version records it.
+An update whose save finds the file changed on disk (shell-runtime §1 step
+3.4) writes nothing; the indicator says so (`UPDATE_CONFLICT_MESSAGE`: "The
+file changed on disk since you opened it (another program or an agent
+edited it), so the update wrote nothing. Reload the page to open its
+version, then update.").
 
 ### 4.10 Reader preferences
 

@@ -349,8 +349,17 @@ export interface EditorShell {
     redo(): boolean;
     focus(): void;
     on<E extends EditorEventName>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
-    /** Render the preview now (normally after a pause in typing). */
-    refreshPreview(): Promise<void>;
+    /**
+     * Render the preview now (normally after a pause in typing), also when the
+     * text has not changed (e.g. an include became available). With `includes`
+     * (2.2.0, FC-19 §4): the renderer's include record is replaced by it (`null`
+     * or `{}`: none) and the fetched-include cache is cleared first, so every
+     * include is read again from the new record or `fetchInclude`. Saves keep the
+     * includes the shell was mounted with (the opened file's `#orz-includes`).
+     */
+    refreshPreview(options?: {
+        includes?: Record<string, string> | null;
+    }): Promise<void>;
     /** Read-only now: asked for (`readOnly`, `setReadOnly`), or forced by a newer text format. */
     readonly readOnly: boolean;
     /**

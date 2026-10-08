@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.APP_CSS = void 0;
+exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = void 0;
 exports.bootCarrierApp = bootCarrierApp;
 /**
  * The standalone assembled file's runtime (spec/carrier-app.md): what every
@@ -57,7 +57,6 @@ const widgets_js_1 = require("./widgets.js");
 exports.APP_CSS = `
 :host { position: fixed; top: 12px; right: 12px; z-index: 2147481000; display: block; }
 :host([data-mode="edit"]) { inset: 0; display: flex; flex-direction: column; background: var(--orz-chrome-bg); }
-:host([data-hidden]) { display: none !important; }
 .orz-app__bar {
   display: flex; align-items: center; gap: var(--orz-chrome-space-2); padding: var(--orz-chrome-space-2);
   border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-l);
@@ -78,6 +77,9 @@ exports.APP_CSS = `
 .orz-app__editor { flex: 1; min-height: 0; display: flex; }
 .orz-app__editor > * { flex: 1; min-width: 0; }
 @media (max-width: 560px) { .orz-btn--has-icon .orz-btn__label { display: none; } .orz-btn { padding: 0 var(--orz-chrome-space-3); } }
+/* a presenter hides the bar, not the toasts (2.2.0): the stack is fixed bottom centre, outside the bar */
+:host([data-hidden]) { display: block; inset: auto; top: auto; right: auto; width: 0; height: 0; background: none; }
+:host([data-hidden]) .orz-app__bar, :host([data-hidden]) .orz-app__editor, :host([data-hidden]) .orz-popover { display: none !important; }
 `;
 /** The page's top padding at narrow widths, so the fixed bar does not cover the start of the document (2.2.0). */
 const NARROW = '(max-width: 560px)';
@@ -91,6 +93,8 @@ const DEFAULT_SERVICES = {
     skipVersion: (kind, version) => (0, update_js_1.skipVersion)(kind, version),
 };
 const errorText = (e) => (e instanceof Error ? e.message : String(e));
+/** The update found the file changed on disk (S.14): nothing was written (2.2.0, round 2 of the carrier-app loop). */
+exports.UPDATE_CONFLICT_MESSAGE = 'The file changed on disk since you opened it (another program or an agent edited it), so the update wrote nothing. Reload the page to open its version, then update.';
 /** A text's header facts the app needs: its `format` (default 1, as `readDocument` reads it) and its well-formed `uid`. */
 function headerFacts(text) {
     const fields = (0, header_js_1.readHeader)(text)?.fields ?? {};
@@ -122,6 +126,9 @@ function bootCarrierApp(k, options = {}) {
         target.addEventListener(type, fn, o);
         cleanups.push(() => target.removeEventListener(type, fn, o));
     };
+    /** A pointer or the keyboard drove the chrome last (where the focus goes after Done or a bar action). */
+    let pointerUsed = false;
+    let disposed = false;
     // ── document state: the text is the document ──
     let text = file.text;
     let saved = file.text;
@@ -140,7 +147,16 @@ function bootCarrierApp(k, options = {}) {
     const assembleWith = (t, includes) => Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}) })).then(String);
     const assembleFile = (t, o) => assembleWith(t, o?.includes);
     let openedBytes = null;
-    const openedHtml = () => (openedBytes ?? (openedBytes = assembleWith(file.text, file.includes)));
+    /** The opened bytes, once they are assembled (a failure is not kept: tried again at the next save, never disabling the conflict check). */
+    const openedHtml = () => {
+        if (openedBytes)
+            return openedBytes;
+        const run = assembleWith(file.text, file.includes);
+        openedBytes = run;
+        run.catch(() => { if (openedBytes === run)
+            openedBytes = null; });
+        return run;
+    };
     {
         // computed when the page is first idle, so a save click does not wait for it (B#6)
         const warm = () => { void openedHtml().catch(() => undefined); };
@@ -182,7 +198,8 @@ function bootCarrierApp(k, options = {}) {
     const hostInclude = host
         ? (url) => (host.protocols().include && /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? host.requestInclude(url) : Promise.resolve(null))
         : undefined;
-    const saver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml });
+    // the file on disk's uid is read as the page reads its own (a quoted or block uid is one: S.14)
+    const saver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml, readUid: (t) => headerFacts(t).uid });
     /** The page's storage (reader preferences, the once-a-day record); absent or throwing: the kit's fail-closed defaults. */
     let storage;
     try {
@@ -314,7 +331,12 @@ function bootCarrierApp(k, options = {}) {
         b.setAttribute('data-orz-action', a.id);
         if (!a.inEdit)
             b.classList.add('orz-app__read-only');
-        b.addEventListener('click', () => runAction(a.id));
+        b.addEventListener('click', () => {
+            runAction(a.id);
+            // after a pointer's click the focus is the page's, so the read view's keys (Space, Enter) work at once
+            if (pointerUsed && root.activeElement === b)
+                b.blur?.();
+        });
         bar.append(b);
     }
     const more = (0, widgets_js_1.menuButton)(doc, {
@@ -423,9 +445,34 @@ function bootCarrierApp(k, options = {}) {
         pageSaving ?? (pageSaving = savePage().finally(() => { pageSaving = null; }));
         return pageSaving;
     }
+    /** A conflict question is open (one per page): a later page save updates it instead of asking again. */
+    let conflictOpen = false;
+    let conflictName;
+    let conflictAsk = 0;
+    /** The focused element (through shadow roots), where the focus goes back after the question. */
+    const focusedNow = () => {
+        let a = doc.activeElement ?? null;
+        for (let i = 0; i < 16 && a; i++) {
+            const inner = a.shadowRoot?.activeElement;
+            if (!inner)
+                break;
+            a = inner;
+        }
+        return a;
+    };
     /** The file changed on disk since the page opened it: the reader replaces it or downloads a copy. */
     function resolveConflict(t, html, name) {
-        void (0, chrome_js_1.askSaveConflict)(root, name).then(async (choice) => {
+        const ask = ++conflictAsk;
+        const back = conflictOpen ? null : focusedNow();
+        conflictOpen = true;
+        conflictName = name;
+        void (0, chrome_js_1.askSaveConflict)(root, name, back ? { returnFocus: back } : {}).then(async (choice) => {
+            // superseded by a newer save's question: this (older) text is never written
+            if (ask !== conflictAsk)
+                return;
+            conflictOpen = false;
+            if (disposed)
+                return;
             if (choice === 'replace') {
                 const r = await saver.save({ text: t, html }, { overwrite: true });
                 if (r.via === 'served-notice')
@@ -460,6 +507,11 @@ function bootCarrierApp(k, options = {}) {
         catch (e) {
             toast(`Could not save: ${errorText(e)}`, 'error');
             return { ok: false, error: errorText(e) };
+        }
+        if (conflictOpen) {
+            // the open question (focused) now answers for this text; no second picker
+            resolveConflict(t, html, conflictName);
+            return { ok: false, via: 'file', error: 'conflict', conflict: true };
         }
         const r = await saver.save({ text: t, html });
         if (r.via === 'served-notice') {
@@ -651,8 +703,6 @@ function bootCarrierApp(k, options = {}) {
     listen(saveBtn, 'click', () => { void save(); });
     // keyboard on the page: Cmd/Ctrl+S saves the document being edited, Cmd/Ctrl+E edits,
     // Cmd/Ctrl+Z / Shift+Z undo / redo header settings; other keys go to the read view
-    // a pointer or the keyboard drove the chrome last (where the focus goes after Done)
-    let pointerUsed = false;
     listen(chromeHost, 'pointerdown', () => { pointerUsed = true; }, true);
     listen(win, 'keydown', () => { pointerUsed = false; }, true);
     listen(win, 'keydown', (e) => {
@@ -759,6 +809,8 @@ function bootCarrierApp(k, options = {}) {
                 toast(`The file updated to ${info.latest} is downloading; this page stays as it is.`, 'success');
                 return;
             }
+            if (r.save.via === 'file' && r.save.conflict)
+                throw new Error(exports.UPDATE_CONFLICT_MESSAGE);
             if (!r.save.ok)
                 throw new Error(r.save.error ?? 'The updated file could not be saved.');
             if (r.reload) {
@@ -794,7 +846,6 @@ function bootCarrierApp(k, options = {}) {
             cleanups.push(() => indicator.dispose());
         }, () => undefined);
     }
-    let disposed = false;
     const api = {
         kind: k,
         file,

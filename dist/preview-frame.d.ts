@@ -97,6 +97,14 @@ export interface EnhanceRoot {
     readonly ownerDocument?: unknown;
 }
 /**
+ * A library that failed to load is tried again only after this pause (doubled
+ * after each further failure), and at most {@link ENHANCE_MAX_ATTEMPTS} times
+ * per window (2.2.0): a re-render while offline does not inject its script
+ * again each time.
+ */
+export declare const ENHANCE_RETRY_MS = 15000;
+export declare const ENHANCE_MAX_ATTEMPTS = 3;
+/**
  * Enhance content rendered IN A PAGE (a carrier's read view, an app's own
  * view) the way the preview frame enhances its article: highlight.js,
  * Mermaid, SMILES and Chart.js from their pinned URLs (`PREVIEW_CDN`) —

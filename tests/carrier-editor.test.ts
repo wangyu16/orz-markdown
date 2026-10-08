@@ -922,6 +922,40 @@ describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-a
     m.shell.destroy();
   });
 
+  it('[E.31] refreshPreview renders now even for an unchanged text; refreshPreview({ includes }) replaces the renderer\'s include record (null or {}: none) and forgets the fetched includes, so each include is read again from the new record or fetchInclude; saves keep the includes the shell was mounted with', async () => {
+    const asked: string[] = [];
+    let answer = 'FIRST';
+    const fetchInclude = async (t: string) => { asked.push(t); return `## ${answer} ${t}\n`; };
+    const renders: string[] = [];
+    const assembled: Array<Record<string, string> | undefined> = [];
+    const m = mount({
+      text: '{{md parts/a.md}}\n\n{{md parts/b.md}}\n', includes: { 'parts/a.md': '## Record A\n' }, hooks: { fetchInclude },
+      assemble: (t, o) => { assembled.push(o?.includes); return `<html>${t}</html>`; },
+      render: async (t, ctx) => { const h = await renderMarkdownPreviewWithIncludes(t, ctx); renders.push(h); return h; },
+    });
+    await tick(80);
+    expect(renders.at(-1)).toContain('Record A</h2>');
+    expect(renders.at(-1)).toContain('FIRST parts/b.md</h2>');
+    expect(asked).toEqual(['parts/b.md']);
+    const n = renders.length;
+    await m.shell.refreshPreview(); // the same text: rendered again (the fetched include is kept)
+    expect(renders.length).toBe(n + 1);
+    expect(asked).toEqual(['parts/b.md']);
+    answer = 'SECOND';
+    await m.shell.refreshPreview({ includes: { 'parts/b.md': '## Record B\n' } });
+    expect(renders.at(-1)).toContain('Record B</h2>');
+    expect(renders.at(-1)).toContain('SECOND parts/a.md</h2>'); // a left the record: fetched again
+    expect(asked).toEqual(['parts/b.md', 'parts/a.md']);
+    await m.shell.refreshPreview({ includes: null });
+    expect(renders.at(-1)).toContain('SECOND parts/b.md</h2>'); // the cache was cleared
+    expect(asked).toEqual(['parts/b.md', 'parts/a.md', 'parts/a.md', 'parts/b.md']);
+    // saves keep the mounted includes
+    await m.shell.save().catch(() => undefined);
+    expect(assembled.every((x) => JSON.stringify(x) === JSON.stringify({ 'parts/a.md': '## Record A\n' }))).toBe(true);
+    m.shell.destroy();
+    await m.shell.refreshPreview({ includes: {} }); // after destroy: nothing
+  });
+
   it('[E.30] an include directive that resolved to nothing renders a quiet note — "Included file not available: <target>" (p.orz-include-missing, role note) keeping the directive in data-md, so copy-as-Markdown gives back the directive; missingIncludes: false renders nothing as the parser does', async () => {
     const html = renderMarkdownPreview('# Doc\n\n{{md part.md}}\n\nAfter.\n');
     expect(html).toContain('<p class="orz-include-missing" role="note" data-md="{{md part.md}}"><small>Included file not available: part.md</small></p>');
@@ -1790,7 +1824,7 @@ describe('the standalone save proves the opened file (round 2)', () => {
     }
   });
 
-  it('[E.8] round 3 (B#6, D4): the default opened bytes are assembled once, when the page is idle after mount — a save click then runs one assemble (none for an unchanged text) — and the includes option goes to every assemble, so a save keeps the file\'s #orz-includes', async () => {
+  it('[E.8] round 3 (B#6, D4): in an assembled file (standalone: true) the default opened bytes are assembled once, when the page is idle after mount — a save click then runs one assemble (none for an unchanged text) — and the includes option goes to every assemble, so a save keeps the file\'s #orz-includes', async () => {
     const g = globalThis as unknown as Record<string, unknown>;
     const had = Object.prototype.hasOwnProperty.call(g, 'window');
     const prev = g.window;
@@ -1806,7 +1840,7 @@ describe('the standalone save proves the opened file (round 2)', () => {
     g.window = { location: { protocol: 'file:', href: 'file:///d/doc.md.html', pathname: '/d/doc.md.html', origin: 'null' }, showSaveFilePicker: async () => handle };
     try {
       const assemble = vi.fn(assembled);
-      const m = mount({ text: 'a\r\n', assemble, includes, fileName: 'doc.md.html' });
+      const m = mount({ text: 'a\r\n', assemble, includes, fileName: 'doc.md.html', standalone: true });
       expect(assemble).not.toHaveBeenCalled(); // not during mount
       for (let i = 0; i < 60 && assemble.mock.calls.length === 0; i++) await tick(50);
       expect(assemble.mock.calls).toEqual([['a\r\n', { includes }]]); // at idle, before any save
@@ -1822,15 +1856,44 @@ describe('the standalone save proves the opened file (round 2)', () => {
       m.shell.destroy();
       // without includes the carrier's assemble gets the text alone (FC-19 §2's one-argument form still works)
       const plain = vi.fn(assembled);
-      const n = mount({ text: 'c\n', assemble: plain, fileName: 'doc.md.html' });
+      const n = mount({ text: 'c\n', assemble: plain, fileName: 'doc.md.html', standalone: true });
       for (let i = 0; i < 60 && plain.mock.calls.length === 0; i++) await tick(50);
       expect(plain.mock.calls).toEqual([['c\n']]);
       n.shell.destroy();
       // a shell destroyed before it is idle assembles nothing
       const none = vi.fn(assembled);
-      mount({ text: 'd\n', assemble: none }).shell.destroy();
+      mount({ text: 'd\n', assemble: none, standalone: true }).shell.destroy();
       await tick(2500);
       expect(none).not.toHaveBeenCalled();
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
+  });
+
+  it('[E.8] round 2 of the carrier-app loop: an app\'s editor (no hooks.save, not an assembled file) assembles nothing at idle — its assemble may fetch the carrier\'s engine — only at its first save; a failed assembly of the opened bytes is not kept (the next save tries again, so the conflict check is not disabled); fileName is the picker\'s and the download\'s name', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const picked: string[] = [];
+    let onDisk = '';
+    const handle = { name: 'mine.md.html', getFile: async () => ({ text: async () => onDisk }), createWritable: async () => ({ write: async (h: string) => { onDisk = h; }, close: async () => {} }) };
+    g.window = { location: { protocol: 'https:', href: 'https://app.test/editor', pathname: '/editor', origin: 'https://app.test' }, showSaveFilePicker: async (o: { suggestedName: string }) => { picked.push(o.suggestedName); return handle; } };
+    try {
+      let fail = true;
+      const assemble = vi.fn(async (t: string) => { if (fail && t === 'a\n') { fail = false; throw new Error('the engine could not be fetched'); } return `<html>${t}</html>`; });
+      const m = mount({ text: 'a\n', assemble, fileName: 'mine.md.html' });
+      await tick(2500);
+      expect(assemble).not.toHaveBeenCalled(); // not at idle
+      // the first save: the opened text's assembly fails (offline) — the save fails, nothing is kept
+      const r1 = await m.shell.save();
+      expect(r1.ok).toBe(false);
+      expect(assemble).toHaveBeenCalledTimes(1);
+      // the next save assembles again, and succeeds; the picker offers fileName
+      expect(await m.shell.save()).toEqual({ ok: true, via: 'file' });
+      expect(assemble).toHaveBeenCalledTimes(2);
+      expect(picked).toEqual(['mine.md.html']);
+      expect(onDisk).toBe('<html>a\n</html>');
+      m.shell.destroy();
     } finally {
       if (had) g.window = prev; else delete g.window;
     }

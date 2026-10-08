@@ -403,6 +403,8 @@ chrome('mutants the harness must catch in Chrome', () => {
     // 2.2.0 (claim H.7): only bundle requests count — and a file that fetches its bundle early is still caught
     ['prefetch-bundle', 'C.update.indicator', /bundle requests before the reader asked for the update/],
     ['prefetch-bundle', 'C.update.prerelease', /bundle requests/],
+    // round 2 of the carrier-app loop: a carrier that answers a conflict itself ("replace") passed the harness
+    ['save-ignores-conflict', 'C.save.conflict', /wrote over the file that changed on disk without asking/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''} the ${variant} mutant fails ${id}`, async () => {

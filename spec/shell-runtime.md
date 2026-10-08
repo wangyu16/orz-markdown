@@ -33,7 +33,7 @@ and the shell chrome (§8). Claims S.1–S.15, U.1–U.13 and V.1–V.6 in
 ## 1. Save
 
 ```ts
-const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml?, servedNotice? });
+const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml?, servedNotice?, readUid? });
 saver.save({ text, html, theme? }, { overwrite? }?): Promise<SaveResult>   // never rejects
 saver.download({ html }): Promise<SaveResult>             // Export / the notice's "download a copy"
 
@@ -73,10 +73,24 @@ caller words it "Download started", never "Saved". Its `name` is
   the text the page loaded (`readIslandFromDom(#orz-src)` at boot, with the
   file's delivery and includes), which reproduces the file (FC-18 law 3).
   Without it no remembered handle is reused across page loads and no picked
-  file counts as the opened one. A function is best started when the page is
-  first idle: computed only at a save click on a large document, it can
+  file counts as the opened one. A function is called when a handle has to
+  be proved, until it gives a string, which is kept: a rejection or a
+  non-string is not kept (round 2 of the carrier-app loop), so a failed
+  assembly is tried again at the next save and never disables the conflict
+  check of step 3.4. A function is best started when an assembled file's page
+  is first idle: computed only at a save click on a large document, it can
   outlast the click's user activation, which the permission prompt and the
-  picker need (B#6).
+  picker need (B#6). An app's editor (not an assembled file) computes it only
+  at its first save: its `assemble` may fetch the carrier's engine, which is
+  not done on every mount.
+- `readUid(text)` (2.2.0, round 2) — the header `uid` of a text, used by step
+  3.4 to read the uid of the file on disk. Pass the reader the page reads its
+  own uid with (the kit's `readHeader(text).fields.uid`, well-formed: the
+  carrier app and the editor shell do), so both sides agree on every header
+  form — a quoted (`uid: "doc-…"`) or block (`uid: |`) value, blank lines
+  before the header, `{{nyml kind: document` on the opener line. Default:
+  `headerUidOf` (parser-free: the first `{{nyml` block after a BOM and blank
+  lines, a top-level `uid:` line, quotes and a `|` block's first line read).
 
 **Order** (the first that applies):
 
@@ -125,29 +139,51 @@ caller words it "Download started", never "Saved". Its `name` is
       `.html`). The picked file is the opened one (`opened: true`) only if,
       before the write, it holds the opened bytes — a new file, or a
       same-named file in the folder the picker opened in, is not.
-   4. **A file that changed on disk** (2.2.0, round 1 of the carrier-app
+   4. **A file that changed on disk** (2.2.0, rounds 1–2 of the carrier-app
       loop): when the picked (or re-picked — the session's handle was
       dropped because someone else wrote its file) file is an orz file
-      (`extract`) whose header `uid` (`headerUidOf`, parser-free) is this
-      saver's `uid` and whose text is neither the opened text (from
-      `openedHtml`), what this page last wrote, nor the text being saved,
-      nothing is written: → `{ via: 'file', ok: false, error: 'conflict',
-      conflict: true, picked: true, opened: false, name? }`. Another program
-      or an agent edited the document since the page opened it; writing
-      would lose that edit silently. The caller asks the reader —
-      `askSaveConflict(root, name?)` (§8): "This file changed on disk since
-      you opened it (another program or an agent edited it). Replace it with
-      your version?" with **Replace it** and **Download a copy instead** —
-      and on Replace it calls `save(input, { overwrite: true })`, which
-      writes the file picked for the conflicting save (no second picker; no
-      check; `opened: false`, so it is not remembered), or on Download a
-      copy instead `download({ html })`. Another document's file (another
-      `uid`), a file that is not an orz file, the opened bytes or the text
-      being saved are no conflict, and without `openedHtml` nothing is
+      (`extract`) of **this document** and its **content** is neither the
+      opened file's (from `openedHtml`), what this page last wrote, nor the
+      file being saved, nothing is written: → `{ via: 'file', ok: false,
+      error: 'conflict', conflict: true, picked: true, opened: false, name? }`.
+      Another program or an agent edited the document since the page opened
+      it; writing would lose that edit silently.
+      - *This document:* the file's header `uid` (read with `readUid`, else
+        `headerUidOf`) is the saver's `uid` — or either side has none (a
+        document without a uid is still this document: a different content
+        asks). Only two different well-formed uids are two documents: the
+        reader chose another document's file in the picker, which the
+        browser's own replace prompt covers.
+      - *Content:* the extracted text, the resolved includes (`#orz-includes`,
+        compared as entries) and the delivery — not the raw bytes. A tool
+        that wrote the same text, includes and delivery again in other bytes
+        (another shell version, CR LF line endings) changed nothing the page
+        would lose; an agent that re-assembled the same text with new
+        includes or `cdn` delivery did, and is asked about (the page would
+        write back its old includes or delivery).
+
+      The caller asks the reader — `askSaveConflict(root, name?)` (§8):
+      "This file changed on disk since you opened it (another program or an
+      agent edited it). Replace it with your version?" with **Replace it**
+      and **Download a copy instead** (focused: the choice that changes
+      nothing on disk; Escape dismisses, writing nothing) — and on Replace it
+      calls `save(input, { overwrite: true })`, which writes the file picked
+      for the conflicting save (no second picker; no check; `opened: false`,
+      so it is not remembered), or on Download a copy instead
+      `download({ html })`. **One question at a time:** while it is open, a
+      further save of that page or editor does not call the saver (no second
+      picker): the open question is focused and answers for the newer text —
+      the older text is never written. Another document's file, a file that
+      is not an orz file, the opened content, this page's last write or the
+      file being saved are no conflict, and without `openedHtml` nothing is
       (nothing is known about the opened text). *Limit:* only a picked file
       is checked — a remembered or session handle is reused only while its
       file holds the opened bytes or this page's last write, so a changed
-      one never gets here without the picker.
+      one never gets here without the picker. A quiet update whose save
+      finds a conflict writes nothing and says so (the carrier app's
+      indicator: "The file changed on disk since you opened it … so the
+      update wrote nothing. Reload the page to open its version, then
+      update.").
 
    Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok:
    true, picked, opened, name }`, and a handle proved to be the opened file
@@ -493,11 +529,19 @@ shadow roots and does not compete with it.
   stays), paused while hovered or focused. The message is text, never HTML.
   `actions` (2.2.0): buttons labelled as text; choosing one dismisses the
   toast, then runs the action; a toast with actions stays by default
-  (`timeoutMs` 0) and, with `focus`, focuses its first action; `onDismiss`
-  runs once when it goes without a choice.
-- **`askSaveConflict(root, name?)`** (2.2.0) — the question of §1 step 3.4
-  as a toast with actions: resolves `'replace'`, `'download'` or `null`
-  (dismissed). `SAVE_CONFLICT_MESSAGE` is its text.
+  (`timeoutMs` 0) and, with `focus`, focuses its action marked `autofocus`,
+  else its first; `onDismiss` runs once when it goes without a choice.
+  Escape inside a toast dismisses it (and goes no further). The returned
+  `Toast` has `dismiss()`, `focus()` (its default action again) and
+  `setMessage(text)`.
+- **`askSaveConflict(root, name?, { returnFocus? })`** (2.2.0) — the
+  question of §1 step 3.4 as a toast with actions: resolves `'replace'`,
+  `'download'` or `null` (dismissed: the Dismiss button, Escape). The focus
+  goes to **Download a copy instead** (non-destructive) and, after the
+  answer, back to `returnFocus` (the element focused before the save). One
+  question per root: asked again while one is open, the open one is focused,
+  takes the newer `name` and answers the newer call; the older call
+  resolves `null`. `SAVE_CONFLICT_MESSAGE` is its text.
 
 Vocabulary origin: orz-mdhtml's light/dark `--c-*` tokens and dark editor bar
 (`src/template.ts`) and orz-poster's floating launcher and toast

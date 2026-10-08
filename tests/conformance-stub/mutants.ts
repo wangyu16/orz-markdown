@@ -215,6 +215,13 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
       return connectHost({ ...o, window: win as never });
     };
   }
+  if (v === 'save-ignores-conflict') {
+    // BUG (mutation): a conflict (the file changed on disk) is answered "replace" without asking the reader
+    services.createSaver = (o) => {
+      const base = createSaver(o);
+      return { ...base, async save(input, call) { const r = await base.save(input, call); return r.via === 'file' && r.conflict ? base.save(input, { overwrite: true }) : r; } };
+    };
+  }
   if (v === 'silent-refusal') services.mountUpdateIndicator = (a, i, h, o) => mountUpdateIndicator(a, i, { ...h, onUpdate: (x) => Promise.resolve(h.onUpdate(x)).catch(() => undefined) }, o); // BUG (mutation): a refused update is swallowed
   if (v === 'steal-focus') {
     services.mountUpdateIndicator = (a, i, h, o) => {

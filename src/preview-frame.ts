@@ -175,6 +175,17 @@ const PAGE_LIBS: ReadonlyArray<{ url: string; needs: string; global: string; set
 
 /** Library loads per window (a page loads each library once). */
 const pageLoads = new WeakMap<object, Map<string, Promise<boolean>>>();
+/** Failed library loads per window: how many attempts failed, and when the last one did. */
+const pageFailures = new WeakMap<object, Map<string, { attempts: number; at: number }>>();
+
+/**
+ * A library that failed to load is tried again only after this pause (doubled
+ * after each further failure), and at most {@link ENHANCE_MAX_ATTEMPTS} times
+ * per window (2.2.0): a re-render while offline does not inject its script
+ * again each time.
+ */
+export const ENHANCE_RETRY_MS = 15_000;
+export const ENHANCE_MAX_ATTEMPTS = 3;
 
 /**
  * Enhance content rendered IN A PAGE (a carrier's read view, an app's own
@@ -242,18 +253,34 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
 
   let loads = pageLoads.get(win);
   if (!loads) { loads = new Map(); pageLoads.set(win, loads); }
+  let failures = pageFailures.get(win);
+  if (!failures) { failures = new Map(); pageFailures.set(win, failures); }
+  const now = (): number => { try { const t = Number(win.Date?.now?.()); return Number.isFinite(t) ? t : Date.now(); } catch { return Date.now(); } };
   const pending: Array<Promise<void>> = [];
   for (const lib of PAGE_LIBS) {
     if (!has(lib.needs) || win[lib.global]) continue;
     let p = loads.get(lib.url);
+    const failed = failures.get(lib.url);
+    if (!p && failed && (failed.attempts >= ENHANCE_MAX_ATTEMPTS || now() - failed.at < ENHANCE_RETRY_MS * 2 ** (failed.attempts - 1))) {
+      // failed before, and not yet due again (or never again in this window): reported, not injected
+      result.failed.push(lib.url);
+      continue;
+    }
     if (!p) {
       p = new Promise<boolean>((resolve) => {
         const s = doc.createElement('script') as AnyEl;
         s.setAttribute('src', lib.url);
         if (nonce) s.setAttribute('nonce', nonce);
         s.async = true;
-        s.addEventListener('load', () => { try { lib.setup?.(win); } catch { /* the library's own error */ } resolve(true); });
-        s.addEventListener('error', () => { loads!.delete(lib.url); resolve(false); }); // offline: try again next time
+        s.addEventListener('load', () => { failures!.delete(lib.url); try { lib.setup?.(win); } catch { /* the library's own error */ } resolve(true); });
+        s.addEventListener('error', () => {
+          // offline: tried again after a pause, a bounded number of times (the failed element goes)
+          loads!.delete(lib.url);
+          const prev = failures!.get(lib.url);
+          failures!.set(lib.url, { attempts: (prev?.attempts ?? 0) + 1, at: now() });
+          try { s.remove(); } catch { /* gone */ }
+          resolve(false);
+        });
         head.appendChild(s);
       });
       loads.set(lib.url, p);

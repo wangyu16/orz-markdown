@@ -26,6 +26,7 @@ const nyml_blocks_js_1 = require("../nyml-blocks.js");
 const nyml_body_js_1 = require("../nyml-body.js");
 const text_js_1 = require("./text.js");
 const parser_js_1 = require("./parser.js");
+const themes_js_1 = require("../themes.js");
 /** Keys every kind accepts (FC-18 §5.1). */
 exports.COMMON_HEADER_KEYS = [
     'format', 'carrier', 'title', 'author', 'description', 'date', 'keywords', 'source',
@@ -514,7 +515,8 @@ const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * (warning), `key-grammar` (warning), `unknown-key` (warning), `host-key`
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
- * `bad-ratio` (warnings: value shapes). Text codes, with or without a header:
+ * `bad-ratio` (warnings: value shapes), `unknown-theme` (warning, kind md: a
+ * `theme` not in `THEMES`, 2.2.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
@@ -696,6 +698,9 @@ function lintLocated(text, loc, kind, blocks) {
     check('lang', (v) => /^(?:[A-Za-z]{2,8}|[xXiI])(?:-[A-Za-z0-9]{1,8})*$/.test(v), 'warning', 'bad-lang', 'lang should be a BCP 47 language tag (e.g. en, zh-Hans, pt-BR)');
     check('measure', (v) => v === 'normal' || v === 'wide' || v === 'full', 'warning', 'bad-measure', 'measure is normal, wide or full');
     check('ratio', (v) => /^[1-9][0-9]*(?:\.[0-9]+)?:[1-9][0-9]*(?:\.[0-9]+)?$/.test(v), 'warning', 'bad-ratio', 'ratio is W:H (e.g. 16:9, 4:3)');
+    // md themes are orz-markdown's (THEMES); slides and paged keep their own lists
+    if (effective === 'md')
+        check('theme', (v) => (0, themes_js_1.isThemeId)(v.trim()), 'warning', 'unknown-theme', 'theme is not one of the bundled themes (THEMES); the default theme is shown');
     return out;
 }
 //# sourceMappingURL=header.js.map
