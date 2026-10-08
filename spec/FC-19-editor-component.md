@@ -72,6 +72,7 @@ interface EditorOptions {
   hooks?: EditorHooks;
   preferences?: PreferenceStore;      // reader preferences (FC-18 §6); default: localStorage
   nonce?: string;                     // added 2.2.0: an app's CSP nonce (§8.4) for the preview and the editor's scripts and styles
+  includes?: Record<string, string>;  // added 2.2.0: resolved includes for the renderer (target as written → text), like a file's #orz-includes
 }
 
 interface EditorHooks {
@@ -79,7 +80,7 @@ interface EditorHooks {
   ai?: { operations: AiOperation[];
          request(op: string, ctx: { text: string; selection?: Range }): Promise<{ proposed: string }> };
                                                            // Range = { from, to }: offsets in the exact text
-  fetchInclude?(target: string): Promise<string | null>;   // URL or path; host owns the trust policy
+  fetchInclude?(target: string): Promise<string | null>;   // a URL include, or a file include's path as written that `includes` lacks; host owns the trust policy
   resolveAsset?(path: string): string;                     // relative path → URL for preview
   uploadAsset?(file: File): Promise<string>;               // returns the relative path to insert
   resolveLink?(href: string): string;                      // e.g. map twin links inside an app; also preview link clicks
@@ -123,7 +124,7 @@ type UploadOutcome = { ok: true; inserted: string[] } | { ok: false; inserted: s
 type SaveVia = "hook" | "host" | "file" | "download";
 type SaveOutcome =
   | { ok: true; via: SaveVia }
-  | { ok: false; via?: SaveVia | "served-notice"; error: string; cancelled?: boolean };
+  | { ok: false; via?: SaveVia | "served-notice"; error: string; cancelled?: boolean; conflict?: boolean };
 
 interface EditorEvents {
   change:    { text: string };
@@ -150,6 +151,22 @@ when the text changed in any way since the proposal was made, when
 read-only or destroyed, a second time, or for another editor's proposal.
 The kit's AI menu and review panel (`orz-markdown/carrier/app`
 `attachAiMenu`, `reviewProposal`) use them.
+
+**`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
+carrier-app loop): the renderer reads an include from `includes` first (an
+assembled file passes its `#orz-includes`; an app may pass what it
+resolved), then asks `fetchInclude` — with the URL for a URL include, or
+with the path as written in the directive for a file include `includes`
+lacks (an app host reads its own files). An include neither answers renders
+a quiet "Included file not available: <target>" note in the preview (§8.8).
+In an assembled file inside a host frame, `fetchInclude` is the host's
+`orz-host-include@1`, which resolves URLs only: a path is never sent to it.
+
+**`conflict`** (2.2.0, additive): a standalone save whose picked file
+changed on disk since the page opened it (spec/shell-runtime.md §1 step
+3.4) writes nothing and resolves `{ ok: false, via: "file", error:
+"conflict", conflict: true }` while the reader is asked to replace the file
+or download a copy.
 
 **`nonce`** (2.2.0, additive): the §8.4 CSP recipe needs one nonce for the
 preview frame and the editor's own `<script>`/`<style>`; before, it was the
@@ -575,11 +592,21 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   `assemble` (none for the unchanged text, which reuses it), so the picker or
   Chrome's permission prompt still has the click's user activation on a
   large document. A carrier passing its own `openedHtml` function should
-  start it early the same way. A
-  served page shows the `#orz-served-note` notice — on Cmd/Ctrl+S only when
+  start it early the same way. An
+  assembled file opened from the web (served) shows the `#orz-served-note`
+  notice ("This file was opened from a web address, so it cannot be saved
+  over. Download a copy to keep your changes.") — on Cmd/Ctrl+S only when
   there are unsaved edits (the Save button and `save()` always show it);
-  "Download a copy" calls `saver.download`. A cancelled picker is not an
-  error.
+  "Download a copy" calls `saver.download`. The shell's own saver knows it
+  is an assembled file only from `standalone: true` or an `openedHtml`
+  option (2.2.0): an app's page with an editor and no `hooks.save` (no file
+  context) never gets the notice — its save goes to the picker, else a
+  download (`createSaver({ servedNotice: false })`). A cancelled picker is
+  not an error. A picked file that changed on disk since the page opened it
+  (shell-runtime §1 step 3.4) is not written: the shell asks the reader
+  (Replace it → `saver.save(input, { overwrite: true })`; Download a copy
+  instead → `saver.download`) and `save()` resolves `{ ok: false, via:
+  'file', error: 'conflict', conflict: true }`.
 - One save at a time; dirty clears only on success (an edit made during the
   save stays dirty); a toast announces the result — "Download started." for
   a download (the browser has it; it may not have finished; dirty clears),
@@ -605,7 +632,12 @@ interface TextEditorAdapter {
 - `codemirror6Adapter({ loadModules?, url?, timeoutMs?, nonce? })` — CodeMirror 6
   with the Markdown language, line wrapping, history, search, bracket
   matching, the Markdown keymap (list continuation) and Tab indentation,
-  styled with the chrome tokens, mounted in the shell's shadow root. It is a
+  styled with the chrome tokens, mounted in the shell's shadow root, its
+  syntax coloured by the kit's highlighter (`ORZ_HIGHLIGHTER`, 2.2.0: lezer
+  tag names → `orz-tok-*` classes coloured by the chrome's
+  `--orz-chrome-syntax-*` tokens, so it follows the chrome's light or dark
+  scheme, ≥ 4.5:1 on the editor background; a tag without a known name is
+  plain text). It is a
   textarea at once and upgrades in place when CodeMirror arrives: from the
   textarea's **current** text (typed or set while loading), with its
   selection, focus and scroll, and its newest undo steps (each of the last
@@ -731,3 +763,10 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   can select, copy and press Cmd/Ctrl+S in it (§5 invariant 7: keyboard
   operable). The standalone file's own runtime that mounts this shell is
   `orz-markdown/carrier/app` ([carrier-app.md](carrier-app.md)).
+- 2.2.0, round 1 of the carrier-app loop (additive): `EditorOptions.includes`
+  (§3); `fetchInclude` also for file includes the record lacks (§3,
+  `renderMarkdownPreviewWithIncludes`); the missing-include note
+  (`p.orz-include-missing`, `data-md` keeps the directive; the renderer
+  option `missingIncludes: false` turns it off); `SaveOutcome.conflict` and
+  the conflict question (§8.5); no served notice for an app's page (§8.5);
+  the syntax highlighter (`ORZ_HIGHLIGHTER`, §8.6).

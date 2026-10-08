@@ -21,7 +21,7 @@ import vm from 'node:vm';
 import type { AddressInfo } from 'node:net';
 import {
   connectHost, embedCarrierFrame, createSaver, createPreferenceStore, preferenceNamespace, READER_PREFERENCES,
-  MSG, KIND_EXTENSIONS, HOST_KINDS, SHELL_UID_PATTERN, SAVE_ACK_TIMEOUT_MS, AI_TIMEOUT_MS, INCLUDE_TIMEOUT_MS, HELLO_INTERVAL_MS, HELLO_MAX_MS,
+  MSG, KIND_EXTENSIONS, HOST_KINDS, SHELL_UID_PATTERN, headerUidOf, SAVE_ACK_TIMEOUT_MS, AI_TIMEOUT_MS, INCLUDE_TIMEOUT_MS, HELLO_INTERVAL_MS, HELLO_MAX_MS,
   type MessageListener, type HandleStore, type StoredHandle, type FileHandleLike, type SaverWindow, type StorageLike, type HostConnection,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, UID_PATTERN, type ShellParts } from '../src/carrier';
@@ -449,6 +449,71 @@ function memoryStorage(): StorageLike & { map: Map<string, string> } {
   return { map, getItem: (k) => map.get(k) ?? null, setItem: (k, v) => { map.set(k, v); }, removeItem: (k) => { map.delete(k); } };
 }
 
+describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () => {
+  const orz = (text: string): string => assembleEnvelope(text, { kind: 'md', shellVersion: '1.0.0', delivery: 'cdn', headHtml: '', bodyHtml: '<main></main>' });
+  const doc = (uid: string, body: string): string => `{{nyml\nkind: document\ntitle: Notes\nuid: ${uid}\n}}\n\n# Notes\n\n${body}\n`;
+  const OPENED_TEXT = doc(UID, 'As opened.');
+  const OPENED = orz(OPENED_TEXT);
+  const MINE = doc(UID, 'My edit.');
+
+  it('[S.14] headerUidOf reads a well-formed header uid without the kit\'s header tools (BOM, CR LF; a malformed uid, no header or a uid outside the header is none)', () => {
+    expect(headerUidOf(OPENED_TEXT)).toBe(UID);
+    expect(headerUidOf(`\uFEFF{{nyml\r\nkind: document\r\nuid: ${UID}\r\n}}\r\n# x`)).toBe(UID);
+    expect(headerUidOf('{{nyml\nkind: document\nuid: doc-BAD\n}}\n')).toBeUndefined();
+    expect(headerUidOf(`# Title\n\nuid: ${UID}\n`)).toBeUndefined();
+    expect(headerUidOf(`{{nyml\nkind: document\n}}\n\nuid: ${UID}\n`)).toBeUndefined();
+  });
+
+  it('[S.14] a picked (or re-picked) file of this document whose text changed on disk since the page opened it is never written silently: { via: file, ok: false, conflict: true }; save(input, { overwrite: true }) then writes that file without a second picker; the opened bytes, another document (uid), a non-orz file or the text being saved are no conflict; without the opened bytes nothing is a conflict', async () => {
+    // the agent's version is on disk; the page picks it
+    const agent = fakeHandle('notes.md.html', {}, orz(doc(UID, 'AGENT EDIT')));
+    const f = fakeSaverWindow({ picker: async () => agent });
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: memoryHandleStore().store, openedHtml: OPENED });
+    const input = { text: MINE, html: orz(MINE) };
+    expect(await saver.save(input)).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name: 'notes.md.html' });
+    expect([agent.writes.length, extract(agent.content)!.text]).toEqual([0, doc(UID, 'AGENT EDIT')]);
+    expect(await saver.save(input, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
+    expect([f.picks.length, agent.content === input.html, f.downloads.length]).toEqual([1, true, 0]);
+    // the next save reuses that handle (what this page wrote last), no picker, no conflict
+    const again = { text: doc(UID, 'Again.'), html: orz(doc(UID, 'Again.')) };
+    expect((await saver.save(again)).ok).toBe(true);
+    expect(f.picks.length).toBe(1);
+
+    // the session's handle changed on disk (an agent wrote the file between two saves): the picker, then the conflict
+    const opened = fakeHandle('notes.md.html', {}, OPENED);
+    const g = fakeSaverWindow({ picker: async () => opened });
+    const s2 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: g.win, handleStore: memoryHandleStore().store, openedHtml: OPENED });
+    expect(await s2.save(input)).toEqual({ via: 'file', ok: true, picked: true, opened: true, name: 'notes.md.html' });
+    opened.content = orz(doc(UID, 'AGENT EDIT'));
+    const r = await s2.save(again);
+    expect([r.via, 'conflict' in r && r.conflict, g.picks.length, extract(opened.content)!.text]).toEqual(['file', true, 2, doc(UID, 'AGENT EDIT')]);
+
+    // no conflict: another document's file, the text being saved, the opened bytes, a non-orz file, no opened bytes
+    for (const [content, o] of [
+      [orz(doc('doc-otherotherother0', 'Other doc.')), OPENED],
+      [orz(MINE), OPENED],
+      [OPENED, OPENED],
+      ['<!doctype html><p>not an orz file</p>', OPENED],
+      [orz(doc(UID, 'AGENT EDIT')), undefined],
+    ] as const) {
+      const h = fakeHandle('notes.md.html', {}, content);
+      const w = fakeSaverWindow({ picker: async () => h });
+      const res = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, ...(o ? { openedHtml: o } : {}) }).save(input);
+      expect([res.via, (res as { ok: boolean }).ok, h.content === input.html], content.slice(0, 40)).toEqual(['file', true, true]);
+    }
+  });
+
+  it('[S.15] servedNotice: false — a page that is not an assembled file (an app\'s editor without a save hook) on http(s) goes on to the picker, else a download; the default keeps the notice', async () => {
+    const served = fakeSaverWindow({ protocol: 'https:', href: 'https://app.example/editor', picker: async () => fakeHandle('notes.md.html') });
+    expect((await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: served.win }).save({ text: 'T', html: 'H' })).via).toBe('served-notice');
+    const r = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: served.win, servedNotice: false }).save({ text: 'T', html: 'H' });
+    expect([r.via, (r as { ok: boolean }).ok, served.picks.length]).toEqual(['file', true, 1]);
+    const noPicker = fakeSaverWindow({ protocol: 'https:', href: 'https://app.example/editor' });
+    const d = await createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: noPicker.win, servedNotice: false }).save({ text: 'T', html: 'H' });
+    expect([d.via, noPicker.downloads.length]).toEqual(['download', 1]);
+  });
+});
+
 describe('reader preferences (FC-18 §6)', () => {
   it('[S.5] preferences are namespaced by uid (a malformed or absent uid uses "_"), typed and validated: an invalid set is refused, a corrupt or invalid stored value reads as the default', () => {
     const s = memoryStorage();
@@ -842,14 +907,16 @@ function valueImports(entry: string): Set<string> {
  * bundle, and an ESM build of the editor goes through the parser's ESM path, which loads KaTeX twice.
  * Bound 62 KB ≈ measurement + 10 %: the shell runs in every assembled file.
  */
-const SHELL_BUNDLE_LIMIT = 62_000;
+// 2026-10-08, round 1 of the carrier-app loop (the save-conflict check, syntax tokens, icons, toast
+// actions): 61,607 bytes. Bound ~10 % above.
+const SHELL_BUNDLE_LIMIT = 68_000;
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
 const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
-  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 62 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
+  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 68 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
     const graph = [...valueImports('src/carrier/shell/index.ts')].sort();
     expect(graph).toEqual([
       ...READER_GRAPH,

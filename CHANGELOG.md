@@ -90,6 +90,72 @@ Present) fit, in the spec. Claims A.1–A.13.
   carrier is rebuilt on `carrier/app`; every broken build is still caught,
   and a file that fetches its bundle early (`prefetch-bundle`) is.
 
+### Round 1 of the carrier-app loop (orz-mdhtml 1.0 on the 2.2.0 kit)
+
+Findings of the design audit and the adversary, fixed on the kit side
+(additive unless noted; claims in `notes/CLAIMS.md`).
+
+- **A file that changed on disk is not overwritten silently** (S.14, A.15):
+  when the picked (or re-picked) file is an orz file of this document (its
+  header `uid`) whose text is neither the opened text, this page's last
+  write nor the text being saved, `createSaver().save` writes nothing and
+  returns `{ via: 'file', ok: false, error: 'conflict', conflict: true, … }`;
+  `save(input, { overwrite: true })` then writes that file without a second
+  picker. The app and the editor ask the reader ("This file changed on disk
+  since you opened it (another program or an agent edited it). Replace it
+  with your version?" — Replace it / Download a copy instead) through the new
+  `askSaveConflict`; `SaveOutcome` / `AppSaveOutcome` gain `conflict`. Also
+  `headerUidOf`, `SaveCallOptions`, `SAVE_CONFLICT_MESSAGE`
+  (shell-runtime §1).
+- **No served-page notice on an app's page** (S.15, E.28): `createSaver({
+  servedNotice: false })`; the editor's own saver passes it unless it is an
+  assembled file (`standalone: true` or `openedHtml`), so an app's editor
+  without a save hook uses the picker, else a download. The notice now reads
+  "This file was opened from a web address, so it cannot be saved over…".
+- **Keys** (A.10, A.14, A.16): in edit mode Cmd/Ctrl+S with the focus on the
+  chrome or the page saves the editor (never "Save page as") and Cmd/Ctrl+E
+  leaves edit mode; navigation keys on a chrome button reach the read view's
+  `onKey` (not Space, Enter, Tab, Escape); a pointer's choice in a menu and a
+  pointer's Done leave the focus to the page.
+- **The page's save runs one at a time** (A.15); **every editor opened or
+  attached during a quiet update is read-only and given back** (A.9); **a
+  framed file whose host never connected asks before leaving** with unsaved
+  changes (A.7).
+- **Chrome**: at narrow widths only buttons with an icon drop their label
+  (`orz-btn--has-icon`); `ICONS` gains `present`, `print`, `pageSize`; a
+  kind's action may bring its own `KindIcon` (path data only, built as SVG
+  elements: `anyIconElement`, `isKindIcon`, `KIND_ICON_MAX_PATHS`) (A.17,
+  V.2, V.6). The chrome is first in the page order after the islands, and
+  narrow pages get a top padding under the bar; the edit-mode title follows
+  the header `title` (A.18, A.14). `showToast` takes `actions`, `onDismiss`,
+  `focus` (V.6).
+- **Editor syntax colours follow the chrome's scheme** (E.27): a kit
+  highlighter (`ORZ_HIGHLIGHTER`) with `--orz-chrome-syntax-*` tokens (light
+  and dark), ≥ 4.5:1 on the editor background (measured 5.97 / 6.44). The
+  default `defaultHighlightStyle` is no longer used by `codemirror6Adapter`.
+- **Includes in apps** (E.29): `renderMarkdownPreviewWithIncludes` sends a
+  file include the record lacks to `fetchInclude(path)`; FC-19 §3 gains the
+  `includes` option (`KindEditorOptions.includes`). The app never sends a
+  path through `orz-host-include@1` (URLs only).
+- **Unresolved includes are visible** (E.30): the preview and the md read
+  view render "Included file not available: part.md"
+  (`p.orz-include-missing`, the directive kept in `data-md`; option
+  `missingIncludes: false`); `themes/common.css` dims it and hides it in
+  print. `md.render` is unchanged.
+- **`enhanceDocument` releases charts** (M.26): each call destroys the
+  Chart.js instances whose canvas left the root; `disposeEnhancement(root)`
+  destroys the rest. **`swapStylesheet`** (M.27) swaps a `<link id>` without
+  a flash (the old one goes when the new one has loaded); `enhanceDocument`'s
+  highlight.js swap uses it.
+- **Engine source** (A.12): `captureEngineSource(document?, { bundle?,
+  integrity? })` takes only the carrier's bundle — a script named like the
+  bundle (default `orz-<x>.browser.js`), the file's `#orz-engine`, or the
+  update sandbox's — so an app script that bundles the IIFE is not inlined
+  as the engine (the release's CDN URL is fetched instead). Changed: a
+  loaded script with another file name is no longer taken.
+- Size bounds re-measured on what ships (S.11 68 KB / 61.6 KB, U.10 45 KB /
+  40.9 KB, V.5 19 KB / 16.9 KB, E.10 75 KB / 68.5 KB, A.2 36 KB / 32.9 KB).
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers

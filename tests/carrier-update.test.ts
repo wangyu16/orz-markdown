@@ -22,7 +22,7 @@ import type { AddressInfo } from 'node:net';
 import {
   checkForUpdate, reassemble, performUpdate, skipVersion, skippedVersion, parseManifest, manifestUrl, bundleUrl, browserPackage, isBundlePath,
   isScriptSafe, sandboxDocument, sha384Integrity, parseSemver, compareSemver, UpdateError, mountUpdateIndicator,
-  CHROME_CSS, ICONS, createShadowRoot, showToast,
+  CHROME_CSS, ICONS, createShadowRoot, showToast, anyIconElement, isKindIcon, askSaveConflict, SAVE_CONFLICT_MESSAGE,
   UPDATE_CHECK_INTERVAL_MS, UPDATE_CACHE_PREFIX, UPDATE_SKIP_PREFIX, RELEASE_CDN_BASE, MANIFEST_TIMEOUT_MS, REASSEMBLE_TIMEOUT_MS,
   type ReleaseManifest, type FetchLike, type ResponseLike, type StorageLike, type UpdateInfo, type MessageListener, type UiDocument, type UiElement,
   type SaveResult, createSaver, type FileHandleLike, type HandleStore, type StoredHandle,
@@ -847,8 +847,8 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     }
   });
 
-  it('[V.2] ICONS: the fifteen shell icons, each one inline 24×24 SVG in currentColor, aria-hidden and unfocusable, with no script, handler or external reference', () => {
-    expect(Object.keys(ICONS).sort()).toEqual(['check', 'close', 'copy', 'download', 'edit', 'info', 'measure', 'more', 'new', 'preview', 'save', 'split', 'theme', 'update', 'warning']);
+  it('[V.2] ICONS: the eighteen shell icons, each one inline 24×24 SVG in currentColor, aria-hidden and unfocusable, with no script, handler or external reference', () => {
+    expect(Object.keys(ICONS).sort()).toEqual(['check', 'close', 'copy', 'download', 'edit', 'info', 'measure', 'more', 'new', 'pageSize', 'present', 'preview', 'print', 'save', 'split', 'theme', 'update', 'warning']);
     for (const [name, s] of Object.entries(ICONS)) {
       expect(s, name).toMatch(/^<svg viewBox="0 0 24 24"[^>]* stroke="currentColor"[^>]* aria-hidden="true" focusable="false">.*<\/svg>$/s);
       expect(s.match(/<svg/g), name).toHaveLength(1);
@@ -892,6 +892,45 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect(root.querySelectorAll('.orz-toast')).toHaveLength(0);
     a.dismiss(); // idempotent
     vi.useRealTimers();
+  });
+
+  it('[V.6] showToast actions: labelled buttons (text, not HTML); choosing one dismisses the toast and then runs it once; a toast with actions stays (timeoutMs 0), focuses its first action with focus, and calls onDismiss once when it goes without a choice; askSaveConflict asks Replace it / Download a copy instead; anyIconElement builds a kit icon or a KindIcon (path data only, as elements) and refuses anything else', async () => {
+    const { win, document } = await dom();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createShadowRoot(host as unknown as UiElement) as unknown as ShadowRoot;
+    vi.useFakeTimers();
+    Object.assign(win, { setTimeout: (f: () => void, ms: number) => setTimeout(f, ms), clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id) });
+    const ran: string[] = [];
+    let dismissed = 0;
+    showToast(root as never, 'Choose', { tone: 'warning', focus: true, actions: [{ label: '<b>Yes</b>', primary: true, run: () => ran.push('yes') }, { label: 'No', run: () => ran.push('no') }], onDismiss: () => { dismissed++; } });
+    const actions = [...root.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[];
+    expect(actions.map((b) => b.textContent)).toEqual(['<b>Yes</b>', 'No']);
+    expect(root.querySelector('b')).toBeNull();
+    expect(root.activeElement).toBe(actions[0]);
+    vi.advanceTimersByTime(60_000);
+    expect(root.querySelectorAll('.orz-toast')).toHaveLength(1); // stays
+    actions[0].click();
+    actions[0].click();
+    expect([ran, dismissed, root.querySelectorAll('.orz-toast').length]).toEqual([['yes'], 0, 0]);
+    showToast(root as never, 'Again', { actions: [{ label: 'Go', run: () => ran.push('go') }], onDismiss: () => { dismissed++; } });
+    (root.querySelector('button[aria-label="Dismiss"]') as HTMLButtonElement).click();
+    expect([ran, dismissed]).toEqual([['yes'], 1]);
+    vi.useRealTimers();
+    const asked = askSaveConflict(root as never, 'notes.md.html');
+    expect(root.querySelector('.orz-toast__message')!.textContent).toContain(`notes.md.html: ${SAVE_CONFLICT_MESSAGE}`);
+    ([...root.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[]).find((b) => b.textContent === 'Download a copy instead')!.click();
+    expect(await asked).toBe('download');
+    const doc = document as unknown as UiDocument;
+    const kit = anyIconElement(doc, 'print') as unknown as Element;
+    expect([kit.className, kit.querySelectorAll('svg').length, kit.querySelector('rect') !== null]).toEqual(['orz-icon', 1, true]);
+    const own = anyIconElement(doc, { paths: ['M4 4h16v16H4z', 'm8 12 4 4'] }) as unknown as Element;
+    expect([...own.querySelectorAll('svg > path')].map((x) => x.getAttribute('d'))).toEqual(['M4 4h16v16H4z', 'm8 12 4 4']);
+    expect(own.querySelector('svg')!.getAttribute('stroke')).toBe('currentColor');
+    for (const bad of [{ paths: [] }, { paths: ['M0 0"/><script>'] }, { paths: ['url(#x)'] }, { paths: Array(9).fill('M0 0') }, { paths: ['M'.repeat(1001)] }, { d: 'M0 0' }, 'nope']) {
+      expect(anyIconElement(doc, bad as never), JSON.stringify(bad).slice(0, 40)).toBeNull();
+    }
+    expect([isKindIcon({ paths: ['M1 2L3 4z'] }), isKindIcon(null)]).toEqual([true, false]);
   });
 
   it('[V.4] createShadowRoot installs CHROME_CSS (constructed sheet, else <style>), and the chrome writes only into its own shadow root: no DOM-reading API, innerHTML only from ICONS', async () => {
@@ -949,8 +988,11 @@ function valueImports(entry: string): Set<string> {
  * fits, a real jump in size fails.
  */
 const UPDATE_LIMIT = 22_000;
-const UPDATE_UI_LIMIT = 40_000;
-const CHROME_LIMIT = 16_000;
+// 2026-10-08 (round 1 of the carrier-app loop: syntax tokens, three icons, kind icons, toast actions,
+// the save-conflict question): update 20,377 B; update + indicator + chrome 40,852 B; chrome 16,871 B.
+// Bounds ~10 % above.
+const UPDATE_UI_LIMIT = 45_000;
+const CHROME_LIMIT = 19_000;
 /** Bundle `contents` (JS importing from `dist/`) as a carrier would. */
 async function shippedSize(contents: string): Promise<{ bytes: number; inputs: string[] }> {
   expect(existsSync('dist/carrier/shell/update.js'), 'dist/ is missing: run npm run build').toBe(true);
@@ -960,7 +1002,7 @@ async function shippedSize(contents: string): Promise<{ bytes: number; inputs: s
 }
 
 describe('module boundaries', () => {
-  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 22 KB (with indicator and chrome under 40 KB)', async () => {
+  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 22 KB (with indicator and chrome under 45 KB)', async () => {
     expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
     expect([...valueImports('src/carrier/shell/indicator.ts')].sort()).toEqual(['src/carrier/shell/chrome.ts', 'src/carrier/shell/indicator.ts']);
     const u = await shippedSize("export * from './dist/carrier/shell/update.js';");
@@ -971,7 +1013,7 @@ describe('module boundaries', () => {
     expect(ui.inputs.filter((f) => /markdown-it|katex|dist\/index|header|document\.js|parser/.test(f))).toEqual([]);
   });
 
-  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and what ships (dist/carrier/shell/chrome.js) bundles under 16 KB', async () => {
+  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and what ships (dist/carrier/shell/chrome.js) bundles under 19 KB', async () => {
     expect([...valueImports('src/carrier/shell/chrome.ts')]).toEqual(['src/carrier/shell/chrome.ts']);
     const c = await shippedSize("export * from './dist/carrier/shell/chrome.js';");
     expect(c.bytes).toBeLessThan(CHROME_LIMIT);

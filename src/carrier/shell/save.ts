@@ -18,6 +18,7 @@
  * Every browser feature is detected when `save` is called, never at module
  * load, so the module imports safely in Node.
  */
+import { extract } from '../read.js';
 import { KIND_EXTENSIONS, type HostKind } from './protocol.js';
 import type { HostConnection } from './file-side.js';
 import { globalWindow, openedFileName, pageLocation, type FileHandleLike, type IdbDatabaseLike, type IdbFactoryLike, type IdbRequestLike, type IdbStoreLike, type SaverWindow } from './types.js';
@@ -41,10 +42,15 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  *   `confirmed` is always `false`: the page cannot know whether the download
  *   landed (it may be blocked or cancelled); `ok` means it was started.
  * - `served-notice`: nothing was saved (spec/shell-runtime.md §1 step 2).
+ * - `file` with `conflict: true` (2.2.0): nothing was written — the picked
+ *   file is an orz file of this document (its header `uid`) whose text is
+ *   neither the opened text nor what this page last wrote: it changed on disk
+ *   since the page opened it (another program, an agent). The caller asks the
+ *   reader: replace it (`save(input, { overwrite: true })`) or download a copy.
  */
 export type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 
@@ -55,6 +61,17 @@ export interface SaveInput {
   html: string;
   /** The current theme id, passed to a host (`orz-host-save` `theme`). */
   theme?: string;
+}
+
+/** Options of one save (2.2.0). */
+export interface SaveCallOptions {
+  /**
+   * The reader chose to replace a file that changed on disk (after a
+   * `conflict` result): the file picked for that save is written without the
+   * check (no second picker); with no such file the save runs as usual,
+   * without the check.
+   */
+  overwrite?: boolean;
 }
 
 export interface SaverOptions {
@@ -78,11 +95,19 @@ export interface SaverOptions {
    * one (`opened: false`, so an update never reloads).
    */
   openedHtml?: string | (() => string | undefined | null | Promise<string | undefined | null>);
+  /**
+   * Whether a served page (http/https) with no handle gets the served notice
+   * (step 2). Default `true`: an assembled file opened from the web cannot be
+   * saved over. `false` (2.2.0): the page is not an assembled file (an app's
+   * page with an editor and no save hook), so the save goes on to the picker,
+   * else a download.
+   */
+  servedNotice?: boolean;
 }
 
 export interface Saver {
   /** Save in the order above. Never rejects. */
-  save(input: SaveInput): Promise<SaveResult>;
+  save(input: SaveInput, options?: SaveCallOptions): Promise<SaveResult>;
   /** Download a copy (Export, or the served-page notice's "download a copy"). */
   download(input: Pick<SaveInput, 'html'>): Promise<SaveResult>;
   /** The handle key in use: `<uid> <page location>` (the uid alone without a location), or the page URL without its fragment. */
@@ -220,6 +245,21 @@ async function sha256Hex(text: string): Promise<string | undefined> {
   }
 }
 
+/**
+ * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
+ * undefined — a parser-free reading, enough to tell whether a file on disk is
+ * this document (the shell does not load the kit's header tools).
+ */
+export function headerUidOf(text: string): string | undefined {
+  const m = /^\uFEFF?\{\{nyml[ \t]*\r?\n([\s\S]*?)(?:\r?\n|\r)?\}\}/.exec(text);
+  if (!m) return undefined;
+  for (const line of m[1].split(/\r\n|\r|\n/)) {
+    const u = /^uid[ \t]*:[ \t]*(\S+)[ \t]*$/.exec(line);
+    if (u && SHELL_UID_PATTERN.test(u[1])) return u[1];
+  }
+  return undefined;
+}
+
 const DESCRIPTIONS: Record<HostKind, string> = {
   md: 'orz document',
   slides: 'orz slides',
@@ -288,6 +328,26 @@ export function createSaver(opts: SaverOptions): Saver {
 
   /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
   let session: { handle: FileHandleLike; opened: boolean; last: string } | null = null;
+  /** What this page last wrote through any handle (kept when the session handle is dropped). */
+  let lastWritten: string | null = null;
+  /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
+  let conflicted: FileHandleLike | null = null;
+
+  /**
+   * The picked file's bytes (`before`) are an orz file of this document (its
+   * header uid is this saver's) whose text is neither the opened text, this
+   * page's last write nor the text being saved: it changed on disk since the
+   * page opened it. Needs the opened bytes (without them nothing is known).
+   */
+  const changedOnDisk = (before: string | null, mine: string | undefined, text: string): boolean => {
+    if (before === null || mine === undefined || before === mine || before === lastWritten) return false;
+    if (typeof opts.uid !== 'string' || !SHELL_UID_PATTERN.test(opts.uid)) return false;
+    let disk: string;
+    try { const x = extract(before); if (!x) return false; disk = x.text; } catch { return false; }
+    if (headerUidOf(disk) !== opts.uid || disk === text) return false;
+    const known = (html: string | null): string | null => { if (html === null) return null; try { return extract(html)?.text ?? null; } catch { return null; } };
+    return disk !== known(mine) && disk !== known(lastWritten);
+  };
 
   /** A remembered handle proved to be the opened file, or null. */
   const remembered = async (k: string, win: SaverWindow): Promise<FileHandleLike | null> => {
@@ -331,12 +391,18 @@ export function createSaver(opts: SaverOptions): Saver {
     await w.close();
   };
 
-  const saveToFile = async (html: string, win: SaverWindow): Promise<SaveResult> => {
+  const saveToFile = async (html: string, text: string, win: SaverWindow, overwrite: boolean): Promise<SaveResult> => {
     const k = key();
     let h: FileHandleLike | null = null;
     let opened = false;
     let picked = false;
-    if (session) {
+    if (overwrite && conflicted) {
+      // the reader chose to replace the file that changed on disk: no second picker, no check
+      h = conflicted;
+      picked = true;
+    }
+    conflicted = null;
+    if (!h && session) {
       // this page's handle, if the file still holds what this page wrote last (or the opened bytes)
       const now = await readText(session.handle);
       if (now !== null && now === session.last) { h = session.handle; opened = session.opened; }
@@ -363,6 +429,11 @@ export function createSaver(opts: SaverOptions): Saver {
       const mine = await openedBytes();
       const before = mine === undefined ? null : await readText(h);
       opened = before !== null && before === mine;
+      // this document's file, changed on disk since the page opened it: never written silently
+      if (!overwrite && changedOnDisk(before, mine, text)) {
+        conflicted = h;
+        return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
+      }
     }
     try {
       await write(h, html);
@@ -371,6 +442,7 @@ export function createSaver(opts: SaverOptions): Saver {
       return download(html); // the write failed: keep the user's work as a download
     }
     session = { handle: h, opened, last: html };
+    lastWritten = html;
     if (k && opened) {
       // remember only a handle proved to be this page's file, with what was written through it
       const location = pageLocation(win.location);
@@ -386,15 +458,15 @@ export function createSaver(opts: SaverOptions): Saver {
   };
 
   return {
-    async save(input) {
+    async save(input, call) {
       if (typeof input?.html !== 'string' || typeof input.text !== 'string') return { via: 'download', ok: false, confirmed: false, error: 'text and html must be strings.' };
       if (opts.host && opts.host.connected()) {
         const ack = await opts.host.save({ source: input.text, html: input.html, ...(typeof input.theme === 'string' ? { theme: input.theme } : {}) });
         return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };
       }
       const win = winOf();
-      if (isServed(win) && !session) return { via: 'served-notice' };
-      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, win);
+      if (isServed(win) && !session && opts.servedNotice !== false) return { via: 'served-notice' };
+      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, input.text, win, call?.overwrite === true);
       return download(input.html);
     },
     download: (input) => download(input.html),

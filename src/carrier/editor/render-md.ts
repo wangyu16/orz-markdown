@@ -22,11 +22,19 @@
  * `prepareSources` (each URL fetched once per shell when the shell's
  * `ctx.cache` is passed), passing the render env as `includeEnv` so a
  * document that also has file includes gets its URL includes too, then
- * renders the expanded text the same way.
+ * renders the expanded text the same way. A file include the record does
+ * not hold goes to `fetchInclude(path)` (the path as written; an app host
+ * reads its own files, 2.2.0).
+ *
+ * An include directive that resolved to nothing (no record entry, no host
+ * answer, a nested include, a refused path) renders a quiet note — "Included
+ * file not available: part.md" (`p.orz-include-missing`, keeping the
+ * directive in `data-md` for copy-as-Markdown) — instead of nothing (2.2.0).
  */
 import { md } from '../../index.js';
+import { escapeAttr, escapeHtml } from '../../html.js';
 import { prepareSources } from '../../prepare-sources.js';
-import type { IncludeEnv } from '../../plugins/markdown-include.js';
+import { INCLUDE_DIRECTIVES, type IncludeEnv } from '../../plugins/markdown-include.js';
 import { withoutHeader } from '../header.js';
 import { registerTwinLinks } from '../links.js';
 
@@ -41,12 +49,19 @@ export interface MarkdownPreviewOptions {
   env?: Record<string, unknown>;
   /**
    * The editor shell's render context (`render(text, ctx)`), accepted so this
-   * function can be passed as `render` directly. Not used here: the shell
-   * applies `resolveAsset` to the rendered HTML itself, and includes need an
-   * asynchronous pre-pass (`prepareSources`) before rendering.
+   * function can be passed as `render` directly. Not used by the synchronous
+   * `renderMarkdownPreview` (includes need an asynchronous pre-pass);
+   * `renderMarkdownPreviewWithIncludes` resolves URL includes and the file
+   * includes the record lacks through it. `resolveAsset` is the shell's: it
+   * applies it to the rendered HTML itself.
    */
   fetchInclude?(target: string): Promise<string | null>;
   resolveAsset?(path: string): string;
+  /**
+   * Show an include directive that resolved to nothing as a quiet note
+   * (default `true`; 2.2.0). `false`: it renders nothing, as the parser does.
+   */
+  missingIncludes?: boolean;
   /** The shell's per-instance scratch map (`ctx.cache`): fetched includes are kept there. */
   cache?: Map<string, unknown>;
   /**
@@ -125,6 +140,8 @@ export async function renderMarkdownPreviewWithIncludes(text: string, options: M
   const rec = options.includes;
   const recorded = rec && typeof rec === 'object' ? Object.keys(rec).filter((k) => isUrl(k) && typeof rec[k] === 'string') : [];
   if (!host && recorded.length === 0) return renderMarkdownPreview(text, options);
+  // file includes the record does not hold: the host's own reading (an app host's files), fetched first
+  if (host) options = await withHostFiles(text, options, host);
   const fromRecord = (url: string): string | null => (rec && Object.prototype.hasOwnProperty.call(rec, url) && typeof rec[url] === 'string' ? rec[url] : null);
   const resolve = async (url: string): Promise<string | null> => {
     if (host) {
@@ -164,6 +181,54 @@ export async function renderMarkdownPreviewWithIncludes(text: string, options: M
   return renderBody(expanded, lineOffset, env, options, (l) => (l < head ? l : l >= b.length - tail ? l - shift : head));
 }
 
+/** The file include targets a text's body leaves unresolved with these options (one level: the body's own directives). */
+function unresolvedFileIncludes(body: string, options: MarkdownPreviewOptions): string[] {
+  const env: Record<string, unknown> = { ...(renderEnv({ ...options, includes: options.includes ?? {} }) ?? {}) };
+  const out = new Set<string>();
+  for (const t of md.parse(body, env)) {
+    if (t.type !== 'plugin_block' || !INCLUDE_ALIASES.has(t.info)) continue;
+    const target = (t.content || '').trim();
+    if (target && !isUrl(target)) out.add(target);
+  }
+  return [...out];
+}
+
+/**
+ * `options` with the file includes the record lacks read through the host's
+ * `fetchInclude(path)` (the path as written in the directive), each once per
+ * shell through `options.cache`; a host that has none returns null.
+ */
+async function withHostFiles(text: string, options: MarkdownPreviewOptions, host: (target: string) => Promise<string | null>): Promise<MarkdownPreviewOptions> {
+  const { body } = withoutHeader(text);
+  if (!/\{\{\s*(?:markdown|md|md-include)\b/.test(body)) return options;
+  const targets = unresolvedFileIncludes(body, options);
+  if (targets.length === 0) return options;
+  const cache = options.cache;
+  const got = await Promise.all(targets.map(async (path) => {
+    const key = `orz-include-file:${path}`;
+    let p = cache?.get(key) as Promise<string | null> | undefined;
+    if (!p) {
+      p = Promise.resolve().then(() => host(path)).then((t) => (typeof t === 'string' ? t : null), () => null);
+      cache?.set(key, p);
+      const mine = p;
+      void p.then((t) => { if (t === null && cache?.get(key) === mine) cache.delete(key); });
+    }
+    return [path, await p] as const;
+  }));
+  const extra: Record<string, string> = {};
+  for (const [path, t] of got) if (typeof t === 'string') extra[path] = t;
+  if (Object.keys(extra).length === 0) return options;
+  return { ...options, includes: { ...extra, ...(options.includes ?? {}) } };
+}
+
+const INCLUDE_ALIASES: ReadonlySet<string> = new Set(INCLUDE_DIRECTIVES);
+
+/** The quiet note of an include directive that resolved to nothing (its directive kept in `data-md`). */
+function missingIncludeHtml(info: string, target: string): string {
+  const directive = `{{${info} ${target}}}`;
+  return `<p class="orz-include-missing" role="note" data-md="${escapeAttr(directive)}"><small>Included file not available: ${escapeHtml(target)}</small></p>\n`;
+}
+
 /** Line breaks in a string (CR LF, CR and LF each count once). */
 function linesIn(s: string): number {
   let n = 0;
@@ -180,6 +245,15 @@ function renderBody(body: string, lineOffset: number, baseEnv: Record<string, un
   const env: Record<string, unknown> = { ...(baseEnv ?? {}), orzTwinLinks: options.twinLinks !== false };
   const tokens = md.parse(body, env);
   for (const t of tokens) {
+    if (options.missingIncludes !== false && t.type === 'plugin_block' && INCLUDE_ALIASES.has(t.info)) {
+      // left by the include rule and prepareSources: it resolved to nothing — say so, quietly
+      const target = (t.content || '').trim();
+      if (target) {
+        t.type = 'html_block';
+        t.content = missingIncludeHtml(t.info, target);
+      }
+      continue;
+    }
     if (!t.map || !t.block) continue;
     if (t.nesting === 1 || STAMPED_LEAVES.has(t.type)) t.attrSet('data-src-line', String((mapLine ? mapLine(t.map[0]) : t.map[0]) + lineOffset));
   }

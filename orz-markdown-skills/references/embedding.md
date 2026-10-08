@@ -47,8 +47,12 @@ There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
 > it loads only the libraries the content needs (highlight.js, Mermaid, SMILES,
 > Chart.js, KaTeX's and highlight.js's stylesheets) from the same pinned URLs,
 > installs the runtime once (copy-as-Markdown, tabs, QR) and is idempotent —
-> call it again after every render. `nonce` stamps what it adds (CSP);
-> `assets: false` fetches nothing. The theme list for a picker is `THEMES`
+> call it again after every render (each call destroys the Chart.js charts of
+> the content it replaced; `disposeEnhancement(article)` releases the rest when
+> the view goes). `nonce` stamps what it adds (CSP); `assets: false` fetches
+> nothing. To switch a theme stylesheet without a flash use
+> `swapStylesheet(document, 'orz-theme', href)` (the old sheet stays until the
+> new one has loaded). The theme list for a picker is `THEMES`
 > (`orz-markdown/themes`: ids, names, light/dark).
 
 ---

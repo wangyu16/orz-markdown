@@ -723,7 +723,7 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     [pa.cdn.hljsJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.hljs={highlightElement:function(el){window.__calls.hljs=(window.__calls.hljs||0)+1;el.classList.add('hljs')}};",
     [pa.cdn.mermaidJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.mermaid={initialize:function(o){window.__mermaidInit=o},run:function(o){window.__calls.mermaid=(window.__calls.mermaid||0)+o.nodes.length;o.nodes.forEach(function(n){n.setAttribute('data-processed','true')});return Promise.resolve()}};",
     [pa.cdn.smilesJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.SmilesDrawer={Drawer:function(){this.draw=function(t,c,theme){window.__smilesTheme=theme}},parse:function(s,cb){window.__calls.smiles=(window.__calls.smiles||0)+1;cb({})}};",
-    [pa.cdn.chartJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.Chart=function(){window.__calls.chart=(window.__calls.chart||0)+1};",
+    [pa.cdn.chartJs]: "window.__loads=(window.__loads||0)+1;window.__calls=window.__calls||{};window.__live=0;window.Chart=function(){window.__calls.chart=(window.__calls.chart||0)+1;window.__live++;var gone=false;this.destroy=function(){if(!gone){gone=true;window.__live--}}};",
   });
   let bundle = '';
   let own: Browser | null = null; // its own Chrome: the copy suite closes the shared one when it ends
@@ -731,7 +731,7 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
   beforeAll(async () => {
     own = await launch();
     const { build } = await import('esbuild');
-    const out = await build({ stdin: { contents: "export { enhanceDocument, PREVIEW_CDN } from './src/preview-frame';", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'iife', globalName: 'E', platform: 'browser', write: false, logLevel: 'silent' });
+    const out = await build({ stdin: { contents: "export { enhanceDocument, disposeEnhancement, swapStylesheet, PREVIEW_CDN } from './src/preview-frame';", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'iife', globalName: 'E', platform: 'browser', write: false, logLevel: 'silent' });
     bundle = out.outputFiles[0].text;
   });
 
@@ -797,8 +797,9 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     expect(await enhance(p, { scheme: 'dark', nonce: 'n1' })).toEqual({ loaded: [], failed: [] });
     expect(await state(p)).toEqual(s);
     expect(await p.evaluate(() => document.querySelectorAll('#doc .tabs-bar').length)).toBe(1);
-    // a scheme change swaps highlight.js's stylesheet
+    // a scheme change swaps highlight.js's stylesheet (the new one loads before the old goes: M.27)
     await enhance(p, { scheme: 'light' });
+    await p.waitForFunction(() => !document.querySelector('link[data-orz-swap]'));
     expect((await state(p)).links).toEqual([[pa.cdn.katexCss, '', 'n1'], [pa.cdn.hljsLightCss, 'orz-hljs', 'n1']]);
     // a re-render that needs the other libraries loads exactly those, once, and draws each construct once
     await render(p, '```js\ny\n```\n\n{{mermaid\ngraph LR; A-->B\n}}\n\n{{smiles CCO}}\n\n{{chart\ndata: 1, 2\n}}\n');
@@ -813,6 +814,61 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     expect(await p.evaluate(() => document.querySelectorAll('canvas.orz-chart').length)).toBe(1);
     // the page's own elements are not touched
     expect(await p.evaluate(() => document.getElementById('site')!.outerHTML)).toBe('<header id="site">Site</header>');
+    await context.close();
+  }, 60_000);
+
+  it('[M.26] enhanceDocument releases what it drew: over 40 re-renders of a chart the live Chart.js instances do not grow (each call destroys the charts whose canvas left the root), and disposeEnhancement(root) destroys the rest', async () => {
+    const { p, context } = await enhancePage();
+    for (let i = 0; i < 40; i++) {
+      await render(p, `{{chart\ndata: ${i}, ${i + 1}\n}}\n\n{{chart\ndata: 3, ${i}\n}}\n`);
+      await enhance(p, { assets: i === 0 });
+    }
+    const live = await p.evaluate(() => (window as unknown as { __live: number; __calls: Record<string, number> }).__live);
+    const made = await p.evaluate(() => (window as unknown as { __calls: Record<string, number> }).__calls.chart);
+    expect(made).toBe(80);
+    expect(live).toBe(2); // the current render's two charts only
+    await p.evaluate(() => (window as unknown as { E: { disposeEnhancement(r: Element): void } }).E.disposeEnhancement(document.getElementById('doc')!));
+    expect(await p.evaluate(() => (window as unknown as { __live: number }).__live)).toBe(0);
+    await context.close();
+  }, 60_000);
+
+  it('[M.27] swapStylesheet (and enhanceDocument\'s scheme change) keeps the old stylesheet until the new one has loaded — never a moment without one — then the new link carries the id (and the old nonce); a newer swap supersedes a pending one', async () => {
+    const pa = getPreviewFrameAssets();
+    const context = await own!.newContext();
+    let releaseCss!: () => void;
+    const gate = new Promise<void>((r) => { releaseCss = r; });
+    await context.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url === 'https://page.test/doc.html') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html><head><meta charset="utf-8"><link id="orz-theme" rel="stylesheet" nonce="n9" href="https://css.test/a.css"></head><body><article class="markdown-body" id="doc"><p>x</p></article></body></html>' });
+      if (url === 'https://css.test/a.css') return route.fulfill({ status: 200, contentType: 'text/css', body: 'p { color: rgb(1, 2, 3); }' });
+      if (url === 'https://css.test/b.css') { await gate; return route.fulfill({ status: 200, contentType: 'text/css', body: 'p { color: rgb(4, 5, 6); }' }); }
+      if (url === 'https://css.test/c.css') return route.fulfill({ status: 200, contentType: 'text/css', body: 'p { color: rgb(7, 8, 9); }' });
+      return route.abort('internetdisconnected');
+    });
+    const p = await context.newPage();
+    await p.goto('https://page.test/doc.html');
+    await p.addScriptTag({ content: bundle });
+    const color = () => p.evaluate(() => getComputedStyle(document.querySelector('#doc p')!).color);
+    expect(await color()).toBe('rgb(1, 2, 3)');
+    await p.evaluate(() => (window as unknown as { E: { swapStylesheet(d: Document, id: string, h: string): void } }).E.swapStylesheet(document, 'orz-theme', 'https://css.test/b.css'));
+    await new Promise((r) => setTimeout(r, 300));
+    // still loading: the old stylesheet styles the page
+    expect(await color()).toBe('rgb(1, 2, 3)');
+    expect(await p.evaluate(() => document.querySelectorAll('link[rel=stylesheet]').length)).toBe(2);
+    releaseCss();
+    await p.waitForFunction(() => !document.querySelector('link[data-orz-swap]'));
+    expect(await color()).toBe('rgb(4, 5, 6)');
+    expect(await p.evaluate(() => Array.from(document.querySelectorAll('link[rel=stylesheet]')).map((l) => [l.id, l.getAttribute('href'), (l as HTMLLinkElement).nonce]))).toEqual([['orz-theme', 'https://css.test/b.css', 'n9']]);
+    // a newer swap wins over a pending one; the same href is a no-op
+    await p.evaluate(() => {
+      const E = (window as unknown as { E: { swapStylesheet(d: Document, id: string, h: string): void } }).E;
+      E.swapStylesheet(document, 'orz-theme', 'https://css.test/a.css');
+      E.swapStylesheet(document, 'orz-theme', 'https://css.test/c.css');
+    });
+    await p.waitForFunction(() => !document.querySelector('link[data-orz-swap]'));
+    expect(await color()).toBe('rgb(7, 8, 9)');
+    expect(await p.evaluate(() => Array.from(document.querySelectorAll('link[rel=stylesheet]')).map((l) => l.getAttribute('href')))).toEqual(['https://css.test/c.css']);
+    void pa;
     await context.close();
   }, 60_000);
 

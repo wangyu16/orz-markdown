@@ -32,10 +32,13 @@ exports.bootCarrierApp = bootCarrierApp;
  * - **Quiet update** (top-level only, the kit's who-checks rules):
  *   `checkForUpdate` → `mountUpdateIndicator` → `performUpdate`; the document
  *   is read-only while it runs; the page reloads only when the kit says so.
- * - **Keymap**: Cmd/Ctrl+S saves the document being edited, Cmd/Ctrl+E
- *   edits, Cmd/Ctrl+Z / Shift+Z undo / redo header settings; a key another
- *   handler took (`defaultPrevented`) is never ours; other keys go to the
- *   read view (`onKey`: slides' navigation).
+ * - **Keymap**: Cmd/Ctrl+S saves the document being edited — also in edit
+ *   mode with the focus on the chrome or the page (the browser's "Save page
+ *   as" never runs while a document is open), Cmd/Ctrl+E edits and leaves
+ *   edit mode, Cmd/Ctrl+Z / Shift+Z undo / redo header settings; a key
+ *   another handler took (`defaultPrevented`) is never ours; other keys go to
+ *   the read view (`onKey`: slides' navigation), also from a chrome button
+ *   (not Enter, Space, Tab or Escape, which are the button's).
  *
  * Nothing runs at module load.
  */
@@ -74,8 +77,11 @@ exports.APP_CSS = `
 }
 .orz-app__editor { flex: 1; min-height: 0; display: flex; }
 .orz-app__editor > * { flex: 1; min-width: 0; }
-@media (max-width: 560px) { .orz-btn__label { display: none; } .orz-btn { padding: 0 var(--orz-chrome-space-3); } }
+@media (max-width: 560px) { .orz-btn--has-icon .orz-btn__label { display: none; } .orz-btn { padding: 0 var(--orz-chrome-space-3); } }
 `;
+/** The page's top padding at narrow widths, so the fixed bar does not cover the start of the document (2.2.0). */
+const NARROW = '(max-width: 560px)';
+const NARROW_TOP = '56px';
 const DEFAULT_SERVICES = {
     createSaver: save_js_1.createSaver,
     connectHost: file_side_js_1.connectHost,
@@ -172,8 +178,9 @@ function bootCarrierApp(k, options = {}) {
             return { proposed: r.proposed };
         },
     };
+    // orz-host-include@1 resolves URL includes only: a file include's path is not sent to the host
     const hostInclude = host
-        ? (url) => (host.protocols().include ? host.requestInclude(url) : Promise.resolve(null))
+        ? (url) => (host.protocols().include && /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? host.requestInclude(url) : Promise.resolve(null))
         : undefined;
     const saver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml });
     /** The page's storage (reader preferences, the once-a-day record); absent or throwing: the kit's fail-closed defaults. */
@@ -239,7 +246,16 @@ function bootCarrierApp(k, options = {}) {
     if (!mount) {
         mount = doc.createElement('div');
         mount.id = 'orz-chrome';
-        doc.body.append(mount);
+    }
+    // first in the page's order after the islands: a keyboard reaches Edit and Save before the document (it is drawn fixed, top right)
+    let first = doc.body.firstElementChild;
+    while (first && first !== mount && String(first.tagName).toUpperCase() === 'SCRIPT')
+        first = first.nextElementSibling;
+    if (first !== mount) {
+        if (first?.before)
+            first.before(mount);
+        else
+            doc.body.append(mount);
     }
     const chromeHost = mount;
     chromeHost.setAttribute('data-orz-chrome', 'app');
@@ -331,6 +347,25 @@ function bootCarrierApp(k, options = {}) {
         }
     };
     dirtyChanged();
+    // narrow screens: the bar sits over the top of the page, so the page starts below it (read view only)
+    const narrow = typeof win.matchMedia === 'function' ? (() => { try {
+        return win.matchMedia(NARROW);
+    }
+    catch {
+        return null;
+    } })() : null;
+    const body = doc.body;
+    const padTop = () => {
+        const on = !!narrow?.matches && chromeHost.getAttribute('data-mode') !== 'edit' && !chromeHost.hasAttribute('data-hidden');
+        body.style.setProperty('padding-top', on ? NARROW_TOP : '');
+        doc.documentElement.style.setProperty('scroll-padding-top', on ? NARROW_TOP : '');
+    };
+    if (narrow) {
+        padTop();
+        const onChange = () => padTop();
+        narrow.addEventListener?.('change', onChange);
+        cleanups.push(() => { narrow.removeEventListener?.('change', onChange); body.style.setProperty('padding-top', ''); doc.documentElement.style.setProperty('scroll-padding-top', ''); });
+    }
     const afterHeaderChange = () => {
         present();
         dirtyChanged();
@@ -379,10 +414,38 @@ function bootCarrierApp(k, options = {}) {
         return true;
     }
     // ── saving (never the live DOM: always the assembly of the current text) ──
-    async function save() {
+    /** The page's save in flight: one at a time (as the editor's). */
+    let pageSaving = null;
+    function save() {
         const a = active();
         if (a)
             return a.save();
+        pageSaving ?? (pageSaving = savePage().finally(() => { pageSaving = null; }));
+        return pageSaving;
+    }
+    /** The file changed on disk since the page opened it: the reader replaces it or downloads a copy. */
+    function resolveConflict(t, html, name) {
+        void (0, chrome_js_1.askSaveConflict)(root, name).then(async (choice) => {
+            if (choice === 'replace') {
+                const r = await saver.save({ text: t, html }, { overwrite: true });
+                if (r.via === 'served-notice')
+                    return;
+                if (r.ok) {
+                    saved = t;
+                    dirtyChanged();
+                    toast(r.via === 'download' ? 'Download started.' : 'Saved.', 'success');
+                }
+                else if (!(r.via === 'file' && r.error === 'cancelled'))
+                    toast(`Could not save: ${r.error ?? 'unknown error'}`, 'error');
+            }
+            else if (choice === 'download') {
+                const r = await saver.download({ html });
+                const ok = r.via === 'download' && r.ok;
+                toast(ok ? 'Download started; the file on disk is unchanged.' : 'The download failed.', ok ? 'success' : 'error');
+            }
+        });
+    }
+    async function savePage() {
         if (updating)
             return { ok: false, error: 'updating' };
         const t = text;
@@ -400,8 +463,12 @@ function bootCarrierApp(k, options = {}) {
         }
         const r = await saver.save({ text: t, html });
         if (r.via === 'served-notice') {
-            toast('This page is served from the web, so it cannot be saved in place. Use “Download a copy” (⋯) to keep your changes.', 'warning');
+            toast('This file was opened from a web address, so it cannot be saved over. Use “Download a copy” (⋯) to keep your changes.', 'warning');
             return { ok: false, via: 'served-notice', error: 'served page' };
+        }
+        if (r.via === 'file' && r.conflict) {
+            resolveConflict(t, html, r.name);
+            return { ok: false, via: 'file', error: 'conflict', conflict: true };
         }
         if (r.ok) {
             saved = t;
@@ -478,15 +545,38 @@ function bootCarrierApp(k, options = {}) {
     // ── edit mode ──
     let offEditor = [];
     let headerTimer = null;
+    /** Editors this app made read-only for the running update (also those opened or attached during it). */
+    const lockedForUpdate = new Set();
+    const lockForUpdate = (ed) => {
+        if (!updating || ed.isReadOnly())
+            return;
+        ed.setReadOnly(true);
+        lockedForUpdate.add(ed);
+    };
+    /** The edit-mode title: the header's `title` (it follows the text), else the page's. */
+    const showTitle = () => {
+        let t = '';
+        try {
+            t = (0, header_js_1.readHeader)(currentText())?.fields['title']?.trim() ?? '';
+        }
+        catch {
+            t = '';
+        }
+        title.textContent = t || doc.title;
+        if (t && doc.title !== t)
+            doc.title = t;
+    };
     const headerFollow = () => {
         if (headerTimer !== null)
             win.clearTimeout(headerTimer);
-        headerTimer = win.setTimeout(() => { headerTimer = null; present(); }, 200);
+        headerTimer = win.setTimeout(() => { headerTimer = null; present(); if (editor)
+            showTitle(); }, 200);
     };
     function edit() {
         if (editor)
             return editor;
         chromeHost.setAttribute('data-mode', 'edit');
+        padTop();
         editorSlot.hidden = false;
         setViewVisible(false);
         doc.documentElement.style.setProperty('overflow', 'hidden');
@@ -496,10 +586,9 @@ function bootCarrierApp(k, options = {}) {
         const ed = k.mountEditor(container, { text: saved }, editorContext());
         if (text !== saved)
             ed.setText(text);
-        if (updating)
-            ed.setReadOnly(true);
+        lockForUpdate(ed);
         editor = ed;
-        title.textContent = doc.title;
+        showTitle();
         offEditor = [
             ed.on('save', (e) => { saved = e.text; dirtyChanged(); }),
             ed.on('dirty', () => dirtyChanged()),
@@ -525,6 +614,7 @@ function bootCarrierApp(k, options = {}) {
         editorSlot.replaceChildren();
         editorSlot.hidden = true;
         chromeHost.removeAttribute('data-mode');
+        padTop();
         setViewVisible(true);
         doc.documentElement.style.setProperty('overflow', '');
         undoStack.length = 0;
@@ -533,12 +623,15 @@ function bootCarrierApp(k, options = {}) {
         dirtyChanged();
         present();
         await renderView();
-        editBtn.focus();
+        // the keyboard keeps its place (Edit); after a pointer's Done the focus is the page's (a read view's keys work at once)
+        if (pointerUsed)
+            doc.activeElement?.blur?.();
+        else
+            editBtn.focus();
     }
     function attach(ed) {
         attached.push(ed);
-        if (updating)
-            ed.setReadOnly(true);
+        lockForUpdate(ed);
         const offs = [ed.on('dirty', () => dirtyChanged()), withAiMenu(ed)];
         let done = false;
         return () => {
@@ -558,14 +651,35 @@ function bootCarrierApp(k, options = {}) {
     listen(saveBtn, 'click', () => { void save(); });
     // keyboard on the page: Cmd/Ctrl+S saves the document being edited, Cmd/Ctrl+E edits,
     // Cmd/Ctrl+Z / Shift+Z undo / redo header settings; other keys go to the read view
+    // a pointer or the keyboard drove the chrome last (where the focus goes after Done)
+    let pointerUsed = false;
+    listen(chromeHost, 'pointerdown', () => { pointerUsed = true; }, true);
+    listen(win, 'keydown', () => { pointerUsed = false; }, true);
     listen(win, 'keydown', (e) => {
-        // the Edit button's editor has its own keymap; a key another handler already took is not ours
-        if (editor || e.defaultPrevented || e.isComposing)
+        // a key another handler already took is not ours
+        if (e.defaultPrevented || e.isComposing)
             return;
+        const mod = isMac ? e.metaKey : e.ctrlKey;
+        if (editor) {
+            // the Edit button's editor has its own keymap (its keys never get here); with the focus on the
+            // chrome (Done, More) or the page, Cmd/Ctrl+S still saves the document — never "Save page as" —
+            // and Cmd/Ctrl+E leaves edit mode
+            if (!mod || e.altKey)
+                return;
+            const key = String(e.key ?? '').toLowerCase();
+            if (key === 's') {
+                e.preventDefault();
+                void editor.save();
+            }
+            else if (key === 'e') {
+                e.preventDefault();
+                void leave();
+            }
+            return;
+        }
         const path = e.composedPath?.() ?? [];
         const target = (path[0] ?? e.target);
         const typing = !!target && (target.isContentEditable === true || /^(INPUT|TEXTAREA|SELECT)$/.test(String(target.tagName ?? '').toUpperCase()));
-        const mod = isMac ? e.metaKey : e.ctrlKey;
         const other = attached[attached.length - 1];
         if (mod && !e.altKey) {
             const key = String(e.key ?? '').toLowerCase();
@@ -588,9 +702,16 @@ function bootCarrierApp(k, options = {}) {
             }
             return;
         }
-        // the read view's own keys (slides: navigation), outside fields and the chrome
-        if (typing || other || path.includes(chromeHost))
+        // the read view's own keys (slides: navigation), outside fields; from the chrome only on a
+        // button (not a menu item, the review panel or a toast's text) and never its own keys
+        if (typing || other)
             return;
+        if (path.includes(chromeHost)) {
+            const tag = String(target?.tagName ?? '').toUpperCase();
+            const role = target?.getAttribute?.('role') ?? '';
+            if (tag !== 'BUTTON' || /^menuitem/.test(role) || /^(Enter| |Spacebar|Tab|Escape)$/.test(String(e.key ?? '')))
+                return;
+        }
         try {
             if (view.onKey?.(e))
                 e.preventDefault();
@@ -602,23 +723,23 @@ function bootCarrierApp(k, options = {}) {
     // dirty state through orz-host-save@1). The quiet update's reload never asks: the kit reloads only
     // after the update wrote the current text into the opened file.
     let leavingForUpdate = false;
-    if (!framed) {
-        listen(win, 'beforeunload', (e) => {
-            if (leavingForUpdate || !isDirty())
-                return;
-            e.preventDefault();
-            e.returnValue = ''; // Chromium before 119 asks only when returnValue is set
-        });
-    }
+    // a framed file whose host never connected (an ordinary page framing it) asks too: no host owns that decision
+    listen(win, 'beforeunload', (e) => {
+        if (leavingForUpdate || !isDirty())
+            return;
+        if (framed && host?.connected())
+            return;
+        e.preventDefault();
+        e.returnValue = ''; // Chromium before 119 asks only when returnValue is set
+    });
     // ── the quiet update (FD-05): only a top-level standalone file checks (the kit's guards) ──
     const editors = () => [...(editor ? [editor] : []), ...attached];
     async function runUpdate(info) {
         if (updating)
             return;
         updating = true;
-        const locked = editors().filter((ed) => !ed.isReadOnly());
-        for (const ed of locked)
-            ed.setReadOnly(true);
+        for (const ed of editors())
+            lockForUpdate(ed);
         for (const p of pickers)
             p.button.disabled = true;
         let reloading = false;
@@ -654,9 +775,11 @@ function bootCarrierApp(k, options = {}) {
                 updating = false;
                 for (const p of pickers)
                     p.button.disabled = false;
-                for (const ed of locked)
+                // every editor made read-only for the update — also one opened or attached while it ran — is given back
+                for (const ed of [...lockedForUpdate])
                     if (editors().includes(ed))
                         ed.setReadOnly(false);
+                lockedForUpdate.clear();
             }
         }
     }
@@ -693,7 +816,7 @@ function bootCarrierApp(k, options = {}) {
         setChromeVisible(visible) { if (visible)
             chromeHost.removeAttribute('data-hidden');
         else
-            chromeHost.setAttribute('data-hidden', ''); },
+            chromeHost.setAttribute('data-hidden', ''); padTop(); },
         view,
         root,
         host,

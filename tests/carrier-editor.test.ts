@@ -689,7 +689,7 @@ describe('save', () => {
     await expect(m.shell.save()).resolves.toMatchObject({ ok: false, via: 'served-notice' });
     expect(served.downloads).toEqual([]);
     const note = m.root.querySelector('#orz-served-note')!;
-    expect(note.textContent).toContain('cannot be saved in place');
+    expect(note.textContent).toContain('opened from a web address, so it cannot be saved over');
     expect(m.shell.isDirty()).toBe(true);
     (note.querySelector('button.orz-btn--primary') as HTMLElement).click();
     await tick(10);
@@ -799,12 +799,14 @@ function valueImports(entry: string): Set<string> {
  * Bound ≈ +30 %.
  */
 /** The editor's own modules in the shipped (CommonJS dist) bundle: 51.8 KB before round 2 of closed loop 2, 64.9 KB after. */
-const EDITOR_OWN_LIMIT = 70_000;
+// 68,516 B on 2026-10-08 (round 1 of the carrier-app loop: the syntax highlighter, file includes through
+// fetchInclude, the missing-include note, the save-conflict question); bound ~10 % above.
+const EDITOR_OWN_LIMIT = 75_000;
 /** The whole shipped editor bundle (parser, one KaTeX, editor; no CodeMirror): 967 KB before round 2, 982 KB after. */
 const EDITOR_BUNDLE_LIMIT = 1_050_000;
 
 describe('module boundaries', () => {
-  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 70 KB, the whole bundle under 1.05 MB with one KaTeX, and no CodeMirror', async () => {
+  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 75 KB, the whole bundle under 1.05 MB with one KaTeX, and no CodeMirror', async () => {
     for (const entry of ['src/carrier/shell/index.ts', 'src/carrier/read.ts', 'src/carrier.ts', 'src/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/editor')), entry).toEqual([]);
     }
@@ -894,6 +896,83 @@ describe('renderMarkdownPreview', () => {
     const body = withoutHeader(text).body;
     expect(html.replace(/ data-src-line="\d+"/g, '')).toBe(md.render(body, { orzTwinLinks: true }));
     expect(renderMarkdownPreview('[a](b.md)', { twinLinks: false })).toContain('href="b.md"');
+  });
+});
+
+describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-app loop)', () => {
+  it('[E.29] a file include the record does not hold goes to fetchInclude(path) (the path as written), once per shell through ctx.cache — the record answers first; URL includes as before; the shell\'s includes option (FC-19 §3 includes) reaches the renderer', async () => {
+    const asked: string[] = [];
+    const fetchInclude = async (t: string) => { asked.push(t); return t === 'parts/a.md' ? '## From the app\n' : t === 'https://x.test/u.md' ? '## From a URL\n' : null; };
+    const cache = new Map<string, unknown>();
+    const text = '# Doc\n\n{{md parts/a.md}}\n\n{{md parts/recorded.md}}\n\n{{md https://x.test/u.md}}\n';
+    const html = await renderMarkdownPreviewWithIncludes(text, { fetchInclude, cache, includes: { 'parts/recorded.md': '## From the record\n' } });
+    expect(html).toContain('From the app</h2>');
+    expect(html).toContain('From the record</h2>');
+    expect(html).toContain('From a URL</h2>');
+    expect(asked.sort()).toEqual(['https://x.test/u.md', 'parts/a.md']);
+    await renderMarkdownPreviewWithIncludes(text, { fetchInclude, cache, includes: { 'parts/recorded.md': '## From the record\n' } });
+    expect(asked).toHaveLength(2);
+    // through the shell: the includes option and the hook reach the renderer
+    let seen: RenderContext | null = null;
+    const m = mount({ text: '{{md parts/opt.md}}\n', includes: { 'parts/opt.md': '## From the option\n' }, hooks: { fetchInclude }, render: (t, ctx) => { seen = ctx; return renderMarkdownPreviewWithIncludes(t, ctx); } });
+    await tick(60);
+    expect(seen!.includes).toEqual({ 'parts/opt.md': '## From the option\n' });
+    expect(typeof seen!.fetchInclude).toBe('function');
+    expect(await renderMarkdownPreviewWithIncludes('{{md parts/opt.md}}\n', seen!)).toContain('From the option</h2>');
+    m.shell.destroy();
+  });
+
+  it('[E.30] an include directive that resolved to nothing renders a quiet note — "Included file not available: <target>" (p.orz-include-missing, role note) keeping the directive in data-md, so copy-as-Markdown gives back the directive; missingIncludes: false renders nothing as the parser does', async () => {
+    const html = renderMarkdownPreview('# Doc\n\n{{md part.md}}\n\nAfter.\n');
+    expect(html).toContain('<p class="orz-include-missing" role="note" data-md="{{md part.md}}"><small>Included file not available: part.md</small></p>');
+    expect(html).toContain('<p data-src-line="4">After.</p>');
+    expect(renderMarkdownPreview('{{markdown <b>x.md}}\n')).toContain('data-md="{{markdown &lt;b&gt;x.md}}"><small>Included file not available: &lt;b&gt;x.md</small>');
+    expect(await renderMarkdownPreviewWithIncludes('{{md-include https://x.test/gone.md}}\n', { fetchInclude: async () => null })).toContain('Included file not available: https://x.test/gone.md');
+    expect(renderMarkdownPreview('{{md part.md}}\n', { missingIncludes: false })).toBe('');
+    expect(renderMarkdownPreview('{{md part.md}}\n', { includes: { 'part.md': 'Here.\n' } })).not.toContain('orz-include-missing');
+    // copy-as-Markdown recovers the directive
+    const { Window } = await import('happy-dom');
+    const w = new Window();
+    const { browserRuntimeScript } = await import('../src/runtime');
+    const g = globalThis as unknown as { OrzMarkdownRuntime?: { elementToMarkdown(n: unknown): string } };
+    const saved = g.OrzMarkdownRuntime;
+    (0, eval)(browserRuntimeScript);
+    try {
+      const root = w.document.createElement('div');
+      root.className = 'markdown-body';
+      root.innerHTML = html;
+      expect(g.OrzMarkdownRuntime!.elementToMarkdown(root)).toContain('{{md part.md}}');
+      expect(g.OrzMarkdownRuntime!.elementToMarkdown(root)).not.toContain('not available');
+    } finally {
+      if (saved) g.OrzMarkdownRuntime = saved; else delete g.OrzMarkdownRuntime;
+    }
+  });
+
+  it('[E.28] the shell\'s own saver shows the served-page notice only for an assembled file (standalone: true or openedHtml given): on an app\'s page (no hooks.save, no file) an http(s) save goes to the picker, else a download — never the notice', async () => {
+    const assemble = async (t: string) => `<html>${t.length}</html>`;
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const picked: unknown[] = [];
+    // the saver's page (the global window, as in a browser): an app served over https with a picker
+    g.window = { location: { protocol: 'https:', href: 'https://app.example/edit', pathname: '/edit', origin: 'https://app.example' }, showSaveFilePicker: async (o: unknown) => { picked.push(o); return { name: 'document.md.html', createWritable: async () => ({ write: async () => undefined, close: async () => undefined }) }; } };
+    try {
+      const app = mount({ assemble });
+      type(app, 'q');
+      expect(await app.shell.save()).toMatchObject({ ok: true, via: 'file' });
+      expect([picked.length, app.root.querySelector('#orz-served-note')]).toEqual([1, null]);
+      app.shell.destroy();
+      for (const o of [{ standalone: true }, { openedHtml: '<html>opened</html>' }] as const) {
+        const file = mount({ assemble, ...o });
+        type(file, 'q');
+        expect(await file.shell.save()).toMatchObject({ ok: false, via: 'served-notice' });
+        expect(file.root.querySelector('#orz-served-note')).not.toBeNull();
+        file.shell.destroy();
+      }
+      expect(picked.length).toBe(1);
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
   });
 });
 
@@ -2245,7 +2324,7 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
     plain.shell.destroy();
   });
 
-  it('[E.12] with only fetchInclude (no include record), a URL include next to a file include still resolves; the unreadable file include renders nothing', async () => {
+  it('[E.12] with only fetchInclude (no include record), a URL include next to a file include still resolves; the unreadable file include renders the missing-include note (E.30)', async () => {
     const text = '{{md parts/a.md}}\n\n{{md https://x.example/b.md}}\n';
     const fetchInclude = async (u: string) => (u.includes('b.md') ? 'URL CONTENT' : null);
     const html = await renderMarkdownPreviewWithIncludes(text, { fetchInclude });
@@ -2324,7 +2403,7 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
     const env = includeRecordEnv({ 'parts/x.md': 'X', './y.md': 'Y', 'https://a.test/z.md': 'Z' });
     expect([env.markdownBasePath, env.readFile!('/parts/x.md'), env.readFile!('/y.md'), env.readFile!('/https:/a.test/z.md'), env.readFile!('/nope.md')]).toEqual(['/', 'X', 'Y', null, null]);
     expect(includeRecordEnv(undefined).readFile!('/x')).toBeNull();
-    expect(renderMarkdownPreview('# T\n\n{{md missing.md}}\n', { includes: {} })).not.toContain('missing');
+    expect(renderMarkdownPreview('# T\n\n{{md missing.md}}\n', { includes: {} })).toContain('Included file not available: missing.md'); // E.30
     // the shell gives its includes option to render as ctx.includes
     const ctxs: RenderContext[] = [];
     const m = mount({ text, includes: { ...includes }, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreviewWithIncludes(t, ctx); } });
@@ -2559,6 +2638,47 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     const style = await p.locator('#a .orz-editor__save').evaluate((el) => { const s = getComputedStyle(el); return [s.backgroundColor, s.fontSize]; });
     expect(style[0]).not.toBe('rgb(255, 0, 0)');
     expect(style[1]).toBe('13px');
+    await p.close();
+  });
+
+  it('[E.27] syntax highlighting follows the chrome\'s scheme: in CodeMirror every Markdown token (headings, emphasis marks, links, URLs, code, quotes, comments, labels) is coloured by the --orz-chrome-syntax-* tokens, at a contrast of at least 4.5:1 on the editor background — measured in Chrome, light and dark', async () => {
+    const p = await open();
+    const text = '# Heading one\n\nSome *em*, **strong**, ~~gone~~, `code`, [link](https://x.example "Title") and <https://auto.example>.\n\n> A quote\n\n- item\n\n<!-- a comment -->\n\n```js\nlet x = 1;\n```\n\n---\n\n[ref]: https://ref.example\n';
+    expect(await p.evaluate(`mountOpts('c', ${JSON.stringify(text)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    const measure = (scheme: string) => p.evaluate(`(function (scheme) {
+      shell_c.root.host.setAttribute('data-chrome', scheme);
+      var cv = document.createElement('canvas'); cv.width = cv.height = 1;
+      var x = cv.getContext('2d', { willReadFrequently: true });
+      function rgb(c) { x.clearRect(0, 0, 1, 1); x.fillStyle = '#000'; x.fillStyle = c; x.fillRect(0, 0, 1, 1); var d = x.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]]; }
+      function lum(c) { return c.map(function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce(function (a, v, i) { return a + v * [0.2126, 0.7152, 0.0722][i]; }, 0); }
+      function ratio(a, b) { var l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); }
+      var ed = shell_c.root.querySelector('.cm-editor');
+      var bg = rgb(getComputedStyle(ed).backgroundColor);
+      var out = {};
+      shell_c.root.querySelectorAll('.cm-line [class*="orz-tok-"]').forEach(function (n) {
+        var cls = String(n.className).split(/\\s+/).filter(function (c) { return /^orz-tok-/.test(c); }).join(' ');
+        var r = ratio(rgb(getComputedStyle(n).color), bg);
+        if (!(cls in out) || r < out[cls]) out[cls] = Math.round(r * 100) / 100;
+      });
+      return { bg: bg, ratios: out };
+    })(${JSON.stringify(scheme)})`) as Promise<{ bg: number[]; ratios: Record<string, number> }>;
+    const all = ['heading', 'em', 'strong', 'link', 'url', 'code', 'quote', 'comment', 'label', 'mark'];
+    const complete = async (scheme: string) => {
+      // CodeMirror highlights as its parser gets there: wait until every token kind of the text is drawn
+      let m = await measure(scheme);
+      for (let i = 0; i < 50 && !all.every((t) => Object.keys(m.ratios).join(' ').includes(`orz-tok-${t}`)); i++) { await p.waitForTimeout(100); m = await measure(scheme); }
+      return m;
+    };
+    const light = await complete('light');
+    const dark = await complete('dark');
+    expect(light.bg[0]).toBeGreaterThan(200);
+    expect(dark.bg[0]).toBeLessThan(80);
+    for (const m of [light, dark]) {
+      const seen = Object.keys(m.ratios).join(' ');
+      for (const t of all) expect(seen, `${t} in ${JSON.stringify(m.ratios)}`).toContain(`orz-tok-${t}`);
+      for (const [cls, r] of Object.entries(m.ratios)) expect(r, `${cls} on ${m.bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+    process.stdout.write(`[E.27] contrast (lowest per class): ${JSON.stringify({ light: light.ratios, dark: dark.ratios })}\n`);
     await p.close();
   });
 

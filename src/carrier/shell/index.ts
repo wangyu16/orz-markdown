@@ -21,7 +21,7 @@ export type { HostKind, HostProtocol, SavePayload, SaveAck, AiOperation, AiReque
 // small (one re-export helper per module instead of a getter per name; claim S.11).
 export * from './file-side.js'; // connectHost, NOT_CONNECTED; ConnectHostOptions, HostConnection
 export * from './host-side.js'; // embedCarrierFrame; EmbedOptions, CarrierFrame
-export * from './save.js'; // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN; Saver, SaverOptions, SaveInput, SaveResult, HandleStore, StoredHandle
+export * from './save.js'; // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN, headerUidOf; Saver, SaverOptions, SaveInput, SaveCallOptions, SaveResult, HandleStore, StoredHandle
 export * from './preferences.js'; // createPreferenceStore, preferenceNamespace, READER_PREFERENCES, PREFERENCE_PREFIX; PreferenceStore, PreferenceSpec, PreferenceSchema, ReaderPreferences
 export type {
   MessageEventLike, MessageWindow, PostTarget, IframeLike, SaverWindow, StorageLike, FileHandleLike, WritableLike,
@@ -34,6 +34,6 @@ export type {
 // PerformUpdateOptions, PerformUpdateResult, UpdateErrorCode, FetchLike, ResponseLike, Semver, SandboxFrameLike
 export * from './update.js';
 export * from './indicator.js'; // mountUpdateIndicator; IndicatorHandlers, UpdateIndicator
-export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement } from './chrome.js';
-export type { IconName, ToastTone, ToastOptions, Toast } from './chrome.js';
+export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE } from './chrome.js';
+export type { IconName, KindIcon, ToastTone, ToastOptions, Toast } from './chrome.js';
 export type { UiElement, UiDocument, UiView, UiEventLike, UiListener, ShadowRootLike, TextLike, StyleLike } from './types.js';

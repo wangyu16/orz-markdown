@@ -12,7 +12,7 @@
  * never parsed as HTML (the icons are the kit's constants). No DOM at module
  * load.
  */
-import { iconElement, showToast, type IconName } from '../shell/chrome.js';
+import { anyIconElement, iconElement, showToast, type IconName, type KindIcon } from '../shell/chrome.js';
 import type { ShadowRootLike, UiDocument } from '../shell/types.js';
 import type { AiProposal, EditorShell } from '../editor/shell.js';
 import type { ColorScheme } from '../../preview-frame.js';
@@ -85,21 +85,28 @@ export function installCss(root: CssRoot, css: string): void {
 export interface ButtonOptions {
   /** The label (text) and accessible name (`aria-label`). */
   label: string;
-  icon?: IconName;
+  /** A kit icon, or a kind's own (`KindIcon`: path data only, 2.2.0). */
+  icon?: IconName | KindIcon;
   variant?: 'primary' | 'ghost';
   /** Icon only (the label stays the accessible name and the tooltip). */
   iconOnly?: boolean;
   title?: string;
 }
 
-/** A chrome button named by its label (`aria-label`), with an optional kit icon. */
+/**
+ * A chrome button named by its label (`aria-label`), with an optional icon (a
+ * kit icon or a kind's). One with an icon gets `orz-btn--has-icon`: at narrow
+ * widths (APP_CSS) only those drop their visible label — a button without an
+ * icon (or whose kind icon is malformed) keeps it.
+ */
 export function button(doc: AppDocument, o: ButtonOptions): AppElement {
   const b = doc.createElement('button');
   b.setAttribute('type', 'button');
-  b.className = `orz-btn${o.variant ? ` orz-btn--${o.variant}` : ''}${o.iconOnly ? ' orz-btn--icon' : ''}`;
+  const icon = o.icon ? anyIconElement(doc as unknown as UiDocument, o.icon) : null;
+  b.className = `orz-btn${o.variant ? ` orz-btn--${o.variant}` : ''}${o.iconOnly ? ' orz-btn--icon' : ''}${icon ? ' orz-btn--has-icon' : ''}`;
   b.setAttribute('aria-label', o.label);
   if (o.title !== undefined || o.iconOnly) b.title = o.title ?? o.label;
-  if (o.icon) b.append(iconElement(doc as unknown as UiDocument, o.icon));
+  if (icon) b.append(icon);
   if (!o.iconOnly) {
     const span = doc.createElement('span');
     span.className = 'orz-btn__label';
@@ -203,9 +210,11 @@ export function menuButton(doc: AppDocument, o: ButtonOptions & { items(): MenuI
       const l = doc.createElement('span');
       l.textContent = it.label;
       b.append(l);
-      b.addEventListener('click', () => {
+      b.addEventListener('click', (e) => {
         close();
-        btn.focus();
+        // the keyboard keeps its place on the button; a pointer's choice leaves the focus to the page
+        // (2.2.0: a read view's keys — slides' Space and arrows — work again at once)
+        if (((e as { detail?: number }).detail ?? 0) > 0) btn.blur?.(); else btn.focus();
         it.run();
       });
       m.append(b);

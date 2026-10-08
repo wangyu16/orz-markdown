@@ -38,6 +38,7 @@ const uid_js_1 = require("../uid.js");
 const chrome_js_1 = require("../shell/chrome.js");
 const preferences_js_1 = require("../shell/preferences.js");
 const save_js_1 = require("../shell/save.js");
+const chrome_js_2 = require("../shell/chrome.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const codemirror6_js_1 = require("./codemirror6.js");
 const preview_js_1 = require("./preview.js");
@@ -866,7 +867,7 @@ function createEditorShell(element, options) {
         notice.setAttribute('id', 'orz-served-note');
         notice.setAttribute('role', 'status');
         const text = el('span', 'orz-editor__notice-text');
-        text.append(doc.createTextNode('This page is served from the web, so it cannot be saved in place. Download a copy to keep your changes.'));
+        text.append(doc.createTextNode('This file was opened from a web address, so it cannot be saved over. Download a copy to keep your changes.'));
         const download = button('orz-btn orz-btn--primary', 'Download a copy', 'download');
         const close = button('orz-btn orz-btn--ghost', 'Dismiss');
         listen(download, 'click', () => {
@@ -928,6 +929,8 @@ function createEditorShell(element, options) {
             kind,
             ...(options.host ? { host: options.host } : {}),
             openedHtml: options.openedHtml ?? openedAssembled,
+            // the served notice is for an assembled file opened from the web, not for an app's page
+            servedNotice: options.standalone === true || options.openedHtml !== undefined,
         }));
         const r = await saver.save({ text, html });
         if (r.via === 'served-notice') {
@@ -940,7 +943,38 @@ function createEditorShell(element, options) {
             return succeed(text, r.via);
         if (r.via === 'file' && r.error === 'cancelled')
             return { ok: false, via: 'file', error: 'cancelled', cancelled: true };
+        if (r.via === 'file' && r.conflict) {
+            // the file changed on disk since it was opened (another program, an agent): never written silently
+            if (!destroyed)
+                resolveConflict(text, html, r.name);
+            return { ok: false, via: 'file', error: 'conflict', conflict: true };
+        }
         return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+    };
+    /** The reader's answer to a save that found the file changed on disk: replace it, or download a copy. */
+    const resolveConflict = (text, html, name) => {
+        void (0, chrome_js_2.askSaveConflict)(root, name).then(async (choice) => {
+            if (destroyed || !saver)
+                return;
+            if (choice === 'replace') {
+                const r = await saver.save({ text, html }, { overwrite: true });
+                if (destroyed || r.via === 'served-notice')
+                    return;
+                if (r.ok)
+                    succeed(text, r.via);
+                else if (!(r.via === 'file' && r.error === 'cancelled'))
+                    fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+            }
+            else if (choice === 'download') {
+                const r = await saver.download({ html });
+                if (destroyed)
+                    return;
+                if (r.via === 'download' && r.ok)
+                    toast('Download started; the file on disk is unchanged.', 'success');
+                else
+                    fail('error' in r && r.error ? r.error : 'The download failed.', 'download');
+            }
+        });
     };
     const save = (fromKey) => {
         if (destroyed)

@@ -18,7 +18,7 @@ export type {
 } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
 export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition } from './adapter.js';
-export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS, CODEMIRROR6_HISTORY_STEPS } from './codemirror6.js';
+export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, ORZ_HIGHLIGHTER, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS, CODEMIRROR6_HISTORY_STEPS } from './codemirror6.js';
 export type { CodeMirror6Modules, CodeMirror6Options } from './codemirror6.js';
 export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_GLOBAL } from './codemirror-pin.js';
 export { createTextModel, toEditorText, minimalChange, detachString } from './text-model.js';

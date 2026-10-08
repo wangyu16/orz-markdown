@@ -1,4 +1,4 @@
-import type { IncludeEnv } from '../../plugins/markdown-include.js';
+import { type IncludeEnv } from '../../plugins/markdown-include.js';
 export interface MarkdownPreviewOptions {
     /**
      * Rewrite links to text twins (`x.md` → `x.md.html`), as an assembled file
@@ -10,12 +10,19 @@ export interface MarkdownPreviewOptions {
     env?: Record<string, unknown>;
     /**
      * The editor shell's render context (`render(text, ctx)`), accepted so this
-     * function can be passed as `render` directly. Not used here: the shell
-     * applies `resolveAsset` to the rendered HTML itself, and includes need an
-     * asynchronous pre-pass (`prepareSources`) before rendering.
+     * function can be passed as `render` directly. Not used by the synchronous
+     * `renderMarkdownPreview` (includes need an asynchronous pre-pass);
+     * `renderMarkdownPreviewWithIncludes` resolves URL includes and the file
+     * includes the record lacks through it. `resolveAsset` is the shell's: it
+     * applies it to the rendered HTML itself.
      */
     fetchInclude?(target: string): Promise<string | null>;
     resolveAsset?(path: string): string;
+    /**
+     * Show an include directive that resolved to nothing as a quiet note
+     * (default `true`; 2.2.0). `false`: it renders nothing, as the parser does.
+     */
+    missingIncludes?: boolean;
     /** The shell's per-instance scratch map (`ctx.cache`): fetched includes are kept there. */
     cache?: Map<string, unknown>;
     /**

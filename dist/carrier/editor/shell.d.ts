@@ -52,6 +52,7 @@ export type SaveOutcome = {
     via?: SaveVia | 'served-notice';
     error: string;
     cancelled?: boolean;
+    conflict?: boolean;
 };
 export interface EditorEvents {
     /** The exact text after the change (captured when the event fires). */
@@ -204,7 +205,12 @@ export interface EditorShellOptions {
     includes?: Record<string, string>;
     /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
     fileName?: string;
-    /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml })`. */
+    /**
+     * A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml,
+     * servedNotice })`. The shell's own saver shows the served-page notice only for an assembled file
+     * (`standalone: true` or `openedHtml` given); on an app's page (no `hooks.save`, no file) a save
+     * on an http(s) page goes to the picker, else a download (2.2.0).
+     */
     saver?: Saver;
     /**
      * The bytes of the file this page was opened from (`createSaver`'s

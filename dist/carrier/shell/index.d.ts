@@ -21,7 +21,7 @@ export * from './preferences.js';
 export type { MessageEventLike, MessageWindow, PostTarget, IframeLike, SaverWindow, StorageLike, FileHandleLike, WritableLike, SaveFilePickerOptions, IdbFactoryLike, LocationLike, FileLike, } from './types.js';
 export * from './update.js';
 export * from './indicator.js';
-export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement } from './chrome.js';
-export type { IconName, ToastTone, ToastOptions, Toast } from './chrome.js';
+export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE } from './chrome.js';
+export type { IconName, KindIcon, ToastTone, ToastOptions, Toast } from './chrome.js';
 export type { UiElement, UiDocument, UiView, UiEventLike, UiListener, ShadowRootLike, TextLike, StyleLike } from './types.js';
 //# sourceMappingURL=index.d.ts.map

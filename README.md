@@ -192,7 +192,7 @@ preview identically instead of re-deriving it.
 |---|---|
 | `orz-markdown` | the configured `md` instance, `createMarkdown()`, `register`, `prepareSources`, `resolveIncludePath`, DocMeta + nyml helpers, `maskInertMarkdown`, `THEMES`, `VERSION`, `KATEX_VERSION` |
 | `orz-markdown/runtime` | the browser runtime (tabs, QR expand, copy-as-Markdown) as a script string |
-| `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned), and `enhanceDocument(root, { scheme })` (≥ 2.2.0) for content rendered in a page |
+| `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned), and `enhanceDocument(root, { scheme })`, `disposeEnhancement(root)`, `swapStylesheet(document, id, href)` (≥ 2.2.0) for content rendered in a page |
 | `orz-markdown/doc-meta` | the DocMeta API on its own |
 | `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint, `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser) |
 | `orz-markdown/carrier/read` | `extract`, `readIslandFromDom`, `decodeText`, escape helpers — reads assembled files without the parser |

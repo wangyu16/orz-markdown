@@ -9,11 +9,21 @@ export interface EngineSource {
      */
     get(fallbackUrl: string): Promise<string>;
 }
+interface DocLike {
+    readonly currentScript?: unknown;
+    readonly title?: string;
+    getElementById?(id: string): unknown;
+}
+export interface CaptureOptions {
+    /** The bundle's file name (`release.json` `bundle.path`'s last segment, e.g. `orz-mdhtml.browser.js`). Default: any `orz-<x>.browser.js`. */
+    bundle?: string;
+    /** The release's bundle integrity (`sha384-…`), when known: an inline text must match it. */
+    integrity?: string;
+}
 /**
  * Capture the running bundle's own script. Call once, synchronously, when the
  * bundle starts (`document.currentScript` is set only then).
  */
-export declare function captureEngineSource(doc?: {
-    readonly currentScript?: unknown;
-} | null): EngineSource;
+export declare function captureEngineSource(doc?: DocLike | null, options?: CaptureOptions): EngineSource;
+export {};
 //# sourceMappingURL=engine-source.d.ts.map

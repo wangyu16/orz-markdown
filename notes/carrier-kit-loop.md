@@ -304,3 +304,36 @@ then reopen lost work, undo patches retained whole texts, the harness
 passed broken carriers (twice), includes dropped by browser saves and
 updates. Claims S.1–S.13, U.1–U.13, V.1–V.5, E.1–E.25, H.1–H.5 bound and
 mutation-checked; harness 45 checks.
+
+---
+
+## Loop 3 — orz-mdhtml 1.0 on the 2.2.0 kit (carrier/app)
+
+### Round 1 — 2026-10-08, kit-side fixes
+
+Design audit (real Chrome, the md carrier and fake slides/paged kinds) and
+an adversary against the claims. The kit side fixed the findings below in
+`orz-markdown` (orz-mdhtml fixed its own in parallel); each is bound to a
+claim (new: S.14, S.15, V.6, E.27–E.30, M.26, M.27, A.14–A.18; reworded:
+S.1, S.11, U.10, V.2, V.5, E.8, E.10, E.12, M.24, A.2, A.7, A.9, A.10, A.12).
+
+| Finding | Sev | Fix (claim) |
+|---|---|---|
+| a save after an agent rewrote the file on disk overwrote it silently (re-picked file) | HIGH | conflict outcome + reader's choice, `overwrite` (S.14, A.15) |
+| Cmd/Ctrl+S in edit mode with the focus on Done/More/page ran "Save page as" | HIGH | routed to the editor's save (A.14) |
+| file includes in an app: `fetchInclude` never asked for a path; no `includes` option | MED | `fetchInclude(path)` for what the record lacks; FC-19 §3 `includes` (E.29) |
+| an include that resolved to nothing was invisible | MED | quiet note, `data-md` kept (E.30) |
+| an app's editor without a save hook got the "served page" notice | MED | `servedNotice: false` unless an assembled file (S.15, E.28) |
+| dark themes: the editor kept CodeMirror's light syntax colours | MED | chrome syntax tokens, ≥ 4.5:1 measured (E.27) |
+| slides: keys lost after a picker or Done (focus on the chrome) | MED | navigation keys from chrome buttons, pointer focus left to the page (A.10, A.16) |
+| narrow widths: icon-less actions became empty buttons | MED | label kept without an icon; `present`/`print`/`pageSize`; `KindIcon` (A.17, V.2, V.6) |
+| `enhanceDocument` kept every Chart.js instance across re-renders | MED | released per call; `disposeEnhancement` (M.26) |
+| engine capture took an app script that bundles the IIFE | MED | only the carrier's bundle (A.12) |
+| two page saves ran at once | LOW | one at a time (A.15) |
+| an editor opened during the update stayed writable / one stayed read-only | LOW | tracked and given back (A.9) |
+| a framed file with no host never warned before leaving | LOW | warns unless a host connected (A.7) |
+| keyboard reached the chrome last; bar covered content on phones; edit title stale | LOW | DOM order, top padding, title follows the header (A.18, A.14) |
+| theme/highlight stylesheet swap flashed | LOW | `swapStylesheet` (M.27; the md read view's own swap is orz-mdhtml's) |
+
+Size bounds re-measured on what ships and raised ~10 % above the new
+measurements (S.11, U.10, V.5, E.10, A.2).

@@ -5,7 +5,7 @@
 (FD-03). It implements family contract FC-11 (self-reproducing save) for text
 format 1 (FC-18 §6, §10), the file side of the host protocols
 ([host-protocols.md](host-protocols.md)), the quiet update of FD-05 (§6–§7)
-and the shell chrome (§8). Claims S.1–S.13, U.1–U.13 and V.1–V.5 in
+and the shell chrome (§8). Claims S.1–S.15, U.1–U.13 and V.1–V.6 in
 `notes/CLAIMS.md`; tests in `tests/carrier-shell.test.ts` and
 `tests/carrier-update.test.ts`.
 
@@ -33,13 +33,13 @@ and the shell chrome (§8). Claims S.1–S.13, U.1–U.13 and V.1–V.5 in
 ## 1. Save
 
 ```ts
-const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml? });
-saver.save({ text, html, theme? }): Promise<SaveResult>   // never rejects
+const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml?, servedNotice? });
+saver.save({ text, html, theme? }, { overwrite? }?): Promise<SaveResult>   // never rejects
 saver.download({ html }): Promise<SaveResult>             // Export / the notice's "download a copy"
 
 type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 ```
@@ -86,7 +86,10 @@ caller words it "Download started", never "Saved". Its `name` is
    host save is reported as such; it never falls back to a download (the
    host owns persistence).
 2. **Served page notice:** the page is `http:`/`https:` and this session has
-   no file handle → `{ via: 'served-notice' }`. The reader cannot write the
+   no file handle → `{ via: 'served-notice' }` — unless the caller passes
+   `servedNotice: false` (2.2.0): the page is not an assembled file (an app's
+   page whose editor has no save hook), and the save goes on to step 3, else
+   step 4. The reader cannot write the
    server's bytes; the caller shows its dismissible notice (element id
    `orz-served-note`) offering `download()`, and should show it only when the
    document has unsaved edits. No picker opens and no IndexedDB lookup runs.
@@ -122,6 +125,29 @@ caller words it "Download started", never "Saved". Its `name` is
       `.html`). The picked file is the opened one (`opened: true`) only if,
       before the write, it holds the opened bytes — a new file, or a
       same-named file in the folder the picker opened in, is not.
+   4. **A file that changed on disk** (2.2.0, round 1 of the carrier-app
+      loop): when the picked (or re-picked — the session's handle was
+      dropped because someone else wrote its file) file is an orz file
+      (`extract`) whose header `uid` (`headerUidOf`, parser-free) is this
+      saver's `uid` and whose text is neither the opened text (from
+      `openedHtml`), what this page last wrote, nor the text being saved,
+      nothing is written: → `{ via: 'file', ok: false, error: 'conflict',
+      conflict: true, picked: true, opened: false, name? }`. Another program
+      or an agent edited the document since the page opened it; writing
+      would lose that edit silently. The caller asks the reader —
+      `askSaveConflict(root, name?)` (§8): "This file changed on disk since
+      you opened it (another program or an agent edited it). Replace it with
+      your version?" with **Replace it** and **Download a copy instead** —
+      and on Replace it calls `save(input, { overwrite: true })`, which
+      writes the file picked for the conflicting save (no second picker; no
+      check; `opened: false`, so it is not remembered), or on Download a
+      copy instead `download({ html })`. Another document's file (another
+      `uid`), a file that is not an orz file, the opened bytes or the text
+      being saved are no conflict, and without `openedHtml` nothing is
+      (nothing is known about the opened text). *Limit:* only a picked file
+      is checked — a remembered or session handle is reused only while its
+      file holds the opened bytes or this page's last write, so a changed
+      one never gets here without the picker.
 
    Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok:
    true, picked, opened, name }`, and a handle proved to be the opened file
@@ -441,16 +467,37 @@ shadow roots and does not compete with it.
 - **`ICONS`** — inline SVG strings (24×24, stroke `currentColor`,
   `aria-hidden`, `focusable="false"`): `save`, `download`, `update`, `edit`,
   `preview`, `split`, `theme`, `close`, `info`, `check`, `warning`, `more`,
-  and (2.2.0, the carrier app's chrome) `measure`, `new`, `copy`.
-  A control is named by its `aria-label`, never by the icon.
+  and (2.2.0, the carrier app's chrome) `measure`, `new`, `copy`, `present`,
+  `print`, `pageSize`. A control is named by its `aria-label`, never by the
+  icon.
+- **Kind icons** (2.2.0) — `KindIcon = { paths: string[] }`: a carrier's own
+  icon for one of its actions, constrained like `ICONS` by construction:
+  1–8 path `d` strings of path data only (commands, numbers, separators; at
+  most 1,000 characters each), drawn on the same 24×24 stroked
+  `currentColor` grid. `anyIconElement(doc, icon)` builds a kit icon or a
+  kind icon — the latter element by element (`createElementNS`, attributes
+  set as data, never markup: the only `innerHTML` stays the `ICONS`
+  constants); a malformed one (`isKindIcon` false), an unknown name or a
+  document without SVG elements gives null and the control keeps its label.
+- **Syntax tokens** (2.2.0) — `--orz-chrome-syntax-heading`, `-mark`,
+  `-link`, `-url`, `-code`, `-quote`, `-comment`, `-label`, light and dark
+  like every token: the editor's syntax colours (FC-19 §8.6), each at least
+  4.5:1 on `--orz-chrome-surface`.
 - **`createShadowRoot(host, { mode? })`** — attaches an (`open` by default)
   shadow root and installs `CHROME_CSS` as a constructed stylesheet (no
   inline `<style>`, so a strict `style-src` keeps working), else a `<style>`.
-- **`showToast(root, message, { tone, timeoutMs })`** — `tone` `info` |
+- **`showToast(root, message, { tone, timeoutMs, actions?, onDismiss?, focus? })`** — `tone` `info` |
   `success` | `warning` | `error`; one `role="status"` `aria-live="polite"`
   stack per root (bottom centre), toasts stack, each has a Dismiss button and
   goes after `timeoutMs` (default 5 s; 8 s for warnings and errors; `0`
   stays), paused while hovered or focused. The message is text, never HTML.
+  `actions` (2.2.0): buttons labelled as text; choosing one dismisses the
+  toast, then runs the action; a toast with actions stays by default
+  (`timeoutMs` 0) and, with `focus`, focuses its first action; `onDismiss`
+  runs once when it goes without a choice.
+- **`askSaveConflict(root, name?)`** (2.2.0) — the question of §1 step 3.4
+  as a toast with actions: resolves `'replace'`, `'download'` or `null`
+  (dismissed). `SAVE_CONFLICT_MESSAGE` is its text.
 
 Vocabulary origin: orz-mdhtml's light/dark `--c-*` tokens and dark editor bar
 (`src/template.ts`) and orz-poster's floating launcher and toast

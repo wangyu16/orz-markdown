@@ -35,6 +35,7 @@ import { mintUid } from '../uid.js';
 import { createShadowRoot, iconElement, showToast, type IconName } from '../shell/chrome.js';
 import { createPreferenceStore, type PreferenceStore } from '../shell/preferences.js';
 import { createSaver, type Saver, type SaverOptions } from '../shell/save.js';
+import { askSaveConflict } from '../shell/chrome.js';
 import { KIND_EXTENSIONS, type AiOperation, type HostKind } from '../shell/protocol.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
@@ -53,7 +54,7 @@ export type SaveVia = 'hook' | 'host' | 'file' | 'download';
 /** How the save went. `save()` never rejects. */
 export type SaveOutcome =
   | { ok: true; via: SaveVia }
-  | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean };
+  | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean; conflict?: boolean };
 
 export interface EditorEvents {
   /** The exact text after the change (captured when the event fires). */
@@ -185,7 +186,12 @@ export interface EditorShellOptions {
   includes?: Record<string, string>;
   /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
   fileName?: string;
-  /** A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml })`. */
+  /**
+   * A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml,
+   * servedNotice })`. The shell's own saver shows the served-page notice only for an assembled file
+   * (`standalone: true` or `openedHtml` given); on an app's page (no `hooks.save`, no file) a save
+   * on an http(s) page goes to the picker, else a download (2.2.0).
+   */
   saver?: Saver;
   /**
    * The bytes of the file this page was opened from (`createSaver`'s
@@ -1008,7 +1014,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     notice.setAttribute('id', 'orz-served-note');
     notice.setAttribute('role', 'status');
     const text = el('span', 'orz-editor__notice-text');
-    text.append(doc.createTextNode('This page is served from the web, so it cannot be saved in place. Download a copy to keep your changes.'));
+    text.append(doc.createTextNode('This file was opened from a web address, so it cannot be saved over. Download a copy to keep your changes.'));
     const download = button('orz-btn orz-btn--primary', 'Download a copy', 'download');
     const close = button('orz-btn orz-btn--ghost', 'Dismiss');
     listen(download, 'click', () => {
@@ -1048,6 +1054,8 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       kind,
       ...(options.host ? { host: options.host } : {}),
       openedHtml: options.openedHtml ?? openedAssembled,
+      // the served notice is for an assembled file opened from the web, not for an app's page
+      servedNotice: options.standalone === true || options.openedHtml !== undefined,
     });
     const r = await saver.save({ text, html });
     if (r.via === 'served-notice') {
@@ -1057,7 +1065,29 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     }
     if (r.ok) return succeed(text, r.via);
     if (r.via === 'file' && r.error === 'cancelled') return { ok: false, via: 'file', error: 'cancelled', cancelled: true };
+    if (r.via === 'file' && r.conflict) {
+      // the file changed on disk since it was opened (another program, an agent): never written silently
+      if (!destroyed) resolveConflict(text, html, r.name);
+      return { ok: false, via: 'file', error: 'conflict', conflict: true };
+    }
     return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+  };
+  /** The reader's answer to a save that found the file changed on disk: replace it, or download a copy. */
+  const resolveConflict = (text: string, html: string, name: string | undefined): void => {
+    void askSaveConflict(root, name).then(async (choice) => {
+      if (destroyed || !saver) return;
+      if (choice === 'replace') {
+        const r = await saver.save({ text, html }, { overwrite: true });
+        if (destroyed || r.via === 'served-notice') return;
+        if (r.ok) succeed(text, r.via);
+        else if (!(r.via === 'file' && r.error === 'cancelled')) fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+      } else if (choice === 'download') {
+        const r = await saver.download({ html });
+        if (destroyed) return;
+        if (r.via === 'download' && r.ok) toast('Download started; the file on disk is unchanged.', 'success');
+        else fail('error' in r && r.error ? r.error : 'The download failed.', 'download');
+      }
+    });
   };
   const save = (fromKey: boolean): Promise<SaveOutcome> => {
     if (destroyed) return Promise.resolve({ ok: false, error: 'destroyed' });

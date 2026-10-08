@@ -1,23 +1,3 @@
-/**
- * The standalone save of an assembled file (spec/shell-runtime.md §1; family
- * contract FC-11). The caller assembles the file (`assembleEnvelope` with the
- * current text) and hands the bytes in; this module NEVER serializes the live
- * DOM. Order:
- *
- *   1. a connected host (`orz-host-save@1`)        → { via: 'host', ok }
- *   2. a served page (http/https) with no handle   → { via: 'served-notice' }
- *   3. File System Access (handle remembered in IndexedDB under the header
- *      `uid` + the page location, else the page URL; reused only on that
- *      page and only when the file it points at is proved by its CONTENT to
- *      be the opened file — it holds the opened file's bytes, or what this
- *      page last wrote through it; a second save then overwrites silently)
- *                                   → { via: 'file', ok, picked, opened, name? }
- *   4. a download of `suggestedName`
- *                                   → { via: 'download', ok, confirmed: false, name }
- *
- * Every browser feature is detected when `save` is called, never at module
- * load, so the module imports safely in Node.
- */
 import { type HostKind } from './protocol.js';
 import type { HostConnection } from './file-side.js';
 import { type FileHandleLike, type IdbFactoryLike, type SaverWindow } from './types.js';
@@ -39,6 +19,11 @@ export declare const SHELL_UID_PATTERN: RegExp;
  *   `confirmed` is always `false`: the page cannot know whether the download
  *   landed (it may be blocked or cancelled); `ok` means it was started.
  * - `served-notice`: nothing was saved (spec/shell-runtime.md §1 step 2).
+ * - `file` with `conflict: true` (2.2.0): nothing was written — the picked
+ *   file is an orz file of this document (its header `uid`) whose text is
+ *   neither the opened text nor what this page last wrote: it changed on disk
+ *   since the page opened it (another program, an agent). The caller asks the
+ *   reader: replace it (`save(input, { overwrite: true })`) or download a copy.
  */
 export type SaveResult = {
     via: 'host';
@@ -51,6 +36,7 @@ export type SaveResult = {
     picked: boolean;
     opened: boolean;
     name?: string;
+    conflict?: true;
 } | {
     via: 'download';
     ok: boolean;
@@ -67,6 +53,16 @@ export interface SaveInput {
     html: string;
     /** The current theme id, passed to a host (`orz-host-save` `theme`). */
     theme?: string;
+}
+/** Options of one save (2.2.0). */
+export interface SaveCallOptions {
+    /**
+     * The reader chose to replace a file that changed on disk (after a
+     * `conflict` result): the file picked for that save is written without the
+     * check (no second picker); with no such file the save runs as usual,
+     * without the check.
+     */
+    overwrite?: boolean;
 }
 export interface SaverOptions {
     /** The header `uid` (FC-18 §10); with the page location, the handle key. Absent or malformed → the page URL. */
@@ -89,10 +85,18 @@ export interface SaverOptions {
      * one (`opened: false`, so an update never reloads).
      */
     openedHtml?: string | (() => string | undefined | null | Promise<string | undefined | null>);
+    /**
+     * Whether a served page (http/https) with no handle gets the served notice
+     * (step 2). Default `true`: an assembled file opened from the web cannot be
+     * saved over. `false` (2.2.0): the page is not an assembled file (an app's
+     * page with an editor and no save hook), so the save goes on to the picker,
+     * else a download.
+     */
+    servedNotice?: boolean;
 }
 export interface Saver {
     /** Save in the order above. Never rejects. */
-    save(input: SaveInput): Promise<SaveResult>;
+    save(input: SaveInput, options?: SaveCallOptions): Promise<SaveResult>;
     /** Download a copy (Export, or the served-page notice's "download a copy"). */
     download(input: Pick<SaveInput, 'html'>): Promise<SaveResult>;
     /** The handle key in use: `<uid> <page location>` (the uid alone without a location), or the page URL without its fragment. */
@@ -129,5 +133,11 @@ export declare const HANDLE_DB = "orz-carrier";
 export declare const HANDLE_STORE = "handles";
 /** The IndexedDB handle store (structured clone keeps a real `FileSystemFileHandle`). */
 export declare function createIndexedDbHandleStore(factory?: IdbFactoryLike): HandleStore;
+/**
+ * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
+ * undefined — a parser-free reading, enough to tell whether a file on disk is
+ * this document (the shell does not load the kit's header tools).
+ */
+export declare function headerUidOf(text: string): string | undefined;
 export declare function createSaver(opts: SaverOptions): Saver;
 //# sourceMappingURL=save.d.ts.map

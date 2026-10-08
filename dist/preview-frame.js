@@ -28,6 +28,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
 exports.enhanceDocument = enhanceDocument;
+exports.disposeEnhancement = disposeEnhancement;
+exports.swapStylesheet = swapStylesheet;
 const runtime_js_1 = require("./runtime.js");
 const version_js_1 = require("./version.js");
 /**
@@ -149,9 +151,10 @@ async function enhanceDocument(root, options = {}) {
         const ensure = (href, id) => {
             if (id) {
                 const el = doc.getElementById(id);
+                // a scheme change: the new stylesheet loads before the old one goes (no unstyled flash)
                 if (el && String(el.tagName).toUpperCase() === 'LINK') {
                     if (el.getAttribute('href') !== href)
-                        el.setAttribute('href', href);
+                        swapStylesheet(doc, id, href, nonce ? { nonce } : {});
                     return;
                 }
             }
@@ -185,6 +188,8 @@ async function enhanceDocument(root, options = {}) {
         }
         catch { /* the runtime's own error */ }
     }
+    // charts of content no longer in root (a re-render replaced it) are destroyed first (M.26)
+    releaseDetached(root);
     const pass = async () => { await enhanceRoot(root, win); };
     await pass();
     if (!assets)
@@ -220,6 +225,104 @@ async function enhanceDocument(root, options = {}) {
     }
     await Promise.all(pending);
     return result;
+}
+/** Chart.js instances drawn per enhanced root, with their canvas (M.26). */
+const drawnCharts = new WeakMap();
+function track(root, chart, canvas) {
+    let list = drawnCharts.get(root);
+    if (!list)
+        drawnCharts.set(root, (list = []));
+    list.push({ chart, canvas });
+}
+const destroyChart = (c) => { try {
+    c?.destroy?.();
+}
+catch { /* Chart.js's own error */ } };
+/** Destroy the charts of `root` whose canvas is no longer inside it (the content was re-rendered). */
+function releaseDetached(root) {
+    const list = drawnCharts.get(root);
+    if (!list)
+        return;
+    const inside = (n) => {
+        try {
+            const r = root;
+            return typeof r.contains === 'function' ? r.contains(n) && n.isConnected !== false : n.isConnected !== false;
+        }
+        catch {
+            return false;
+        }
+    };
+    const kept = list.filter((x) => { if (inside(x.canvas))
+        return true; destroyChart(x.chart); return false; });
+    if (kept.length)
+        drawnCharts.set(root, kept);
+    else
+        drawnCharts.delete(root);
+}
+/**
+ * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
+ * Chart.js instance it drew there is destroyed (its listeners, resize
+ * observer and registry entry go) and an expanded QR overlay is closed. Call
+ * it before replacing `root`'s content when the root itself goes, or before a
+ * re-render; `enhanceDocument` also destroys, on each call, the charts whose
+ * canvas left `root`. Idempotent; a root never enhanced is a no-op.
+ */
+function disposeEnhancement(root) {
+    const list = drawnCharts.get(root);
+    drawnCharts.delete(root);
+    for (const x of list ?? [])
+        destroyChart(x.chart);
+    try {
+        const win = (root.ownerDocument ?? root)?.defaultView;
+        win?.OrzMarkdownRuntime?.collapseQr?.();
+    }
+    catch { /* no runtime */ }
+}
+/**
+ * Swap a stylesheet without a flash (2.2.0, M.27): the `<link id>` with
+ * another `href` is added next to the current one and the old one removed
+ * only when the new one has loaded (or failed — then the new one stays: it is
+ * what the text asks for). A link already at `href` is left; a missing one is
+ * created. Returns the link that carries `id` now.
+ */
+function swapStylesheet(doc, id, href, options = {}) {
+    const d = doc;
+    if (!d || typeof d.createElement !== 'function')
+        return null;
+    const head = (d.head ?? d.documentElement);
+    const old = d.getElementById(id);
+    const isLink = !!old && String(old.tagName).toUpperCase() === 'LINK';
+    // an earlier swap still loading under this id: drop it (this one wins)
+    for (const p of Array.from((d.querySelectorAll(`link[data-orz-swap="${id.replace(/["\\]/g, '')}"]`) ?? [])))
+        p.remove();
+    if (isLink && old.getAttribute('href') === href)
+        return old;
+    const l = d.createElement('link');
+    l.setAttribute('rel', 'stylesheet');
+    l.setAttribute('href', href);
+    // the nonce of this call, else the replaced link's (Chrome hides the attribute but keeps `.nonce`)
+    const nonce = options.nonce || (isLink ? (old.nonce || old.getAttribute('nonce') || '') : '');
+    if (nonce)
+        l.setAttribute('nonce', nonce);
+    if (!isLink) {
+        l.setAttribute('id', id);
+        head.appendChild(l);
+        return l;
+    }
+    l.setAttribute('data-orz-swap', id);
+    old.after ? old.after(l) : head.appendChild(l);
+    const done = () => {
+        l.removeEventListener('load', done);
+        l.removeEventListener('error', done);
+        if (!l.isConnected)
+            return; // superseded
+        old.remove();
+        l.removeAttribute('data-orz-swap');
+        l.setAttribute('id', id);
+    };
+    l.addEventListener('load', done);
+    l.addEventListener('error', done);
+    return l;
 }
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
 async function enhanceRoot(root, w) {
@@ -280,7 +383,7 @@ async function enhanceRoot(root, w) {
                     g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
                     if (!((g.data && g.data.datasets) || []).some((d) => d && d.label))
                         g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
-                    new w.Chart(v, g); // eslint-disable-line no-new
+                    track(root, new w.Chart(v, g), v);
                 }
                 catch { /* a bad chart */ }
             }

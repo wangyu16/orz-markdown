@@ -111,4 +111,23 @@ export interface EnhanceRoot {
  * load; without a document it resolves at once.
  */
 export declare function enhanceDocument(root: EnhanceRoot, options?: EnhanceOptions): Promise<EnhanceResult>;
+/**
+ * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
+ * Chart.js instance it drew there is destroyed (its listeners, resize
+ * observer and registry entry go) and an expanded QR overlay is closed. Call
+ * it before replacing `root`'s content when the root itself goes, or before a
+ * re-render; `enhanceDocument` also destroys, on each call, the charts whose
+ * canvas left `root`. Idempotent; a root never enhanced is a no-op.
+ */
+export declare function disposeEnhancement(root: EnhanceRoot): void;
+/**
+ * Swap a stylesheet without a flash (2.2.0, M.27): the `<link id>` with
+ * another `href` is added next to the current one and the old one removed
+ * only when the new one has loaded (or failed — then the new one stays: it is
+ * what the text asks for). A link already at `href` is left; a missing one is
+ * created. Returns the link that carries `id` now.
+ */
+export declare function swapStylesheet(doc: unknown, id: string, href: string, options?: {
+    nonce?: string;
+}): unknown;
 //# sourceMappingURL=preview-frame.d.ts.map

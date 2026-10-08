@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HANDLE_STORE = exports.HANDLE_DB = exports.SHELL_UID_PATTERN = void 0;
 exports.createIndexedDbHandleStore = createIndexedDbHandleStore;
+exports.headerUidOf = headerUidOf;
 exports.createSaver = createSaver;
 /**
  * The standalone save of an assembled file (spec/shell-runtime.md §1; family
@@ -23,6 +24,7 @@ exports.createSaver = createSaver;
  * Every browser feature is detected when `save` is called, never at module
  * load, so the module imports safely in Node.
  */
+const read_js_1 = require("../read.js");
 const protocol_js_1 = require("./protocol.js");
 const types_js_1 = require("./types.js");
 /** FC-18 §5.1: a well-formed uid. (Same pattern as `UID_PATTERN` in the kit core.) */
@@ -142,6 +144,22 @@ async function sha256Hex(text) {
         return undefined;
     }
 }
+/**
+ * The `uid` of an FC-18 header at the start of a text (`{{nyml` … `}}`), or
+ * undefined — a parser-free reading, enough to tell whether a file on disk is
+ * this document (the shell does not load the kit's header tools).
+ */
+function headerUidOf(text) {
+    const m = /^\uFEFF?\{\{nyml[ \t]*\r?\n([\s\S]*?)(?:\r?\n|\r)?\}\}/.exec(text);
+    if (!m)
+        return undefined;
+    for (const line of m[1].split(/\r\n|\r|\n/)) {
+        const u = /^uid[ \t]*:[ \t]*(\S+)[ \t]*$/.exec(line);
+        if (u && exports.SHELL_UID_PATTERN.test(u[1]))
+            return u[1];
+    }
+    return undefined;
+}
 const DESCRIPTIONS = {
     md: 'orz document',
     slides: 'orz slides',
@@ -215,6 +233,42 @@ function createSaver(opts) {
     };
     /** This page's handle: later saves never prompt while the file still holds what this page wrote last. */
     let session = null;
+    /** What this page last wrote through any handle (kept when the session handle is dropped). */
+    let lastWritten = null;
+    /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
+    let conflicted = null;
+    /**
+     * The picked file's bytes (`before`) are an orz file of this document (its
+     * header uid is this saver's) whose text is neither the opened text, this
+     * page's last write nor the text being saved: it changed on disk since the
+     * page opened it. Needs the opened bytes (without them nothing is known).
+     */
+    const changedOnDisk = (before, mine, text) => {
+        if (before === null || mine === undefined || before === mine || before === lastWritten)
+            return false;
+        if (typeof opts.uid !== 'string' || !exports.SHELL_UID_PATTERN.test(opts.uid))
+            return false;
+        let disk;
+        try {
+            const x = (0, read_js_1.extract)(before);
+            if (!x)
+                return false;
+            disk = x.text;
+        }
+        catch {
+            return false;
+        }
+        if (headerUidOf(disk) !== opts.uid || disk === text)
+            return false;
+        const known = (html) => { if (html === null)
+            return null; try {
+            return (0, read_js_1.extract)(html)?.text ?? null;
+        }
+        catch {
+            return null;
+        } };
+        return disk !== known(mine) && disk !== known(lastWritten);
+    };
     /** A remembered handle proved to be the opened file, or null. */
     const remembered = async (k, win) => {
         const stored = await store().get(k);
@@ -268,12 +322,18 @@ function createSaver(opts) {
         }
         await w.close();
     };
-    const saveToFile = async (html, win) => {
+    const saveToFile = async (html, text, win, overwrite) => {
         const k = key();
         let h = null;
         let opened = false;
         let picked = false;
-        if (session) {
+        if (overwrite && conflicted) {
+            // the reader chose to replace the file that changed on disk: no second picker, no check
+            h = conflicted;
+            picked = true;
+        }
+        conflicted = null;
+        if (!h && session) {
             // this page's handle, if the file still holds what this page wrote last (or the opened bytes)
             const now = await readText(session.handle);
             if (now !== null && now === session.last) {
@@ -310,6 +370,11 @@ function createSaver(opts) {
             const mine = await openedBytes();
             const before = mine === undefined ? null : await readText(h);
             opened = before !== null && before === mine;
+            // this document's file, changed on disk since the page opened it: never written silently
+            if (!overwrite && changedOnDisk(before, mine, text)) {
+                conflicted = h;
+                return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
+            }
         }
         try {
             await write(h, html);
@@ -319,6 +384,7 @@ function createSaver(opts) {
             return download(html); // the write failed: keep the user's work as a download
         }
         session = { handle: h, opened, last: html };
+        lastWritten = html;
         if (k && opened) {
             // remember only a handle proved to be this page's file, with what was written through it
             const location = (0, types_js_1.pageLocation)(win.location);
@@ -333,7 +399,7 @@ function createSaver(opts) {
         return { via: 'file', ok: true, picked, opened, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
     };
     return {
-        async save(input) {
+        async save(input, call) {
             if (typeof input?.html !== 'string' || typeof input.text !== 'string')
                 return { via: 'download', ok: false, confirmed: false, error: 'text and html must be strings.' };
             if (opts.host && opts.host.connected()) {
@@ -341,10 +407,10 @@ function createSaver(opts) {
                 return ack.ok ? { via: 'host', ok: true } : { via: 'host', ok: false, error: ack.error ?? 'The host could not save.' };
             }
             const win = winOf();
-            if (isServed(win) && !session)
+            if (isServed(win) && !session && opts.servedNotice !== false)
                 return { via: 'served-notice' };
             if (typeof win.showSaveFilePicker === 'function')
-                return saveToFile(input.html, win);
+                return saveToFile(input.html, input.text, win, call?.overwrite === true);
             return download(input.html);
         },
         download: (input) => download(input.html),

@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.iconElement = exports.showToast = exports.createShadowRoot = exports.ICONS = exports.CHROME_CSS = exports.HELLO_MAX_MS = exports.HELLO_INTERVAL_MS = exports.INCLUDE_TIMEOUT_MS = exports.AI_TIMEOUT_MS = exports.SAVE_ACK_TIMEOUT_MS = exports.MSG = exports.PROTOCOL_VERSION = exports.INCLUDE_PROTOCOL = exports.AI_PROTOCOL = exports.SAVE_PROTOCOL = exports.KIND_EXTENSIONS = exports.HOST_KINDS = void 0;
+exports.SAVE_CONFLICT_MESSAGE = exports.askSaveConflict = exports.KIND_ICON_MAX_PATHS = exports.isKindIcon = exports.anyIconElement = exports.iconElement = exports.showToast = exports.createShadowRoot = exports.ICONS = exports.CHROME_CSS = exports.HELLO_MAX_MS = exports.HELLO_INTERVAL_MS = exports.INCLUDE_TIMEOUT_MS = exports.AI_TIMEOUT_MS = exports.SAVE_ACK_TIMEOUT_MS = exports.MSG = exports.PROTOCOL_VERSION = exports.INCLUDE_PROTOCOL = exports.AI_PROTOCOL = exports.SAVE_PROTOCOL = exports.KIND_EXTENSIONS = exports.HOST_KINDS = void 0;
 /**
  * `orz-markdown/carrier/shell` — the browser runtime every assembled orz file
  * shares (FD-03): the standalone save, reader preferences, both sides of the
@@ -46,7 +46,7 @@ Object.defineProperty(exports, "HELLO_MAX_MS", { enumerable: true, get: function
 // small (one re-export helper per module instead of a getter per name; claim S.11).
 __exportStar(require("./file-side.js"), exports); // connectHost, NOT_CONNECTED; ConnectHostOptions, HostConnection
 __exportStar(require("./host-side.js"), exports); // embedCarrierFrame; EmbedOptions, CarrierFrame
-__exportStar(require("./save.js"), exports); // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN; Saver, SaverOptions, SaveInput, SaveResult, HandleStore, StoredHandle
+__exportStar(require("./save.js"), exports); // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN, headerUidOf; Saver, SaverOptions, SaveInput, SaveCallOptions, SaveResult, HandleStore, StoredHandle
 __exportStar(require("./preferences.js"), exports); // createPreferenceStore, preferenceNamespace, READER_PREFERENCES, PREFERENCE_PREFIX; PreferenceStore, PreferenceSpec, PreferenceSchema, ReaderPreferences
 // checkForUpdate, reassemble, performUpdate, skipVersion, skippedVersion, parseManifest, manifestUrl, bundleUrl, browserPackage,
 // isBundlePath, isScriptSafe, sandboxDocument, sha384Integrity, parseSemver, compareSemver, UpdateError, RELEASE_KINDS,
@@ -61,4 +61,9 @@ Object.defineProperty(exports, "ICONS", { enumerable: true, get: function () { r
 Object.defineProperty(exports, "createShadowRoot", { enumerable: true, get: function () { return chrome_js_1.createShadowRoot; } });
 Object.defineProperty(exports, "showToast", { enumerable: true, get: function () { return chrome_js_1.showToast; } });
 Object.defineProperty(exports, "iconElement", { enumerable: true, get: function () { return chrome_js_1.iconElement; } });
+Object.defineProperty(exports, "anyIconElement", { enumerable: true, get: function () { return chrome_js_1.anyIconElement; } });
+Object.defineProperty(exports, "isKindIcon", { enumerable: true, get: function () { return chrome_js_1.isKindIcon; } });
+Object.defineProperty(exports, "KIND_ICON_MAX_PATHS", { enumerable: true, get: function () { return chrome_js_1.KIND_ICON_MAX_PATHS; } });
+Object.defineProperty(exports, "askSaveConflict", { enumerable: true, get: function () { return chrome_js_1.askSaveConflict; } });
+Object.defineProperty(exports, "SAVE_CONFLICT_MESSAGE", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_MESSAGE; } });
 //# sourceMappingURL=index.js.map

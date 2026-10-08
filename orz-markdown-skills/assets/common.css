@@ -330,6 +330,17 @@
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -357,5 +368,6 @@
   }
 
   .markdown-body .youtube-embed,
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }

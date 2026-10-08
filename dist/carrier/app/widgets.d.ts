@@ -12,7 +12,7 @@
  * never parsed as HTML (the icons are the kit's constants). No DOM at module
  * load.
  */
-import { type IconName } from '../shell/chrome.js';
+import { type IconName, type KindIcon } from '../shell/chrome.js';
 import type { ShadowRootLike } from '../shell/types.js';
 import type { AiProposal, EditorShell } from '../editor/shell.js';
 import type { ColorScheme } from '../../preview-frame.js';
@@ -27,13 +27,19 @@ export declare function installCss(root: CssRoot, css: string): void;
 export interface ButtonOptions {
     /** The label (text) and accessible name (`aria-label`). */
     label: string;
-    icon?: IconName;
+    /** A kit icon, or a kind's own (`KindIcon`: path data only, 2.2.0). */
+    icon?: IconName | KindIcon;
     variant?: 'primary' | 'ghost';
     /** Icon only (the label stays the accessible name and the tooltip). */
     iconOnly?: boolean;
     title?: string;
 }
-/** A chrome button named by its label (`aria-label`), with an optional kit icon. */
+/**
+ * A chrome button named by its label (`aria-label`), with an optional icon (a
+ * kit icon or a kind's). One with an icon gets `orz-btn--has-icon`: at narrow
+ * widths (APP_CSS) only those drop their visible label — a button without an
+ * icon (or whose kind icon is malformed) keeps it.
+ */
 export declare function button(doc: AppDocument, o: ButtonOptions): AppElement;
 /** One entry of a menu. */
 export interface MenuItem {

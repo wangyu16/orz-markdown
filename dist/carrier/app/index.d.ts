@@ -17,7 +17,7 @@ export { startCarrier, carrierGlobal } from './start.js';
 export type { StartOptions } from './start.js';
 export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, openedFileName, copyName } from './file.js';
 export { captureEngineSource } from './engine-source.js';
-export type { EngineSource } from './engine-source.js';
+export type { EngineSource, CaptureOptions } from './engine-source.js';
 export { WIDGET_CSS, installCss, button, menuButton, settingPicker, attachSettings, reviewProposal, attachAiMenu, followPresentation, } from './widgets.js';
 export type { ButtonOptions, MenuItem, MenuButton, AiOp, AiMenu, PreviewPresentation } from './widgets.js';
 export type { AppEvent, AppListener, AppClassList, AppElement, AppShadowRoot, AppDocument, AppWindow, CarrierKindName, OpenedFile, AppAssembleOptions, KindEditorOptions, StandaloneContext, ReadViewContext, CarrierReadView, SettingControl, CarrierAction, StandaloneKind, AppServices, CarrierAppOptions, AppSaveOutcome, CarrierApp, OrzCarrierGlobal, } from './types.js';

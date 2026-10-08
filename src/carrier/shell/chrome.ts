@@ -34,6 +34,14 @@ const LIGHT = `
   --orz-chrome-danger: oklch(56% 0.19 25);
   --orz-chrome-info: oklch(54% 0.17 258);
   --orz-chrome-shadow: 0 1px 2px oklch(22% 0.02 260 / 0.08), 0 8px 28px oklch(22% 0.02 260 / 0.14);
+  --orz-chrome-syntax-heading: oklch(45% 0.16 258);
+  --orz-chrome-syntax-mark: oklch(50% 0.016 260);
+  --orz-chrome-syntax-link: oklch(48% 0.15 245);
+  --orz-chrome-syntax-url: oklch(47% 0.1 210);
+  --orz-chrome-syntax-code: oklch(48% 0.14 25);
+  --orz-chrome-syntax-quote: oklch(46% 0.09 150);
+  --orz-chrome-syntax-comment: oklch(50% 0.016 260);
+  --orz-chrome-syntax-label: oklch(47% 0.14 300);
   color-scheme: light;`;
 
 /** Dark tokens (the family's dark editor bar, lifted to OKLCH). */
@@ -54,6 +62,14 @@ const DARK = `
   --orz-chrome-danger: oklch(71% 0.16 25);
   --orz-chrome-info: oklch(70% 0.14 258);
   --orz-chrome-shadow: 0 1px 2px oklch(0% 0 0 / 0.4), 0 10px 32px oklch(0% 0 0 / 0.45);
+  --orz-chrome-syntax-heading: oklch(80% 0.11 258);
+  --orz-chrome-syntax-mark: oklch(72% 0.012 260);
+  --orz-chrome-syntax-link: oklch(78% 0.11 240);
+  --orz-chrome-syntax-url: oklch(78% 0.09 210);
+  --orz-chrome-syntax-code: oklch(80% 0.1 45);
+  --orz-chrome-syntax-quote: oklch(80% 0.09 150);
+  --orz-chrome-syntax-comment: oklch(72% 0.012 260);
+  --orz-chrome-syntax-label: oklch(80% 0.1 300);
   color-scheme: dark;`;
 
 /**
@@ -171,6 +187,8 @@ export const CHROME_CSS = `
 .orz-toast[data-tone="warning"] > .orz-icon { color: var(--orz-chrome-warning); }
 .orz-toast[data-tone="error"] > .orz-icon { color: var(--orz-chrome-danger); }
 .orz-toast__message { flex: 1; min-width: 0; padding-top: 1px; overflow-wrap: anywhere; }
+.orz-toast__actions { display: flex; flex-wrap: wrap; gap: var(--orz-chrome-space-2); margin-top: var(--orz-chrome-space-3); }
+.orz-toast__action { min-height: 26px; padding: 0 var(--orz-chrome-space-3); font-size: var(--orz-chrome-text-sm); }
 .orz-toast__close { width: 22px; height: 22px; min-height: 22px; padding: 0; margin: -2px -2px 0 0; }
 .orz-toast__close .orz-icon { width: 14px; height: 14px; }
 
@@ -204,6 +222,10 @@ export const ICONS = {
   measure: svg('<path d="M4 5v14"/><path d="M20 5v14"/><path d="M8 12h8"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/><path d="m13.5 9.5 2.5 2.5-2.5 2.5"/>'),
   new: svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6"/><path d="M9 15h6"/>'),
   copy: svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+  // 2.2.0 (round 1 of the carrier-app loop): the actions and settings of slides and paged — Present, Print, page size
+  present: svg('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="m10 8 4 2-4 2z" fill="currentColor"/><path d="M12 16v4"/><path d="M8 20h8"/>'),
+  print: svg('<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>'),
+  pageSize: svg('<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h6"/><path d="M9 16h6"/>'),
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -218,6 +240,54 @@ export function iconElement(doc: UiDocument, name: IconName): UiElement {
   span.setAttribute('aria-hidden', 'true');
   span.innerHTML = ICONS[name];
   return span;
+}
+
+/**
+ * A kind's own icon (2.2.0): the `d` of up to {@link KIND_ICON_MAX_PATHS}
+ * stroked paths on the ICONS grid (24×24, `currentColor`), nothing else — no
+ * markup, so no script, link, style or colour can come with it. Each `d` is
+ * path data only (commands, numbers, separators; at most 1,000 characters).
+ */
+export interface KindIcon {
+  readonly paths: readonly string[];
+}
+export const KIND_ICON_MAX_PATHS = 8;
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9.,+\-eE \t\n]{1,1000}$/;
+
+/** True when a value is a well-formed {@link KindIcon}. */
+export function isKindIcon(icon: unknown): icon is KindIcon {
+  const p = (icon as { paths?: unknown } | null)?.paths;
+  return Array.isArray(p) && p.length > 0 && p.length <= KIND_ICON_MAX_PATHS && p.every((d) => typeof d === 'string' && PATH_DATA.test(d));
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * An icon element for a kit icon name or a kind's {@link KindIcon}: the kit's
+ * constant, or the kind's paths built element by element (`createElementNS`,
+ * attributes set as data — never markup). Null for an unknown name, a
+ * malformed kind icon or a document without SVG elements: the control keeps
+ * its label.
+ */
+export function anyIconElement(doc: UiDocument, icon: IconName | KindIcon | undefined): UiElement | null {
+  if (typeof icon === 'string') return Object.prototype.hasOwnProperty.call(ICONS, icon) ? iconElement(doc, icon) : null;
+  if (!isKindIcon(icon) || typeof doc.createElementNS !== 'function') return null;
+  try {
+    const span = doc.createElement('span');
+    span.className = 'orz-icon';
+    span.setAttribute('aria-hidden', 'true');
+    const s = doc.createElementNS(SVG_NS, 'svg');
+    for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '16'], ['height', '16'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '2'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true'], ['focusable', 'false']]) s.setAttribute(k, v);
+    for (const d of icon.paths) {
+      const path = doc.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', d);
+      s.append(path);
+    }
+    span.append(s);
+    return span;
+  } catch {
+    return null;
+  }
 }
 
 /** An element with a text child (the text is set as data, never parsed as HTML). */
@@ -281,8 +351,18 @@ export type ToastTone = 'info' | 'success' | 'warning' | 'error';
 
 export interface ToastOptions {
   tone?: ToastTone;
-  /** Auto-dismiss after this many ms (`0`: stays until dismissed). Default 5 s; 8 s for warnings and errors. Paused while hovered or focused. */
+  /** Auto-dismiss after this many ms (`0`: stays until dismissed). Default 5 s; 8 s for warnings and errors (with `actions`: 0). Paused while hovered or focused. */
   timeoutMs?: number;
+  /**
+   * Buttons in the toast (2.2.0): choosing one dismisses the toast, then runs
+   * it. A toast with actions stays until chosen or dismissed (default
+   * `timeoutMs` 0) and takes the focus on its first action when `focus` is set.
+   */
+  actions?: ReadonlyArray<{ label: string; run(): void; primary?: boolean }>;
+  /** Called once when the toast goes without an action chosen (Dismiss, the timeout, `dismiss()`). */
+  onDismiss?(): void;
+  /** Focus the first action (a question the reader must answer). */
+  focus?: boolean;
 }
 
 export interface Toast {
@@ -313,7 +393,8 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
     stacks.set(root, stack);
   }
   const tone: ToastTone = options.tone && Object.prototype.hasOwnProperty.call(TONE_ICON, options.tone) ? options.tone : 'info';
-  const timeout = typeof options.timeoutMs === 'number' && options.timeoutMs >= 0 ? options.timeoutMs : tone === 'warning' || tone === 'error' ? 8000 : 5000;
+  const actions = Array.isArray(options.actions) ? options.actions.filter((a) => a && typeof a.label === 'string' && typeof a.run === 'function') : [];
+  const timeout = typeof options.timeoutMs === 'number' && options.timeoutMs >= 0 ? options.timeoutMs : actions.length ? 0 : tone === 'warning' || tone === 'error' ? 8000 : 5000;
   const toast = doc.createElement('div');
   toast.className = 'orz-toast';
   toast.setAttribute('data-tone', tone);
@@ -323,8 +404,30 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   close.className = 'orz-btn orz-btn--ghost orz-btn--icon orz-toast__close';
   close.setAttribute('aria-label', 'Dismiss');
   close.append(iconElement(doc, 'close'));
+  const buttons: UiElement[] = [];
+  let chosen = false;
+  if (actions.length) {
+    const row = doc.createElement('span');
+    row.className = 'orz-toast__actions';
+    for (const a of actions) {
+      const b = doc.createElement('button');
+      b.setAttribute('type', 'button');
+      b.className = `orz-btn ${a.primary ? 'orz-btn--primary' : 'orz-btn--ghost'} orz-toast__action`;
+      b.append(doc.createTextNode(String(a.label)));
+      b.addEventListener('click', () => {
+        if (gone) return;
+        chosen = true;
+        dismiss();
+        try { a.run(); } catch { /* the action's own error */ }
+      });
+      buttons.push(b);
+      row.append(b);
+    }
+    msg.el.append(row);
+  }
   toast.append(iconElement(doc, TONE_ICON[tone]), msg.el, close);
   stack.append(toast);
+  if (options.focus && buttons[0]) buttons[0].focus?.();
 
   let timer: unknown = null;
   let gone = false;
@@ -335,6 +438,7 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
     gone = true;
     clear();
     toast.remove();
+    if (!chosen) { try { options.onDismiss?.(); } catch { /* the caller's own error */ } }
   }
   close.addEventListener('click', dismiss);
   toast.addEventListener('pointerenter', clear);
@@ -343,4 +447,27 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   toast.addEventListener('focusout', arm);
   arm();
   return { dismiss };
+}
+
+/** What the reader is asked when the file changed on disk since the page opened it (a save's `conflict` result, 2.2.0). */
+export const SAVE_CONFLICT_MESSAGE = 'This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?';
+
+/**
+ * Ask the reader about a save that found the file changed on disk (2.2.0,
+ * shell-runtime §1): a toast that stays, with "Replace it" and "Download a
+ * copy instead"; the focus goes to the first. Resolves the choice, or null
+ * when the toast is dismissed. Writes text only.
+ */
+export function askSaveConflict(root: ShadowRootLike | UiElement, name?: string): Promise<'replace' | 'download' | null> {
+  return new Promise((resolve) => {
+    showToast(root, name ? `${name}: ${SAVE_CONFLICT_MESSAGE}` : SAVE_CONFLICT_MESSAGE, {
+      tone: 'warning',
+      focus: true,
+      actions: [
+        { label: 'Replace it', primary: true, run: () => resolve('replace') },
+        { label: 'Download a copy instead', run: () => resolve('download') },
+      ],
+      onDismiss: () => resolve(null),
+    });
+  });
 }

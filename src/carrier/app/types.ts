@@ -15,7 +15,7 @@ import type { Extracted } from '../envelope.js';
 import type { DocumentInfo } from '../document.js';
 import type { EditorHooks, EditorShell } from '../editor/shell.js';
 import type { TextEditorAdapter } from '../editor/adapter.js';
-import type { IconName } from '../shell/chrome.js';
+import type { IconName, KindIcon } from '../shell/chrome.js';
 import type { HostConnection, ConnectHostOptions } from '../shell/file-side.js';
 import type { PreferenceStore } from '../shell/preferences.js';
 import type { Saver, SaverOptions, SaveResult } from '../shell/save.js';
@@ -71,8 +71,12 @@ export interface AppElement {
   prepend(...nodes: unknown[]): void;
   appendChild(node: unknown): unknown;
   replaceChildren(...nodes: unknown[]): void;
+  readonly firstElementChild?: unknown;
+  readonly nextElementSibling?: unknown;
+  before?(...nodes: unknown[]): void;
   remove(): void;
   focus(options?: { preventScroll?: boolean }): void;
+  blur?(): void;
   contains(node: unknown): boolean;
   querySelectorAll(selector: string): ArrayLike<AppElement>;
   addEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean; passive?: boolean }): void;
@@ -103,6 +107,7 @@ export interface AppDocument {
   readonly defaultView: AppWindow | null;
   readonly activeElement?: unknown;
   readonly currentScript?: unknown;
+  readonly firstElementChild?: unknown;
   createElement(tag: string): AppElement;
   createTextNode(text: string): unknown;
   getElementById(id: string): AppElement | null;
@@ -123,7 +128,7 @@ export interface AppWindow {
   requestIdleCallback?(cb: () => void, options?: { timeout: number }): unknown;
   addEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
   removeEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
-  matchMedia?(query: string): { matches: boolean };
+  matchMedia?(query: string): { matches: boolean; addEventListener?(type: 'change', listener: () => void): void; removeEventListener?(type: 'change', listener: () => void): void };
 }
 
 // ── the opened file ────────────────────────────────────────────────────────
@@ -168,6 +173,12 @@ export interface KindEditorOptions {
   preferences?: PreferenceStore;
   /** FC-19 §3 `nonce` (2.2.0): the app's CSP nonce (FC-19 §8.4). */
   nonce?: string;
+  /**
+   * FC-19 §3 `includes` (2.2.0): resolved includes an app hands the renderer
+   * (target as written → text), like an assembled file's `#orz-includes`.
+   * The kind passes them to `createEditorShell({ includes })`.
+   */
+  includes?: Record<string, string>;
 }
 
 /**
@@ -257,7 +268,13 @@ export interface CarrierAction {
   id: string;
   /** Label and accessible name. */
   label: string;
-  icon?: IconName;
+  /**
+   * A kit icon (`ICONS`: `present`, `print`, `pageSize`, …) or the kind's own
+   * (`KindIcon`: up to 8 path `d` strings on the 24×24 grid — path data only,
+   * built as elements, never markup; a malformed one shows no icon). Without
+   * an icon the label stays visible at every width.
+   */
+  icon?: IconName | KindIcon;
   placement?: 'bar' | 'menu';
   /** Offered in edit mode too (default: read view only). */
   inEdit?: boolean;
@@ -320,7 +337,7 @@ export interface CarrierAppOptions {
 }
 
 /** How a save from the page went (the editor's `SaveOutcome` while editing, else the saver's result). */
-export type AppSaveOutcome = { ok: boolean; via?: string; error?: string; cancelled?: boolean };
+export type AppSaveOutcome = { ok: boolean; via?: string; error?: string; cancelled?: boolean; conflict?: boolean };
 
 /** The page-side handle of a booted file (`OrzCarrier.standalone`; tests and the conformance driver use it). */
 export interface CarrierApp {

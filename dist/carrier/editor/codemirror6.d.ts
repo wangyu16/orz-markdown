@@ -88,6 +88,18 @@ export declare function loadCodeMirror6(doc: EdDocument, options?: {
     timeoutMs?: number;
     nonce?: string;
 }): Promise<CodeMirror6Modules>;
+/**
+ * The editor's syntax highlighter (2.2.0): a CodeMirror `Highlighter` that
+ * gives each Markdown token a class of {@link THEME}, whose colours are the
+ * chrome's `--orz-chrome-syntax-*` tokens — so the editor's syntax follows the
+ * chrome's light or dark scheme (`data-chrome`, `prefers-color-scheme`) with
+ * no reconfiguration, at ≥ 4.5:1 on the editor background (E.27). It reads
+ * the tag names `@lezer/highlight` sets on its `tags`; a tag without a known
+ * name is not styled.
+ */
+export declare const ORZ_HIGHLIGHTER: {
+    style(tags: readonly Any[]): string | null;
+};
 export declare function codemirror6Adapter(options?: CodeMirror6Options): TextEditorAdapter;
 export {};
 //# sourceMappingURL=codemirror6.d.ts.map

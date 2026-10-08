@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = void 0;
+exports.ORZ_HIGHLIGHTER = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = void 0;
 exports.isCodeMirror6Modules = isCodeMirror6Modules;
 exports.loadCodeMirror6 = loadCodeMirror6;
 exports.codemirror6Adapter = codemirror6Adapter;
@@ -125,6 +125,51 @@ const THEME = {
         backgroundColor: 'color-mix(in oklch, var(--orz-chrome-accent) 26%, transparent)',
     },
     '.cm-panels': { backgroundColor: 'var(--orz-chrome-surface-2)', color: 'var(--orz-chrome-fg)' },
+    // syntax (2.2.0): the chrome's syntax tokens, light and dark with the chrome's scheme (E.27)
+    '.orz-tok-heading': { color: 'var(--orz-chrome-syntax-heading)', fontWeight: '700' },
+    '.orz-tok-strong': { fontWeight: '700' },
+    '.orz-tok-em': { fontStyle: 'italic' },
+    '.orz-tok-strike': { textDecoration: 'line-through' },
+    '.orz-tok-link': { color: 'var(--orz-chrome-syntax-link)' },
+    '.orz-tok-url': { color: 'var(--orz-chrome-syntax-url)', textDecoration: 'underline' },
+    '.orz-tok-code': { color: 'var(--orz-chrome-syntax-code)' },
+    '.orz-tok-quote': { color: 'var(--orz-chrome-syntax-quote)' },
+    '.orz-tok-comment': { color: 'var(--orz-chrome-syntax-comment)', fontStyle: 'italic' },
+    '.orz-tok-label': { color: 'var(--orz-chrome-syntax-label)' },
+    '.orz-tok-mark': { color: 'var(--orz-chrome-syntax-mark)' },
+};
+/** Lezer highlight tag names → the classes of {@link THEME} (a tag's own name first, then its parents'). */
+const TAG_CLASSES = {
+    heading: 'orz-tok-heading', heading1: 'orz-tok-heading', heading2: 'orz-tok-heading', heading3: 'orz-tok-heading',
+    heading4: 'orz-tok-heading', heading5: 'orz-tok-heading', heading6: 'orz-tok-heading',
+    strong: 'orz-tok-strong', emphasis: 'orz-tok-em', strikethrough: 'orz-tok-strike',
+    link: 'orz-tok-link', url: 'orz-tok-url', monospace: 'orz-tok-code', quote: 'orz-tok-quote', comment: 'orz-tok-comment',
+    labelName: 'orz-tok-label', string: 'orz-tok-label', meta: 'orz-tok-label', atom: 'orz-tok-label', keyword: 'orz-tok-label',
+    processingInstruction: 'orz-tok-mark', contentSeparator: 'orz-tok-mark', character: 'orz-tok-mark', escape: 'orz-tok-mark',
+};
+/**
+ * The editor's syntax highlighter (2.2.0): a CodeMirror `Highlighter` that
+ * gives each Markdown token a class of {@link THEME}, whose colours are the
+ * chrome's `--orz-chrome-syntax-*` tokens — so the editor's syntax follows the
+ * chrome's light or dark scheme (`data-chrome`, `prefers-color-scheme`) with
+ * no reconfiguration, at ≥ 4.5:1 on the editor background (E.27). It reads
+ * the tag names `@lezer/highlight` sets on its `tags`; a tag without a known
+ * name is not styled.
+ */
+exports.ORZ_HIGHLIGHTER = {
+    style(tags) {
+        const out = new Set();
+        for (const t of tags) {
+            for (const p of (Array.isArray(t?.set) ? t.set : [t])) {
+                const c = typeof p?.name === 'string' ? TAG_CLASSES[p.name] : undefined;
+                if (c) {
+                    out.add(c);
+                    break;
+                }
+            }
+        }
+        return out.size ? [...out].join(' ') : null;
+    },
 };
 /** CodeMirror 6 (markdown mode, line wrapping, history, search) behind the adapter interface. */
 /**
@@ -171,7 +216,7 @@ function codemirror6Adapter(options = {}) {
             m.view.dropCursor?.(),
             l.indentOnInput?.(),
             l.bracketMatching?.(),
-            l.syntaxHighlighting(l.defaultHighlightStyle, { fallback: true }),
+            l.syntaxHighlighting(exports.ORZ_HIGHLIGHTER),
             l.LanguageSupport ? new l.LanguageSupport(m.markdown.markdownLanguage) : m.markdown.markdownLanguage,
             m.view.highlightActiveLine?.(),
             m.search?.highlightSelectionMatches?.(),

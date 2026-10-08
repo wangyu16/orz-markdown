@@ -88,16 +88,22 @@ function installCss(root, css) {
     style.textContent = css;
     root.appendChild(style);
 }
-/** A chrome button named by its label (`aria-label`), with an optional kit icon. */
+/**
+ * A chrome button named by its label (`aria-label`), with an optional icon (a
+ * kit icon or a kind's). One with an icon gets `orz-btn--has-icon`: at narrow
+ * widths (APP_CSS) only those drop their visible label — a button without an
+ * icon (or whose kind icon is malformed) keeps it.
+ */
 function button(doc, o) {
     const b = doc.createElement('button');
     b.setAttribute('type', 'button');
-    b.className = `orz-btn${o.variant ? ` orz-btn--${o.variant}` : ''}${o.iconOnly ? ' orz-btn--icon' : ''}`;
+    const icon = o.icon ? (0, chrome_js_1.anyIconElement)(doc, o.icon) : null;
+    b.className = `orz-btn${o.variant ? ` orz-btn--${o.variant}` : ''}${o.iconOnly ? ' orz-btn--icon' : ''}${icon ? ' orz-btn--has-icon' : ''}`;
     b.setAttribute('aria-label', o.label);
     if (o.title !== undefined || o.iconOnly)
         b.title = o.title ?? o.label;
-    if (o.icon)
-        b.append((0, chrome_js_1.iconElement)(doc, o.icon));
+    if (icon)
+        b.append(icon);
     if (!o.iconOnly) {
         const span = doc.createElement('span');
         span.className = 'orz-btn__label';
@@ -183,9 +189,14 @@ function menuButton(doc, o) {
             const l = doc.createElement('span');
             l.textContent = it.label;
             b.append(l);
-            b.addEventListener('click', () => {
+            b.addEventListener('click', (e) => {
                 close();
-                btn.focus();
+                // the keyboard keeps its place on the button; a pointer's choice leaves the focus to the page
+                // (2.2.0: a read view's keys — slides' Space and arrows — work again at once)
+                if ((e.detail ?? 0) > 0)
+                    btn.blur?.();
+                else
+                    btn.focus();
                 it.run();
             });
             m.append(b);

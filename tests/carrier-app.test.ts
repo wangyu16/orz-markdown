@@ -25,7 +25,7 @@ import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, readDocumen
 import { createEditorShell, renderMarkdownPreview, textareaAdapter, type EditorShell } from '../src/carrier/editor';
 import type { HostConnection, PerformUpdateOptions, PerformUpdateResult, SaveResult, Saver, SaverOptions, UpdateInfo } from '../src/carrier/shell';
 import {
-  bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
+  APP_CSS, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
   menuButton, settingPicker, reviewProposal, attachAiMenu, attachSettings, followPresentation, installCss, WIDGET_CSS,
   type AppServices, type CarrierApp, type CarrierReadView, type KindEditorOptions, type SettingControl, type StandaloneContext, type StandaloneKind, type AppDocument, type AppWindow,
 } from '../src/carrier/app';
@@ -145,10 +145,11 @@ function fakeServices(rec: Recorder, over: Partial<AppServices> = {}): Partial<A
 
 const recorder = (): Recorder => ({ assembled: [], saves: [], downloads: [], savers: [], rendered: [], mounted: [], actions: [], keys: [] });
 
-function boot(html = fileHtml(TEXT, { includes: INCLUDES }), o: { url?: string; kind?: Partial<StandaloneKind>; services?: Partial<AppServices>; framed?: boolean } = {}) {
+function boot(html = fileHtml(TEXT, { includes: INCLUDES }), o: { url?: string; kind?: Partial<StandaloneKind>; services?: Partial<AppServices>; framed?: boolean; beforeBoot?(win: HWin): void } = {}) {
   const rec = recorder();
   const { win, doc } = filePage(html, o.url);
   if (o.framed) Object.defineProperty(win, 'parent', { value: { postMessage() { /* a host */ } }, configurable: true });
+  o.beforeBoot?.(win);
   const app = bootCarrierApp(fakeKind(rec, o.kind), { window: win as unknown as AppWindow, adapter: textareaAdapter(), services: fakeServices(rec, o.services) })!;
   const root = app.root as unknown as ShadowRoot;
   const buttons = () => [...root.querySelectorAll('.orz-app__bar > button, .orz-app__bar > .orz-menu-wrap > button')].map((b) => b.getAttribute('aria-label'));
@@ -183,7 +184,8 @@ function valueImports(entry: string): Set<string> {
   return seen;
 }
 
-const APP_OWN_LIMIT = 33_000;
+// 32,933 B on 2026-10-08 (round 1 of the carrier-app loop); bound ~10 % above.
+const APP_OWN_LIMIT = 36_000;
 const APP_DELTA_LIMIT = 62_000;
 const EDITOR_AND_APP_LIMIT = 1_100_000;
 
@@ -200,7 +202,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 33 KB and adds under 62 KB to a carrier bundle that already holds the editor (the whole under 1.1 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 36 KB and adds under 62 KB to a carrier bundle that already holds the editor (the whole under 1.1 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });
@@ -263,29 +265,60 @@ describe('the opened file', () => {
     expect(readOpenedFile(forged as unknown as AppDocument, 'md')).toBeNull();
   });
 
-  it('[A.12] captureEngineSource takes the running bundle\'s own <script>: an inline one\'s exact text (in the update sandbox too: sandboxDocument inlines the verified bundle with nothing after it), a loaded one\'s URL, fetched once and required script-safe', async () => {
-    const inline = captureEngineSource({ currentScript: { src: '', textContent: ENGINE } });
+  it('[A.12] captureEngineSource takes the running bundle\'s own <script>: the file\'s inline #orz-engine exact text, the update sandbox\'s bundle (sandboxDocument inlines the verified bundle with nothing after it), a loaded bundle\'s URL (its file name is the bundle\'s) — fetched once and required script-safe', async () => {
+    const inline = captureEngineSource({ currentScript: { id: 'orz-engine', src: '', textContent: ENGINE } });
     expect([inline.inline, inline.url]).toEqual([ENGINE, null]);
     expect(await inline.get('https://x.test/never')).toBe(ENGINE);
-    // the update sandbox: the bundle's script text is exactly the bundle (2.2.0: no newline after it)
+    // the update sandbox: the bundle's script text is exactly the bundle (2.2.0: no newline after it), in a page titled "orz update" with no island
     const { win, doc } = filePage(sandboxDocument(ENGINE), 'about:blank');
     const scripts = [...doc.querySelectorAll('script')];
     expect(scripts[0].textContent).toBe(ENGINE);
+    const sandboxed = captureEngineSource({ currentScript: scripts[0], title: doc.title, getElementById: (id: string) => doc.getElementById(id) });
+    expect(sandboxed.inline).toBe(ENGINE);
     void win;
     const fetchSpy = vi.fn(async (u: string) => ({ ok: true, status: 200, text: async () => (u.includes('unsafe') ? 'x = "<\/script>"' : `/* from ${u} */`) }));
     const g = globalThis as { fetch?: unknown };
     const saved = g.fetch;
     g.fetch = fetchSpy;
     try {
-      const loaded = captureEngineSource({ currentScript: { src: 'https://cdn.test/own.js', textContent: '' } });
-      expect([loaded.inline, loaded.url]).toEqual([null, 'https://cdn.test/own.js']);
-      expect(await loaded.get('https://fallback.test/b.js')).toBe('/* from https://cdn.test/own.js */');
-      expect(await loaded.get('https://fallback.test/b.js')).toBe('/* from https://cdn.test/own.js */');
+      const loaded = captureEngineSource({ currentScript: { src: 'https://cdn.test/orz-stub.browser.js', textContent: '' } });
+      expect([loaded.inline, loaded.url]).toEqual([null, 'https://cdn.test/orz-stub.browser.js']);
+      expect(await loaded.get('https://fallback.test/b.js')).toBe('/* from https://cdn.test/orz-stub.browser.js */');
+      expect(await loaded.get('https://fallback.test/b.js')).toBe('/* from https://cdn.test/orz-stub.browser.js */');
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const esm = captureEngineSource({ currentScript: null });
       expect(await esm.get('https://fallback.test/b.js')).toBe('/* from https://fallback.test/b.js */');
-      const unsafe = captureEngineSource({ currentScript: { src: 'https://cdn.test/unsafe.js' } });
+      const unsafe = captureEngineSource({ currentScript: { src: 'https://cdn.test/orz-unsafe.browser.js' } });
       await expect(unsafe.get('https://fallback.test/unsafe.js')).rejects.toThrow(/not script-safe/);
+    } finally {
+      g.fetch = saved;
+    }
+  });
+
+  it('[A.12] only the carrier\'s bundle is the engine: an app script that bundles the IIFE — loaded (app.js) or inline in the app\'s page — is not taken, and the release\'s CDN URL is fetched instead; with bundle the file name must match exactly; with integrity an inline text must match it', async () => {
+    const fetched: string[] = [];
+    const g = globalThis as { fetch?: unknown };
+    const saved = g.fetch;
+    g.fetch = async (u: string) => { fetched.push(u); return { ok: true, status: 200, text: async () => `/* the release bundle from ${u} */` }; };
+    const CDN = 'https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.0.0/orz-mdhtml.browser.js';
+    try {
+      const appJs = captureEngineSource({ currentScript: { src: 'https://app.test/assets/app.js' } });
+      expect([appJs.inline, appJs.url]).toEqual([null, null]);
+      expect(await appJs.get(CDN)).toBe(`/* the release bundle from ${CDN} */`);
+      expect(fetched).toEqual([CDN]);
+      // an inline app script (no #orz-engine, not the update sandbox) bundling the IIFE plus the app's own code
+      const appInline = captureEngineSource({ currentScript: { textContent: `${ENGINE}\n/* the app's own code */` }, title: 'My app', getElementById: () => null });
+      expect(appInline.inline).toBeNull();
+      // a bundle name of the family but not this carrier's
+      expect(captureEngineSource({ currentScript: { src: 'https://cdn.test/orz-slides.browser.js' } }, { bundle: 'orz-mdhtml.browser.js' }).url).toBeNull();
+      expect(captureEngineSource({ currentScript: { src: 'https://cdn.test/v/orz-mdhtml.browser.js?x=1' } }, { bundle: 'orz-mdhtml.browser.js' }).url).toBe('https://cdn.test/v/orz-mdhtml.browser.js?x=1');
+      // integrity: the inline text must be the release's bytes
+      const { createHash } = await import('node:crypto');
+      const sri = `sha384-${createHash('sha384').update(ENGINE, 'utf8').digest('base64')}`;
+      expect(await captureEngineSource({ currentScript: { id: 'orz-engine', textContent: ENGINE } }, { integrity: sri }).get(CDN)).toBe(ENGINE);
+      fetched.length = 0;
+      expect(await captureEngineSource({ currentScript: { id: 'orz-engine', textContent: `${ENGINE} ` } }, { integrity: sri }).get(CDN)).toBe(`/* the release bundle from ${CDN} */`);
+      expect(fetched).toEqual([CDN]);
     } finally {
       g.fetch = saved;
     }
@@ -312,7 +345,7 @@ describe('the seam (StandaloneKind)', () => {
     expect(host.getAttribute('data-chrome')).toBe('dark');
     expect(b.buttons()).toEqual(['Edit', 'Theme', 'Print', 'Save', 'Done', 'More']);
     expect((b.root.querySelector('#orz-brand') as HTMLElement).textContent).toBe('orz');
-    expect([...b.doc.body.children].map((e) => e.id || e.tagName)).toEqual(['orz-src', 'orz-includes', 'orz-app', 'orz-chrome', 'orz-engine']);
+    expect([...b.doc.body.children].map((e) => e.id || e.tagName)).toEqual(['orz-src', 'orz-includes', 'orz-chrome', 'orz-app', 'orz-engine']); // the chrome first after the islands (A.18)
     expect(b.doc.head.querySelectorAll('style, link').length).toBe(0);
     b.app.dispose();
     // a darkChrome preference wins over the document's scheme; a kind's brand
@@ -432,7 +465,7 @@ describe('saving from the page', () => {
     const s = boot(undefined, { services: { createSaver: (o) => ({ save: async () => ({ via: 'served-notice' }), download: async () => ({ via: 'download', ok: true, confirmed: false, name: o.suggestedName }), handleKey: () => null }) } });
     s.app.setSetting({ theme: 'beige-decent-1' });
     expect(await s.app.save()).toMatchObject({ ok: false, via: 'served-notice' });
-    expect(s.toasts().join(' ')).toContain('served from the web');
+    expect(s.toasts().join(' ')).toContain('opened from a web address, so it cannot be saved over');
     expect(s.app.isDirty()).toBe(true);
     s.app.dispose();
   });
@@ -720,7 +753,7 @@ describe('the quiet update', () => {
 // ── A.10 the page keymap ─────────────────────────────────────────────────
 
 describe('the page keymap', () => {
-  it('[A.10] Cmd/Ctrl+S saves the document being edited (an attached editor\'s, never the page\'s other copy), a key another handler already took (defaultPrevented) is never the page\'s, Cmd/Ctrl+E edits, Cmd/Ctrl+Z undoes a setting outside fields only, and other keys go to the read view (onKey) — not while typing in a field, not from the chrome, not while an editor is the document', async () => {
+  it('[A.10] Cmd/Ctrl+S saves the document being edited (an attached editor\'s, never the page\'s other copy), a key another handler already took (defaultPrevented) is never the page\'s, Cmd/Ctrl+E edits, Cmd/Ctrl+Z undoes a setting outside fields only, and other keys go to the read view (onKey) — not while typing in a field, not a chrome button\'s own keys (Space, Enter, Tab, Escape), not while an editor is the document', async () => {
     const b = boot();
     await b.app.ready;
     b.app.setSetting({ theme: 'beige-decent-2' });
@@ -740,8 +773,12 @@ describe('the page keymap', () => {
     b.key('ArrowLeft', {}, input);
     b.key('z', { meta: true }, input); // typing: not the page's undo
     expect(b.app.getText() === editHeader(TEXT, { theme: 'beige-decent-2' })).toBe(true);
-    (b.root.querySelector('button') as HTMLButtonElement).dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }) as unknown as Event);
+    // from a chrome button: its own keys stay the button's (Space, Enter, Tab, Escape); navigation keys reach the view
+    const editButton = b.root.querySelector('button') as HTMLButtonElement;
+    for (const k of [' ', 'Enter', 'Tab', 'Escape']) editButton.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true }) as unknown as Event);
     expect(b.rec.keys).toEqual(['ArrowRight', 'x']);
+    editButton.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    expect(b.rec.keys).toEqual(['ArrowRight', 'x', 'PageDown']);
     // an attached editor is the document: Cmd/Ctrl+S saves it, the read view gets no keys
     const el = b.doc.createElement('div');
     b.doc.body.append(el);
@@ -752,13 +789,218 @@ describe('the page keymap', () => {
     await tick(10);
     expect(b.rec.saves.at(-1)!.text).toBe(`${editHeader(TEXT, { theme: 'beige-decent-2' })}attached\r\n`);
     b.key('ArrowRight');
-    expect(b.rec.keys).toEqual(['ArrowRight', 'x']);
+    expect(b.rec.keys).toEqual(['ArrowRight', 'x', 'PageDown']);
     b.key('e', { meta: true });
     expect(b.app.editor()).toBeNull(); // the attached editor is the document
     detach();
     attached.destroy();
     b.key('e', { meta: true });
     expect(b.app.editor()).not.toBeNull();
+    b.app.dispose();
+  });
+});
+
+// ── round 1 of the carrier-app loop (2.2.0) ──────────────────────────────
+
+describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
+  const byLabel = (root: ParentNode, label: string) => [...root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === label || x.textContent === label) as HTMLButtonElement;
+
+  it('[A.14] in edit mode, Cmd/Ctrl+S with the focus on the chrome (Done, More) or the page saves the open editor — never the browser\'s "Save page as" (default prevented) — and Cmd/Ctrl+E leaves edit mode; the edit-mode title follows the header title', async () => {
+    const b = boot();
+    await b.app.ready;
+    const ed = b.app.edit();
+    ed.setText(editHeader(`${TEXT}typed\r\n`, { title: 'Renamed' }));
+    const done = byLabel(b.root, 'Done');
+    expect(b.key('s', { meta: true }, done).defaultPrevented).toBe(true);
+    await tick(10);
+    expect(b.rec.saves.at(-1)!.text).toBe(editHeader(`${TEXT}typed\r\n`, { title: 'Renamed' }));
+    expect(ed.isDirty()).toBe(false);
+    ed.setText(`${ed.getText()}more\r\n`);
+    expect(b.key('s', { meta: true }).defaultPrevented).toBe(true); // the page body
+    await tick(10);
+    expect(b.rec.saves).toHaveLength(2);
+    await tick(250);
+    expect((b.root.querySelector('.orz-app__title') as HTMLElement).textContent).toBe('Renamed');
+    expect(b.doc.title).toBe('Renamed');
+    expect(b.key('e', { meta: true }, done).defaultPrevented).toBe(true);
+    await tick(10);
+    expect(b.app.editor()).toBeNull();
+    b.app.dispose();
+  });
+
+  it('[A.15] the page\'s save runs one at a time (a second call while one runs gets the same outcome); a save that finds the file changed on disk is not written: the outcome says conflict and the reader is asked — Replace it writes over it (overwrite), Download a copy instead downloads and leaves the document unsaved; the editor\'s save asks the same', async () => {
+    const calls: boolean[] = [];
+    let downloads = 0;
+    const conflictSaver = (): Partial<AppServices> => ({
+      createSaver: (): Saver => ({
+        async save(_i, c) { calls.push(c?.overwrite === true); await tick(5); return c?.overwrite ? { via: 'file', ok: true, picked: true, opened: false, name: 'n.md.html' } : { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name: 'n.md.html' }; },
+        async download() { downloads++; return { via: 'download', ok: true, confirmed: false, name: 'n.md.html' }; },
+        handleKey: () => null,
+      }),
+    });
+    const b = boot(undefined, { services: conflictSaver() });
+    await b.app.ready;
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    const [r1, r2] = await Promise.all([b.app.save(), b.app.save()]);
+    expect(r1).toBe(r2);
+    expect(r1).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
+    expect(calls).toEqual([false]);
+    expect(b.toasts().join(' ')).toContain('This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?');
+    byLabel(b.root, 'Replace it').click();
+    await tick(20);
+    expect(calls).toEqual([false, true]);
+    expect(b.app.isDirty()).toBe(false);
+    b.app.setSetting({ theme: 'beige-decent-1' });
+    await b.app.save();
+    byLabel(b.root, 'Download a copy instead').click();
+    await tick(20);
+    expect([downloads, b.app.isDirty()]).toEqual([1, true]);
+    // the editor's save asks the same
+    const ed = b.app.edit();
+    ed.setText(`${ed.getText()}edited\r\n`);
+    expect(await ed.save()).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
+    const edRoot = ed.root as unknown as ShadowRoot;
+    expect([...edRoot.querySelectorAll('.orz-toast__message')].map((n) => n.textContent).join(' ')).toContain('changed on disk');
+    byLabel(edRoot, 'Replace it').click();
+    await tick(20);
+    expect(ed.isDirty()).toBe(false);
+    b.app.dispose();
+  });
+
+  it('[A.9] an editor opened or attached while the update runs is read-only too and given back when it settles; one read-only before the update stays read-only', async () => {
+    let handlers: { onUpdate(i: UpdateInfo): unknown } | null = null;
+    let release!: () => void;
+    const b = boot(undefined, {
+      services: {
+        checkForUpdate: async () => INFO,
+        mountUpdateIndicator: (a, _i, h) => { handlers = h; return { dispose() {} } as never; },
+        performUpdate: async () => { await new Promise<void>((r) => { release = r; }); return { status: 'up-to-date', info: INFO } as never; },
+      },
+    });
+    await tick(10);
+    const pre = b.doc.createElement('div');
+    b.doc.body.append(pre);
+    const already = b.app.kind.mountEditor(pre as never, { text: b.app.getText() }, b.app.editorContext());
+    already.setReadOnly(true);
+    const offPre = b.app.attach(already);
+    const running = handlers!.onUpdate(INFO) as Promise<void>;
+    await tick();
+    const ed = b.app.edit(); // opened during the update
+    const el = b.doc.createElement('div');
+    b.doc.body.append(el);
+    const late = b.app.kind.mountEditor(el as never, { text: b.app.getText() }, b.app.editorContext());
+    const off = b.app.attach(late); // attached during the update
+    expect([ed.isReadOnly(), late.isReadOnly(), already.isReadOnly()]).toEqual([true, true, true]);
+    release();
+    await running;
+    expect([ed.isReadOnly(), late.isReadOnly(), already.isReadOnly()]).toEqual([false, false, true]);
+    off(); late.destroy(); offPre(); already.destroy();
+    b.app.dispose();
+  });
+
+  it('[A.7] a framed file whose host never connected (an ordinary page framing it) asks before the page goes while it has unsaved changes; with a connected host it does not', async () => {
+    const leave = (w: HWin) => { const e = new w.Event('beforeunload', { cancelable: true }); w.dispatchEvent(e as unknown as Event); return e.defaultPrevented; };
+    const silent = { ...fakeHost(), connected: () => false };
+    const f = boot(undefined, { framed: true, services: { connectHost: () => silent as never } });
+    f.app.setSetting({ theme: 'beige-decent-2' });
+    expect(leave(f.win)).toBe(true);
+    f.app.dispose();
+    const c = boot(undefined, { framed: true, services: { connectHost: () => fakeHost() } });
+    c.app.setSetting({ theme: 'beige-decent-2' });
+    expect(leave(c.win)).toBe(false);
+    c.app.dispose();
+  });
+
+  it('[A.16] slides fitness: after a setting is chosen with the pointer the focus leaves the picker (the read view\'s keys work at once; with the keyboard it returns to the picker), after a pointer\'s Done the focus is the page\'s (the keyboard\'s Done returns to Edit), and navigation keys from a chrome button reach the view\'s onKey', async () => {
+    const b = boot();
+    await b.app.ready;
+    const theme = byLabel(b.root, 'Theme');
+    const choose = (detail: number) => {
+      theme.click();
+      const item = [...b.root.querySelectorAll('[role="menuitemradio"]')].find((x) => x.getAttribute('aria-checked') === 'false') as HTMLButtonElement;
+      item.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail }) as unknown as Event);
+    };
+    theme.focus();
+    choose(1); // a pointer
+    expect(b.root.activeElement).not.toBe(theme);
+    theme.focus();
+    choose(0); // the keyboard (Enter on the item)
+    expect(b.root.activeElement).toBe(theme);
+    // navigation from the focused picker button reaches the view; its own keys do not
+    theme.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    theme.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: ' ', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    expect(b.rec.keys).toEqual(['ArrowRight']);
+    // Done by pointer: the focus is not put back on Edit; by keyboard it is
+    b.app.edit();
+    b.root.host.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event);
+    byLabel(b.root, 'Done').click();
+    await tick(10);
+    expect(b.root.activeElement).not.toBe(byLabel(b.root, 'Edit'));
+    b.app.edit();
+    b.key('Tab');
+    byLabel(b.root, 'Done').click();
+    await tick(10);
+    expect(b.root.activeElement).toBe(byLabel(b.root, 'Edit'));
+    b.app.dispose();
+  });
+
+  it('[A.17] labels without icons: at narrow widths only a button with an icon drops its visible label (orz-btn--has-icon); a kind\'s action may use the kit\'s present / print / pageSize icons or its own KindIcon (path data only, built as SVG elements), and a malformed one shows no icon and keeps the label', async () => {
+    expect(APP_CSS).toContain('.orz-btn--has-icon .orz-btn__label { display: none; }');
+    expect(APP_CSS).not.toMatch(/\{\s*\.orz-btn__label \{ display: none/);
+    const b = boot(undefined, {
+      kind: {
+        actions: [
+          { id: 'print', label: 'Print', placement: 'bar', icon: 'print', run: () => undefined },
+          { id: 'plain', label: 'Plain', placement: 'bar', run: () => undefined },
+          { id: 'own', label: 'Own', placement: 'bar', icon: { paths: ['M4 4h16v16H4z', 'M8 12h8'] }, run: () => undefined },
+          { id: 'bad', label: 'Bad', placement: 'bar', icon: { paths: ['M4 4"/><script>alert(1)</script>'] }, run: () => undefined },
+        ],
+      },
+    });
+    const btn = (id: string) => b.root.querySelector(`[data-orz-action="${id}"]`) as HTMLElement;
+    expect(btn('print').classList.contains('orz-btn--has-icon')).toBe(true);
+    expect(btn('plain').classList.contains('orz-btn--has-icon')).toBe(false);
+    expect(btn('plain').querySelector('.orz-btn__label')!.textContent).toBe('Plain');
+    const own = btn('own').querySelector('svg')!;
+    expect([...own.querySelectorAll('path')].map((p) => p.getAttribute('d'))).toEqual(['M4 4h16v16H4z', 'M8 12h8']);
+    expect(own.getAttribute('stroke')).toBe('currentColor');
+    expect(btn('bad').querySelector('svg')).toBeNull();
+    expect(btn('bad').querySelector('script')).toBeNull();
+    expect(btn('bad').classList.contains('orz-btn--has-icon')).toBe(false);
+    b.app.dispose();
+  });
+
+  it('[A.18] accessibility: the chrome is first in the page\'s order after the islands (a keyboard reaches Edit before the document); at narrow widths the page gets top padding so the fixed bar does not cover it (not in edit mode, not with the chrome hidden), removed by dispose', async () => {
+    let listener: (() => void) | null = null;
+    const mq = { matches: true, addEventListener: (_t: string, l: () => void) => { listener = l; }, removeEventListener: () => { listener = null; } };
+    const b = boot(undefined, { beforeBoot: (w) => { Object.defineProperty(w, 'matchMedia', { value: () => mq, configurable: true }); } });
+    expect([...b.doc.body.children].find((e) => e.tagName !== 'SCRIPT')).toBe(b.doc.getElementById('orz-chrome'));
+    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('56px');
+    b.app.edit();
+    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    await b.app.leave();
+    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('56px');
+    mq.matches = false;
+    listener!();
+    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    mq.matches = true;
+    listener!();
+    b.app.setChromeVisible(false);
+    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    b.app.setChromeVisible(true);
+    b.app.dispose();
+    expect([b.doc.body.style.getPropertyValue('padding-top'), listener]).toEqual(['', null]);
+  });
+
+  it('[A.8] a file include\'s path is never sent to the host (orz-host-include@1 resolves URLs only): the context\'s fetchInclude answers null for it without a request', async () => {
+    const host = fakeHost({ include: true });
+    const asked: string[] = [];
+    const spy = { ...host, requestInclude: async (u: string) => { asked.push(u); return `HOST ${u}\n`; } };
+    const b = boot(undefined, { framed: true, services: { connectHost: () => spy as never } });
+    const ctx = b.app.editorContext();
+    expect(await ctx.fetchInclude!('parts/x.md')).toBeNull();
+    expect(await ctx.fetchInclude!('https://inc.test/c.md')).toBe('HOST https://inc.test/c.md\n');
+    expect(asked).toEqual(['https://inc.test/c.md']);
     b.app.dispose();
   });
 });
@@ -1027,6 +1269,52 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await reopened.evaluate(`${APP}.getText()`)).toBe(`${typed} Again.`);
     expect(await reopened.locator('#orz-doc').textContent()).toContain('Typed in Chrome. Again.');
     expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+
+  it('[A.15] [S.14] in Chrome: an agent rewrites the opened file on disk between two saves — the next save does not write silently: the reader is asked, Replace it writes the page\'s text into that file (no second picker), Download a copy instead downloads it and leaves the agent\'s file as it is; Cmd/Ctrl+S in edit mode with the focus on Done saves the editor (no "Save page as")', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ntitle: Conflict\nuid: doc-conflictconf0003c\n}}\n\n# Conflict\n\nBody.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    await page.goto(write('conflict.md.html', html));
+    await bootDone(page);
+    await writeOpfs(page, { name: 'conflict.md.html' }, html);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-3' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true, via: 'file' });
+    const agentText = `${text}AGENT EDIT\n`;
+    await writeOpfs(page, { name: 'conflict.md.html' }, await assembleStub(agentText));
+    await page.evaluate(`${APP}.setSetting({ theme: 'beige-decent-1' })`);
+    const mine = await page.evaluate(`${APP}.getText()`) as string;
+    expect(await page.evaluate(`${APP}.save()`)).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
+    expect(await readOpfs(page, { name: 'conflict.md.html' }) === await assembleStub(agentText)).toBe(true);
+    await page.getByText('This file changed on disk since you opened it').waitFor({ state: 'visible' });
+    const picks = (await pageRecords(page, 'picker')).length;
+    await page.getByRole('button', { name: 'Replace it' }).click();
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    expect(await readOpfs(page, { name: 'conflict.md.html' }) === await assembleStub(mine)).toBe(true);
+    expect(await pageRecords(page, 'picker')).toHaveLength(picks);
+    // again, and this time a copy
+    await writeOpfs(page, { name: 'conflict.md.html' }, await assembleStub(agentText));
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-3' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ conflict: true });
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download a copy instead' }).click();
+    const d = await download;
+    expect(readFileSync((await d.path())!, 'utf8') === await assembleStub(await page.evaluate(`${APP}.getText()`) as string)).toBe(true);
+    expect(await readOpfs(page, { name: 'conflict.md.html' }) === await assembleStub(agentText)).toBe(true);
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
+    // edit mode: Cmd/Ctrl+S with the focus on Done saves the editor, never the browser's "Save page as"
+    await writeOpfs(page, { name: 'conflict.md.html' }, await assembleStub(await page.evaluate(`${APP}.getText()`) as string));
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(`${APP}.editor().ready`);
+    await page.getByRole('button', { name: 'Done', exact: true }).focus();
+    await page.evaluate(() => { addEventListener('keydown', (e) => { if (e.key === 's') setTimeout(() => { (window as unknown as { __prevented?: boolean }).__prevented = e.defaultPrevented; }); }); });
+    const before = await page.evaluate(`${APP}.editor().isDirty()`);
+    expect(before).toBe(true);
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForFunction(`!${APP}.editor().isDirty()`);
+    expect(await page.evaluate(() => (window as unknown as { __prevented?: boolean }).__prevented)).toBe(true);
     await ctx.close();
   }, 120_000);
 
