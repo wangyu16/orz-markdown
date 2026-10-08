@@ -488,7 +488,7 @@ function bootCarrierApp(k, options = {}) {
             else if (choice === 'download') {
                 const r = await saver.download({ html });
                 const ok = r.via === 'download' && r.ok;
-                toast(ok ? 'Download started; the file on disk is unchanged.' : 'The download failed.', ok ? 'success' : 'error');
+                toast(ok ? chrome_js_1.SAVE_CONFLICT_DOWNLOADED : 'The download failed.', ok ? 'success' : 'error');
             }
         });
     }
@@ -768,6 +768,24 @@ function bootCarrierApp(k, options = {}) {
         }
         catch { /* the view's own error */ }
     });
+    /**
+     * The bar (or the editor) is hidden while the focus is in it — a keyboard
+     * user pressed Present (round 3, M5): the focus goes to the page (the read
+     * view's element when it takes the focus, else the document), so Escape and
+     * Space reach the read view's `onKey` at once. A toast keeps its focus (it
+     * stays shown).
+     */
+    function hideFocus() {
+        const inChrome = root.activeElement;
+        if (!inChrome || inChrome.closest?.('.orz-toast'))
+            return;
+        try {
+            view.element?.focus({ preventScroll: true });
+        }
+        catch { /* not focusable */ }
+        if (root.activeElement)
+            inChrome.blur?.();
+    }
     // ── data-loss protection: leaving a top-level file with unsaved changes asks first ──
     // (the browser's own "Leave site?" prompt; a framed file's host owns that decision, it is told the
     // dirty state through orz-host-save@1). The quiet update's reload never asks: the kit reloads only
@@ -864,10 +882,15 @@ function bootCarrierApp(k, options = {}) {
         editorContext,
         attach,
         toast,
-        setChromeVisible(visible) { if (visible)
-            chromeHost.removeAttribute('data-hidden');
-        else
-            chromeHost.setAttribute('data-hidden', ''); padTop(); },
+        setChromeVisible(visible) {
+            if (visible)
+                chromeHost.removeAttribute('data-hidden');
+            else {
+                chromeHost.setAttribute('data-hidden', '');
+                hideFocus();
+            }
+            padTop();
+        },
         view,
         root,
         host,

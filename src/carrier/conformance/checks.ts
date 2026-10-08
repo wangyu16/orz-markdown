@@ -1147,7 +1147,7 @@ export const saveChecks: Record<string, CheckFn> = {
       await ed(page, `window.__orzEditor.setText(${JSON.stringify(text)})`);
       return ed(page, 'window.__orzEditor.save()');
     };
-    const choose = (label: string): Promise<boolean> => ed<boolean>(page, `(function () { var b = window.__orzC.deepAll(document, 'button').filter(function (x) { return (x.textContent || '').trim() === ${JSON.stringify(label)}; })[0]; if (!b) return false; b.click(); return true; })()`);
+    const choose = (label: string): Promise<boolean> => ed<boolean>(page, `(function () { var b = window.__orzC.deepAll(document, 'button').filter(function (x) { var t = (x.textContent || '').trim(); return t === ${JSON.stringify(label)} || t.indexOf(${JSON.stringify(label + ' (')}) === 0; })[0]; if (!b) return false; b.click(); return true; })()`);
     const text1 = `${EDIT_TEXT}First save.\r\n`;
     const r1 = await save(text1);
     if (!p.check(r1?.ok === true && (await read()) === (await s.assemble(text1)), `the first save did not write assemble(text) to the opened file (${clip(JSON.stringify(r1))})`)) return;
@@ -1185,6 +1185,8 @@ export const saveChecks: Record<string, CheckFn> = {
       p.check((await read()) === agent2, 'Download a copy instead changed the file on disk');
       p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after Download a copy instead (the file on disk is not the page\'s text)');
     }
+    await page.close();
+    await conflictPhases(s, p, ctx);
   },
 
   async 'C.save.save-as-elsewhere'(s, p) {
@@ -1226,6 +1228,92 @@ export const saveChecks: Record<string, CheckFn> = {
     p.eq(ctx.downloads.length, 0, 'downloads');
   },
 };
+
+/** A file of the check's own on a page of its own, its opened bytes in the page's folder (where the `opfs` picker opens). */
+async function conflictFile(s: Session, ctx: CheckContext, tag: string, html: string, editor: boolean): Promise<{ page: Page; read(): Promise<string | null>; write(data: string): Promise<unknown> }> {
+  const name = fileName(s, tag);
+  const page = await ctx.newPage();
+  const url = s.writeFile(name, html);
+  if (editor) await openEditor(s, page, url);
+  else { await page.goto(url); await page.evaluate(PAGE_HELPERS); }
+  const pathname = await ed<string>(page, 'location.pathname');
+  await call(page, WRITE_OPFS, { pathname, name, data: html });
+  return { page, read: () => call<string | null>(page, READ_OPFS, { pathname, name }), write: (data: string) => call(page, WRITE_OPFS, { pathname, name, data }) };
+}
+
+/**
+ * Round 3 of the carrier-app loop (F2): the conflict's blind spots — a page save with no editor open, a
+ * text without a uid, an includes-only and a delivery-only change, the same text in a newer shell (an
+ * agent's `upgrade`, asked about: spec/shell-runtime.md §1 step 3.4) and the quiet update after an
+ * agent's edit (it writes nothing and says why). The last two need a `next` release.
+ */
+async function conflictPhases(s: Session, p: Probe, ctx: CheckContext): Promise<void> {
+  const editorPhase = async (what: string, tag: string, html: string, agent: string, edited: string): Promise<void> => {
+    const f = await conflictFile(s, ctx, tag, html, true);
+    const downloads = ctx.downloads.length;
+    await f.write(agent);
+    await ed(f.page, `window.__orzEditor.setText(${JSON.stringify(edited)})`);
+    const r = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, 'window.__orzEditor.save()');
+    await f.page.waitForTimeout(300);
+    p.check(r?.ok === false && r.conflict === true, `${what}: the save after the file changed on disk did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r))})`);
+    p.check((await f.read()) === agent, `${what}: the save wrote over the file that changed on disk without asking`);
+    p.eq(ctx.downloads.length - downloads, 0, `${what}: downloads before the reader answered`);
+    await f.page.close();
+  };
+  const edited = `${EDIT_TEXT}The page's edit.\r\n`;
+  const opened = await s.assemble(EDIT_TEXT, { delivery: 'inline' });
+  // a text without a uid is still this document: a different content asks
+  const plain = EDIT_TEXT.replace(/uid: [^\r\n]*\r\n/, '');
+  await editorPhase('a text without a uid', 'conflict-no-uid', await s.assemble(plain, { delivery: 'inline' }), await s.assemble(`${plain}The agent's edit.\r\n`, { delivery: 'inline' }), `${plain}The page's edit.\r\n`);
+  // the same text with other includes, or another delivery: a save would write the old ones back
+  const incFile = await s.assemble(INCLUDE_TEXT, { delivery: 'inline', includes: { ...INCLUDES } });
+  const [firstInclude] = Object.keys(INCLUDES);
+  await editorPhase('the same text with other includes', 'conflict-includes', incFile, await s.assemble(INCLUDE_TEXT, { delivery: 'inline', includes: { ...INCLUDES, [firstInclude]: 'The agent resolved this include again.\n' } }), `${INCLUDE_TEXT}\nThe page's edit.\n`);
+  await editorPhase('the same text with cdn delivery', 'conflict-delivery', opened, await s.assemble(EDIT_TEXT, { delivery: 'cdn' }), edited);
+  // a page save with no editor open (OrzCarrier.standalone, the carrier app's handle) after a setting change
+  {
+    const f = await conflictFile(s, ctx, 'conflict-page', opened, false);
+    const has = await until(() => ed<boolean>(f.page, '!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone && typeof globalThis.OrzCarrier.standalone.save === "function")'), 5_000);
+    if (has) {
+      const agent = await s.assemble(`${EDIT_TEXT}The agent's edit before a page save.\r\n`, { delivery: 'inline' });
+      await f.write(agent);
+      const downloads = ctx.downloads.length;
+      const r = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, `(async function () {
+        var app = globalThis.OrzCarrier.standalone;
+        if (app.ready) { try { await app.ready; } catch (e) {} }
+        var c = ((app.kind && app.kind.settings) || [])[0];
+        if (c && typeof app.setSetting === 'function') {
+          var now = c.current(app.getText());
+          var other = (c.choices || []).filter(function (x) { return x.value !== now; })[0];
+          if (other) { var ch = {}; ch[c.key] = other.value; app.setSetting(ch); }
+        }
+        return app.save();
+      })()`);
+      await f.page.waitForTimeout(500);
+      p.check(r?.ok === false && r.conflict === true, `page save (OrzCarrier.standalone.save(), no editor open): the save after the file changed on disk did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r))})`);
+      p.check((await f.read()) === agent, 'page save (OrzCarrier.standalone.save(), no editor open): the save wrote over the file that changed on disk without asking');
+      p.eq(ctx.downloads.length - downloads, 0, 'page save: downloads before the reader answered');
+    }
+    await f.page.close();
+  }
+  const next = s.releases.next;
+  if (!next) return;
+  // the same text in a newer shell (an agent ran upgrade): a save would undo it — asked about
+  const [upgraded] = await s.chromeAssemble(next, [EDIT_TEXT], 'inline');
+  await editorPhase('the same text in a newer shell (an agent\'s upgrade)', 'conflict-upgrade', opened, upgraded, edited);
+  // the quiet update after an agent's edit: nothing written, and the reader is told why
+  const uctx = await s.context({ picker: 'opfs', cdn: { latest: next } });
+  const f = await conflictFile(s, uctx, 'conflict-update', opened, false);
+  const agent = await s.assemble(`${EDIT_TEXT}The agent's edit before the update.\r\n`, { delivery: 'inline' });
+  await f.write(agent);
+  if (!p.check(await until(async () => (await f.page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20_000), 'update after an agent\'s edit: no update indicator')) return;
+  await runUpdate(f.page, uctx, next.version);
+  await f.page.waitForTimeout(500);
+  p.check((await f.read()) === agent, 'update after an agent\'s edit: the update wrote over the file that changed on disk');
+  p.eq(uctx.downloads.length, 0, 'update after an agent\'s edit: downloads');
+  const said = await ed<string[]>(f.page, 'window.__orzC.deepAll(document, "[aria-live], [role=alert], [role=status]").filter(function (n) { return !n.hidden; }).map(function (n) { return n.textContent.trim(); })');
+  p.check(said.some((t) => /changed on disk/i.test(t)), `update after an agent's edit: no announced message saying the file changed on disk (${clip(JSON.stringify(said))})`);
+}
 
 // ── update ───────────────────────────────────────────────────────────────
 

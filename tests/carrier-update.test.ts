@@ -22,7 +22,7 @@ import type { AddressInfo } from 'node:net';
 import {
   checkForUpdate, reassemble, performUpdate, skipVersion, skippedVersion, parseManifest, manifestUrl, bundleUrl, browserPackage, isBundlePath,
   isScriptSafe, sandboxDocument, sha384Integrity, parseSemver, compareSemver, UpdateError, mountUpdateIndicator,
-  CHROME_CSS, ICONS, createShadowRoot, showToast, anyIconElement, isKindIcon, askSaveConflict, SAVE_CONFLICT_MESSAGE,
+  CHROME_CSS, ICONS, createShadowRoot, showToast, anyIconElement, isKindIcon, askSaveConflict, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_PICKED_MESSAGE, SAVE_CONFLICT_TITLE, SAVE_CONFLICT_LABELS, SAVE_CONFLICT_DOWNLOADED,
   UPDATE_CHECK_INTERVAL_MS, UPDATE_CACHE_PREFIX, UPDATE_SKIP_PREFIX, RELEASE_CDN_BASE, MANIFEST_TIMEOUT_MS, REASSEMBLE_TIMEOUT_MS,
   type ReleaseManifest, type FetchLike, type ResponseLike, type StorageLike, type UpdateInfo, type MessageListener, type UiDocument, type UiElement,
   type SaveResult, createSaver, type FileHandleLike, type HandleStore, type StoredHandle,
@@ -960,7 +960,7 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect(await older).toBeNull();
     expect(root.activeElement).toBe(action('Download a copy instead'));
     expect(root.querySelector('.orz-toast__message')!.textContent).toContain(`new.md.html: ${SAVE_CONFLICT_MESSAGE}`);
-    action('Replace it').click();
+    action(SAVE_CONFLICT_LABELS.replace).click();
     expect(await newer).toBe('replace');
     expect(document.activeElement).toBe(pageBtn); // where the focus was when the question first opened
     // a toast's Escape without actions dismisses too; setMessage/focus on a gone toast do nothing
@@ -969,6 +969,46 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect(root.querySelectorAll('.orz-toast')).toHaveLength(0);
     t.setMessage('x');
     t.focus();
+  });
+
+  it('[V.6] round 3 (M6, L9): the question is an alertdialog outside the polite status region — labelled by its title, described by its message — so focusing its default action announces it; plain toasts stay in the status region; the safe default (Download a copy instead) is the primary-styled first action and Replace it says the version on disk is lost; an editor with no opened file is not told "since this page opened it"', async () => {
+    const { document } = await dom();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createShadowRoot(host as unknown as UiElement) as unknown as ShadowRoot;
+    showToast(root as never, 'Saved.', { tone: 'success' });
+    const asked = askSaveConflict(root as never, 'n.md.html');
+    const q = root.querySelector('[role="alertdialog"]')!;
+    expect(q).not.toBeNull();
+    expect(q.closest('[role="status"]')).toBeNull();
+    expect(q.closest('[aria-live]')).toBeNull();
+    const plain = [...root.querySelectorAll('.orz-toast')].find((t) => t !== q)!;
+    expect(plain.closest('[role="status"]')?.getAttribute('aria-live')).toBe('polite');
+    expect(plain.getAttribute('role')).toBeNull();
+    const byId = (id: string | null) => (id ? root.getElementById(id) : null);
+    expect(byId(q.getAttribute('aria-labelledby'))?.textContent).toBe(SAVE_CONFLICT_TITLE);
+    expect(byId(q.getAttribute('aria-describedby'))?.textContent).toBe(`n.md.html: ${SAVE_CONFLICT_MESSAGE}`);
+    expect(q.getAttribute('aria-modal')).toBe('false');
+    const acts = [...q.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[];
+    expect(acts.map((b) => [b.textContent, b.classList.contains('orz-btn--primary')])).toEqual([[SAVE_CONFLICT_LABELS.download, true], [SAVE_CONFLICT_LABELS.replace, false]]);
+    expect(root.activeElement).toBe(acts[0]);
+    expect(SAVE_CONFLICT_LABELS.replace).toMatch(/^Replace it \(.*lost\)$/);
+    expect(SAVE_CONFLICT_MESSAGE).toMatch(/since this page opened or last saved it/);
+    expect(SAVE_CONFLICT_DOWNLOADED).toMatch(/next save asks again/);
+    acts[0].click();
+    expect(await asked).toBe('download');
+    // no opened file: the other wording, and setMessage keeps the title
+    const asked2 = askSaveConflict(root as never, undefined, { opened: false });
+    const q2 = root.querySelector('[role="alertdialog"]')!;
+    expect(byId(q2.getAttribute('aria-describedby'))?.textContent).toBe(SAVE_CONFLICT_PICKED_MESSAGE);
+    expect(SAVE_CONFLICT_PICKED_MESSAGE).not.toMatch(/since you opened|opened it/);
+    expect(q2.getAttribute('aria-labelledby')).not.toBe(q.getAttribute('aria-labelledby')); // ids are unique
+    const again = askSaveConflict(root as never, 'x.md.html', { opened: false });
+    expect(await asked2).toBeNull();
+    expect(byId(q2.getAttribute('aria-labelledby'))?.textContent).toBe(SAVE_CONFLICT_TITLE);
+    expect(byId(q2.getAttribute('aria-describedby'))?.textContent).toBe(`x.md.html: ${SAVE_CONFLICT_PICKED_MESSAGE}`);
+    (q2.querySelector('button[aria-label="Dismiss"]') as HTMLButtonElement).click();
+    expect(await again).toBeNull();
   });
 
   it('[V.4] createShadowRoot installs CHROME_CSS (constructed sheet, else <style>), and the chrome writes only into its own shadow root: no DOM-reading API, innerHTML only from ICONS', async () => {
@@ -1029,8 +1069,11 @@ const UPDATE_LIMIT = 22_000;
 // 2026-10-08 (round 1 of the carrier-app loop: syntax tokens, three icons, kind icons, toast actions,
 // the save-conflict question): update 20,377 B; update + indicator + chrome 40,852 B; chrome 16,871 B.
 // Bounds ~10 % above.
+// 2026-10-08, round 3 (the question as an alertdialog with a title, its two wordings and labels, the
+// questions' own container): update + indicator + chrome 43,170 B; chrome 19,186 B. Chrome bound raised
+// to ~10 % above (21 KB); the others stand.
 const UPDATE_UI_LIMIT = 45_000;
-const CHROME_LIMIT = 19_000;
+const CHROME_LIMIT = 21_000;
 /** Bundle `contents` (JS importing from `dist/`) as a carrier would. */
 async function shippedSize(contents: string): Promise<{ bytes: number; inputs: string[] }> {
   expect(existsSync('dist/carrier/shell/update.js'), 'dist/ is missing: run npm run build').toBe(true);
@@ -1051,7 +1094,7 @@ describe('module boundaries', () => {
     expect(ui.inputs.filter((f) => /markdown-it|katex|dist\/index|header|document\.js|parser/.test(f))).toEqual([]);
   });
 
-  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and what ships (dist/carrier/shell/chrome.js) bundles under 19 KB', async () => {
+  it('[V.5] the chrome is standalone and size-bounded: chrome.ts imports nothing at run time and what ships (dist/carrier/shell/chrome.js) bundles under 21 KB', async () => {
     expect([...valueImports('src/carrier/shell/chrome.ts')]).toEqual(['src/carrier/shell/chrome.ts']);
     const c = await shippedSize("export * from './dist/carrier/shell/chrome.js';");
     expect(c.bytes).toBeLessThan(CHROME_LIMIT);

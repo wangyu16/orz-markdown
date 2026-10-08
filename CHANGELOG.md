@@ -212,6 +212,59 @@ The closed loop on orz-mdhtml 1.0 and this kit, round 2 (claims in
 - Sizes (what ships): shell 63.0 KB (S.11 bound 68 KB), app 34.1 KB (A.2
   bound 36 KB).
 
+### Round 3 of the carrier-app loop (kit side)
+
+The closed loop on orz-mdhtml 1.0 and this kit, round 3 (claims in
+`notes/CLAIMS.md`; additive unless noted).
+
+- **Keyboard users stuck in present mode** (A.19; M5):
+  `setChromeVisible(false)` with the focus in the bar or the editor (Present
+  pressed with the keyboard) moves the focus to the page — the read view's
+  element when it takes the focus, else the document — so Escape and Space
+  reach the read view's `onKey`; a focused toast keeps its focus.
+- **The conflict question for screen readers** (V.6; M6, L9): a toast with
+  actions is a question — `role="alertdialog"` outside the polite status
+  region, labelled by its new `title` option (else its message) and
+  described by its message — so focusing its default action announces it;
+  plain toasts stay in the status region. Changed wording: titled "The file
+  changed on disk"; "since this page opened or last saved it", and the
+  consequence is said ("Download a copy to keep both versions; replacing the
+  file loses the version on disk"); **Download a copy instead** comes first
+  and is the primary-styled default, **Replace it (the version on disk is
+  lost)** is no longer primary. `askSaveConflict(root, name?, { opened:
+  false })` (an app's editor with no opened file) asks "The file you chose
+  holds another version of this document…". New exports
+  `SAVE_CONFLICT_TITLE`, `SAVE_CONFLICT_PICKED_MESSAGE`,
+  `SAVE_CONFLICT_LABELS`, `SAVE_CONFLICT_DOWNLOADED` ("Download started; the
+  file on disk is unchanged. Your next save asks again.").
+- **Saves after `refreshPreview({ includes })`** (E.31, FC-19 §4; L7):
+  changed — saves write the latest include record (none after `null`), not
+  the one the editor was mounted with; the opened bytes keep the mounted
+  record.
+- **An agent's `upgrade` undone by a browser save** (S.14; L12): the same
+  content in a newer shell on disk than the file being saved is a change —
+  the save asks — unless this page wrote that shell; the same shell in
+  other bytes, or an older shell, is still no question.
+- **A revert of this page's save** (S.14, S.13; F3): the session's file
+  holding the opened bytes again over this page's own write is asked about
+  (no picker, `picked: false`); `overwrite` then writes it as the opened file
+  (round-2 m24's proof by content kept). Changed: it was written silently.
+- **After "Download a copy instead"** (L11): every later save asks again —
+  by design, now documented (shell-runtime §1 step 3.4) and said in the
+  download's toast.
+- **Harness** (H.5; F2): `C.save.conflict` also covers a text without a uid,
+  an includes-only and a delivery-only change, a page save with no editor
+  open (`OrzCarrier.standalone.save()` after a setting change), and with a
+  `next` release the same text in a newer shell (asked) and the quiet
+  update after an agent's edit (nothing written, the reason announced); the
+  stub mutants `page-overwrites-conflict` and `update-overwrites-conflict`
+  fail it.
+- **Tests** (K10, K12/K13, K25): the app keeps no failed opened assembly; a
+  third save while the question is open asks no saver (page and editor); a
+  saver without `openedHtml` never reports a conflict.
+- Sizes (what ships): shell 65.8 KB (S.11 bound 68 KB), chrome 19.2 KB (V.5
+  bound raised to 21 KB), app 34.3 KB (A.2 bound 36 KB).
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers

@@ -170,11 +170,13 @@ export const CHROME_CSS = `
 .orz-popover__error { margin: var(--orz-chrome-space-3) 0 0; color: var(--orz-chrome-danger); font-size: var(--orz-chrome-text-sm); }
 .orz-popover__actions { display: flex; flex-wrap: wrap; gap: var(--orz-chrome-space-2); margin-top: var(--orz-chrome-space-4); }
 
-.orz-toast-stack {
+.orz-toasts {
   position: fixed; z-index: var(--orz-chrome-z); left: 50%; bottom: var(--orz-chrome-space-5); transform: translateX(-50%);
-  display: flex; flex-direction: column-reverse; align-items: center; gap: var(--orz-chrome-space-3);
+  display: flex; flex-direction: column-reverse; align-items: center;
   width: max-content; max-width: min(560px, calc(100vw - 24px)); pointer-events: none;
 }
+.orz-toast-stack, .orz-toast-questions { display: flex; flex-direction: column-reverse; align-items: center; gap: var(--orz-chrome-space-3); max-width: 100%; }
+.orz-toast-stack:not(:empty) ~ .orz-toast-questions:not(:empty) { margin-bottom: var(--orz-chrome-space-3); }
 .orz-toast {
   display: flex; align-items: flex-start; gap: var(--orz-chrome-space-3); pointer-events: auto;
   padding: var(--orz-chrome-space-3) var(--orz-chrome-space-3) var(--orz-chrome-space-3) var(--orz-chrome-space-4);
@@ -187,6 +189,7 @@ export const CHROME_CSS = `
 .orz-toast[data-tone="warning"] > .orz-icon { color: var(--orz-chrome-warning); }
 .orz-toast[data-tone="error"] > .orz-icon { color: var(--orz-chrome-danger); }
 .orz-toast__message { flex: 1; min-width: 0; padding-top: 1px; overflow-wrap: anywhere; }
+.orz-toast__title { display: block; font-weight: 600; margin-bottom: var(--orz-chrome-space-1); }
 .orz-toast__actions { display: flex; flex-wrap: wrap; gap: var(--orz-chrome-space-2); margin-top: var(--orz-chrome-space-3); }
 .orz-toast__action { min-height: 26px; padding: 0 var(--orz-chrome-space-3); font-size: var(--orz-chrome-text-sm); }
 .orz-toast__close { width: 22px; height: 22px; min-height: 22px; padding: 0; margin: -2px -2px 0 0; }
@@ -359,6 +362,13 @@ export interface ToastOptions {
    * `timeoutMs` 0) and takes the focus on its first action when `focus` is set.
    */
   actions?: ReadonlyArray<{ label: string; run(): void; primary?: boolean; autofocus?: boolean }>;
+  /**
+   * A short title shown above the message (2.2.0, round 3). A toast with
+   * actions is a question: `role="alertdialog"` labelled by its title (else
+   * its message) and described by its message, outside the polite status
+   * region, so focusing its default action announces the question.
+   */
+  title?: string;
   /** Called once when the toast goes without an action chosen (Dismiss, the timeout, `dismiss()`). */
   onDismiss?(): void;
   /** Focus an action (a question the reader must answer): the one marked `autofocus`, else the first. */
@@ -374,13 +384,18 @@ export interface Toast {
 }
 
 const TONE_ICON: Record<ToastTone, IconName> = { info: 'info', success: 'check', warning: 'warning', error: 'warning' };
-const stacks = new WeakMap<object, UiElement>();
+const stacks = new WeakMap<object, { live: UiElement; questions: UiElement }>();
+
+let toastIds = 0;
 
 /**
  * Show a toast in a chrome root (a shadow root from {@link createShadowRoot},
- * or an element inside one). Toasts stack bottom-centre in one
- * `aria-live="polite"` region per root; each has a Dismiss button and goes by
- * itself after `timeoutMs` (paused while the pointer or focus is on it).
+ * or an element inside one). Toasts stack bottom-centre: plain ones in one
+ * `role="status"` `aria-live="polite"` region per root, toasts with actions
+ * (questions) beside it as `role="alertdialog"` (labelled by the title, else
+ * the message; described by the message), so a question is not read twice;
+ * each has a Dismiss button and goes by itself after `timeoutMs` (paused
+ * while the pointer or focus is on it).
  */
 export function showToast(root: ShadowRootLike | UiElement, message: string, options: ToastOptions = {}): Toast {
   const doc = documentOf((root as { host?: UiElement }).host ?? (root as UiElement));
@@ -388,12 +403,18 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   const view = viewOf(doc);
   let stack = stacks.get(root);
   if (!stack) {
-    stack = doc.createElement('div');
-    stack.className = 'orz-toast-stack';
-    stack.setAttribute('role', 'status');
-    stack.setAttribute('aria-live', 'polite');
-    stack.setAttribute('aria-relevant', 'additions');
-    root.append(stack);
+    const wrap = doc.createElement('div');
+    wrap.className = 'orz-toasts';
+    const live = doc.createElement('div');
+    live.className = 'orz-toast-stack';
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    live.setAttribute('aria-relevant', 'additions');
+    const questions = doc.createElement('div');
+    questions.className = 'orz-toast-questions';
+    wrap.append(live, questions);
+    root.append(wrap);
+    stack = { live, questions };
     stacks.set(root, stack);
   }
   const tone: ToastTone = options.tone && Object.prototype.hasOwnProperty.call(TONE_ICON, options.tone) ? options.tone : 'info';
@@ -402,7 +423,22 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   const toast = doc.createElement('div');
   toast.className = 'orz-toast';
   toast.setAttribute('data-tone', tone);
-  const msg = textElement(doc, 'span', 'orz-toast__message', String(message));
+  const msg = { el: doc.createElement('span') };
+  msg.el.className = 'orz-toast__message';
+  const title = typeof options.title === 'string' && options.title ? textElement(doc, 'strong', 'orz-toast__title', options.title) : null;
+  const body = textElement(doc, 'span', 'orz-toast__text', String(message));
+  if (title) msg.el.append(title.el);
+  msg.el.append(body.el);
+  if (actions.length) {
+    // a question: announced when its default action takes the focus (not also by the polite region)
+    const id = `orz-toast-${++toastIds}`;
+    body.el.setAttribute('id', `${id}-text`);
+    if (title) title.el.setAttribute('id', `${id}-title`);
+    toast.setAttribute('role', 'alertdialog');
+    toast.setAttribute('aria-modal', 'false');
+    toast.setAttribute('aria-labelledby', title ? `${id}-title` : `${id}-text`);
+    if (title) toast.setAttribute('aria-describedby', `${id}-text`);
+  }
   const close = doc.createElement('button');
   close.setAttribute('type', 'button');
   close.className = 'orz-btn orz-btn--ghost orz-btn--icon orz-toast__close';
@@ -432,7 +468,7 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
     msg.el.append(row);
   }
   toast.append(iconElement(doc, TONE_ICON[tone]), msg.el, close);
-  stack.append(toast);
+  (actions.length ? stack.questions : stack.live).append(toast);
   let timer: unknown = null;
   let gone = false;
   const focusDefault = (): void => { if (!gone) (preferred ?? buttons[0])?.focus?.(); };
@@ -460,16 +496,41 @@ export function showToast(root: ShadowRootLike | UiElement, message: string, opt
   toast.addEventListener('focusin', clear);
   toast.addEventListener('focusout', arm);
   arm();
-  return { dismiss, focus: focusDefault, setMessage: (m: string) => { if (!gone) msg.text.data = String(m); } };
+  return { dismiss, focus: focusDefault, setMessage: (m: string) => { if (!gone) body.text.data = String(m); } };
 }
 
-/** What the reader is asked when the file changed on disk since the page opened it (a save's `conflict` result, 2.2.0). */
-export const SAVE_CONFLICT_MESSAGE = 'This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?';
+/** The title of the conflict question (its accessible name: round 3). */
+export const SAVE_CONFLICT_TITLE = 'The file changed on disk';
+
+/**
+ * What the reader is asked when the file changed on disk since the page
+ * opened it (a save's `conflict` result, 2.2.0; round 3: the consequence of
+ * each answer is said, and a later save of the page also counts).
+ */
+export const SAVE_CONFLICT_MESSAGE = 'This file changed on disk since this page opened or last saved it (another program or an agent edited it). Download a copy to keep both versions; replacing the file loses the version on disk.';
+
+/**
+ * The question for an editor with no opened file (an app's editor, round 3):
+ * the file the reader picked holds another version of the document.
+ */
+export const SAVE_CONFLICT_PICKED_MESSAGE = 'The file you chose holds another version of this document (another program or an agent edited it). Download a copy to keep both versions; replacing the file loses the version on disk.';
+
+/** The question's answers: the safe default first (round 3: the destructive one is never styled primary). */
+export const SAVE_CONFLICT_LABELS = { download: 'Download a copy instead', replace: 'Replace it (the version on disk is lost)' } as const;
+
+/** What the reader is told after "Download a copy instead" (round 3, L11: the next save asks again). */
+export const SAVE_CONFLICT_DOWNLOADED = 'Download started; the file on disk is unchanged. Your next save asks again.';
 
 /** Options of {@link askSaveConflict} (2.2.0). */
 export interface SaveConflictOptions {
   /** Where the focus goes back to after the reader answers or dismisses (the element focused before the save). */
   returnFocus?: { focus?(options?: { preventScroll?: boolean }): void } | null;
+  /**
+   * The page or editor was opened from a file (default `true`): the question
+   * says the file changed since then. `false` (an app's editor with no opened
+   * file, round 3): {@link SAVE_CONFLICT_PICKED_MESSAGE}.
+   */
+  opened?: boolean;
 }
 
 /** The open conflict question of a root: one at a time. */
@@ -477,17 +538,20 @@ const conflictQuestions = new WeakMap<object, { toast: Toast; settle(choice: 're
 
 /**
  * Ask the reader about a save that found the file changed on disk (2.2.0,
- * shell-runtime §1 step 3.4): a toast that stays, with "Replace it" and
- * "Download a copy instead"; the focus goes to the non-destructive "Download
- * a copy instead", Escape dismisses it (nothing chosen), and after a choice
- * or a dismissal the focus goes back to `returnFocus`. Resolves the choice,
- * or null when the toast is dismissed. One question per root: asked again
- * while one is open, the open one is focused and answers the newer call —
- * the older call resolves null (a caller then writes nothing: an older text
- * is never written over the newer one). Writes text only.
+ * shell-runtime §1 step 3.4): a question (`role="alertdialog"`, titled
+ * {@link SAVE_CONFLICT_TITLE}, described by the message) that stays, with
+ * "Download a copy instead" (focused and styled as the default: it changes
+ * nothing on disk) and "Replace it (the version on disk is lost)"; Escape
+ * dismisses it (nothing chosen), and after a choice or a dismissal the
+ * focus goes back to `returnFocus`. Resolves the choice, or null when the
+ * toast is dismissed. One question per root: asked again while one is open,
+ * the open one is focused and answers the newer call — the older call
+ * resolves null (a caller then writes nothing: an older text is never
+ * written over the newer one). Writes text only.
  */
 export function askSaveConflict(root: ShadowRootLike | UiElement, name?: string, options: SaveConflictOptions = {}): Promise<'replace' | 'download' | null> {
-  const message = name ? `${name}: ${SAVE_CONFLICT_MESSAGE}` : SAVE_CONFLICT_MESSAGE;
+  const text = options.opened === false ? SAVE_CONFLICT_PICKED_MESSAGE : SAVE_CONFLICT_MESSAGE;
+  const message = name ? `${name}: ${text}` : text;
   const back = (): void => { try { options.returnFocus?.focus?.({ preventScroll: true }); } catch { /* gone */ } };
   return new Promise((resolve) => {
     const open = conflictQuestions.get(root);
@@ -510,10 +574,11 @@ export function askSaveConflict(root: ShadowRootLike | UiElement, name?: string,
     conflictQuestions.set(root, entry);
     entry.toast = showToast(root, message, {
       tone: 'warning',
+      title: SAVE_CONFLICT_TITLE,
       focus: true,
       actions: [
-        { label: 'Replace it', primary: true, run: () => answer('replace') },
-        { label: 'Download a copy instead', autofocus: true, run: () => answer('download') },
+        { label: SAVE_CONFLICT_LABELS.download, primary: true, autofocus: true, run: () => answer('download') },
+        { label: SAVE_CONFLICT_LABELS.replace, run: () => answer('replace') },
       ],
       onDismiss: () => answer(null),
     });

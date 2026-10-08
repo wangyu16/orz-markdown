@@ -36,7 +36,9 @@ export type StubVariant =
   // 2.2.0: a file that fetches a bundle before the reader asks for the update
   | 'prefetch-bundle'
   // round 2 of the carrier-app loop: a save that writes over a file changed on disk without asking
-  | 'save-ignores-conflict';
+  | 'save-ignores-conflict'
+  // round 3 of the carrier-app loop: the page's save and the update answer a conflict themselves
+  | 'page-overwrites-conflict' | 'update-overwrites-conflict';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 

@@ -406,7 +406,13 @@ export interface CarrierApp {
     attach(editor: EditorShell): () => void;
     /** Show a toast in the chrome. */
     toast(message: string, tone?: 'info' | 'success' | 'warning' | 'error'): void;
-    /** Show or hide the chrome (slides' presenter hides it). */
+    /**
+     * Show or hide the chrome (slides' presenter hides it): the bar and the
+     * editor, not the toasts. Hiding it while the focus is in the bar or the
+     * editor moves the focus to the page (the read view's element when it
+     * takes the focus, else the document), so the read view's keys work at
+     * once (round 3 of the carrier-app loop).
+     */
     setChromeVisible(visible: boolean): void;
     /** The read view. */
     readonly view: CarrierReadView;

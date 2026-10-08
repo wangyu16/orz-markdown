@@ -42,7 +42,7 @@ const DEFAULT_LANES = 3;
  */
 export const EXCLUSIVE_CHECKS: readonly string[] = ['C.edit.preview-isolation'];
 /** Started first: they mostly wait (a host that never acknowledges takes 10 s). */
-const FIRST: readonly string[] = ['C.host.no-ack', 'C.update.edit-during', 'C.update.resigned', 'C.save.save-as-elsewhere', 'C.save.copy-elsewhere', 'C.law.content-independence', 'C.law.determinism'];
+const FIRST: readonly string[] = ['C.host.no-ack', 'C.update.edit-during', 'C.update.resigned', 'C.save.save-as-elsewhere', 'C.save.copy-elsewhere', 'C.save.conflict', 'C.law.content-independence', 'C.law.determinism'];
 
 function selected(options: ConformanceOptions): string[] {
   for (const id of [...(options.only ?? []), ...(options.skip ?? [])]) checkInfo(id); // unknown ids throw

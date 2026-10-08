@@ -34,6 +34,6 @@ export type {
 // PerformUpdateOptions, PerformUpdateResult, UpdateErrorCode, FetchLike, ResponseLike, Semver, SandboxFrameLike
 export * from './update.js';
 export * from './indicator.js'; // mountUpdateIndicator; IndicatorHandlers, UpdateIndicator
-export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE } from './chrome.js';
+export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_PICKED_MESSAGE, SAVE_CONFLICT_TITLE, SAVE_CONFLICT_LABELS, SAVE_CONFLICT_DOWNLOADED } from './chrome.js';
 export type { IconName, KindIcon, ToastTone, ToastOptions, Toast, SaveConflictOptions } from './chrome.js';
 export type { UiElement, UiDocument, UiView, UiEventLike, UiListener, ShadowRootLike, TextLike, StyleLike } from './types.js';

@@ -141,7 +141,12 @@ placement?: 'bar' | 'menu', inEdit?, run(app) }` — run with the app handle
 and the editor but not the toast stack, so a save's or an action's message
 and the conflict question still show while presenting — round 2 of the
 carrier-app loop; a kind that presents in the browser's full screen shows
-its own element only, so it shows its own messages there). A bar action
+its own element only, so it shows its own messages there). Hiding the bar
+while the focus is in it (or in the editor) — a keyboard user pressed
+Present — moves the focus to the page: the read view's element when it
+takes the focus, else the document, so Escape and Space reach the read
+view's `onKey` at once (round 3, M5); a focused toast (the conflict
+question) keeps the focus. A bar action
 clicked with the pointer leaves the focus to the page afterwards (with the
 keyboard it stays on the button), so the read view's keys — slides' Space
 and Enter — work at once.
@@ -216,15 +221,23 @@ read view's keys — slides' Space — then work at once).
   changed on disk since the page opened it (another program or an agent
   wrote it; spec/shell-runtime.md §1 step 3.4) is never written silently:
   the outcome is `{ ok: false, via: 'file', error: 'conflict', conflict:
-  true }` and the reader is asked (`askSaveConflict`): **Replace it** saves
-  over it (`save(input, { overwrite: true })`, the document is then saved),
-  **Download a copy instead** downloads the file and leaves the document
-  unsaved. The editor's save asks the same. The question focuses Download a
-  copy instead (non-destructive), Escape dismisses it (nothing written) and
-  the focus goes back where it was; one question per page or editor: a
-  save while it is open does not call the saver (no second picker), focuses
-  it and makes it answer for the newer text — the older text is never
-  written. The saver reads the disk file's uid as the page reads its own
+  true }` and the reader is asked (`askSaveConflict`, an alertdialog titled
+  "The file changed on disk"): **Download a copy instead** (the default:
+  focused, styled primary) downloads the file and leaves the document
+  unsaved — "Your next save asks again" (every later save opens the picker
+  and is checked again: by design, round 3, L11); **Replace it (the version
+  on disk is lost)** saves over it (`save(input, { overwrite: true })`, the
+  document is then saved). The same holds for a newer shell on disk (an
+  agent's `upgrade`) and for the opened version put back over this page's
+  own save (shell-runtime §1 step 3.4, round 3). The editor's save asks the
+  same; an app's editor with no opened file is asked "The file you chose
+  holds another version of this document…" (`opened: false`). Escape
+  dismisses the question (nothing written) and the focus goes back where it
+  was; one question per page or editor: every save while it is open — the
+  second, the third — does not call the saver (no second picker), focuses
+  it and makes it answer for the newest text — an older text is never
+  written. The opened bytes the saver proves files with (`openedHtml`) are
+  assembled once they succeed: a failed assembly is not kept (round 3, K10). The saver reads the disk file's uid as the page reads its own
   (`readUid` = `readHeader`'s well-formed `uid`), so a quoted or block uid,
   or no uid on either side, is still this document (shell-runtime §1 step
   3.4).

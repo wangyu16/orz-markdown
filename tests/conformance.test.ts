@@ -405,6 +405,9 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['prefetch-bundle', 'C.update.prerelease', /bundle requests/],
     // round 2 of the carrier-app loop: a carrier that answers a conflict itself ("replace") passed the harness
     ['save-ignores-conflict', 'C.save.conflict', /wrote over the file that changed on disk without asking/],
+    // round 3: the conflict's blind spots — a page save with no editor open, the quiet update
+    ['page-overwrites-conflict', 'C.save.conflict', /page save \(OrzCarrier\.standalone\.save\(\), no editor open\): the save wrote over the file that changed on disk/],
+    ['update-overwrites-conflict', 'C.save.conflict', /update after an agent's edit: the update wrote over the file that changed on disk/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''} the ${variant} mutant fails ${id}`, async () => {

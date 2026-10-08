@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SAVE_CONFLICT_MESSAGE = exports.askSaveConflict = exports.KIND_ICON_MAX_PATHS = exports.isKindIcon = exports.anyIconElement = exports.iconElement = exports.showToast = exports.createShadowRoot = exports.ICONS = exports.CHROME_CSS = exports.HELLO_MAX_MS = exports.HELLO_INTERVAL_MS = exports.INCLUDE_TIMEOUT_MS = exports.AI_TIMEOUT_MS = exports.SAVE_ACK_TIMEOUT_MS = exports.MSG = exports.PROTOCOL_VERSION = exports.INCLUDE_PROTOCOL = exports.AI_PROTOCOL = exports.SAVE_PROTOCOL = exports.KIND_EXTENSIONS = exports.HOST_KINDS = void 0;
+exports.SAVE_CONFLICT_DOWNLOADED = exports.SAVE_CONFLICT_LABELS = exports.SAVE_CONFLICT_TITLE = exports.SAVE_CONFLICT_PICKED_MESSAGE = exports.SAVE_CONFLICT_MESSAGE = exports.askSaveConflict = exports.KIND_ICON_MAX_PATHS = exports.isKindIcon = exports.anyIconElement = exports.iconElement = exports.showToast = exports.createShadowRoot = exports.ICONS = exports.CHROME_CSS = exports.HELLO_MAX_MS = exports.HELLO_INTERVAL_MS = exports.INCLUDE_TIMEOUT_MS = exports.AI_TIMEOUT_MS = exports.SAVE_ACK_TIMEOUT_MS = exports.MSG = exports.PROTOCOL_VERSION = exports.INCLUDE_PROTOCOL = exports.AI_PROTOCOL = exports.SAVE_PROTOCOL = exports.KIND_EXTENSIONS = exports.HOST_KINDS = void 0;
 /**
  * `orz-markdown/carrier/shell` — the browser runtime every assembled orz file
  * shares (FD-03): the standalone save, reader preferences, both sides of the
@@ -66,4 +66,8 @@ Object.defineProperty(exports, "isKindIcon", { enumerable: true, get: function (
 Object.defineProperty(exports, "KIND_ICON_MAX_PATHS", { enumerable: true, get: function () { return chrome_js_1.KIND_ICON_MAX_PATHS; } });
 Object.defineProperty(exports, "askSaveConflict", { enumerable: true, get: function () { return chrome_js_1.askSaveConflict; } });
 Object.defineProperty(exports, "SAVE_CONFLICT_MESSAGE", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_MESSAGE; } });
+Object.defineProperty(exports, "SAVE_CONFLICT_PICKED_MESSAGE", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_PICKED_MESSAGE; } });
+Object.defineProperty(exports, "SAVE_CONFLICT_TITLE", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_TITLE; } });
+Object.defineProperty(exports, "SAVE_CONFLICT_LABELS", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_LABELS; } });
+Object.defineProperty(exports, "SAVE_CONFLICT_DOWNLOADED", { enumerable: true, get: function () { return chrome_js_1.SAVE_CONFLICT_DOWNLOADED; } });
 //# sourceMappingURL=index.js.map

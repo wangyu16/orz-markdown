@@ -649,6 +649,19 @@ describe('save', () => {
     r.shell.destroy();
   });
 
+  it('[E.8] round 3 (L9): a save conflict asks an editor that is not an assembled file (an app\'s, no openedHtml, not standalone) "The file you chose holds another version of this document…" — never "since this page opened it"; an assembled file\'s editor (standalone: true or openedHtml) is asked the opened-file question', async () => {
+    const { SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_PICKED_MESSAGE } = await import('../src/carrier/shell');
+    const saver = { save: async () => ({ via: 'file' as const, ok: false, error: 'conflict', conflict: true as const, picked: true, opened: false }), download: async () => ({ via: 'download' as const, ok: true, confirmed: false as const }), handleKey: () => null };
+    for (const [o, want] of [[{}, SAVE_CONFLICT_PICKED_MESSAGE], [{ standalone: true }, SAVE_CONFLICT_MESSAGE], [{ openedHtml: '<html>opened</html>' }, SAVE_CONFLICT_MESSAGE]] as const) {
+      const m = mount({ assemble: async (t: string) => `<html>${t.length}</html>`, saver, ...o });
+      type(m, 'q');
+      expect(await m.shell.save()).toMatchObject({ conflict: true });
+      const q = m.root.querySelector('[role="alertdialog"]')!;
+      expect(m.root.getElementById(q.getAttribute('aria-describedby')!)?.textContent, JSON.stringify(o)).toBe(want);
+      m.shell.destroy();
+    }
+  });
+
   it('[E.8] standalone host: save() assembles the current text and hands { text, html } to the saver; success clears dirty; a cancelled picker is no error; a failure keeps dirty', async () => {
     const assemble = vi.fn(async (t: string) => `<html data-len="${t.length}"></html>`);
     const ok = fakeSaver({ via: 'file', ok: true });
@@ -922,7 +935,7 @@ describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-a
     m.shell.destroy();
   });
 
-  it('[E.31] refreshPreview renders now even for an unchanged text; refreshPreview({ includes }) replaces the renderer\'s include record (null or {}: none) and forgets the fetched includes, so each include is read again from the new record or fetchInclude; saves keep the includes the shell was mounted with', async () => {
+  it('[E.31] refreshPreview renders now even for an unchanged text; refreshPreview({ includes }) replaces the renderer\'s include record (null or {}: none) and forgets the fetched includes, so each include is read again from the new record or fetchInclude; saves write the latest record (round 3 of the carrier-app loop, L7: what the preview shows is what the file keeps) while the opened bytes keep the mounted one', async () => {
     const asked: string[] = [];
     let answer = 'FIRST';
     const fetchInclude = async (t: string) => { asked.push(t); return `## ${answer} ${t}\n`; };
@@ -946,12 +959,30 @@ describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-a
     expect(renders.at(-1)).toContain('Record B</h2>');
     expect(renders.at(-1)).toContain('SECOND parts/a.md</h2>'); // a left the record: fetched again
     expect(asked).toEqual(['parts/b.md', 'parts/a.md']);
+    // a save now writes the new record (the unchanged text too: it is not the opened file any more), while
+    // the opened bytes the saver proves a file handle with keep the mounted record (a picker page, file:)
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const written: string[] = [];
+    g.window = { location: { protocol: 'file:', href: 'file:///me/n.md.html', pathname: '/me/n.md.html' }, showSaveFilePicker: async () => ({ name: 'n.md.html', getFile: async () => ({ text: async () => 'other bytes' }), createWritable: async () => ({ write: async (d: string) => { written.push(d); }, close: async () => undefined }) }) };
+    try {
+      const n1 = assembled.length;
+      expect(await m.shell.save()).toMatchObject({ ok: true, via: 'file' });
+      const now = assembled.slice(n1).map((x) => JSON.stringify(x));
+      expect(now.sort()).toEqual([JSON.stringify({ 'parts/a.md': '## Record A\n' }), JSON.stringify({ 'parts/b.md': '## Record B\n' })].sort());
+      expect(written).toHaveLength(1);
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
     await m.shell.refreshPreview({ includes: null });
     expect(renders.at(-1)).toContain('SECOND parts/b.md</h2>'); // the cache was cleared
     expect(asked).toEqual(['parts/b.md', 'parts/a.md', 'parts/a.md', 'parts/b.md']);
-    // saves keep the mounted includes
+    // with no record, a save writes none
+    const n2 = assembled.length;
     await m.shell.save().catch(() => undefined);
-    expect(assembled.every((x) => JSON.stringify(x) === JSON.stringify({ 'parts/a.md': '## Record A\n' }))).toBe(true);
+    expect(assembled.length).toBe(n2 + 1);
+    expect(assembled.at(-1)).toBeUndefined();
     m.shell.destroy();
     await m.shell.refreshPreview({ includes: {} }); // after destroy: nothing
   });

@@ -19,6 +19,7 @@
  * load, so the module imports safely in Node.
  */
 import { extract } from '../read.js';
+import { compareSemver } from './update.js';
 import { KIND_EXTENSIONS, type HostKind } from './protocol.js';
 import type { HostConnection } from './file-side.js';
 import { globalWindow, openedFileName, pageLocation, type FileHandleLike, type IdbDatabaseLike, type IdbFactoryLike, type IdbRequestLike, type IdbStoreLike, type SaverWindow } from './types.js';
@@ -46,9 +47,12 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  *   file is an orz file of this document (the same header `uid`, or no uid on
  *   either side) whose content — text, resolved includes and delivery — is
  *   neither the opened file's, what this page last wrote, nor what is being
- *   saved: it changed on disk since the page opened it (another program, an
- *   agent). The caller asks the reader: replace it (`save(input, { overwrite:
- *   true })`) or download a copy.
+ *   saved, or that holds the same content in a newer shell than the one being
+ *   saved (round 3: an agent's `upgrade`): it changed on disk since the page
+ *   opened it (another program, an agent). Also (round 3, `picked: false`):
+ *   the session's file holds the opened bytes again over this page's own
+ *   save (someone reverted it). The caller asks the reader: replace it
+ *   (`save(input, { overwrite: true })`) or download a copy.
  */
 export type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
@@ -282,8 +286,12 @@ export function headerUidOf(text: string): string | undefined {
   return undefined;
 }
 
-/** The parts of an orz file a save keeps: its text, resolved includes and delivery (what "the same file" means for a conflict). */
-interface FileContent { text: string; includes: string; delivery: string }
+/**
+ * The parts of an orz file a save keeps: its text, resolved includes and
+ * delivery (what "the same file" means for a conflict), plus its shell
+ * version (a newer one on disk is an agent's upgrade a save would undo).
+ */
+interface FileContent { text: string; includes: string; delivery: string; shell: string }
 
 /** An orz file's content (`extract`), or null for anything else. Includes compare as sorted entries. */
 function contentOf(html: string | null | undefined): FileContent | null {
@@ -292,7 +300,7 @@ function contentOf(html: string | null | undefined): FileContent | null {
     const x = extract(html);
     if (!x) return null;
     const inc = x.includes ? Object.keys(x.includes).sort().map((k) => [k, x.includes![k]]) : [];
-    return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery };
+    return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery, shell: x.shell };
   } catch {
     return null;
   }
@@ -300,6 +308,9 @@ function contentOf(html: string | null | undefined): FileContent | null {
 
 const sameContent = (a: FileContent | null, b: FileContent | null): boolean =>
   !!a && !!b && a.text === b.text && a.includes === b.includes && a.delivery === b.delivery;
+
+/** `a`'s shell version is newer than `b`'s (both semver; anything else is not newer). */
+const newerShell = (a: FileContent | null, b: FileContent | null): boolean => !!a && !!b && compareSemver(a.shell, b.shell) === 1;
 
 const DESCRIPTIONS: Record<HostKind, string> = {
   md: 'orz document',
@@ -374,8 +385,8 @@ export function createSaver(opts: SaverOptions): Saver {
   let session: { handle: FileHandleLike; opened: boolean; last: string } | null = null;
   /** What this page last wrote through any handle (kept when the session handle is dropped). */
   let lastWritten: string | null = null;
-  /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
-  let conflicted: FileHandleLike | null = null;
+  /** The file of a save that found it changed on disk (and whether it was picked, or proved opened): `overwrite` writes it without a second picker. */
+  let conflicted: { handle: FileHandleLike; picked: boolean; opened: boolean } | null = null;
 
   /** The opened file's content (`extract` of the opened bytes), once per opened bytes. */
   let openedContent: { of: string; content: FileContent | null } | null = null;
@@ -399,8 +410,10 @@ export function createSaver(opts: SaverOptions): Saver {
    * documents) — whose content (text, includes, delivery: not the raw bytes,
    * so a tool that re-encoded the same file is no change) is neither the
    * opened file's, this page's last write nor the file being saved: it
-   * changed on disk since the page opened it. Needs the opened bytes (without
-   * them nothing is known).
+   * changed on disk since the page opened it. The same content in a NEWER
+   * shell than the file being saved is a change too (round 3, L12: an agent
+   * ran `upgrade`; writing the page's older shell would undo it) unless this
+   * page wrote it. Needs the opened bytes (without them nothing is known).
    */
   const changedOnDisk = (before: string | null, mine: string | undefined, html: string): boolean => {
     if (before === null || mine === undefined || before === mine || before === lastWritten || before === html) return false;
@@ -409,7 +422,23 @@ export function createSaver(opts: SaverOptions): Saver {
     const mineUid = typeof opts.uid === 'string' && SHELL_UID_PATTERN.test(opts.uid) ? opts.uid : undefined;
     const diskUid = uidOf(disk.text);
     if (mineUid && diskUid && diskUid !== mineUid) return false; // another document
-    return !sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
+    const last = contentOf(lastWritten);
+    const saving = contentOf(html);
+    if (!sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, last) && !sameContent(disk, saving)) return true;
+    return newerShell(disk, saving) && !(sameContent(disk, last) && disk.shell === last!.shell);
+  };
+
+  /**
+   * The session's file holds the opened bytes again although this page wrote
+   * something else into it since (round 3, F3): someone put the opened
+   * version back over this page's save (a revert, `git checkout`, an agent).
+   * Asked like any change — unless the opened content is what this page last
+   * wrote or is saving (nothing would be lost).
+   */
+  const revertedOnDisk = (now: string, html: string): boolean => {
+    if (lastWritten === null || now === lastWritten || now === html) return false;
+    const disk = contentOf(now);
+    return !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
   };
 
   /** A remembered handle proved to be the opened file, or null. */
@@ -461,16 +490,22 @@ export function createSaver(opts: SaverOptions): Saver {
     let picked = false;
     if (overwrite && conflicted) {
       // the reader chose to replace the file that changed on disk: no second picker, no check
-      h = conflicted;
-      picked = true;
+      ({ handle: h, picked, opened } = conflicted);
     }
     conflicted = null;
     if (!h && session) {
       // this page's handle, if the file still holds what this page wrote last (or the opened bytes)
       const now = await readText(session.handle);
       if (now !== null && now === session.last) { h = session.handle; opened = session.opened; }
-      else if (now !== null && now === (await openedBytes())) { h = session.handle; opened = true; }
-      else session = null; // written by someone else since, or unreadable: ask again
+      else if (now !== null && now === (await openedBytes())) {
+        // the opened bytes again (m24: proved like any) — but put back over this page's own save: ask (F3)
+        if (!overwrite && revertedOnDisk(now, html)) {
+          conflicted = { handle: session.handle, picked: false, opened: true };
+          return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, ...(typeof session.handle.name === 'string' ? { name: session.handle.name } : {}) };
+        }
+        h = session.handle;
+        opened = true;
+      } else session = null; // written by someone else since, or unreadable: ask again
     }
     if (!h && k) {
       h = await remembered(k, win);
@@ -494,7 +529,7 @@ export function createSaver(opts: SaverOptions): Saver {
       opened = before !== null && before === mine;
       // this document's file, changed on disk since the page opened it: never written silently
       if (!overwrite && changedOnDisk(before, mine, html)) {
-        conflicted = h;
+        conflicted = { handle: h, picked: true, opened: false };
         return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
       }
     }

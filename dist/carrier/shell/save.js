@@ -25,6 +25,7 @@ exports.createSaver = createSaver;
  * load, so the module imports safely in Node.
  */
 const read_js_1 = require("../read.js");
+const update_js_1 = require("./update.js");
 const protocol_js_1 = require("./protocol.js");
 const types_js_1 = require("./types.js");
 /** FC-18 §5.1: a well-formed uid. (Same pattern as `UID_PATTERN` in the kit core.) */
@@ -180,13 +181,15 @@ function contentOf(html) {
         if (!x)
             return null;
         const inc = x.includes ? Object.keys(x.includes).sort().map((k) => [k, x.includes[k]]) : [];
-        return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery };
+        return { text: x.text, includes: inc.length ? JSON.stringify(inc) : '', delivery: x.delivery, shell: x.shell };
     }
     catch {
         return null;
     }
 }
 const sameContent = (a, b) => !!a && !!b && a.text === b.text && a.includes === b.includes && a.delivery === b.delivery;
+/** `a`'s shell version is newer than `b`'s (both semver; anything else is not newer). */
+const newerShell = (a, b) => !!a && !!b && (0, update_js_1.compareSemver)(a.shell, b.shell) === 1;
 const DESCRIPTIONS = {
     md: 'orz document',
     slides: 'orz slides',
@@ -267,7 +270,7 @@ function createSaver(opts) {
     let session = null;
     /** What this page last wrote through any handle (kept when the session handle is dropped). */
     let lastWritten = null;
-    /** The file picked for a save that found it changed on disk: `overwrite` writes it without a second picker. */
+    /** The file of a save that found it changed on disk (and whether it was picked, or proved opened): `overwrite` writes it without a second picker. */
     let conflicted = null;
     /** The opened file's content (`extract` of the opened bytes), once per opened bytes. */
     let openedContent = null;
@@ -292,8 +295,10 @@ function createSaver(opts) {
      * documents) — whose content (text, includes, delivery: not the raw bytes,
      * so a tool that re-encoded the same file is no change) is neither the
      * opened file's, this page's last write nor the file being saved: it
-     * changed on disk since the page opened it. Needs the opened bytes (without
-     * them nothing is known).
+     * changed on disk since the page opened it. The same content in a NEWER
+     * shell than the file being saved is a change too (round 3, L12: an agent
+     * ran `upgrade`; writing the page's older shell would undo it) unless this
+     * page wrote it. Needs the opened bytes (without them nothing is known).
      */
     const changedOnDisk = (before, mine, html) => {
         if (before === null || mine === undefined || before === mine || before === lastWritten || before === html)
@@ -305,7 +310,24 @@ function createSaver(opts) {
         const diskUid = uidOf(disk.text);
         if (mineUid && diskUid && diskUid !== mineUid)
             return false; // another document
-        return !sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
+        const last = contentOf(lastWritten);
+        const saving = contentOf(html);
+        if (!sameContent(disk, contentOfOpened(mine)) && !sameContent(disk, last) && !sameContent(disk, saving))
+            return true;
+        return newerShell(disk, saving) && !(sameContent(disk, last) && disk.shell === last.shell);
+    };
+    /**
+     * The session's file holds the opened bytes again although this page wrote
+     * something else into it since (round 3, F3): someone put the opened
+     * version back over this page's save (a revert, `git checkout`, an agent).
+     * Asked like any change — unless the opened content is what this page last
+     * wrote or is saving (nothing would be lost).
+     */
+    const revertedOnDisk = (now, html) => {
+        if (lastWritten === null || now === lastWritten || now === html)
+            return false;
+        const disk = contentOf(now);
+        return !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
     };
     /** A remembered handle proved to be the opened file, or null. */
     const remembered = async (k, win) => {
@@ -367,8 +389,7 @@ function createSaver(opts) {
         let picked = false;
         if (overwrite && conflicted) {
             // the reader chose to replace the file that changed on disk: no second picker, no check
-            h = conflicted;
-            picked = true;
+            ({ handle: h, picked, opened } = conflicted);
         }
         conflicted = null;
         if (!h && session) {
@@ -379,6 +400,11 @@ function createSaver(opts) {
                 opened = session.opened;
             }
             else if (now !== null && now === (await openedBytes())) {
+                // the opened bytes again (m24: proved like any) — but put back over this page's own save: ask (F3)
+                if (!overwrite && revertedOnDisk(now, html)) {
+                    conflicted = { handle: session.handle, picked: false, opened: true };
+                    return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, ...(typeof session.handle.name === 'string' ? { name: session.handle.name } : {}) };
+                }
                 h = session.handle;
                 opened = true;
             }
@@ -410,7 +436,7 @@ function createSaver(opts) {
             opened = before !== null && before === mine;
             // this document's file, changed on disk since the page opened it: never written silently
             if (!overwrite && changedOnDisk(before, mine, html)) {
-                conflicted = h;
+                conflicted = { handle: h, picked: true, opened: false };
                 return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
             }
         }

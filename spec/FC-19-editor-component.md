@@ -117,7 +117,7 @@ interface Editor {
   applyAi(proposal: AiProposal, options?: { proposed?: string }): AiOutcome;          // one undoable edit; refused if the text changed
   // added 2.2.0 (additive, round 2 of the carrier-app loop)
   readonly ready: Promise<{ engine: string; error?: unknown }>;   // the engine is final (e.g. "codemirror6", or "textarea" with the load error); never rejects
-  refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;  // render now; with includes: replace the record, forget fetched includes
+  refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;  // render now; with includes: replace the record (saves write it too), forget fetched includes
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -188,8 +188,11 @@ now, also when the text has not changed (an include became available). With
 `includes`, the renderer's include record is replaced by it (`null` or `{}`:
 none) and the includes fetched so far (`fetchInclude`) are forgotten, so
 every include is read again — an app that resolved new includes hands them
-over without remounting. Saves keep the includes the editor was mounted
-with (an assembled file's `#orz-includes`).
+over without remounting. Saves write the latest record (round 3 of the
+carrier-app loop, L7: what the preview shows is what the file keeps; `null`
+or `{}`: a save writes no `#orz-includes`), while the opened bytes the saver
+proves a file with (the default `openedHtml`) stay the assembly of the
+mounted text with the mounted includes (the opened file's `#orz-includes`).
 
 **`nonce`** (2.2.0, additive): the §8.4 CSP recipe needs one nonce for the
 preview frame and the editor's own `<script>`/`<style>`; before, it was the
@@ -627,9 +630,13 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   download (`createSaver({ servedNotice: false })`). A cancelled picker is
   not an error. A picked file that changed on disk since the page opened it
   (shell-runtime §1 step 3.4) is not written: the shell asks the reader
-  (Replace it → `saver.save(input, { overwrite: true })`; Download a copy
-  instead → `saver.download`) and `save()` resolves `{ ok: false, via:
-  'file', error: 'conflict', conflict: true }`.
+  (`askSaveConflict`, with `opened: false` — "The file you chose holds
+  another version of this document…" — for an editor that is not an
+  assembled file; Download a copy instead → `saver.download`, the default;
+  Replace it (the version on disk is lost) → `saver.save(input, {
+  overwrite: true })`) and `save()` resolves `{ ok: false, via: 'file',
+  error: 'conflict', conflict: true }`; every save while the question is
+  open answers it instead of calling the saver.
 - One save at a time; dirty clears only on success (an edit made during the
   save stays dirty); a toast announces the result — "Download started." for
   a download (the browser has it; it may not have finished; dirty clears),

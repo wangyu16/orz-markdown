@@ -116,7 +116,9 @@ caller words it "Download started", never "Saved". Its `name` is
       page last wrote to it (or the opened bytes): a second save never
       prompts. Its `opened` is that of its first save, or `true` when the
       file holds the opened bytes (again: e.g. the opened file copied over
-      the one picked earlier — proved by content like any). A file someone else
+      the one picked earlier — proved by content like any) — but the opened
+      version put back over what this page wrote (a revert, `git checkout`,
+      an agent) is asked about first (step 4; round 3, F3). A file someone else
       wrote since (another tab, another tool) gets the picker;
    2. else the handle remembered under the handle key (below), used only
       when **the record's page location equals this page's** (the URL
@@ -139,15 +141,18 @@ caller words it "Download started", never "Saved". Its `name` is
       `.html`). The picked file is the opened one (`opened: true`) only if,
       before the write, it holds the opened bytes — a new file, or a
       same-named file in the folder the picker opened in, is not.
-   4. **A file that changed on disk** (2.2.0, rounds 1–2 of the carrier-app
+   4. **A file that changed on disk** (2.2.0, rounds 1–3 of the carrier-app
       loop): when the picked (or re-picked — the session's handle was
       dropped because someone else wrote its file) file is an orz file
       (`extract`) of **this document** and its **content** is neither the
       opened file's (from `openedHtml`), what this page last wrote, nor the
-      file being saved, nothing is written: → `{ via: 'file', ok: false,
-      error: 'conflict', conflict: true, picked: true, opened: false, name? }`.
-      Another program or an agent edited the document since the page opened
-      it; writing would lose that edit silently.
+      file being saved — or it holds such content in a **newer shell** than
+      the file being saved (semver, round 3, L12: an agent ran `upgrade`;
+      writing would put the older shell back) and this page did not write
+      that shell itself — nothing is written: → `{ via: 'file', ok: false,
+      error: 'conflict', conflict: true, picked: true, opened: false,
+      name? }`. Another program or an agent edited the document since the
+      page opened it; writing would lose that edit silently.
       - *This document:* the file's header `uid` (read with `readUid`, else
         `headerUidOf`) is the saver's `uid` — or either side has none (a
         document without a uid is still this document: a different content
@@ -157,33 +162,58 @@ caller words it "Download started", never "Saved". Its `name` is
       - *Content:* the extracted text, the resolved includes (`#orz-includes`,
         compared as entries) and the delivery — not the raw bytes. A tool
         that wrote the same text, includes and delivery again in other bytes
-        (another shell version, CR LF line endings) changed nothing the page
-        would lose; an agent that re-assembled the same text with new
-        includes or `cdn` delivery did, and is asked about (the page would
-        write back its old includes or delivery).
+        (the same or an older shell version, CR LF line endings) changed
+        nothing the page would lose; an agent that re-assembled the same
+        text with new includes or `cdn` delivery, or in a newer shell, did,
+        and is asked about.
+      - *Reverted* (round 3, F3): the session's file (step 1) holds the
+        opened bytes again although this page wrote something else into it
+        — someone put the opened version back over this page's save. Asked
+        like any change, without a picker: → `{ via: 'file', ok: false,
+        error: 'conflict', conflict: true, picked: false, opened: false,
+        name? }` (then `overwrite` writes that file, `opened: true`, and it
+        is remembered: m24's proof by content still holds), unless the
+        opened content is what this page last wrote or is saving (nothing
+        would be lost). Decided over keeping the silent write: a revert is
+        a deliberate edit on disk like any other, and asking costs one
+        question; nothing legitimate depends on the silent write (m24's
+        "the opened file copied over the one picked earlier" now asks once,
+        then behaves as before).
 
-      The caller asks the reader — `askSaveConflict(root, name?)` (§8):
-      "This file changed on disk since you opened it (another program or an
-      agent edited it). Replace it with your version?" with **Replace it**
-      and **Download a copy instead** (focused: the choice that changes
-      nothing on disk; Escape dismisses, writing nothing) — and on Replace it
-      calls `save(input, { overwrite: true })`, which writes the file picked
-      for the conflicting save (no second picker; no check; `opened: false`,
-      so it is not remembered), or on Download a copy instead
-      `download({ html })`. **One question at a time:** while it is open, a
-      further save of that page or editor does not call the saver (no second
-      picker): the open question is focused and answers for the newer text —
-      the older text is never written. Another document's file, a file that
-      is not an orz file, the opened content, this page's last write or the
-      file being saved are no conflict, and without `openedHtml` nothing is
-      (nothing is known about the opened text). *Limit:* only a picked file
-      is checked — a remembered or session handle is reused only while its
-      file holds the opened bytes or this page's last write, so a changed
-      one never gets here without the picker. A quiet update whose save
-      finds a conflict writes nothing and says so (the carrier app's
-      indicator: "The file changed on disk since you opened it … so the
-      update wrote nothing. Reload the page to open its version, then
-      update.").
+      The caller asks the reader — `askSaveConflict(root, name?, { opened?
+      })` (§8), an alertdialog titled "The file changed on disk": "This
+      file changed on disk since this page opened or last saved it (another
+      program or an agent edited it). Download a copy to keep both
+      versions; replacing the file loses the version on disk." (for an
+      editor that is not an assembled file, `opened: false`: "The file you
+      chose holds another version of this document …") with **Download a
+      copy instead** (focused and styled as the default: it changes nothing
+      on disk; Escape dismisses, writing nothing) and **Replace it (the
+      version on disk is lost)** — and on Replace it calls `save(input, {
+      overwrite: true })`, which writes the file of the conflicting save (no
+      second picker; no check; `opened: false` for a picked file, so it is
+      not remembered; `true` for a reverted session file), or on Download a
+      copy instead `download({ html })` and says "Download started; the file
+      on disk is unchanged. Your next save asks again." **After a download,
+      every later save asks again** (round 3, L11; by design): the file on
+      disk still differs, so each save opens the picker (or, for a reverted
+      session file, finds it again) and is checked again until the reader
+      replaces the file, saves elsewhere, or reloads the page to open the
+      file's own version. **One question at a time:** while it is open,
+      every further save of that page or editor does not call the saver (no
+      second picker): the open question is focused and answers for the
+      newest text — an older text is never written. Another document's
+      file, a file that is not an orz file, the opened content, this page's
+      last write or the file being saved are no conflict, and without
+      `openedHtml` nothing is (nothing is known about the opened text: the
+      saver never reports a conflict). *Limit:* a remembered handle is
+      reused only while its file holds the opened bytes, and a session
+      handle while its file holds this page's last write or the opened
+      bytes (then asked about as above), so a changed one never gets here
+      without the picker. A quiet update whose save finds a conflict writes
+      nothing and says so (the carrier app's indicator: "The file changed on
+      disk since you opened it … so the update wrote nothing. Reload the
+      page to open its version, then update.").
 
    Then `createWritable` → `write(html)` → `close` → `{ via: 'file', ok:
    true, picked, opened, name }`, and a handle proved to be the opened file
@@ -522,9 +552,13 @@ shadow roots and does not compete with it.
 - **`createShadowRoot(host, { mode? })`** — attaches an (`open` by default)
   shadow root and installs `CHROME_CSS` as a constructed stylesheet (no
   inline `<style>`, so a strict `style-src` keeps working), else a `<style>`.
-- **`showToast(root, message, { tone, timeoutMs, actions?, onDismiss?, focus? })`** — `tone` `info` |
+- **`showToast(root, message, { tone, timeoutMs, actions?, onDismiss?, focus?, title? })`** — `tone` `info` |
   `success` | `warning` | `error`; one `role="status"` `aria-live="polite"`
-  stack per root (bottom centre), toasts stack, each has a Dismiss button and
+  stack per root (bottom centre) for plain toasts; a toast with actions is a
+  question (round 3, M6): `role="alertdialog"` (`aria-modal="false"`),
+  labelled by its `title` (else its message) and described by its message,
+  placed above the status stack and outside it (so it is announced once,
+  when its default action takes the focus); toasts stack, each has a Dismiss button and
   goes after `timeoutMs` (default 5 s; 8 s for warnings and errors; `0`
   stays), paused while hovered or focused. The message is text, never HTML.
   `actions` (2.2.0): buttons labelled as text; choosing one dismisses the
@@ -534,14 +568,20 @@ shadow roots and does not compete with it.
   Escape inside a toast dismisses it (and goes no further). The returned
   `Toast` has `dismiss()`, `focus()` (its default action again) and
   `setMessage(text)`.
-- **`askSaveConflict(root, name?, { returnFocus? })`** (2.2.0) — the
+- **`askSaveConflict(root, name?, { returnFocus?, opened? })`** (2.2.0) — the
   question of §1 step 3.4 as a toast with actions: resolves `'replace'`,
   `'download'` or `null` (dismissed: the Dismiss button, Escape). The focus
-  goes to **Download a copy instead** (non-destructive) and, after the
-  answer, back to `returnFocus` (the element focused before the save). One
+  goes to **Download a copy instead** (non-destructive, the first action,
+  styled primary) and, after the answer, back to `returnFocus` (the element
+  focused before the save); **Replace it (the version on disk is lost)** is
+  never styled primary (round 3, L9). One
   question per root: asked again while one is open, the open one is focused,
   takes the newer `name` and answers the newer call; the older call
-  resolves `null`. `SAVE_CONFLICT_MESSAGE` is its text.
+  resolves `null`. Its title is `SAVE_CONFLICT_TITLE`, its text
+  `SAVE_CONFLICT_MESSAGE` (`opened: false`: `SAVE_CONFLICT_PICKED_MESSAGE`,
+  which does not say "since you opened it"), its labels
+  `SAVE_CONFLICT_LABELS`, and `SAVE_CONFLICT_DOWNLOADED` is what a caller
+  says after Download a copy instead.
 
 Vocabulary origin: orz-mdhtml's light/dark `--c-*` tokens and dark editor bar
 (`src/template.ts`) and orz-poster's floating launcher and toast

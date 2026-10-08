@@ -367,3 +367,48 @@ Not done (optional): a third choice "Show the file's version" in the
 conflict question (it needs the saver to hand out the disk bytes; left for
 an owner call).
 
+
+### Round 3 — 2026-10-08, kit-side fixes
+
+Two adversaries against the round-2 fixes: a claims adversary (probes
+`/tmp/r3advA_x7q`: Chrome probes r1–r4, a saver probe, 28 kit mutations —
+K03, K10, K12, K25 survived — and 32 orz-mdhtml CLI mutations) and a
+design audit in real Chrome (`/tmp/r3b`: orz-mdhtml's `r3/*` probes and a
+fake slides kind). Fixed in `orz-markdown` (orz-mdhtml fixed its side in
+parallel); each kit fix bound to a claim (reworded: S.3, S.11, S.13, S.14,
+V.5, V.6, E.31, A.2, A.15, A.19, H.5).
+
+Claims adversary (kit):
+
+| Finding | Sev | Disposition (claim) |
+|---|---|---|
+| F2 `C.save.conflict` blind spots: no page save without an editor, no uid-less text, no includes/delivery-only change, no newer-shell file, no update path | MED | phases added; mutants `page-overwrites-conflict`, `update-overwrites-conflict` fail it (H.5) |
+| F3 the session file holding the opened bytes again (someone reverted this page's save) was written silently (round-2 m24 branch) | MED | asked, no picker (`picked: false`); `overwrite` then writes it as the opened file; no legitimate flow lost — m24's copy-over now asks once (S.14, S.13) |
+| K10 survived: the app memoising a failed opened assembly | LOW | test with a failing-then-working `assemble` (A.15) |
+| K12 survived (K13 caught only for the editor): a third save while the question is open | LOW | tests for the page and the editor (A.15) |
+| K25 survived: the conflict check without opened bytes | LOW | equivalent alone (the picker path reads no bytes without `openedHtml`: two guards); test of the documented rule — removing both guards fails it (S.14) |
+| K03 survived: includes compared in file order | LOW | the kit always writes sorted keys, so only another tool's file tells; test with a hand-reordered `#orz-includes` (S.14) |
+| orz-mdhtml CLI mutants (token/record/known-state checks: C02, C03, C05–C07, C11, C12, C20, C21, C24, C28, C31, C32 survived the first run) | — | orz-mdhtml's (fixed and re-run there) |
+
+Design audit:
+
+| Finding | Sev | Disposition (claim) |
+|---|---|---|
+| M5 keyboard users stuck in present mode: Present by keyboard hid the bar with the focus still in it; Escape/Space never reached the read view | MED | `setChromeVisible(false)` moves the focus to the page (A.19; fake slides kind) |
+| M6 the conflict question was not announced as a question (a button in a polite status region) | MED | `role="alertdialog"` outside the status region, labelled by a title, described by the message (V.6) |
+| L7 saves after `refreshPreview({ includes })` wrote the mounted record | LOW | saves write the latest record; opened bytes keep the mounted one; FC-19 §4 (E.31) |
+| L9 "Replace it" styled primary while the safe choice was the default; consequence unsaid; an app editor told "since you opened it" | LOW | Download first and primary; "Replace it (the version on disk is lost)"; `opened: false` wording (V.6, E.8) |
+| L11 after "Download a copy instead" every later save asks again | LOW | by design; documented (shell-runtime §1 step 3.4) and said in the toast (`SAVE_CONFLICT_DOWNLOADED`) |
+| L12 an agent's `upgrade` (same text, newer shell) undone by a browser save | LOW | a newer shell on disk asks, unless this page wrote it; same shell other bytes / older shell: no question (S.14, A.15 in Chrome) |
+| orz-mdhtml items (its CLI, read view, docs) | — | orz-mdhtml's, fixed there in parallel |
+
+Decisions. L12: ask rather than document a limit — the agent's upgrade is
+an edit on disk the page cannot see; the question costs one click and the
+page's own update (which writes the newer shell itself) is never asked.
+F3: ask — a revert is a deliberate change on disk like any other; the
+only flow that relied on the silent write (m24: the original copied over
+a file picked elsewhere) still ends proved as the opened file after one
+Replace.
+
+Size bounds re-measured on what ships: shell 65.8 KB (S.11, 68 KB stands),
+chrome 19.2 KB (V.5 raised to 21 KB), app 34.3 KB (A.2, 36 KB stands).

@@ -201,6 +201,10 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
   if (v === 'update-download') services.performUpdate = (o) => performUpdate({ ...o, saver: { save: (x) => (o.saver as Saver).download({ html: x.html }) } }); // BUG (mutation): the update is always a downloaded copy
   if (v === 'update-stale-text') services.performUpdate = (o) => { const text = o.getText!(); const { getText: _g, ...rest } = o; void _g; return performUpdate({ ...rest, text }); }; // BUG (mutation): the text read once
   if (v === 'r3-reload-picked') services.performUpdate = async (o) => { const r = await performUpdate(o); return r.status === 'updated' && r.save.via === 'file' && r.save.ok ? { ...r, reload: true } : r; }; // BUG (mutation): reloads after any written file
+  if (v === 'update-overwrites-conflict') {
+    // BUG (mutation): the update answers a conflict itself, writing over the file that changed on disk
+    services.performUpdate = (o) => performUpdate({ ...o, saver: { save: async (x) => { const r = await (o.saver as Saver).save(x); return r.via === 'file' && r.conflict ? (o.saver as Saver).save(x, { overwrite: true }) : r; } } });
+  }
   if (v === 'cdn-to-inline') services.performUpdate = (o) => performUpdate({ ...o, delivery: 'inline' }); // BUG (mutation): a cdn file updates to an inline one
   if (v === 'update-drops-includes') services.performUpdate = (o) => { const { includes: _i, ...rest } = o; void _i; return performUpdate(rest); }; // BUG (mutation)
   if (v === 'any-source') {
@@ -342,6 +346,20 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
       if (!app) return;
       // BUG (mutation) prefetch-bundle: the file fetches its release's bundle at boot, before the reader asked for an update
       if (v === 'prefetch-bundle') void fetch(bundleUrl({ kind: 'md', version, bundle: { path: STUB_BUNDLE_PATH, integrity: '' } }), { credentials: 'omit' }).catch(() => undefined);
+      if (v === 'page-overwrites-conflict') {
+        // BUG (mutation): the page's own save (no editor open) answers a conflict itself, writing over the file
+        const save = app.save;
+        app.save = async () => {
+          const r = await save();
+          if (!r.ok && r.conflict && !app.editor()) {
+            const c = app.editorContext();
+            const t = app.getText();
+            const w = await c.saver!.save({ text: t, html: await c.assemble(t, c.includes ? { includes: c.includes } : undefined) }, { overwrite: true });
+            return w.ok ? { ok: true, via: w.via === 'served-notice' ? 'download' : w.via } as never : r;
+          }
+          return r;
+        };
+      }
       const framed = window.parent !== window;
       if (!framed) return;
       if (v === 'note-when-hosted') {

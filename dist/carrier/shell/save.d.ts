@@ -23,9 +23,12 @@ export declare const SHELL_UID_PATTERN: RegExp;
  *   file is an orz file of this document (the same header `uid`, or no uid on
  *   either side) whose content — text, resolved includes and delivery — is
  *   neither the opened file's, what this page last wrote, nor what is being
- *   saved: it changed on disk since the page opened it (another program, an
- *   agent). The caller asks the reader: replace it (`save(input, { overwrite:
- *   true })`) or download a copy.
+ *   saved, or that holds the same content in a newer shell than the one being
+ *   saved (round 3: an agent's `upgrade`): it changed on disk since the page
+ *   opened it (another program, an agent). Also (round 3, `picked: false`):
+ *   the session's file holds the opened bytes again over this page's own
+ *   save (someone reverted it). The caller asks the reader: replace it
+ *   (`save(input, { overwrite: true })`) or download a copy.
  */
 export type SaveResult = {
     via: 'host';

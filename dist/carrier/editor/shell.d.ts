@@ -354,8 +354,9 @@ export interface EditorShell {
      * text has not changed (e.g. an include became available). With `includes`
      * (2.2.0, FC-19 §4): the renderer's include record is replaced by it (`null`
      * or `{}`: none) and the fetched-include cache is cleared first, so every
-     * include is read again from the new record or `fetchInclude`. Saves keep the
-     * includes the shell was mounted with (the opened file's `#orz-includes`).
+     * include is read again from the new record or `fetchInclude`. Saves write
+     * the latest record (round 3 of the carrier-app loop); the opened bytes stay
+     * those of the mounted includes (the opened file's `#orz-includes`).
      */
     refreshPreview(options?: {
         includes?: Record<string, string> | null;

@@ -395,7 +395,9 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     await s7.save({ text: 'b', html: 'B' });
     expect(f7.picks.length).toBe(2);
     // round 3 (m24): a session file picked as NOT the opened one that later holds the opened bytes again
-    // (the original copied over it) is proved by its content: opened: true, and it is remembered
+    // (the original copied over it) is proved by its content: opened: true, and it is remembered — but since
+    // loop 3 round 3 (F3) the opened bytes put back over this page's own save are asked about first
+    // (S.14): the reader's Replace (overwrite) writes it, proved opened, with no second picker
     const mem8 = memoryHandleStore();
     const elsewhere = fakeHandle('notes.md.html', { query: 'granted' });
     const f8 = fakeSaverWindow({ href: PAGE, picker: async () => elsewhere });
@@ -403,7 +405,9 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     expect(await s8.save({ text: 'a', html: 'A' })).toMatchObject({ picked: true, opened: false });
     expect(mem8.map.size).toBe(0);
     elsewhere.content = 'v0';
-    expect(await s8.save({ text: 'b', html: 'B' })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect(await s8.save({ text: 'b', html: 'B' })).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html' });
+    expect(elsewhere.content).toBe('v0');
+    expect(await s8.save({ text: 'b', html: 'B' }, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
     expect([f8.picks.length, elsewhere.content, mem8.map.size]).toEqual([1, 'B', 1]);
   });
 
@@ -555,8 +559,9 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
   it('[S.14] round 2: "changed on disk" compares content — the extracted text, the resolved includes and the delivery — not bytes: the opened text or this page\'s last write in other bytes (another shell version, CR LF) is no change; the same text with new includes or another delivery is one', async () => {
     const opened = doc(UID, 'As opened.');
     const mine = doc(UID, 'Mine.');
-    // the opened text, re-assembled in other bytes (another shell version; CR LF line endings): no conflict, written
-    expect(await saveOver(orzv(opened, { shellVersion: '9.9.9' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
+    // the opened text, re-assembled in other bytes (an older shell version; CR LF line endings): no conflict, written
+    // (a NEWER shell is an agent's upgrade: round 3, below)
+    expect(await saveOver(orzv(opened, { shellVersion: '0.9.9' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
     expect(await saveOver(orzv(opened).replace(/\n/g, '\r\n'), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
     expect(extract(orzv(opened).replace(/\n/g, '\r\n'))!.text).toBe(opened); // (a CR LF re-encoding keeps the text)
     // the same text with other includes, or another delivery: changed (the page would write back its own)
@@ -564,11 +569,15 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     expect(await saveOver(orzv(opened, { delivery: 'inline' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: true, written: false });
     // includes compare as entries, not as written order
     expect(await saveOver(orzv(opened, { includes: { b: '2', a: '1' } }), orzv(opened, { includes: { a: '1', b: '2' } }), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
+    // round 3 (K03): a file another tool wrote with its #orz-includes in another key order is the same content
+    const unsorted = orzv(opened, { includes: { a: '1', b: '2' } }).replace('{"a":"1","b":"2"}', '{"b":"2","a":"1"}');
+    expect(unsorted).not.toBe(orzv(opened, { includes: { a: '1', b: '2' } }));
+    expect(await saveOver(unsorted, orzv(opened, { includes: { a: '1', b: '2' } }), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
     // the file being saved, in other bytes: no conflict
     expect(await saveOver(orzv(mine, { shellVersion: '0.9.0' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
 
     // this page's last write, re-encoded by a tool between two saves: no conflict; changed text: conflict
-    for (const [rewrite, conflict] of [[(t: string) => orzv(t, { shellVersion: '9.9.9' }), false], [(t: string) => orzv(`${t}AGENT\n`), true]] as const) {
+    for (const [rewrite, conflict] of [[(t: string) => orzv(t, { shellVersion: '0.9.9' }), false], [(t: string) => orzv(`${t}AGENT\n`), true]] as const) {
       const h = fakeHandle('notes.md.html', {}, orzv(opened));
       const w = fakeSaverWindow({ picker: async () => h });
       const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: orzv(opened) });
@@ -578,6 +587,78 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
       const r = await saver.save({ text: next, html: orzv(next) });
       expect([conflict, r.via === 'file' && r.conflict === true, h.content === orzv(next), w.picks.length]).toEqual([conflict, conflict, !conflict, 2]);
     }
+  });
+
+  it('[S.14] round 3 (L12): the same content in a NEWER shell on disk (an agent ran upgrade) is a change — the save asks, and overwrite then writes; the same shell in other bytes, an older shell, or a newer shell this page wrote itself is no question', async () => {
+    const opened = doc(UID, 'As opened.');
+    const mine = doc(UID, 'Mine.');
+    // newer shell, same content as opened: asked (writing would undo the upgrade)
+    const up = await saveOver(orzv(opened, { shellVersion: '1.1.0' }), orzv(opened), mine, { uid: UID });
+    expect(up).toMatchObject({ conflict: true, written: false });
+    expect(up.r).toMatchObject({ via: 'file', ok: false, error: 'conflict', picked: true, opened: false });
+    // newer shell, same text as the file being saved: asked too
+    expect(await saveOver(orzv(mine, { shellVersion: '2.0.0' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: true, written: false });
+    // a prerelease of the same version is older (semver): no question
+    expect(await saveOver(orzv(opened, { shellVersion: '1.0.0-rc.1' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
+    // the same shell in other bytes (a tool that re-wrote the head): no question
+    const otherBytes = orzv(opened, { head: '<meta name="x-tool" content="rewritten">' });
+    expect(otherBytes).not.toBe(orzv(opened));
+    expect(await saveOver(otherBytes, orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
+    // an unreadable shell version on disk is not newer: no question
+    expect(await saveOver(orzv(opened, { shellVersion: 'next' }), orzv(opened), mine, { uid: UID })).toMatchObject({ conflict: false, written: true });
+    // the reader answers Replace: overwrite writes that file
+    const h = fakeHandle('notes.md.html', {}, orzv(opened, { shellVersion: '1.1.0' }));
+    const w = fakeSaverWindow({ picker: async () => h });
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: orzv(opened) });
+    expect((await saver.save({ text: mine, html: orzv(mine) })).ok).toBe(false);
+    expect(await saver.save({ text: mine, html: orzv(mine) }, { overwrite: true })).toMatchObject({ ok: true, picked: true });
+    expect([h.content === orzv(mine), w.picks.length]).toEqual([true, 1]);
+    // this page itself wrote a newer shell (its update), re-encoded by a tool since: no question
+    const h2 = fakeHandle('notes.md.html', {}, orzv(opened));
+    const w2 = fakeSaverWindow({ picker: async () => h2 });
+    const s2 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w2.win, handleStore: memoryHandleStore().store, openedHtml: orzv(opened) });
+    expect((await s2.save({ text: mine, html: orzv(mine, { shellVersion: '1.1.0' }) })).ok).toBe(true);
+    h2.content = orzv(mine, { shellVersion: '1.1.0', head: '<meta name="x-tool" content="re-encoded">' });
+    const r2 = await s2.save({ text: doc(UID, 'Next.'), html: orzv(doc(UID, 'Next.')) });
+    expect([r2.ok, w2.picks.length, h2.content === orzv(doc(UID, 'Next.'))]).toEqual([true, 2, true]);
+  });
+
+  it('[S.14] round 3 (F3): the session\'s file holding the opened bytes again over this page\'s own save (someone reverted it) is asked about — no picker, picked: false; a later save asks again; overwrite writes it (proved opened); saving the opened text itself is no question', async () => {
+    const opened = orzv(doc(UID, 'As opened.'));
+    const h = fakeHandle('notes.md.html', {}, opened);
+    const w = fakeSaverWindow({ picker: async () => h });
+    const mem = memoryHandleStore();
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: mem.store, openedHtml: opened });
+    const one = doc(UID, 'One.');
+    expect(await saver.save({ text: one, html: orzv(one) })).toMatchObject({ ok: true, picked: true, opened: true });
+    h.content = opened; // git checkout / an agent put the opened version back
+    const two = doc(UID, 'Two.');
+    expect(await saver.save({ text: two, html: orzv(two) })).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html' });
+    expect([h.content === opened, w.picks.length]).toEqual([true, 1]);
+    // not answered (a download, a dismissal): the next save asks again
+    expect(await saver.save({ text: two, html: orzv(two) })).toMatchObject({ conflict: true, picked: false });
+    // Replace: overwrite writes the session's file, proved opened, and it is remembered
+    expect(await saver.save({ text: two, html: orzv(two) }, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect([h.content === orzv(two), w.picks.length, mem.map.size]).toEqual([true, 1, 1]);
+    // the page saves the opened text itself while the file holds it again: nothing would be lost — no question
+    const h2 = fakeHandle('notes.md.html', {}, opened);
+    const w2 = fakeSaverWindow({ picker: async () => h2 });
+    const s2 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w2.win, handleStore: memoryHandleStore().store, openedHtml: opened });
+    expect((await s2.save({ text: one, html: orzv(one) })).ok).toBe(true);
+    h2.content = opened;
+    expect(await s2.save({ text: doc(UID, 'As opened.'), html: opened })).toMatchObject({ ok: true, picked: false, opened: true });
+  });
+
+  it('[S.14] round 3 (K25): a saver without openedHtml never reports a conflict — nothing is known about the opened text — on a picked file of this document holding another text, nor on its session file', async () => {
+    const h = fakeHandle('notes.md.html', {}, orzv(doc(UID, 'AGENT EDIT')));
+    const w = fakeSaverWindow({ picker: async () => h });
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store });
+    const one = doc(UID, 'One.');
+    const r = await saver.save({ text: one, html: orzv(one) });
+    expect(r).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
+    h.content = orzv(doc(UID, 'AGENT AGAIN'));
+    const r2 = await saver.save({ text: one, html: orzv(one) });
+    expect([r2.ok, r2.via === 'file' && r2.conflict === true, w.picks.length, h.content === orzv(one)]).toEqual([true, false, 2, true]);
   });
 
   it('[S.14] round 2: the picked file of a conflict is used only by the save that answers it — a later save without overwrite asks the picker again (and is checked again), and an overwrite after that writes the session\'s file, never the old conflicting one', async () => {
@@ -1021,7 +1102,8 @@ function valueImports(entry: string): Set<string> {
  * Bound 62 KB ≈ measurement + 10 %: the shell runs in every assembled file.
  */
 // 2026-10-08, round 1 of the carrier-app loop (the save-conflict check, syntax tokens, icons, toast
-// actions): 61,607 bytes. Bound ~10 % above.
+// actions): 61,607 bytes. Bound ~10 % above. 63,016 after round 2; 65,824 after round 3 (the newer-shell
+// and revert checks, the question's alertdialog and wordings): the bound stands.
 const SHELL_BUNDLE_LIMIT = 68_000;
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;

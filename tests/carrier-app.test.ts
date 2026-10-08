@@ -24,6 +24,7 @@ import type { AddressInfo } from 'node:net';
 import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, readDocument, readHeader, UID_PATTERN } from '../src/carrier';
 import { createEditorShell, renderMarkdownPreview, textareaAdapter, type EditorShell } from '../src/carrier/editor';
 import type { HostConnection, PerformUpdateOptions, PerformUpdateResult, SaveResult, Saver, SaverOptions, UpdateInfo } from '../src/carrier/shell';
+import { SAVE_CONFLICT_LABELS, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_DOWNLOADED } from '../src/carrier/shell';
 import {
   APP_CSS, UPDATE_CONFLICT_MESSAGE, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
   menuButton, settingPicker, reviewProposal, attachAiMenu, attachSettings, followPresentation, installCss, WIDGET_CSS,
@@ -845,8 +846,8 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
     expect(r1).toBe(r2);
     expect(r1).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
     expect(calls).toEqual([false]);
-    expect(b.toasts().join(' ')).toContain('This file changed on disk since you opened it (another program or an agent edited it). Replace it with your version?');
-    byLabel(b.root, 'Replace it').click();
+    expect(b.toasts().join(' ')).toContain(SAVE_CONFLICT_MESSAGE);
+    byLabel(b.root, SAVE_CONFLICT_LABELS.replace).click();
     await tick(20);
     expect(calls).toEqual([false, true]);
     expect(b.app.isDirty()).toBe(false);
@@ -861,7 +862,7 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
     expect(await ed.save()).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
     const edRoot = ed.root as unknown as ShadowRoot;
     expect([...edRoot.querySelectorAll('.orz-toast__message')].map((n) => n.textContent).join(' ')).toContain('changed on disk');
-    byLabel(edRoot, 'Replace it').click();
+    byLabel(edRoot, SAVE_CONFLICT_LABELS.replace).click();
     await tick(20);
     expect(ed.isDirty()).toBe(false);
     b.app.dispose();
@@ -1042,8 +1043,13 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     b.app.setSetting({ theme: 'beige-decent-1' });
     expect(await b.app.save()).toMatchObject({ conflict: true });
     expect(log).toEqual([{ text: older, overwrite: false }]); // the second save asked no saver
+    // round 3 (K12): a THIRD save while the question is open asks no saver either (no second picker)
+    await tick(5);
+    b.app.setSetting({ theme: 'dark-elegant-3' });
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    expect(log).toEqual([{ text: older, overwrite: false }]);
     expect(b.root.querySelectorAll('.orz-toast__action')).toHaveLength(2); // one question
-    byLabel(b.root, 'Replace it').click();
+    byLabel(b.root, SAVE_CONFLICT_LABELS.replace).click();
     await tick(20);
     expect(log).toEqual([{ text: older, overwrite: false }, { text: b.app.getText(), overwrite: true }]); // the newer text, once
     expect(b.app.isDirty()).toBe(false);
@@ -1056,6 +1062,10 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     ed.setText(`${ed.getText()}two\r\n`);
     expect(await ed.save()).toMatchObject({ conflict: true });
     expect(log.length).toBe(n0 + 1); // the second editor save asked no saver
+    await tick(5);
+    ed.setText(`${ed.getText()}three\r\n`);
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    expect(log.length).toBe(n0 + 1); // nor the third (K13)
     const edRoot = ed.root as unknown as ShadowRoot;
     expect(edRoot.querySelectorAll('.orz-toast__action')).toHaveLength(2);
     const n = log.length;
@@ -1065,9 +1075,50 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     // after a dismissal the next save asks the saver again
     expect(await ed.save()).toMatchObject({ conflict: true });
     expect(log.length).toBe(n + 1);
-    byLabel(edRoot, 'Replace it').click();
+    byLabel(edRoot, SAVE_CONFLICT_LABELS.replace).click();
     await tick(20);
     expect(log.at(-1)).toEqual({ text: ed.getText(), overwrite: true });
+    b.app.dispose();
+  });
+
+  it('[A.15] round 3 (K10): the app keeps no failed assembly of the opened bytes — an assemble that fails once (impure, a fetch) is tried again at the next proof, so the conflict check is never disabled', async () => {
+    let failing = true;
+    const b = boot(undefined, { kind: { assemble: (text, o = {}) => { if (failing) throw new Error('engine not reachable'); return fileHtml(text, { ...(o.delivery ? { delivery: o.delivery } : {}), ...(o.includes ? { includes: o.includes } : {}), ...(o.engineSource ? { engine: o.engineSource } : {}) }); } } });
+    await b.app.ready;
+    const openedHtml = b.rec.savers[0].openedHtml as () => Promise<string>;
+    await expect(openedHtml()).rejects.toThrow('engine not reachable');
+    await tick(400); // the idle warm-up has run (and failed) too
+    failing = false;
+    const want = fileHtml(TEXT, { includes: INCLUDES });
+    expect(await openedHtml()).toBe(want);
+    expect(await b.app.editorContext().openedHtml!()).toBe(want);
+    b.app.dispose();
+  });
+
+  it('[A.19] round 3 (M5): Present pressed with the keyboard hides the bar and moves the focus out of it to the page, so Escape and Space reach the read view\'s onKey at once; a toast keeps its focus (it stays shown)', async () => {
+    const b = boot(undefined, { kind: { actions: [{ id: 'present', label: 'Present', placement: 'bar', run: (app) => { app.setChromeVisible(false); } }] } });
+    await b.app.ready;
+    const present = [...b.root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === 'Present' || x.textContent === 'Present') as HTMLButtonElement;
+    present.focus();
+    expect(b.root.activeElement).toBe(present);
+    // the keyboard: Enter on the button (the browser then clicks it)
+    b.key('Enter', {}, present);
+    present.click();
+    await tick(5);
+    expect(b.root.activeElement).toBeNull();
+    const target = (b.doc.activeElement ?? b.doc.body) as unknown as EventTarget;
+    b.key('Escape', {}, target);
+    b.key(' ', {}, target);
+    expect(b.rec.keys).toEqual(['Escape', ' ']);
+    // a question's focus stays (toasts show while presenting)
+    b.app.setChromeVisible(true);
+    const asked = (await import('../src/carrier/shell')).askSaveConflict(b.root as never, 'n.md.html');
+    const focused = b.root.activeElement;
+    expect(focused).not.toBeNull();
+    b.app.setChromeVisible(false);
+    expect(b.root.activeElement).toBe(focused);
+    (focused as HTMLButtonElement).click();
+    await asked;
     b.app.dispose();
   });
 
@@ -1411,7 +1462,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     const mine = await page.evaluate(`${APP}.getText()`) as string;
     expect(await page.evaluate(`${APP}.save()`)).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
     expect(await readOpfs(page, { name: 'conflict.md.html' }) === await assembleStub(agentText)).toBe(true);
-    await page.getByText('This file changed on disk since you opened it').waitFor({ state: 'visible' });
+    await page.getByText('This file changed on disk since this page opened').waitFor({ state: 'visible' });
     const picks = (await pageRecords(page, 'picker')).length;
     await page.getByRole('button', { name: 'Replace it' }).click();
     await page.waitForFunction(`!${APP}.isDirty()`);
@@ -1441,7 +1492,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await ctx.close();
   }, 120_000);
 
-  it('[A.15] [S.14] round 2 in Chrome: the agent\'s edit between two editor saves is kept (the reader is asked) for every header form — no uid at all, a quoted uid, a | block uid after a blank line with kind: document on the opener — and for the same text re-assembled with new includes or cdn delivery; the same text re-assembled by another shell version is no conflict', async () => {
+  it('[A.15] [S.14] round 2 in Chrome: the agent\'s edit between two editor saves is kept (the reader is asked) for every header form — no uid at all, a quoted uid, a | block uid after a blank line with kind: document on the opener — and for the same text re-assembled with new includes or cdn delivery, or by a newer shell version (round 3: an agent\'s upgrade); the same text re-assembled by an older shell version is no conflict', async () => {
     const ctx = await context();
     const edSave = (page: Page, add: string) => page.evaluate(async (a) => {
       const app = (globalThis as unknown as { OrzCarrier: { standalone: CarrierApp } }).OrzCarrier.standalone;
@@ -1456,7 +1507,9 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
       ['block uid', '\n{{nyml kind: document\nuid: |\n  doc-blockblockbl0002\n}}\n\n# B\n', (cur) => assembleStub(`${cur}Agent line.\n`), true],
       ['new includes', '{{nyml\nkind: document\nuid: doc-includesinclu0003\n}}\n\n# I\n\n{{md part.md}}\n', (cur) => assembleStub(cur, { includes: { 'part.md': 'NEW PART\n' } }), true],
       ['cdn delivery', '{{nyml\nkind: document\nuid: doc-deliverydeliv0004\n}}\n\n# D\n', (cur) => assembleStub(cur, { delivery: 'cdn' }), true],
-      ['another shell version', '{{nyml\nkind: document\nuid: doc-shellshellshe0005\n}}\n\n# S\n', (cur) => assembleNext(cur), false],
+      // round 3 (L12): a newer shell on disk is an agent's upgrade — asked about; an older shell (other bytes) is not
+      ['a newer shell version', '{{nyml\nkind: document\nuid: doc-shellshellshe0005\n}}\n\n# S\n', (cur) => assembleNext(cur), true],
+      ['an older shell version', '{{nyml\nkind: document\nuid: doc-shellolderold0007\n}}\n\n# O\n', async (cur) => (await assembleStub(cur)).replace(/("shell":\s*)"1\.1\.0"/, '$1"1.0.9"'), false],
     ];
     for (const [i, [what, text, agent, conflict]] of cases.entries()) {
       const name = `variant-${i}.md.html`;

@@ -821,22 +821,25 @@ function createEditorShell(element, options) {
     measure();
     applyMode();
     // ── save ──
-    const includes = options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { ...options.includes } : null;
-    /** The carrier's `assemble`, with the opened file's includes (FC-18 D4). */
-    const assembleText = (t) => Promise.resolve().then(() => (includes ? options.assemble(t, { includes }) : options.assemble(t))).then(String);
+    /** The opened file's includes (the shell's `includes` option): the opened bytes are assembled with them. */
+    const openedIncludes = options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { ...options.includes } : null;
+    /** The includes a save writes: the opened ones, until `refreshPreview({ includes })` hands newer ones (round 3, L7). */
+    let saveIncludes = openedIncludes;
+    /** The carrier's `assemble`, with the given includes (FC-18 D4). */
+    const assembleWith = (t, inc) => Promise.resolve().then(() => (inc ? options.assemble(t, { includes: { ...inc } }) : options.assemble(t))).then(String);
     let openedMemo = null;
     /** `assemble` of the text the shell was mounted with — the default opened bytes — once it succeeds (a failure is tried again). */
     const openedAssembled = () => {
         if (openedMemo)
             return openedMemo;
-        const run = assembleText(openedText);
+        const run = assembleWith(openedText, openedIncludes);
         openedMemo = run;
         run.catch(() => { if (openedMemo === run)
             openedMemo = null; });
         return run;
     };
-    /** The file for a text; the unchanged text reuses the opened bytes (one `assemble` per save click). */
-    const assembleFor = (t) => (t === openedText ? openedAssembled() : assembleText(t));
+    /** The file for a text, with the latest includes; the unchanged text and includes reuse the opened bytes (one `assemble` per save click). */
+    const assembleFor = (t) => (t === openedText && saveIncludes === openedIncludes ? openedAssembled() : assembleWith(t, saveIncludes));
     if (!hooks.save && options.standalone === true && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
         // B#6: in an assembled file the default opened bytes are ready before the first save click (at idle
         // after mount); an app's editor (not standalone) assembles them only at its first save (the
@@ -855,6 +858,8 @@ function createEditorShell(element, options) {
             later(warm, 300);
     }
     let saver = options.saver ?? null;
+    /** The editor holds an assembled file (it was opened from one): `standalone: true` or `openedHtml` given. */
+    const assembledFile = options.standalone === true || options.openedHtml !== undefined;
     let saving = null;
     const toast = (text, tone) => { if (!destroyed)
         (0, chrome_js_1.showToast)(root, text, { tone }); };
@@ -945,7 +950,7 @@ function createEditorShell(element, options) {
             ...(options.host ? { host: options.host } : {}),
             openedHtml: options.openedHtml ?? openedAssembled,
             // the served notice is for an assembled file opened from the web, not for an app's page
-            servedNotice: options.standalone === true || options.openedHtml !== undefined,
+            servedNotice: assembledFile,
             // the file on disk's uid, read as this editor reads its own (a quoted or block uid is one)
             readUid: headerUid,
         }));
@@ -995,7 +1000,8 @@ function createEditorShell(element, options) {
         const back = conflictOpen ? null : focusedNow();
         conflictOpen = true;
         conflictName = name;
-        void (0, chrome_js_2.askSaveConflict)(root, name, back ? { returnFocus: back } : {}).then(async (choice) => {
+        // an app's editor (no opened file) is not told "since this page opened it" (round 3, L9)
+        void (0, chrome_js_2.askSaveConflict)(root, name, { ...(back ? { returnFocus: back } : {}), opened: assembledFile }).then(async (choice) => {
             // superseded by a newer save's question: this (older) text is never written
             if (ask !== conflictAsk)
                 return;
@@ -1016,7 +1022,7 @@ function createEditorShell(element, options) {
                 if (destroyed)
                     return;
                 if (r.via === 'download' && r.ok)
-                    toast('Download started; the file on disk is unchanged.', 'success');
+                    toast(chrome_js_2.SAVE_CONFLICT_DOWNLOADED, 'success');
                 else
                     fail('error' in r && r.error ? r.error : 'The download failed.', 'download');
             }
@@ -1247,6 +1253,8 @@ function createEditorShell(element, options) {
                     renderCtx.includes = next;
                 else
                     delete renderCtx.includes;
+                // saves write the latest record (round 3, L7): what the reader sees is what the file keeps
+                saveIncludes = next ? { ...next } : null;
                 renderCtx.cache?.clear();
             }
             if (renderRunning)
