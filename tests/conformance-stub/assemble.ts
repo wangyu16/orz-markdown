@@ -38,7 +38,9 @@ export type StubVariant =
   // round 2 of the carrier-app loop: a save that writes over a file changed on disk without asking
   | 'save-ignores-conflict'
   // round 3 of the carrier-app loop: the page's save and the update answer a conflict themselves
-  | 'page-overwrites-conflict' | 'update-overwrites-conflict';
+  | 'page-overwrites-conflict' | 'update-overwrites-conflict'
+  // round 4 of the carrier-app loop: a replace after a download, a silent revert, a second question for the editor
+  | 'r4-after-download' | 'r4-revert-silent' | 'r4-two-questions' | 'r4-no-app-handle';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 

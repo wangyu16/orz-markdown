@@ -39,6 +39,7 @@ const chrome_js_1 = require("../shell/chrome.js");
 const preferences_js_1 = require("../shell/preferences.js");
 const save_js_1 = require("../shell/save.js");
 const chrome_js_2 = require("../shell/chrome.js");
+const conflict_js_1 = require("../shell/conflict.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const codemirror6_js_1 = require("./codemirror6.js");
 const preview_js_1 = require("./preview.js");
@@ -838,6 +839,24 @@ function createEditorShell(element, options) {
             openedMemo = null; });
         return run;
     };
+    let knownMemo = null;
+    /**
+     * The opened text with the latest includes (round 4, F5): content this editor knows — a file on
+     * disk holding it (the app's server resolved the includes again) is no change. Undefined until
+     * `refreshPreview({ includes })` hands includes other than the mounted ones.
+     */
+    const knownAssembled = () => {
+        if (saveIncludes === openedIncludes)
+            return undefined;
+        if (knownMemo?.of !== saveIncludes) {
+            const html = assembleWith(openedText, saveIncludes);
+            const memo = { of: saveIncludes, html };
+            knownMemo = memo;
+            html.catch(() => { if (knownMemo === memo)
+                knownMemo = null; });
+        }
+        return knownMemo.html;
+    };
     /** The file for a text, with the latest includes; the unchanged text and includes reuse the opened bytes (one `assemble` per save click). */
     const assembleFor = (t) => (t === openedText && saveIncludes === openedIncludes ? openedAssembled() : assembleWith(t, saveIncludes));
     if (!hooks.save && options.standalone === true && typeof options.assemble === 'function' && options.openedHtml === undefined && !options.saver && newerFormat === null) {
@@ -949,15 +968,18 @@ function createEditorShell(element, options) {
             kind,
             ...(options.host ? { host: options.host } : {}),
             openedHtml: options.openedHtml ?? openedAssembled,
+            // the opened text with the includes refreshPreview handed since: known content (F5)
+            knownHtml: knownAssembled,
             // the served notice is for an assembled file opened from the web, not for an app's page
             servedNotice: assembledFile,
             // the file on disk's uid, read as this editor reads its own (a quoted or block uid is one)
             readUid: headerUid,
         }));
-        if (conflictOpen) {
-            // a conflict question is open: no second picker; the question (focused) now answers for this text
+        if ((0, conflict_js_1.saveConflictOpen)(saver)) {
+            // a question of this saver is open (this editor's, the page's or another editor's of the file): no
+            // second picker; the question (focused) now answers for this text
             if (!destroyed)
-                resolveConflict(text, html, conflictName);
+                resolveConflict(text, html);
             return { ok: false, via: 'file', error: 'conflict', conflict: true };
         }
         const r = await saver.save({ text, html });
@@ -974,15 +996,11 @@ function createEditorShell(element, options) {
         if (r.via === 'file' && r.conflict) {
             // the file changed on disk since it was opened (another program, an agent): never written silently
             if (!destroyed)
-                resolveConflict(text, html, r.name);
+                resolveConflict(text, html, r);
             return { ok: false, via: 'file', error: 'conflict', conflict: true };
         }
         return fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
     };
-    /** A conflict question is open (one per editor): later saves update it instead of asking again. */
-    let conflictOpen = false;
-    let conflictName;
-    let conflictAsk = 0;
     /** The focused element (through shadow roots) when a question opens: where the focus goes back. */
     const focusedNow = () => {
         let a = doc.activeElement ?? null;
@@ -994,37 +1012,36 @@ function createEditorShell(element, options) {
         }
         return a;
     };
-    /** The reader's answer to a save that found the file changed on disk: replace it, or download a copy. */
-    const resolveConflict = (text, html, name) => {
-        const ask = ++conflictAsk;
-        const back = conflictOpen ? null : focusedNow();
-        conflictOpen = true;
-        conflictName = name;
+    /**
+     * The reader's answer to a save that found the file changed on disk: replace it, or download a
+     * copy. One question per saver (round 4, F2): a page and its editors share the saver, so a save of
+     * any of them while it is open re-targets that question; only the newest text is written, and
+     * only the text written is marked saved.
+     */
+    const resolveConflict = (text, html, r) => {
+        if (!saver)
+            return;
         // an app's editor (no opened file) is not told "since this page opened it" (round 3, L9)
-        void (0, chrome_js_2.askSaveConflict)(root, name, { ...(back ? { returnFocus: back } : {}), opened: assembledFile }).then(async (choice) => {
-            // superseded by a newer save's question: this (older) text is never written
-            if (ask !== conflictAsk)
+        void (0, conflict_js_1.answerSaveConflict)({ saver, root, input: { text, html }, ...(r ? { result: r } : {}), opened: assembledFile, returnFocus: focusedNow() }).then((a) => {
+            if (destroyed)
                 return;
-            conflictOpen = false;
-            if (destroyed || !saver)
-                return;
-            if (choice === 'replace') {
-                const r = await saver.save({ text, html }, { overwrite: true });
-                if (destroyed || r.via === 'served-notice')
+            if (a.choice === 'replace') {
+                const w = a.result;
+                if (w.via === 'served-notice')
                     return;
-                if (r.ok)
-                    succeed(text, r.via);
-                else if (!(r.via === 'file' && r.error === 'cancelled'))
-                    fail(new Error(r.error ?? 'The document could not be saved.'), r.via);
+                if (w.ok)
+                    succeed(text, w.via);
+                else if (w.via === 'file' && w.error === 'stale-conflict')
+                    toast(conflict_js_1.SAVE_CONFLICT_STALE, 'warning');
+                else if (!(w.via === 'file' && w.error === 'cancelled'))
+                    fail(new Error(w.error ?? 'The document could not be saved.'), w.via);
             }
-            else if (choice === 'download') {
-                const r = await saver.download({ html });
-                if (destroyed)
-                    return;
-                if (r.via === 'download' && r.ok)
+            else if (a.choice === 'download') {
+                const w = a.result;
+                if (w.via === 'download' && w.ok)
                     toast(chrome_js_2.SAVE_CONFLICT_DOWNLOADED, 'success');
                 else
-                    fail('error' in r && r.error ? r.error : 'The download failed.', 'download');
+                    fail('error' in w && w.error ? w.error : 'The download failed.', 'download');
             }
         });
     };
@@ -1297,6 +1314,9 @@ function createEditorShell(element, options) {
                 finalText = '';
             }
             destroyed = true;
+            // its question goes with its root (the next save of the file asks again)
+            if (saver)
+                (0, conflict_js_1.dropSaveConflict)(saver, root);
             model.clear();
             renderCtx.cache?.clear();
             for (const id of [...timers])

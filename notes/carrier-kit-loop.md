@@ -412,3 +412,33 @@ Replace.
 
 Size bounds re-measured on what ships: shell 65.8 KB (S.11, 68 KB stands),
 chrome 19.2 KB (V.5 raised to 21 KB), app 34.3 KB (A.2, 36 KB stands).
+
+### Round 4 — 2026-10-08, kit-side fixes
+
+An adversary against the round-3 fixes (probes `/tmp/r4adv`: real-Chrome
+`r4probe.test.ts` P1–P6 on orz-mdhtml's built files, `saverprobe.mjs`, stub
+mutants in `k3/`). Fixed in `orz-markdown` (orz-mdhtml fixed its side in
+parallel); each kit fix bound to a claim (reworded: S.11, S.14, V.6, E.31,
+A.15, H.5).
+
+| Finding | Sev | Disposition (claim) |
+|---|---|---|
+| F1 orz-mdhtml's own finding | — | orz-mdhtml's (fixed there in parallel) |
+| F2 two conflict questions, the older text won (P6): a page save's question (app root) and the editor's save made a second question and picker (separate `conflictOpen` flags per surface); Replace on the newer, then on the older, wrote the older page text over the editor's save (`overwrite` with no conflict pending wrote the session file unchecked); disk lost the typed text, `isDirty()` false, no `beforeunload` | HIGH | one question per saver (`answerSaveConflict` in `shell/conflict.ts`; the app and the editor shell share it through the one saver); a save while it is open focuses it and re-targets it to the newest text, the older caller is `superseded`; conflict results carry a `conflictToken` and the saver refuses an `overwrite` without the pending one (`stale-conflict`); only the text written is marked saved; an editor's `destroy()` drops its question (S.14, V.6, A.15; real Chrome P6 and the editor-then-page order) |
+| F3 harness blind spots in `C.save.conflict`: no save after "Download a copy instead", no revert of the opened bytes, the page-save phase skipped without `OrzCarrier.standalone.save`, no two-question sequence (`r4-after-download`, `r4-revert-silent` passed it) | MED | phases added; the page-save phase fails without the handle; mutants `r4-after-download`, `r4-revert-silent`, `r4-two-questions` (a carrier that hands its editor a wrapped saver), `r4-no-app-handle` fail it (H.5); the check gets 3× the per-check limit (it walks a dozen files and timed out at 120 s with three lanes busy) |
+| F4 the revert check only on the session path: after an agent's edit dropped the session handle (the reader downloaded), a `git checkout` of the opened version was written silently through the remembered handle (P1) | LOW | the same check on the remembered-handle path, against what this page wrote into the opened file (`lastWrittenOpened`: a page that wrote only elsewhere is not asked — narrower than `lastWritten`, which would ask about a file this page never wrote) (S.14) |
+| F5 an app editor given newer includes (`refreshPreview({ includes })`) got a false question when the disk file held the opened text with those includes (`saverprobe.mjs`) | LOW | saver option `knownHtml`; the editor shell passes the mounted text with the latest includes: known content, never a proof of the opened file (S.14, E.31) |
+| F6 gap K02: the `revertedOnDisk` exception for saving (or having last written) the opened content in other bytes was untested | LOW | tested on its own (each disjunct removed fails a test) (S.14) |
+
+Decisions. F2: the question is per saver object, not per root — a carrier
+must hand its editors the page's saver unwrapped (the harness's
+`r4-two-questions` is that bug); refusing `overwrite` without the pending
+token makes an outdated question harmless even if a second one appears. An
+`overwrite` with no pending conflict is refused, not run as a checked save:
+the reader answered a question about a file that is no longer known, so the
+safe outcome is "nothing written, save again" (`SAVE_CONFLICT_STALE`).
+Done with an editor's question open drops the question with the editor;
+the page's next save asks the saver again (the document stays dirty).
+
+Size bounds re-measured on what ships: shell 68.5 KB (S.11 raised to 75 KB),
+chrome 19.2 KB (V.5, 21 KB stands), app 34.4 KB (A.2, 36 KB stands).

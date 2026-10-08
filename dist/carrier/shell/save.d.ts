@@ -27,8 +27,15 @@ export declare const SHELL_UID_PATTERN: RegExp;
  *   saved (round 3: an agent's `upgrade`): it changed on disk since the page
  *   opened it (another program, an agent). Also (round 3, `picked: false`):
  *   the session's file holds the opened bytes again over this page's own
- *   save (someone reverted it). The caller asks the reader: replace it
- *   (`save(input, { overwrite: true })`) or download a copy.
+ *   save (someone reverted it); round 4 (F4): also a remembered handle's
+ *   file holding the opened bytes again over what this page wrote into the
+ *   opened file. The caller asks the reader: replace it
+ *   (`save(input, { overwrite: true, conflictToken })`) or download a copy.
+ *   `conflictToken` (round 4, F2) names this conflict: only an `overwrite`
+ *   carrying the token of the conflict still pending is honoured.
+ * - `file` with `error: 'stale-conflict'` (round 4, F2): an `overwrite` that
+ *   answers no pending conflict (none, or a newer one superseded it) —
+ *   nothing was written and nothing was checked.
  */
 export type SaveResult = {
     via: 'host';
@@ -42,6 +49,7 @@ export type SaveResult = {
     opened: boolean;
     name?: string;
     conflict?: true;
+    conflictToken?: number;
 } | {
     via: 'download';
     ok: boolean;
@@ -63,11 +71,16 @@ export interface SaveInput {
 export interface SaveCallOptions {
     /**
      * The reader chose to replace a file that changed on disk (after a
-     * `conflict` result): the file picked for that save is written without the
-     * check (no second picker); with no such file the save runs as usual,
-     * without the check.
+     * `conflict` result): the file of that save is written without the check
+     * (no second picker) — only with the `conflictToken` of that result while
+     * it is the conflict still pending (round 4, F2: a later save, conflicting
+     * or not, supersedes it). Otherwise nothing is written: `{ via: 'file', ok:
+     * false, error: 'stale-conflict' }` — an `overwrite` never writes a file
+     * the saver did not just find in conflict.
      */
     overwrite?: boolean;
+    /** The `conflictToken` of the conflict an `overwrite` answers (round 4, F2). */
+    conflictToken?: number;
 }
 export interface SaverOptions {
     /** The header `uid` (FC-18 §10); with the page location, the handle key. Absent or malformed → the page URL. */
@@ -109,6 +122,16 @@ export interface SaverOptions {
      * and other header forms. Default: {@link headerUidOf} (parser-free).
      */
     readUid?(text: string): string | undefined;
+    /**
+     * The bytes of a file whose content this page also knows (round 4, F5),
+     * called only when a picked file would otherwise be a conflict: an app's
+     * editor given newer includes (`refreshPreview({ includes })`) passes the
+     * opened text assembled with them — a file on disk holding that content
+     * (the app's server resolved the includes again) is no change. It counts
+     * like the opened content for step 3.4 only; it never proves a handle to be
+     * the opened file. A rejection or a non-string is nothing known.
+     */
+    knownHtml?: () => string | undefined | null | Promise<string | undefined | null>;
 }
 export interface Saver {
     /** Save in the order above. Never rejects. */

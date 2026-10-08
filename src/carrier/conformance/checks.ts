@@ -1184,6 +1184,13 @@ export const saveChecks: Record<string, CheckFn> = {
       }
       p.check((await read()) === agent2, 'Download a copy instead changed the file on disk');
       p.eq(await ed(page, 'window.__orzEditor.isDirty()'), true, 'isDirty() after Download a copy instead (the file on disk is not the page\'s text)');
+      // round 4 (F3a): after a download the file on disk still differs — the next save asks again
+      const downloads = ctx.downloads.length;
+      const r4 = await save(`${EDIT_TEXT}The page's fourth save, after the download.\r\n`);
+      await page.waitForTimeout(300);
+      p.check(r4?.ok === false && r4.conflict === true, `the save after "Download a copy instead" did not ask again: it did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r4))})`);
+      p.check((await read()) === agent2, 'the save after "Download a copy instead" wrote over the file that changed on disk without asking');
+      p.eq(ctx.downloads.length - downloads, 0, 'downloads by the save after "Download a copy instead" before the reader answered');
     }
     await page.close();
     await conflictPhases(s, p, ctx);
@@ -1229,6 +1236,11 @@ export const saveChecks: Record<string, CheckFn> = {
   },
 };
 
+/** Click a button of the kit's conflict question (`label`, or `label (…)`) anywhere in the page's shadow roots. */
+const chooseIn = (page: Page, label: string): Promise<boolean> => ed<boolean>(page, `(function () { var b = window.__orzC.deepAll(document, 'button').filter(function (x) { var t = (x.textContent || '').trim(); return t === ${JSON.stringify(label)} || t.indexOf(${JSON.stringify(label + ' (')}) === 0; })[0]; if (!b) return false; b.click(); return true; })()`);
+/** How many conflict questions (`role="alertdialog"`) the page shows. */
+const questionCount = (page: Page): Promise<number> => ed<number>(page, 'window.__orzC.deepAll(document, "[role=alertdialog]").filter(function (n) { return n.isConnected && !n.hidden; }).length');
+
 /** A file of the check's own on a page of its own, its opened bytes in the page's folder (where the `opfs` picker opens). */
 async function conflictFile(s: Session, ctx: CheckContext, tag: string, html: string, editor: boolean): Promise<{ page: Page; read(): Promise<string | null>; write(data: string): Promise<unknown> }> {
   const name = fileName(s, tag);
@@ -1270,29 +1282,94 @@ async function conflictPhases(s: Session, p: Probe, ctx: CheckContext): Promise<
   const [firstInclude] = Object.keys(INCLUDES);
   await editorPhase('the same text with other includes', 'conflict-includes', incFile, await s.assemble(INCLUDE_TEXT, { delivery: 'inline', includes: { ...INCLUDES, [firstInclude]: 'The agent resolved this include again.\n' } }), `${INCLUDE_TEXT}\nThe page's edit.\n`);
   await editorPhase('the same text with cdn delivery', 'conflict-delivery', opened, await s.assemble(EDIT_TEXT, { delivery: 'cdn' }), edited);
-  // a page save with no editor open (OrzCarrier.standalone, the carrier app's handle) after a setting change
+  // round 4 (F3b): the opened version put back over this page's own save (a revert, git checkout) is asked about
   {
-    const f = await conflictFile(s, ctx, 'conflict-page', opened, false);
-    const has = await until(() => ed<boolean>(f.page, '!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone && typeof globalThis.OrzCarrier.standalone.save === "function")'), 5_000);
-    if (has) {
-      const agent = await s.assemble(`${EDIT_TEXT}The agent's edit before a page save.\r\n`, { delivery: 'inline' });
-      await f.write(agent);
-      const downloads = ctx.downloads.length;
-      const r = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, `(async function () {
-        var app = globalThis.OrzCarrier.standalone;
+    const f = await conflictFile(s, ctx, 'conflict-revert', opened, true);
+    const downloads = ctx.downloads.length;
+    const first = `${EDIT_TEXT}The page's first save.\r\n`;
+    await ed(f.page, `window.__orzEditor.setText(${JSON.stringify(first)})`);
+    const r1 = await ed<{ ok?: boolean } | null>(f.page, 'window.__orzEditor.save()');
+    if (p.check(r1?.ok === true && (await f.read()) === (await s.assemble(first, { delivery: 'inline' })), `revert: the first save did not write assemble(text) to the opened file (${clip(JSON.stringify(r1))})`)) {
+      await f.write(opened); // someone put the opened version back
+      await ed(f.page, `window.__orzEditor.setText(${JSON.stringify(edited)})`);
+      const r = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, 'window.__orzEditor.save()');
+      await f.page.waitForTimeout(300);
+      p.check(r?.ok === false && r.conflict === true, `the opened version put back over the page's own save (a revert): the next save did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r))})`);
+      p.check((await f.read()) === opened, 'revert: the save wrote over the reverted file without asking');
+      p.eq(ctx.downloads.length - downloads, 0, 'revert: downloads before the reader answered');
+    }
+    await f.page.close();
+  }
+  // a page save with no editor open (OrzCarrier.standalone, the carrier app's handle) after a setting change
+  const appHandle = '!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone && typeof globalThis.OrzCarrier.standalone.save === "function")';
+  const settingChanged = `var app = globalThis.OrzCarrier.standalone;
         if (app.ready) { try { await app.ready; } catch (e) {} }
         var c = ((app.kind && app.kind.settings) || [])[0];
         if (c && typeof app.setSetting === 'function') {
           var now = c.current(app.getText());
           var other = (c.choices || []).filter(function (x) { return x.value !== now; })[0];
           if (other) { var ch = {}; ch[c.key] = other.value; app.setSetting(ch); }
-        }
+        }`;
+  {
+    const f = await conflictFile(s, ctx, 'conflict-page', opened, false);
+    const has = await until(() => ed<boolean>(f.page, appHandle), 5_000);
+    // round 4 (F3c): a carrier's file runs the carrier app (spec/carrier-app.md): no handle is a failure, not a skip
+    if (p.check(has, 'page save: no OrzCarrier.standalone.save — the carrier app\'s handle (spec/carrier-app.md §2) — so the page save of a file that changed on disk cannot be checked')) {
+      const agent = await s.assemble(`${EDIT_TEXT}The agent's edit before a page save.\r\n`, { delivery: 'inline' });
+      await f.write(agent);
+      const downloads = ctx.downloads.length;
+      const r = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, `(async function () {
+        ${settingChanged}
         return app.save();
       })()`);
       await f.page.waitForTimeout(500);
       p.check(r?.ok === false && r.conflict === true, `page save (OrzCarrier.standalone.save(), no editor open): the save after the file changed on disk did not resolve { ok: false, conflict: true } (${clip(JSON.stringify(r))})`);
       p.check((await f.read()) === agent, 'page save (OrzCarrier.standalone.save(), no editor open): the save wrote over the file that changed on disk without asking');
       p.eq(ctx.downloads.length - downloads, 0, 'page save: downloads before the reader answered');
+    }
+    await f.page.close();
+  }
+  // round 4 (F3d, P6): a page save asks; an editor of the same file saves while the question is open —
+  // still ONE question (no second picker), and Replace writes the newest text, never the older page text
+  {
+    const f = await conflictFile(s, ctx, 'conflict-two', opened, false);
+    if (await until(() => ed<boolean>(f.page, appHandle), 5_000)) {
+      const agent = await s.assemble(`${EDIT_TEXT}The agent's edit before two saves.\r\n`, { delivery: 'inline' });
+      await f.write(agent);
+      const downloads = ctx.downloads.length;
+      const r1 = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, `(async function () {
+        ${settingChanged}
+        return app.save();
+      })()`);
+      await f.page.waitForTimeout(300);
+      const older = await ed<string>(f.page, 'globalThis.OrzCarrier.standalone.getText()');
+      const picks = ctx.of('picker').length;
+      const newest = `${older}The editor's newer text.\r\n`;
+      const r2 = await ed<{ ok?: boolean; conflict?: boolean } | null>(f.page, `(async function () {
+        var app = globalThis.OrzCarrier.standalone;
+        var e = app.editor() || app.edit();
+        if (e.ready) { try { await e.ready; } catch (x) {} }
+        e.setText(${JSON.stringify(newest)});
+        return e.save();
+      })()`);
+      await f.page.waitForTimeout(300);
+      const what = 'two saves while a question is open (a page save, then its editor\'s: spec/carrier-app.md §4.5)';
+      p.check(r1?.ok === false && r1.conflict === true && r2?.ok === false && r2.conflict === true, `${what}: the saves did not both resolve { ok: false, conflict: true } (${clip(JSON.stringify([r1, r2]))})`);
+      p.eq(await questionCount(f.page), 1, `${what}: conflict questions shown (one per file: the editor's save re-targets the page's question)`);
+      p.eq(ctx.of('picker').length - picks, 0, `${what}: pickers opened by the editor's save while the question was open`);
+      p.check((await f.read()) === agent, `${what}: a save wrote over the file that changed on disk without asking`);
+      if (p.check(await chooseIn(f.page, 'Replace it'), `${what}: no "Replace it" button`)) {
+        const want = await s.assemble(newest, { delivery: 'inline' });
+        await until(async () => (await f.read()) === want, 10_000);
+        // a second question left on screen, answered too, must not write the older text
+        await chooseIn(f.page, 'Replace it');
+        await f.page.waitForTimeout(500);
+        const disk = await f.read();
+        p.check(disk === want, `${what}: Replace it did not leave the newest text on disk — ${disk === (await s.assemble(older, { delivery: 'inline' })) ? 'the older page text was written over it' : clip(firstDiff(disk ?? '', want))}`);
+        p.eq(await questionCount(f.page), 0, `${what}: questions left after Replace it`);
+        p.eq(await ed(f.page, 'globalThis.OrzCarrier.standalone.isDirty()'), false, `${what}: isDirty() after the newest text was written`);
+      }
+      p.eq(ctx.downloads.length - downloads, 0, `${what}: downloads`);
     }
     await f.page.close();
   }

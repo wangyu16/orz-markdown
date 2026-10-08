@@ -51,12 +51,19 @@ export const SHELL_UID_PATTERN = /^doc-[0-9a-z]{10,32}$/;
  *   saved (round 3: an agent's `upgrade`): it changed on disk since the page
  *   opened it (another program, an agent). Also (round 3, `picked: false`):
  *   the session's file holds the opened bytes again over this page's own
- *   save (someone reverted it). The caller asks the reader: replace it
- *   (`save(input, { overwrite: true })`) or download a copy.
+ *   save (someone reverted it); round 4 (F4): also a remembered handle's
+ *   file holding the opened bytes again over what this page wrote into the
+ *   opened file. The caller asks the reader: replace it
+ *   (`save(input, { overwrite: true, conflictToken })`) or download a copy.
+ *   `conflictToken` (round 4, F2) names this conflict: only an `overwrite`
+ *   carrying the token of the conflict still pending is honoured.
+ * - `file` with `error: 'stale-conflict'` (round 4, F2): an `overwrite` that
+ *   answers no pending conflict (none, or a newer one superseded it) —
+ *   nothing was written and nothing was checked.
  */
 export type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true; conflictToken?: number }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
 
@@ -73,11 +80,16 @@ export interface SaveInput {
 export interface SaveCallOptions {
   /**
    * The reader chose to replace a file that changed on disk (after a
-   * `conflict` result): the file picked for that save is written without the
-   * check (no second picker); with no such file the save runs as usual,
-   * without the check.
+   * `conflict` result): the file of that save is written without the check
+   * (no second picker) — only with the `conflictToken` of that result while
+   * it is the conflict still pending (round 4, F2: a later save, conflicting
+   * or not, supersedes it). Otherwise nothing is written: `{ via: 'file', ok:
+   * false, error: 'stale-conflict' }` — an `overwrite` never writes a file
+   * the saver did not just find in conflict.
    */
   overwrite?: boolean;
+  /** The `conflictToken` of the conflict an `overwrite` answers (round 4, F2). */
+  conflictToken?: number;
 }
 
 export interface SaverOptions {
@@ -120,6 +132,16 @@ export interface SaverOptions {
    * and other header forms. Default: {@link headerUidOf} (parser-free).
    */
   readUid?(text: string): string | undefined;
+  /**
+   * The bytes of a file whose content this page also knows (round 4, F5),
+   * called only when a picked file would otherwise be a conflict: an app's
+   * editor given newer includes (`refreshPreview({ includes })`) passes the
+   * opened text assembled with them — a file on disk holding that content
+   * (the app's server resolved the includes again) is no change. It counts
+   * like the opened content for step 3.4 only; it never proves a handle to be
+   * the opened file. A rejection or a non-string is nothing known.
+   */
+  knownHtml?: () => string | undefined | null | Promise<string | undefined | null>;
 }
 
 export interface Saver {
@@ -385,8 +407,20 @@ export function createSaver(opts: SaverOptions): Saver {
   let session: { handle: FileHandleLike; opened: boolean; last: string } | null = null;
   /** What this page last wrote through any handle (kept when the session handle is dropped). */
   let lastWritten: string | null = null;
-  /** The file of a save that found it changed on disk (and whether it was picked, or proved opened): `overwrite` writes it without a second picker. */
-  let conflicted: { handle: FileHandleLike; picked: boolean; opened: boolean } | null = null;
+  /** What this page last wrote into a file proved to be the opened one (the revert check of a remembered handle, F4). */
+  let lastWrittenOpened: string | null = null;
+  /**
+   * The pending conflict: the file of the save that found it changed on disk (and whether it was
+   * picked, or proved opened) with its token — `overwrite` with that token writes it without a
+   * second picker. Any later save supersedes it (round 4, F2).
+   */
+  let conflicted: { handle: FileHandleLike; picked: boolean; opened: boolean; token: number } | null = null;
+  let conflictTokens = 0;
+  /** A conflict on `handle`: nothing written; it is now the pending one, under a new token. */
+  const conflictOn = (handle: FileHandleLike, picked: boolean, opened: boolean): SaveResult => {
+    conflicted = { handle, picked, opened, token: ++conflictTokens };
+    return { via: 'file', ok: false, error: 'conflict', conflict: true, picked, opened: false, ...(typeof handle.name === 'string' ? { name: handle.name } : {}), conflictToken: conflicted.token };
+  };
 
   /** The opened file's content (`extract` of the opened bytes), once per opened bytes. */
   let openedContent: { of: string; content: FileContent | null } | null = null;
@@ -435,10 +469,23 @@ export function createSaver(opts: SaverOptions): Saver {
    * Asked like any change — unless the opened content is what this page last
    * wrote or is saving (nothing would be lost).
    */
-  const revertedOnDisk = (now: string, html: string): boolean => {
-    if (lastWritten === null || now === lastWritten || now === html) return false;
+  const revertedOnDisk = (now: string, html: string, last: string | null = lastWritten): boolean => {
+    if (last === null || now === last || now === html) return false;
     const disk = contentOf(now);
-    return !sameContent(disk, contentOf(lastWritten)) && !sameContent(disk, contentOf(html));
+    return !sameContent(disk, contentOf(last)) && !sameContent(disk, contentOf(html));
+  };
+
+  /**
+   * The picked file holds content this page knows from `knownHtml` (round 4, F5: the opened text
+   * with the includes the page was given since), not in a newer shell than the file being saved.
+   */
+  const knownOnDisk = async (before: string | null, html: string): Promise<boolean> => {
+    if (before === null || typeof opts.knownHtml !== 'function') return false;
+    let known: unknown;
+    try { known = await opts.knownHtml(); } catch { return false; }
+    if (typeof known !== 'string') return false;
+    const disk = contentOf(before);
+    return sameContent(disk, contentOf(known)) && !newerShell(disk, contentOf(html));
   };
 
   /** A remembered handle proved to be the opened file, or null. */
@@ -483,12 +530,15 @@ export function createSaver(opts: SaverOptions): Saver {
     await w.close();
   };
 
-  const saveToFile = async (html: string, win: SaverWindow, overwrite: boolean): Promise<SaveResult> => {
+  const saveToFile = async (html: string, win: SaverWindow, overwrite: boolean, token: number | undefined): Promise<SaveResult> => {
     const k = key();
     let h: FileHandleLike | null = null;
     let opened = false;
     let picked = false;
-    if (overwrite && conflicted) {
+    if (overwrite) {
+      // an answer to a conflict no longer pending (a newer save superseded it, or there is none):
+      // nothing is written — an older question's text never goes over a newer save (round 4, F2)
+      if (!conflicted || token !== conflicted.token) return { via: 'file', ok: false, error: 'stale-conflict', picked: false, opened: false };
       // the reader chose to replace the file that changed on disk: no second picker, no check
       ({ handle: h, picked, opened } = conflicted);
     }
@@ -499,17 +549,19 @@ export function createSaver(opts: SaverOptions): Saver {
       if (now !== null && now === session.last) { h = session.handle; opened = session.opened; }
       else if (now !== null && now === (await openedBytes())) {
         // the opened bytes again (m24: proved like any) — but put back over this page's own save: ask (F3)
-        if (!overwrite && revertedOnDisk(now, html)) {
-          conflicted = { handle: session.handle, picked: false, opened: true };
-          return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, ...(typeof session.handle.name === 'string' ? { name: session.handle.name } : {}) };
-        }
+        if (revertedOnDisk(now, html)) return conflictOn(session.handle, false, true);
         h = session.handle;
         opened = true;
       } else session = null; // written by someone else since, or unreadable: ask again
     }
     if (!h && k) {
       h = await remembered(k, win);
-      if (h) opened = true;
+      if (h) {
+        opened = true;
+        // it holds the opened bytes — put back over what this page wrote into the opened file: ask (F4)
+        const mine = await openedBytes();
+        if (mine !== undefined && revertedOnDisk(mine, html, lastWrittenOpened)) return conflictOn(h, false, true);
+      }
     }
     if (!h) {
       picked = true;
@@ -528,10 +580,7 @@ export function createSaver(opts: SaverOptions): Saver {
       const before = mine === undefined ? null : await readText(h);
       opened = before !== null && before === mine;
       // this document's file, changed on disk since the page opened it: never written silently
-      if (!overwrite && changedOnDisk(before, mine, html)) {
-        conflicted = { handle: h, picked: true, opened: false };
-        return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, ...(typeof h.name === 'string' ? { name: h.name } : {}) };
-      }
+      if (changedOnDisk(before, mine, html) && !(await knownOnDisk(before, html))) return conflictOn(h, true, false);
     }
     try {
       await write(h, html);
@@ -541,6 +590,7 @@ export function createSaver(opts: SaverOptions): Saver {
     }
     session = { handle: h, opened, last: html };
     lastWritten = html;
+    if (opened) lastWrittenOpened = html;
     if (k && opened) {
       // remember only a handle proved to be this page's file, with what was written through it
       const location = pageLocation(win.location);
@@ -564,7 +614,7 @@ export function createSaver(opts: SaverOptions): Saver {
       }
       const win = winOf();
       if (isServed(win) && !session && opts.servedNotice !== false) return { via: 'served-notice' };
-      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, win, call?.overwrite === true);
+      if (typeof win.showSaveFilePicker === 'function') return saveToFile(input.html, win, call?.overwrite === true, call?.conflictToken);
       return download(input.html);
     },
     download: (input) => download(input.html),

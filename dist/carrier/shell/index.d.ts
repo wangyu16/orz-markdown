@@ -17,6 +17,7 @@ export type { HostKind, HostProtocol, SavePayload, SaveAck, AiOperation, AiReque
 export * from './file-side.js';
 export * from './host-side.js';
 export * from './save.js';
+export * from './conflict.js';
 export * from './preferences.js';
 export type { MessageEventLike, MessageWindow, PostTarget, IframeLike, SaverWindow, StorageLike, FileHandleLike, WritableLike, SaveFilePickerOptions, IdbFactoryLike, LocationLike, FileLike, } from './types.js';
 export * from './update.js';

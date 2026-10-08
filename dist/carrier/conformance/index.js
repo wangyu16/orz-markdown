@@ -65,6 +65,12 @@ const DEFAULT_LANES = 3;
  * machine must not make them flaky.
  */
 exports.EXCLUSIVE_CHECKS = ['C.edit.preview-isolation'];
+/**
+ * Checks that walk many files and pages in one run (round 4 of the carrier-app loop: the conflict
+ * check's ten phases) get this many times the per-check limit.
+ */
+const LONG_CHECKS = { 'C.save.conflict': 3 };
+const limitOf = (id, limit) => limit * (LONG_CHECKS[id] ?? 1);
 /** Started first: they mostly wait (a host that never acknowledges takes 10 s). */
 const FIRST = ['C.host.no-ack', 'C.update.edit-during', 'C.update.resigned', 'C.save.save-as-elsewhere', 'C.save.copy-elsewhere', 'C.save.conflict', 'C.law.content-independence', 'C.law.determinism'];
 function selected(options) {
@@ -108,7 +114,7 @@ async function openConformance(target, options = {}) {
         try {
             await Promise.race([
                 fn(scope, p),
-                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limit} ms`)), limit); }),
+                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${limitOf(id, limit)} ms`)), limitOf(id, limit)); }),
             ]);
         }
         catch (e) {
@@ -241,7 +247,7 @@ function registerConformance(t, target, options = {}) {
                     throw new Error(`${id} failed:\n${r.message}`);
                 if (r.status === 'skipped' && typeof ctx?.skip === 'function')
                     ctx.skip(r.message);
-            }, limit * 4 + 60000); // its own run is bounded by the check limit; the rest is waiting for a lane
+            }, limitOf(id, limit) + limit * 4 + 60000); // its own run is bounded by the check limit; the rest is waiting for a lane
         }
         t.it(`${exports.CONFORMANT_TITLE}${options.allowSkips ? ' (skips allowed)' : ''}`, async () => {
             const all = [...results.values()];

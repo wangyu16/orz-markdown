@@ -408,6 +408,11 @@ chrome('mutants the harness must catch in Chrome', () => {
     // round 3: the conflict's blind spots — a page save with no editor open, the quiet update
     ['page-overwrites-conflict', 'C.save.conflict', /page save \(OrzCarrier\.standalone\.save\(\), no editor open\): the save wrote over the file that changed on disk/],
     ['update-overwrites-conflict', 'C.save.conflict', /update after an agent's edit: the update wrote over the file that changed on disk/],
+    // round 4: a replace after "Download a copy instead", a silent revert, a second question for the editor (P6), no app handle
+    ['r4-after-download', 'C.save.conflict', /the save after "Download a copy instead" did not ask again[\s\S]*wrote over the file that changed on disk without asking/],
+    ['r4-revert-silent', 'C.save.conflict', /put back over the page's own save \(a revert\): the next save did not resolve[\s\S]*revert: the save wrote over the reverted file/],
+    ['r4-two-questions', 'C.save.conflict', /two saves while a question is open[^\n]*: conflict questions shown[^\n]*expected 1, got 2/],
+    ['r4-no-app-handle', 'C.save.conflict', /page save: no OrzCarrier\.standalone\.save/],
   ];
   for (const [variant, id, why] of caught) {
     it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''} the ${variant} mutant fails ${id}`, async () => {

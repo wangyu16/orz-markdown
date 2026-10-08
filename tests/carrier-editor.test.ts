@@ -31,7 +31,7 @@ import {
   type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
 } from '../src/carrier/editor';
 import { historyChars, undoTexts } from '../src/carrier/editor/adapter';
-import { editHeader, withoutHeader } from '../src/carrier';
+import { assembleEnvelope, editHeader, withoutHeader } from '../src/carrier';
 import { md } from '../src/index';
 import { isScriptSafe, type HostConnection, type Saver, type SaveResult, type StorageLike, type PreferenceStore } from '../src/carrier/shell';
 import { VERSION } from '../src/version';
@@ -985,6 +985,35 @@ describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-a
     expect(assembled.at(-1)).toBeUndefined();
     m.shell.destroy();
     await m.shell.refreshPreview({ includes: {} }); // after destroy: nothing
+  });
+
+  it('[E.31] round 4 (F5): after refreshPreview({ includes }), a file on disk holding the opened text with those latest includes (an app\'s server resolved them again) is known content — the save writes, no question; another text on disk still asks', async () => {
+    const T = '# Doc\n\n{{md part.md}}\n';
+    const assemble = (t: string, o?: { includes?: Record<string, string> }) => assembleEnvelope(t, { kind: 'md', shellVersion: '1.0.0', delivery: 'cdn', headHtml: '', bodyHtml: '<main></main>', ...(o?.includes ? { includes: o.includes } : {}) });
+    const I1 = { 'part.md': 'one\n' };
+    const I2 = { 'part.md': 'two\n' };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(g, 'window');
+    const prev = g.window;
+    const run = async (disk: string, refresh: boolean) => {
+      let content = disk;
+      g.window = { location: { protocol: 'https:', href: 'https://app.example/edit', pathname: '/edit' }, showSaveFilePicker: async () => ({ name: 'n.md.html', getFile: async () => ({ text: async () => content }), createWritable: async () => { let next = ''; return { write: async (d: string) => { next += d; }, close: async () => { content = next; } }; } }) };
+      const m = mount({ text: T, includes: I1, assemble, fileName: 'n.md.html' });
+      if (refresh) await m.shell.refreshPreview({ includes: I2 });
+      type(m, 'Edited.\n');
+      const r = await m.shell.save();
+      const out = { r, written: content === assemble(m.shell.getText(), { includes: refresh ? I2 : I1 }), asked: m.root.querySelectorAll('[role="alertdialog"]').length };
+      m.shell.destroy();
+      return out;
+    };
+    try {
+      expect(await run(assemble(T, { includes: I2 }), true)).toMatchObject({ r: { ok: true, via: 'file' }, written: true, asked: 0 });
+      // without the refresh the page never saw those includes: a change, asked about
+      expect(await run(assemble(T, { includes: I2 }), false)).toMatchObject({ r: { conflict: true }, written: false, asked: 1 });
+      expect(await run(assemble(`${T}Agent.\n`, { includes: I2 }), true)).toMatchObject({ r: { conflict: true }, written: false, asked: 1 });
+    } finally {
+      if (had) g.window = prev; else delete g.window;
+    }
   });
 
   it('[E.30] an include directive that resolved to nothing renders a quiet note — "Included file not available: <target>" (p.orz-include-missing, role note) keeping the directive in data-md, so copy-as-Markdown gives back the directive; missingIncludes: false renders nothing as the parser does', async () => {

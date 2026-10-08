@@ -22,7 +22,7 @@ import type { AddressInfo } from 'node:net';
 import {
   connectHost, embedCarrierFrame, createSaver, createPreferenceStore, preferenceNamespace, READER_PREFERENCES,
   MSG, KIND_EXTENSIONS, HOST_KINDS, SHELL_UID_PATTERN, headerUidOf, SAVE_ACK_TIMEOUT_MS, AI_TIMEOUT_MS, INCLUDE_TIMEOUT_MS, HELLO_INTERVAL_MS, HELLO_MAX_MS,
-  type MessageListener, type HandleStore, type StoredHandle, type FileHandleLike, type SaverWindow, type StorageLike, type HostConnection,
+  type MessageListener, type HandleStore, type StoredHandle, type FileHandleLike, type SaverWindow, type StorageLike, type HostConnection, type SaverOptions,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, readHeader, UID_PATTERN, type ShellParts } from '../src/carrier';
 
@@ -405,9 +405,10 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     expect(await s8.save({ text: 'a', html: 'A' })).toMatchObject({ picked: true, opened: false });
     expect(mem8.map.size).toBe(0);
     elsewhere.content = 'v0';
-    expect(await s8.save({ text: 'b', html: 'B' })).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html' });
+    const c8 = await s8.save({ text: 'b', html: 'B' });
+    expect(c8).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html', conflictToken: expect.any(Number) });
     expect(elsewhere.content).toBe('v0');
-    expect(await s8.save({ text: 'b', html: 'B' }, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect(await s8.save({ text: 'b', html: 'B' }, { overwrite: true, conflictToken: (c8 as { conflictToken: number }).conflictToken })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
     expect([f8.picks.length, elsewhere.content, mem8.map.size]).toEqual([1, 'B', 1]);
   });
 
@@ -415,7 +416,7 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
     const forbidden = /\b(outerHTML|innerHTML|innerText|textContent|documentElement|XMLSerializer|cloneNode|querySelector(All)?|getElementById|getElementsBy\w+|serializeToString|\.head\b)\b/;
     // chrome.ts is the UI module that writes icons into its own shadow root (V.4 binds it); every other module is checked.
     const files = readdirSync('src/carrier/shell').filter((f) => f.endsWith('.ts') && f !== 'chrome.ts');
-    expect(files.sort()).toEqual(['file-side.ts', 'host-side.ts', 'index.ts', 'indicator.ts', 'preferences.ts', 'protocol.ts', 'save.ts', 'types.ts', 'update.ts']);
+    expect(files.sort()).toEqual(['conflict.ts', 'file-side.ts', 'host-side.ts', 'index.ts', 'indicator.ts', 'preferences.ts', 'protocol.ts', 'save.ts', 'types.ts', 'update.ts']);
     const hits: string[] = [];
     for (const f of files) {
       readFileSync(`src/carrier/shell/${f}`, 'utf8').split('\n').forEach((line, i) => {
@@ -474,9 +475,15 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     const f = fakeSaverWindow({ picker: async () => agent });
     const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: f.win, handleStore: memoryHandleStore().store, openedHtml: OPENED });
     const input = { text: MINE, html: orz(MINE) };
-    expect(await saver.save(input)).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name: 'notes.md.html' });
+    const c1 = await saver.save(input);
+    expect(c1).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name: 'notes.md.html', conflictToken: expect.any(Number) });
     expect([agent.writes.length, extract(agent.content)!.text]).toEqual([0, doc(UID, 'AGENT EDIT')]);
-    expect(await saver.save(input, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
+    // round 4 (F2): an overwrite without the conflict's token, or with another, writes nothing
+    for (const call of [{ overwrite: true }, { overwrite: true, conflictToken: (c1 as { conflictToken: number }).conflictToken + 1 }]) {
+      expect(await saver.save(input, call)).toEqual({ via: 'file', ok: false, error: 'stale-conflict', picked: false, opened: false });
+    }
+    expect([agent.writes.length, f.picks.length]).toEqual([0, 1]);
+    expect(await saver.save(input, { overwrite: true, conflictToken: (c1 as { conflictToken: number }).conflictToken })).toEqual({ via: 'file', ok: true, picked: true, opened: false, name: 'notes.md.html' });
     expect([f.picks.length, agent.content === input.html, f.downloads.length]).toEqual([1, true, 0]);
     // the next save reuses that handle (what this page wrote last), no picker, no conflict
     const again = { text: doc(UID, 'Again.'), html: orz(doc(UID, 'Again.')) };
@@ -610,8 +617,9 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     const h = fakeHandle('notes.md.html', {}, orzv(opened, { shellVersion: '1.1.0' }));
     const w = fakeSaverWindow({ picker: async () => h });
     const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: orzv(opened) });
-    expect((await saver.save({ text: mine, html: orzv(mine) })).ok).toBe(false);
-    expect(await saver.save({ text: mine, html: orzv(mine) }, { overwrite: true })).toMatchObject({ ok: true, picked: true });
+    const cu = await saver.save({ text: mine, html: orzv(mine) });
+    expect(cu.ok).toBe(false);
+    expect(await saver.save({ text: mine, html: orzv(mine) }, { overwrite: true, conflictToken: (cu as { conflictToken: number }).conflictToken })).toMatchObject({ ok: true, picked: true });
     expect([h.content === orzv(mine), w.picks.length]).toEqual([true, 1]);
     // this page itself wrote a newer shell (its update), re-encoded by a tool since: no question
     const h2 = fakeHandle('notes.md.html', {}, orzv(opened));
@@ -633,12 +641,13 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     expect(await saver.save({ text: one, html: orzv(one) })).toMatchObject({ ok: true, picked: true, opened: true });
     h.content = opened; // git checkout / an agent put the opened version back
     const two = doc(UID, 'Two.');
-    expect(await saver.save({ text: two, html: orzv(two) })).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html' });
+    expect(await saver.save({ text: two, html: orzv(two) })).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html', conflictToken: expect.any(Number) });
     expect([h.content === opened, w.picks.length]).toEqual([true, 1]);
     // not answered (a download, a dismissal): the next save asks again
-    expect(await saver.save({ text: two, html: orzv(two) })).toMatchObject({ conflict: true, picked: false });
+    const again = await saver.save({ text: two, html: orzv(two) });
+    expect(again).toMatchObject({ conflict: true, picked: false });
     // Replace: overwrite writes the session's file, proved opened, and it is remembered
-    expect(await saver.save({ text: two, html: orzv(two) }, { overwrite: true })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect(await saver.save({ text: two, html: orzv(two) }, { overwrite: true, conflictToken: (again as { conflictToken: number }).conflictToken })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
     expect([h.content === orzv(two), w.picks.length, mem.map.size]).toEqual([true, 1, 1]);
     // the page saves the opened text itself while the file holds it again: nothing would be lost — no question
     const h2 = fakeHandle('notes.md.html', {}, opened);
@@ -647,6 +656,126 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     expect((await s2.save({ text: one, html: orzv(one) })).ok).toBe(true);
     h2.content = opened;
     expect(await s2.save({ text: doc(UID, 'As opened.'), html: opened })).toMatchObject({ ok: true, picked: false, opened: true });
+  });
+
+  it('[S.14] round 4 (F2): each conflict gets a token and only the pending one is answered — an overwrite carrying the token of a conflict a later save superseded, or after the file was written, writes nothing ({ error: stale-conflict }): an older question\'s text never goes over a newer save', async () => {
+    const opened = orzv(doc(UID, 'As opened.'));
+    const h = fakeHandle('notes.md.html', {}, orzv(doc(UID, 'AGENT EDIT')));
+    const w = fakeSaverWindow({ picker: async () => h });
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: opened });
+    const older = doc(UID, 'The page text (older).');
+    const newer = doc(UID, 'The editor text (newer).');
+    const q1 = await saver.save({ text: older, html: orzv(older) });
+    const q2 = await saver.save({ text: newer, html: orzv(newer) });
+    const t1 = (q1 as { conflictToken: number }).conflictToken;
+    const t2 = (q2 as { conflictToken: number }).conflictToken;
+    expect([q1.via === 'file' && q1.conflict, q2.via === 'file' && q2.conflict, t1 !== t2]).toEqual([true, true, true]);
+    // the older question answers first: refused, nothing written (the newer one is still pending)
+    expect(await saver.save({ text: older, html: orzv(older) }, { overwrite: true, conflictToken: t1 })).toEqual({ via: 'file', ok: false, error: 'stale-conflict', picked: false, opened: false });
+    expect(h.writes).toHaveLength(0);
+    // the newer answers: written
+    expect(await saver.save({ text: newer, html: orzv(newer) }, { overwrite: true, conflictToken: t2 })).toMatchObject({ ok: true, picked: true });
+    // P6: the older question's Replace after the newer one wrote — no conflict pending: refused, the newer text stays
+    expect(await saver.save({ text: older, html: orzv(older) }, { overwrite: true, conflictToken: t1 })).toMatchObject({ ok: false, error: 'stale-conflict' });
+    expect(await saver.save({ text: older, html: orzv(older) }, { overwrite: true, conflictToken: t2 })).toMatchObject({ ok: false, error: 'stale-conflict' });
+    expect([h.writes.length, h.content === orzv(newer), w.picks.length]).toEqual([1, true, 2]);
+  });
+
+  it('[S.14] round 4 (F4): a remembered handle (no session handle: it was dropped after an agent\'s edit) whose file holds the opened bytes again over what this page wrote into the opened file is asked about too — picked: false, nothing written; overwrite writes it; a page that wrote only elsewhere is not asked', async () => {
+    const opened = orzv(doc(UID, 'As opened.'));
+    const mem = memoryHandleStore();
+    const h = fakeHandle('notes.md.html', { query: 'granted' }, opened);
+    const w = fakeSaverWindow({ picker: async () => h });
+    const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: mem.store, openedHtml: opened });
+    const s1 = doc(UID, 'S1.');
+    expect(await saver.save({ text: s1, html: orzv(s1) })).toMatchObject({ ok: true, picked: true, opened: true });
+    expect(mem.map.size).toBe(1);
+    // an agent's edit: the session handle is dropped, the picker gives the file, the conflict; the reader downloads (no answer to the saver)
+    h.content = orzv(doc(UID, 'AGENT EDIT'));
+    const s3 = doc(UID, 'S3.');
+    expect(await saver.save({ text: s3, html: orzv(s3) })).toMatchObject({ conflict: true, picked: true });
+    // git checkout: the opened (committed) version is back; the remembered handle is proved by it
+    h.content = opened;
+    const s4 = doc(UID, 'S4.');
+    const r4 = await saver.save({ text: s4, html: orzv(s4) });
+    expect(r4).toEqual({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: false, opened: false, name: 'notes.md.html', conflictToken: expect.any(Number) });
+    expect([h.content === opened, w.picks.length]).toEqual([true, 2]);
+    expect(await saver.save({ text: s4, html: orzv(s4) }, { overwrite: true, conflictToken: (r4 as { conflictToken: number }).conflictToken })).toEqual({ via: 'file', ok: true, picked: false, opened: true, name: 'notes.md.html' });
+    expect([h.content === orzv(s4), w.picks.length]).toEqual([true, 2]);
+    // a new page load (nothing written yet) reuses the remembered handle holding its opened bytes without a question
+    const s2 = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: fakeSaverWindow({ picker: async () => fakeHandle() }).win, handleStore: mem.store, openedHtml: orzv(s4) });
+    expect(await s2.save({ text: s1, html: orzv(s1) })).toMatchObject({ ok: true, picked: false, opened: true });
+    // a page that wrote only into another file (picked, not the opened one) is not asked when the remembered file holds its opened bytes
+    const elsewhere = fakeHandle('notes.md.html', {}, '');
+    const w3 = fakeSaverWindow({ picker: async () => elsewhere });
+    h.content = 'not the opened bytes yet';
+    const s3saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w3.win, handleStore: mem.store, openedHtml: orzv(s1) });
+    expect(await s3saver.save({ text: s3, html: orzv(s3) })).toMatchObject({ ok: true, picked: true, opened: false });
+    elsewhere.content = 'someone else wrote here';
+    h.content = orzv(s1);
+    expect(await s3saver.save({ text: s4, html: orzv(s4) })).toMatchObject({ ok: true, picked: false, opened: true });
+    expect([h.content === orzv(s4), w3.picks.length]).toEqual([true, 1]);
+  });
+
+  it('[S.14] round 4 (F5): knownHtml — content the page also knows (the opened text with the includes it was given since) — on a picked file is no change: written, never counted as the opened file; without it, or when it fails, or in a newer shell, the save asks', async () => {
+    const text = doc(UID, '{{md part.md}}');
+    const i1 = { 'part.md': 'one\n' };
+    const i2 = { 'part.md': 'two\n' };
+    const opened = orzv(text, { includes: i1 });
+    const mine = doc(UID, '{{md part.md}}\nEdited.');
+    const run = async (disk: string, knownHtml?: SaverOptions['knownHtml']) => {
+      const h = fakeHandle('notes.md.html', {}, disk);
+      const w = fakeSaverWindow({ protocol: 'https:', href: 'https://app.example/edit', picker: async () => h });
+      const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: opened, servedNotice: false, ...(knownHtml ? { knownHtml } : {}) });
+      const r = await saver.save({ text: mine, html: orzv(mine, { includes: i2 }) });
+      return { r, written: h.content === orzv(mine, { includes: i2 }) };
+    };
+    const disk = orzv(text, { includes: i2 }); // the app's server resolved the include again
+    expect(await run(disk)).toMatchObject({ r: { conflict: true }, written: false });
+    expect(await run(disk, async () => orzv(text, { includes: i2 }))).toMatchObject({ r: { ok: true, picked: true, opened: false }, written: true });
+    expect(await run(disk, () => orzv(text, { includes: i2 }))).toMatchObject({ r: { ok: true }, written: true });
+    expect(await run(disk, async () => { throw new Error('assemble failed'); })).toMatchObject({ r: { conflict: true }, written: false });
+    expect(await run(disk, () => null)).toMatchObject({ r: { conflict: true }, written: false });
+    // another text on disk is still a change; the known content in a newer shell is an agent's upgrade
+    expect(await run(orzv(doc(UID, 'AGENT')), () => orzv(text, { includes: i2 }))).toMatchObject({ r: { conflict: true }, written: false });
+    expect(await run(orzv(text, { includes: i2, shellVersion: '1.1.0' }), () => orzv(text, { includes: i2 }))).toMatchObject({ r: { conflict: true }, written: false });
+  });
+
+  it('[S.14] round 4 (F6, K02): the revert check\'s exceptions — the opened content is what this page is saving, or what it last wrote, in OTHER bytes (another shell version) — ask nothing; the same bytes neither', async () => {
+    const opened = orzv(doc(UID, 'As opened.'));
+    const openedOther = orzv(doc(UID, 'As opened.'), { shellVersion: '0.9.0' }); // the opened content, other bytes
+    const setup = async () => {
+      const h = fakeHandle('notes.md.html', {}, opened);
+      const w = fakeSaverWindow({ picker: async () => h });
+      const saver = createSaver({ uid: UID, suggestedName: 'notes.md.html', kind: 'md', window: w.win, handleStore: memoryHandleStore().store, openedHtml: opened });
+      return { h, w, saver };
+    };
+    // saving the opened content (in other bytes) over the reverted file: nothing would be lost
+    {
+      const { h, w, saver } = await setup();
+      const one = doc(UID, 'One.');
+      expect((await saver.save({ text: one, html: orzv(one) })).ok).toBe(true);
+      h.content = opened;
+      expect(await saver.save({ text: doc(UID, 'As opened.'), html: openedOther })).toMatchObject({ ok: true, picked: false, opened: true });
+      expect([h.content === openedOther, w.picks.length]).toEqual([true, 1]);
+    }
+    // this page last wrote the opened content (in other bytes), then the file got the opened bytes: nothing of this page's is lost
+    {
+      const { h, w, saver } = await setup();
+      expect((await saver.save({ text: doc(UID, 'As opened.'), html: openedOther })).ok).toBe(true);
+      h.content = opened;
+      const two = doc(UID, 'Two.');
+      expect(await saver.save({ text: two, html: orzv(two) })).toMatchObject({ ok: true, picked: false, opened: true });
+      expect([h.content === orzv(two), w.picks.length]).toEqual([true, 1]);
+    }
+    // control: another content written before the revert asks
+    {
+      const { h, saver } = await setup();
+      const one = doc(UID, 'One.');
+      expect((await saver.save({ text: one, html: orzv(one) })).ok).toBe(true);
+      h.content = opened;
+      expect(await saver.save({ text: doc(UID, 'Two.'), html: orzv(doc(UID, 'Two.')) })).toMatchObject({ conflict: true, picked: false });
+    }
   });
 
   it('[S.14] round 3 (K25): a saver without openedHtml never reports a conflict — nothing is known about the opened text — on a picked file of this document holding another text, nor on its session file', async () => {
@@ -672,9 +801,12 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     // the reader did not answer; a new save (no overwrite) asks the picker again: the reader picks a new file
     const r2 = await saver.save({ text: MINE, html: orz(MINE) });
     expect([r2.ok, f.picks.length, fresh.content === orz(MINE)]).toEqual([true, 2, true]);
-    // an overwrite now has no conflict to answer: it writes this page's file (fresh), not the agent's
+    // round 4 (F2): an overwrite now answers no pending conflict (the later save superseded it): nothing is
+    // written — neither the agent's file nor this page's — and a plain save then writes this page's file
     const next = doc(UID, 'Next.');
-    expect((await saver.save({ text: next, html: orz(next) }, { overwrite: true })).ok).toBe(true);
+    expect(await saver.save({ text: next, html: orz(next) }, { overwrite: true, conflictToken: (r1 as { conflictToken: number }).conflictToken })).toEqual({ via: 'file', ok: false, error: 'stale-conflict', picked: false, opened: false });
+    expect([agent.writes.length, fresh.content === orz(MINE), f.picks.length]).toEqual([0, true, 2]);
+    expect((await saver.save({ text: next, html: orz(next) })).ok).toBe(true);
     expect([agent.writes.length, fresh.content === orz(next), f.picks.length]).toEqual([0, true, 2]);
   });
 
@@ -692,7 +824,7 @@ describe('a file that changed on disk (2.2.0, spec/shell-runtime.md §1)', () =>
     const r = await saver.save({ text: next, html: orz(next) });
     expect([calls >= 2, r.via === 'file' && r.conflict === true, agent.writes.length]).toEqual([true, true, 0]);
     const n = calls;
-    await saver.save({ text: next, html: orz(next) }, { overwrite: true });
+    await saver.save({ text: next, html: orz(next) }, { overwrite: true, conflictToken: (r as { conflictToken: number }).conflictToken });
     await saver.save({ text: doc(UID, 'Third.'), html: orz(doc(UID, 'Third.')) });
     expect(calls).toBe(n); // a string, once given, is kept
   });
@@ -1103,19 +1235,21 @@ function valueImports(entry: string): Set<string> {
  */
 // 2026-10-08, round 1 of the carrier-app loop (the save-conflict check, syntax tokens, icons, toast
 // actions): 61,607 bytes. Bound ~10 % above. 63,016 after round 2; 65,824 after round 3 (the newer-shell
-// and revert checks, the question's alertdialog and wordings): the bound stands.
-const SHELL_BUNDLE_LIMIT = 68_000;
+// and revert checks, the question's alertdialog and wordings): the bound stands. 68,451 after round 4
+// (one conflict question per saver — conflict.ts — tokens, the remembered-handle revert, knownHtml):
+// bound raised to 75 KB (~10 % above).
+const SHELL_BUNDLE_LIMIT = 75_000;
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
 const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
-  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 68 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
+  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 75 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
     const graph = [...valueImports('src/carrier/shell/index.ts')].sort();
     expect(graph).toEqual([
       ...READER_GRAPH,
-      'src/carrier/shell/chrome.ts', 'src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/indicator.ts',
+      'src/carrier/shell/chrome.ts', 'src/carrier/shell/conflict.ts', 'src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/indicator.ts',
       'src/carrier/shell/preferences.ts', 'src/carrier/shell/protocol.ts', 'src/carrier/shell/save.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts',
     ].sort());
     const { build } = await import('esbuild');

@@ -1081,6 +1081,54 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     b.app.dispose();
   });
 
+  it('[A.15] round 4 (F2): one question per file — the page and its editors share it: a page save asks, then an editor save while it is open calls no saver, shows no question of its own and re-targets the page\'s (focused); Replace writes the editor\'s text once with the conflict\'s token; only the text written is marked saved (an edit made while the question was open stays dirty); a question of a destroyed editor goes with it', async () => {
+    const log: Array<{ text: string; overwrite: boolean; token?: number }> = [];
+    let tokens = 0;
+    const b = boot(undefined, {
+      services: {
+        createSaver: (): Saver => ({
+          async save(i, c) {
+            log.push({ text: i.text, overwrite: c?.overwrite === true, ...(c?.conflictToken !== undefined ? { token: c.conflictToken } : {}) });
+            await tick(2);
+            return c?.overwrite ? { via: 'file', ok: true, picked: true, opened: false } : { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, conflictToken: ++tokens };
+          },
+          async download() { return { via: 'download', ok: true, confirmed: false }; },
+          handleKey: () => null,
+        }),
+      },
+    });
+    await b.app.ready;
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    const pageText = b.app.getText();
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    expect(b.root.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    const ed = b.app.edit();
+    const edRoot = ed.root as unknown as ShadowRoot;
+    ed.setText(`${ed.getText()}typed\r\n`);
+    const typed = ed.getText();
+    expect(await ed.save()).toEqual({ ok: false, via: 'file', error: 'conflict', conflict: true });
+    expect([log.length, edRoot.querySelectorAll('[role="alertdialog"]').length, b.root.querySelectorAll('[role="alertdialog"]').length]).toEqual([1, 0, 1]);
+    expect(b.root.activeElement).toBe(byLabel(b.root, 'Download a copy instead'));
+    // typed while the question is open (not saved): stays dirty after Replace writes `typed`
+    ed.setText(`${typed}more\r\n`);
+    byLabel(b.root, SAVE_CONFLICT_LABELS.replace).click();
+    await tick(20);
+    expect(log).toEqual([{ text: pageText, overwrite: false }, { text: typed, overwrite: true, token: 1 }]);
+    expect([ed.isDirty(), b.app.isDirty()]).toEqual([true, true]);
+    ed.setText(typed);
+    expect([ed.isDirty(), b.app.isDirty()]).toEqual([false, false]);
+    // the editor asks; destroyed (Done) with its question open: the page's next save asks the saver again
+    ed.setText(`${typed}again\r\n`);
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    expect(edRoot.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    await b.app.leave();
+    const n = log.length;
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    expect(log.length).toBe(n + 1);
+    expect(b.root.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    b.app.dispose();
+  });
+
   it('[A.15] round 3 (K10): the app keeps no failed assembly of the opened bytes — an assemble that fails once (impure, a fetch) is tried again at the next proof, so the conflict check is never disabled', async () => {
     let failing = true;
     const b = boot(undefined, { kind: { assemble: (text, o = {}) => { if (failing) throw new Error('engine not reachable'); return fileHtml(text, { ...(o.delivery ? { delivery: o.delivery } : {}), ...(o.includes ? { includes: o.includes } : {}), ...(o.engineSource ? { engine: o.engineSource } : {}) }); } } });
@@ -1532,6 +1580,86 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
       }
       await page.close();
     }
+    await ctx.close();
+  }, 180_000);
+
+  it('[A.15] [S.14] [V.6] round 4 (F2, P6) in Chrome: one conflict question per file — a page save asks (a theme change, Cmd/Ctrl+S in the read view); Edit, typing and Cmd/Ctrl+S in the editor open no second question and no second picker but focus the open one, which now answers for the typed text: Replace it (Tab, Enter) writes it — never the older page text — the page and the editor are clean and leaving asks nothing; in the other order (the editor asks, Done, then the page saves) one question too, and the newest text wins', async () => {
+    const ctx = await context();
+    const deepFocus = (page: Page) => page.evaluate(() => { let a: Element | null = document.activeElement; for (let i = 0; i < 10 && a && (a as HTMLElement).shadowRoot?.activeElement; i++) a = (a as HTMLElement).shadowRoot!.activeElement; return (a?.textContent ?? '').trim(); });
+    const questions = (page: Page) => page.getByRole('alertdialog').count();
+    const open = async (name: string, text: string) => {
+      const html = await assembleStub(text);
+      const page = await ctx.newPage();
+      await page.goto(write(name, html));
+      await bootDone(page);
+      await writeOpfs(page, { name }, html);
+      await writeOpfs(page, { name }, await assembleStub(`${text}Agent edit on disk.\n`));
+      return page;
+    };
+    // P6: the page asks first, then the editor saves
+    const text = '{{nyml\nkind: document\ntitle: P6\nuid: doc-psixpsixpsix0008a\n}}\n\n# P6\n\nBody.\n';
+    const page = await open('p6.md.html', text);
+    const agent = (await readOpfs(page, { name: 'p6.md.html' }))!;
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    await page.locator('#orz-doc').click();
+    await page.keyboard.press(`${MOD}+s`);
+    await page.getByRole('alertdialog').waitFor();
+    const older = await page.evaluate(`${APP}.getText()`) as string;
+    const picks = (await pageRecords(page, 'picker')).length;
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(`${APP}.editor().ready`);
+    await page.evaluate(`${APP}.editor().focus()`);
+    await page.keyboard.press(`${MOD}+ArrowDown`);
+    await page.keyboard.type('Typed in the editor.');
+    const typed = await page.evaluate(`${APP}.editor().getText()`) as string;
+    expect(typed).toContain('Typed in the editor.');
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForTimeout(400);
+    expect(await questions(page)).toBe(1);
+    expect(await pageRecords(page, 'picker')).toHaveLength(picks);
+    expect(await deepFocus(page)).toBe(SAVE_CONFLICT_LABELS.download);
+    expect((await readOpfs(page, { name: 'p6.md.html' })) === agent).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(await deepFocus(page)).toBe(SAVE_CONFLICT_LABELS.replace);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    await page.waitForTimeout(400);
+    expect((await readOpfs(page, { name: 'p6.md.html' })) === await assembleStub(typed)).toBe(true);
+    expect((await readOpfs(page, { name: 'p6.md.html' })) === await assembleStub(older)).toBe(false);
+    expect([await questions(page), await page.evaluate(`${APP}.editor().isDirty()`)]).toEqual([0, false]);
+    let asked = false;
+    page.on('dialog', (d) => { asked = true; void d.accept(); });
+    await page.close({ runBeforeUnload: true });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(asked).toBe(false);
+
+    // the other order: the editor asks, Done, then the page saves
+    const text2 = '{{nyml\nkind: document\ntitle: P6b\nuid: doc-psixpsixpsix0009b\n}}\n\n# P6b\n\nBody.\n';
+    const two = await open('p6b.md.html', text2);
+    await two.getByRole('button', { name: 'Edit', exact: true }).click();
+    await two.evaluate(`${APP}.editor().ready`);
+    await two.evaluate(`${APP}.editor().focus()`);
+    await two.keyboard.press(`${MOD}+ArrowDown`);
+    await two.keyboard.type('First line.');
+    await two.keyboard.press(`${MOD}+s`);
+    await two.getByRole('alertdialog').waitFor();
+    await two.evaluate(`${APP}.editor().focus()`);
+    await two.keyboard.type(' Second.');
+    await two.keyboard.press(`${MOD}+s`);
+    await two.waitForTimeout(300);
+    expect(await questions(two)).toBe(1);
+    await two.getByRole('button', { name: 'Done', exact: true }).click();
+    await two.waitForTimeout(300);
+    expect(await questions(two)).toBe(0); // the editor's question went with it: the next save asks again
+    const newest = await two.evaluate(`${APP}.getText()`) as string;
+    expect(newest).toContain('First line. Second.');
+    await two.locator('#orz-doc').click();
+    await two.keyboard.press(`${MOD}+s`);
+    await two.getByRole('alertdialog').waitFor();
+    expect(await questions(two)).toBe(1);
+    await two.getByRole('button', { name: SAVE_CONFLICT_LABELS.replace }).click();
+    await two.waitForFunction(`!${APP}.isDirty()`);
+    expect((await readOpfs(two, { name: 'p6b.md.html' })) === await assembleStub(newest)).toBe(true);
     await ctx.close();
   }, 180_000);
 

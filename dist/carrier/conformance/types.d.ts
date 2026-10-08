@@ -76,7 +76,7 @@ export interface ConformanceOptions {
      * `false` for none. Default: the corpus shipped in this package.
      */
     corpus?: string | false | Record<string, string>;
-    /** Per-check time limit (ms). Default 120 000. */
+    /** Per-check time limit (ms). Default 120 000; `C.save.conflict`, which walks many files, gets three times it. */
     checkTimeoutMs?: number;
     /**
      * How many checks run side by side (each in its own browser contexts;

@@ -33,15 +33,20 @@ and the shell chrome (§8). Claims S.1–S.15, U.1–U.13 and V.1–V.6 in
 ## 1. Save
 
 ```ts
-const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml?, servedNotice?, readUid? });
-saver.save({ text, html, theme? }, { overwrite? }?): Promise<SaveResult>   // never rejects
+const saver = createSaver({ uid, suggestedName, kind, host?, window?, handleStore?, openedHtml?, servedNotice?, readUid?, knownHtml? });
+saver.save({ text, html, theme? }, { overwrite?, conflictToken? }?): Promise<SaveResult>   // never rejects
 saver.download({ html }): Promise<SaveResult>             // Export / the notice's "download a copy"
 
 type SaveResult =
   | { via: 'host'; ok: boolean; error?: string }
-  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true }
+  | { via: 'file'; ok: boolean; error?: string; picked: boolean; opened: boolean; name?: string; conflict?: true; conflictToken?: number }
   | { via: 'download'; ok: boolean; error?: string; confirmed: false; name?: string }
   | { via: 'served-notice' };
+
+// one conflict question per saver (round 4 of the carrier-app loop, F2)
+answerSaveConflict({ saver, root, input, result?, opened?, returnFocus? }): Promise<SaveConflictAnswer>
+saveConflictOpen(saver): boolean
+dropSaveConflict(saver, root?): void
 ```
 
 **What was written.** A `file` result says whether a picker was shown for
@@ -91,6 +96,14 @@ caller words it "Download started", never "Saved". Its `name` is
   before the header, `{{nyml kind: document` on the opener line. Default:
   `headerUidOf` (parser-free: the first `{{nyml` block after a BOM and blank
   lines, a top-level `uid:` line, quotes and a `|` block's first line read).
+- `knownHtml()` (2.2.0, round 4 of the carrier-app loop, F5) — the bytes of
+  a file whose content the page also knows, read only when a picked file
+  would otherwise be a conflict (step 3.4): the editor shell passes the
+  opened text assembled with the includes `refreshPreview({ includes })`
+  handed it since (an app's server resolved them again, and the file on
+  disk holds that). That content — not in a newer shell than the file being
+  saved — is no change. It never proves a handle to be the opened file. A
+  rejection or a non-string is nothing known.
 
 **Order** (the first that applies):
 
@@ -141,17 +154,17 @@ caller words it "Download started", never "Saved". Its `name` is
       `.html`). The picked file is the opened one (`opened: true`) only if,
       before the write, it holds the opened bytes — a new file, or a
       same-named file in the folder the picker opened in, is not.
-   4. **A file that changed on disk** (2.2.0, rounds 1–3 of the carrier-app
+   4. **A file that changed on disk** (2.2.0, rounds 1–4 of the carrier-app
       loop): when the picked (or re-picked — the session's handle was
       dropped because someone else wrote its file) file is an orz file
       (`extract`) of **this document** and its **content** is neither the
-      opened file's (from `openedHtml`), what this page last wrote, nor the
-      file being saved — or it holds such content in a **newer shell** than
+      opened file's (from `openedHtml`), what this page last wrote, the
+      file being saved, nor the content of `knownHtml` (round 4, F5) — or it holds such content in a **newer shell** than
       the file being saved (semver, round 3, L12: an agent ran `upgrade`;
       writing would put the older shell back) and this page did not write
       that shell itself — nothing is written: → `{ via: 'file', ok: false,
       error: 'conflict', conflict: true, picked: true, opened: false,
-      name? }`. Another program or an agent edited the document since the
+      name?, conflictToken }`. Another program or an agent edited the document since the
       page opened it; writing would lose that edit silently.
       - *This document:* the file's header `uid` (read with `readUid`, else
         `headerUidOf`) is the saver's `uid` — or either side has none (a
@@ -178,7 +191,21 @@ caller words it "Download started", never "Saved". Its `name` is
         a deliberate edit on disk like any other, and asking costs one
         question; nothing legitimate depends on the silent write (m24's
         "the opened file copied over the one picked earlier" now asks once,
-        then behaves as before).
+        then behaves as before). Round 4 (F4): the same holds for a
+        remembered handle (step 2: the session's handle was dropped, e.g.
+        after an agent's edit the reader answered with a download) whose
+        file holds the opened bytes again over what this page wrote into
+        the opened file in this page load; a page that wrote only into
+        another file is not asked.
+      - *The pending conflict* (round 4, F2): every conflict result carries
+        a new `conflictToken`; the saver keeps only the latest one pending,
+        and any later save — conflicting or not — supersedes it. `save(input,
+        { overwrite: true, conflictToken })` writes that file only while the
+        token is the pending conflict's; otherwise (an answer to a superseded
+        question, no conflict pending, no token) nothing is written or
+        checked: `{ via: 'file', ok: false, error: 'stale-conflict', picked:
+        false, opened: false }`. An older question's text can never go over
+        a newer save.
 
       The caller asks the reader — `askSaveConflict(root, name?, { opened?
       })` (§8), an alertdialog titled "The file changed on disk": "This
@@ -192,17 +219,30 @@ caller words it "Download started", never "Saved". Its `name` is
       version on disk is lost)** — and on Replace it calls `save(input, {
       overwrite: true })`, which writes the file of the conflicting save (no
       second picker; no check; `opened: false` for a picked file, so it is
-      not remembered; `true` for a reverted session file), or on Download a
+      not remembered; `true` for a reverted file), or on Download a
       copy instead `download({ html })` and says "Download started; the file
       on disk is unchanged. Your next save asks again." **After a download,
       every later save asks again** (round 3, L11; by design): the file on
       disk still differs, so each save opens the picker (or, for a reverted
       session file, finds it again) and is checked again until the reader
       replaces the file, saves elsewhere, or reloads the page to open the
-      file's own version. **One question at a time:** while it is open,
-      every further save of that page or editor does not call the saver (no
-      second picker): the open question is focused and answers for the
-      newest text — an older text is never written. Another document's
+      file's own version. **One question per saver** (round 4, F2): a page
+      and every editor of its file share ONE saver object (the carrier app
+      hands its saver to the editors through `context.saver`; a carrier
+      must not wrap it), and `answerSaveConflict({ saver, root, input,
+      result })` keeps one question per saver: while it is open, every
+      further save of that page or any of its editors does not call the
+      saver (no second picker, `saveConflictOpen(saver)`) but calls
+      `answerSaveConflict` without a `result`, which focuses the open
+      question wherever it is shown, makes it answer for that newest text
+      (the older caller is told `superseded` and writes nothing) and, for a
+      save from another root, returns the focus there after the answer.
+      Replace it calls `save(input, { overwrite: true, conflictToken })`
+      with the pending conflict's token; only the text actually written is
+      marked saved (an edit made while the question was open stays
+      unsaved). A question's root that goes away (`dropSaveConflict`: an
+      editor destroyed, Done; the app disposed) takes its question: its
+      caller is told `null` and the next save asks the saver again. Another document's
       file, a file that is not an orz file, the opened content, this page's
       last write or the file being saved are no conflict, and without
       `openedHtml` nothing is (nothing is known about the opened text: the
@@ -581,7 +621,11 @@ shadow roots and does not compete with it.
   `SAVE_CONFLICT_MESSAGE` (`opened: false`: `SAVE_CONFLICT_PICKED_MESSAGE`,
   which does not say "since you opened it"), its labels
   `SAVE_CONFLICT_LABELS`, and `SAVE_CONFLICT_DOWNLOADED` is what a caller
-  says after Download a copy instead.
+  says after Download a copy instead. A caller that saves does not call it directly
+  but `answerSaveConflict` (§1 step 3.4; round 4), which keeps one question
+  per saver on top of it — across roots, so the page's question also
+  answers its editors' saves — and says `SAVE_CONFLICT_STALE` when Replace
+  it found the conflict no longer pending.
 
 Vocabulary origin: orz-mdhtml's light/dark `--c-*` tokens and dark editor bar
 (`src/template.ts`) and orz-poster's floating launcher and toast

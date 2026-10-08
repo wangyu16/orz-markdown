@@ -233,10 +233,16 @@ read view's keys — slides' Space — then work at once).
   same; an app's editor with no opened file is asked "The file you chose
   holds another version of this document…" (`opened: false`). Escape
   dismisses the question (nothing written) and the focus goes back where it
-  was; one question per page or editor: every save while it is open — the
-  second, the third — does not call the saver (no second picker), focuses
-  it and makes it answer for the newest text — an older text is never
-  written. The opened bytes the saver proves files with (`openedHtml`) are
+  was; one question per FILE (round 4 of the carrier-app loop, F2: the page
+  and every editor of the file share one saver, `context.saver`, and its
+  one question, `answerSaveConflict`): every save while it is open — the
+  second, the third, the page's or an editor's — does not call the saver
+  (no second picker), focuses it (wherever it is shown) and makes it answer
+  for the newest text — an older text is never written, and the saver
+  refuses an `overwrite` of a superseded conflict (`conflictToken`). Only
+  the text actually written is marked saved. Done with an editor's question
+  open takes the question with the editor; the page's next save asks
+  again. The opened bytes the saver proves files with (`openedHtml`) are
   assembled once they succeed: a failed assembly is not kept (round 3, K10). The saver reads the disk file's uid as the page reads its own
   (`readUid` = `readHeader`'s well-formed `uid`), so a quoted or block uid,
   or no uid on either side, is still this document (shell-runtime §1 step

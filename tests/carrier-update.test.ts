@@ -26,6 +26,7 @@ import {
   UPDATE_CHECK_INTERVAL_MS, UPDATE_CACHE_PREFIX, UPDATE_SKIP_PREFIX, RELEASE_CDN_BASE, MANIFEST_TIMEOUT_MS, REASSEMBLE_TIMEOUT_MS,
   type ReleaseManifest, type FetchLike, type ResponseLike, type StorageLike, type UpdateInfo, type MessageListener, type UiDocument, type UiElement,
   type SaveResult, createSaver, type FileHandleLike, type HandleStore, type StoredHandle,
+  answerSaveConflict, saveConflictOpen, dropSaveConflict, type Saver, type SaveCallOptions, type SaveInput,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, KIND_PACKAGE, type ShellParts } from '../src/carrier';
 import { escapeScriptText } from '../src/html';
@@ -969,6 +970,52 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect(root.querySelectorAll('.orz-toast')).toHaveLength(0);
     t.setMessage('x');
     t.focus();
+  });
+
+  it('[V.6] round 4 (F2): one conflict question per SAVER, across roots — answerSaveConflict while the saver\'s question is open (from another root: an editor over the page) shows no second question, focuses the open one and makes it answer for the newer text; the older caller is told superseded; Replace saves the newest input with overwrite and the pending conflict\'s token; the focus goes back to the newer save\'s place; dropSaveConflict drops it with its root', async () => {
+    const { document } = await dom();
+    const mk = () => { const h = document.createElement('div'); document.body.appendChild(h); return createShadowRoot(h as unknown as UiElement) as unknown as ShadowRoot; };
+    const pageRoot = mk();
+    const editorRoot = mk();
+    const calls: Array<{ input: SaveInput; call?: SaveCallOptions }> = [];
+    const saver: Saver = {
+      async save(input, call) { calls.push({ input, call }); return { via: 'file', ok: true, picked: true, opened: false }; },
+      async download() { return { via: 'download', ok: true, confirmed: false }; },
+      handleKey: () => null,
+    };
+    const conflict: SaveResult = { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name: 'n.md.html', conflictToken: 7 };
+    const editorPlace = document.getElementById('content') as HTMLElement;
+    editorPlace.tabIndex = -1;
+    const older = answerSaveConflict({ saver, root: pageRoot as never, input: { text: 'older', html: 'OLDER' }, result: conflict, returnFocus: document.getElementById('page-btn') as never });
+    expect([saveConflictOpen(saver), pageRoot.querySelectorAll('[role="alertdialog"]').length]).toEqual([true, 1]);
+    // the editor saves while the page's question is open: no saver call, no second question, the open one focused
+    editorPlace.focus();
+    const newer = answerSaveConflict({ saver, root: editorRoot as never, input: { text: 'newer', html: 'NEWER' }, returnFocus: editorPlace as never });
+    expect(await older).toEqual({ choice: 'superseded' });
+    expect([editorRoot.querySelectorAll('[role="alertdialog"]').length, pageRoot.querySelectorAll('[role="alertdialog"]').length, calls.length]).toEqual([0, 1, 0]);
+    expect(pageRoot.activeElement?.textContent).toBe(SAVE_CONFLICT_LABELS.download);
+    // another saver (another file) has a question of its own
+    const other: Saver = { ...saver };
+    expect(saveConflictOpen(other)).toBe(false);
+    ([...pageRoot.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[]).find((b) => b.textContent === SAVE_CONFLICT_LABELS.replace)!.click();
+    expect(await newer).toMatchObject({ choice: 'replace', input: { text: 'newer', html: 'NEWER' }, result: { ok: true } });
+    expect(calls).toEqual([{ input: { text: 'newer', html: 'NEWER' }, call: { overwrite: true, conflictToken: 7 } }]);
+    expect([saveConflictOpen(saver), document.activeElement]).toEqual([false, editorPlace]);
+    // Download a copy instead downloads the newest html; Escape/dismiss resolves null
+    const d = answerSaveConflict({ saver, root: editorRoot as never, input: { text: 't', html: 'T' }, result: conflict, opened: false });
+    expect(editorRoot.querySelector('[role="alertdialog"]')!.textContent).toContain(SAVE_CONFLICT_PICKED_MESSAGE);
+    ([...editorRoot.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[])[0].click();
+    expect(await d).toMatchObject({ choice: 'download', result: { via: 'download', ok: true } });
+    // its root goes away: dropped (another root's drop does nothing), the caller told null, the next save asks again
+    const gone = answerSaveConflict({ saver, root: editorRoot as never, input: { text: 'g', html: 'G' }, result: conflict });
+    dropSaveConflict(saver, pageRoot as never);
+    expect(saveConflictOpen(saver)).toBe(true);
+    dropSaveConflict(saver, editorRoot as never);
+    expect([await gone, saveConflictOpen(saver)]).toEqual([{ choice: null }, false]);
+    // a dropped question answered later writes nothing
+    ([...editorRoot.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[]).find((b) => b.textContent === SAVE_CONFLICT_LABELS.replace)?.click();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(calls).toHaveLength(1);
   });
 
   it('[V.6] round 3 (M6, L9): the question is an alertdialog outside the polite status region — labelled by its title, described by its message — so focusing its default action announces it; plain toasts stay in the status region; the safe default (Download a copy instead) is the primary-styled first action and Replace it says the version on disk is lost; an editor with no opened file is not told "since this page opened it"', async () => {

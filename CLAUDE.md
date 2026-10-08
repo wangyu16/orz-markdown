@@ -87,7 +87,10 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   reload is safe; no check in a framed/hosted or served page) with
   `mountUpdateIndicator` in `indicator.ts`, and the
   shell chrome in `chrome.ts` (`CHROME_CSS` tokens, `ICONS`,
-  `createShadowRoot`, `showToast`). Update URLs are hard-coded (jsDelivr +
+  `createShadowRoot`, `showToast`), and `conflict.ts`
+  (`answerSaveConflict`: ONE save-conflict question per saver object, so a
+  page and its editors must share one saver; Replace passes the conflict's
+  `conflictToken` — the saver refuses any other `overwrite`). Update URLs are hard-coded (jsDelivr +
   `KIND_PACKAGE`, RULES §5.4): never add a path that takes a URL from a
   document. Parser-free (its only non-shell import is the parser-free
   `read.ts`) and Node-safe (no browser global touched at load; claims S.11,

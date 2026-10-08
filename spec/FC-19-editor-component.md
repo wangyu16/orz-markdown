@@ -634,9 +634,17 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   another version of this document…" — for an editor that is not an
   assembled file; Download a copy instead → `saver.download`, the default;
   Replace it (the version on disk is lost) → `saver.save(input, {
-  overwrite: true })`) and `save()` resolves `{ ok: false, via: 'file',
+  overwrite: true, conflictToken })`) and `save()` resolves `{ ok: false, via: 'file',
   error: 'conflict', conflict: true }`; every save while the question is
-  open answers it instead of calling the saver.
+  open answers it instead of calling the saver. The question is one per
+  saver (`answerSaveConflict`, round 4 of the carrier-app loop, F2): an
+  editor given the page's saver (`saver`, the carrier app's
+  `context.saver`) re-targets the page's open question, and the page's
+  save re-targets an editor's; only the newest text is written and only
+  the text written is marked saved; `destroy()` takes the editor's open
+  question with it. After `refreshPreview({ includes })`, a file on disk
+  holding the mounted text with those latest includes is known content,
+  not a change (`knownHtml`, F5).
 - One save at a time; dirty clears only on success (an edit made during the
   save stays dirty); a toast announces the result — "Download started." for
   a download (the browser has it; it may not have finished; dirty clears),

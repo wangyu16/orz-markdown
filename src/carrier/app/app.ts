@@ -41,7 +41,8 @@
 import { editHeader, readHeader, UID_PATTERN, type HeaderChange } from '../header.js';
 import { mintUid } from '../uid.js';
 import type { EditorShell } from '../editor/shell.js';
-import { askSaveConflict, createShadowRoot, SAVE_CONFLICT_DOWNLOADED, showToast } from '../shell/chrome.js';
+import { createShadowRoot, SAVE_CONFLICT_DOWNLOADED, showToast } from '../shell/chrome.js';
+import { answerSaveConflict, dropSaveConflict, saveConflictOpen, SAVE_CONFLICT_STALE } from '../shell/conflict.js';
 import { connectHost } from '../shell/file-side.js';
 import { mountUpdateIndicator } from '../shell/indicator.js';
 import { createPreferenceStore } from '../shell/preferences.js';
@@ -411,10 +412,6 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     return pageSaving;
   }
 
-  /** A conflict question is open (one per page): a later page save updates it instead of asking again. */
-  let conflictOpen = false;
-  let conflictName: string | undefined;
-  let conflictAsk = 0;
   /** The focused element (through shadow roots), where the focus goes back after the question. */
   const focusedNow = (): AppElement | null => {
     let a = (doc as unknown as { activeElement?: AppElement | null }).activeElement ?? null;
@@ -425,28 +422,26 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     }
     return a;
   };
-  /** The file changed on disk since the page opened it: the reader replaces it or downloads a copy. */
-  function resolveConflict(t: string, html: string, name: string | undefined): void {
-    const ask = ++conflictAsk;
-    const back = conflictOpen ? null : focusedNow();
-    conflictOpen = true;
-    conflictName = name;
-    void askSaveConflict(root as never, name, back ? { returnFocus: back as never } : {}).then(async (choice) => {
-      // superseded by a newer save's question: this (older) text is never written
-      if (ask !== conflictAsk) return;
-      conflictOpen = false;
+  /**
+   * The file changed on disk since the page opened it: the reader replaces it or downloads a copy.
+   * One question per saver (round 4, F2): the page and every editor of this file share `saver`, so
+   * a save of any of them while it is open re-targets it; only the newest text is ever written.
+   */
+  function resolveConflict(t: string, html: string, r?: SaveResult): void {
+    void answerSaveConflict({ saver, root: root as never, input: { text: t, html }, ...(r ? { result: r } : {}), returnFocus: focusedNow() as never }).then((a) => {
       if (disposed) return;
-      if (choice === 'replace') {
-        const r = await saver.save({ text: t, html }, { overwrite: true });
-        if (r.via === 'served-notice') return;
-        if (r.ok) {
+      if (a.choice === 'replace') {
+        const w = a.result;
+        if (w.via === 'served-notice') return;
+        if (w.ok) {
+          // the text actually written is saved — not whatever the page holds now
           saved = t;
           dirtyChanged();
-          toast(r.via === 'download' ? 'Download started.' : 'Saved.', 'success');
-        } else if (!(r.via === 'file' && r.error === 'cancelled')) toast(`Could not save: ${r.error ?? 'unknown error'}`, 'error');
-      } else if (choice === 'download') {
-        const r = await saver.download({ html });
-        const ok = r.via === 'download' && r.ok;
+          toast(w.via === 'download' ? 'Download started.' : 'Saved.', 'success');
+        } else if (w.via === 'file' && w.error === 'stale-conflict') toast(SAVE_CONFLICT_STALE, 'warning');
+        else if (!(w.via === 'file' && w.error === 'cancelled')) toast(`Could not save: ${w.error ?? 'unknown error'}`, 'error');
+      } else if (a.choice === 'download') {
+        const ok = a.result.via === 'download' && a.result.ok;
         toast(ok ? SAVE_CONFLICT_DOWNLOADED : 'The download failed.', ok ? 'success' : 'error');
       }
     });
@@ -464,9 +459,9 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       toast(`Could not save: ${errorText(e)}`, 'error');
       return { ok: false, error: errorText(e) };
     }
-    if (conflictOpen) {
-      // the open question (focused) now answers for this text; no second picker
-      resolveConflict(t, html, conflictName);
+    if (saveConflictOpen(saver)) {
+      // a question of this file is open (the page's or an editor's): it (focused) now answers for this text; no second picker
+      resolveConflict(t, html);
       return { ok: false, via: 'file', error: 'conflict', conflict: true };
     }
     const r = await saver.save({ text: t, html });
@@ -475,7 +470,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       return { ok: false, via: 'served-notice', error: 'served page' };
     }
     if (r.via === 'file' && r.conflict) {
-      resolveConflict(t, html, r.name);
+      resolveConflict(t, html, r);
       return { ok: false, via: 'file', error: 'conflict', conflict: true };
     }
     if (r.ok) {
@@ -793,6 +788,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       for (const f of cleanups.splice(0)) { try { f(); } catch { /* gone */ } }
       try { editor?.destroy(); } catch { /* gone */ }
       editor = null;
+      dropSaveConflict(saver);
       for (const p of pickers) p.destroy();
       more.destroy();
       try { view.destroy?.(); } catch { /* the view's own */ }

@@ -22,6 +22,7 @@ export type { HostKind, HostProtocol, SavePayload, SaveAck, AiOperation, AiReque
 export * from './file-side.js'; // connectHost, NOT_CONNECTED; ConnectHostOptions, HostConnection
 export * from './host-side.js'; // embedCarrierFrame; EmbedOptions, CarrierFrame
 export * from './save.js'; // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN, headerUidOf; Saver, SaverOptions, SaveInput, SaveCallOptions, SaveResult, HandleStore, StoredHandle
+export * from './conflict.js'; // answerSaveConflict, saveConflictOpen, dropSaveConflict, SAVE_CONFLICT_STALE; SaveConflictAnswer, SaveConflictRequest (round 4: one question per saver)
 export * from './preferences.js'; // createPreferenceStore, preferenceNamespace, READER_PREFERENCES, PREFERENCE_PREFIX; PreferenceStore, PreferenceSpec, PreferenceSchema, ReaderPreferences
 export type {
   MessageEventLike, MessageWindow, PostTarget, IframeLike, SaverWindow, StorageLike, FileHandleLike, WritableLike,

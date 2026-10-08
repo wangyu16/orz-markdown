@@ -203,7 +203,7 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
   if (v === 'r3-reload-picked') services.performUpdate = async (o) => { const r = await performUpdate(o); return r.status === 'updated' && r.save.via === 'file' && r.save.ok ? { ...r, reload: true } : r; }; // BUG (mutation): reloads after any written file
   if (v === 'update-overwrites-conflict') {
     // BUG (mutation): the update answers a conflict itself, writing over the file that changed on disk
-    services.performUpdate = (o) => performUpdate({ ...o, saver: { save: async (x) => { const r = await (o.saver as Saver).save(x); return r.via === 'file' && r.conflict ? (o.saver as Saver).save(x, { overwrite: true }) : r; } } });
+    services.performUpdate = (o) => performUpdate({ ...o, saver: { save: async (x) => { const r = await (o.saver as Saver).save(x); return r.via === 'file' && r.conflict ? (o.saver as Saver).save(x, { overwrite: true, conflictToken: r.conflictToken }) : r; } } });
   }
   if (v === 'cdn-to-inline') services.performUpdate = (o) => performUpdate({ ...o, delivery: 'inline' }); // BUG (mutation): a cdn file updates to an inline one
   if (v === 'update-drops-includes') services.performUpdate = (o) => { const { includes: _i, ...rest } = o; void _i; return performUpdate(rest); }; // BUG (mutation)
@@ -223,7 +223,22 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
     // BUG (mutation): a conflict (the file changed on disk) is answered "replace" without asking the reader
     services.createSaver = (o) => {
       const base = createSaver(o);
-      return { ...base, async save(input, call) { const r = await base.save(input, call); return r.via === 'file' && r.conflict ? base.save(input, { overwrite: true }) : r; } };
+      return { ...base, async save(input, call) { const r = await base.save(input, call); return r.via === 'file' && r.conflict ? base.save(input, { overwrite: true, conflictToken: r.conflictToken }) : r; } };
+    };
+  }
+  if (v === 'r4-after-download') {
+    // BUG (mutation, round 4): after the reader chose "Download a copy instead", the next conflicting save is replaced silently
+    services.createSaver = (o) => {
+      const base = createSaver(o);
+      let downloaded = false;
+      return { ...base, async download(x) { downloaded = true; return base.download(x); }, async save(input, call) { const r = await base.save(input, call); return downloaded && r.via === 'file' && r.conflict ? base.save(input, { overwrite: true, conflictToken: r.conflictToken }) : r; } };
+    };
+  }
+  if (v === 'r4-revert-silent') {
+    // BUG (mutation, round 4): a session file reverted to the opened bytes is written silently (round-2 m24 behaviour)
+    services.createSaver = (o) => {
+      const base = createSaver(o);
+      return { ...base, async save(input, call) { const r = await base.save(input, call); return r.via === 'file' && r.conflict && r.picked === false ? base.save(input, { overwrite: true, conflictToken: r.conflictToken }) : r; } };
     };
   }
   if (v === 'silent-refusal') services.mountUpdateIndicator = (a, i, h, o) => mountUpdateIndicator(a, i, { ...h, onUpdate: (x) => Promise.resolve(h.onUpdate(x)).catch(() => undefined) }, o); // BUG (mutation): a refused update is swallowed
@@ -276,6 +291,12 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
         }
         if (v === 'save-to-inline' && ctx) out.assemble = (t, o) => (globalThis as unknown as { OrzCarrier: { assemble(t: string, o: unknown): Promise<string> } }).OrzCarrier.assemble(t, { delivery: 'inline', ...(o?.includes ? { includes: o.includes } : {}) }); // BUG (mutation): a cdn file is saved inline (B#7)
         if (v === 'save-drops-includes') delete out.includes; // BUG (mutation)
+        if (v === 'r4-two-questions' && ctx?.saver) {
+          // BUG (mutation, round 4): the editor gets a saver of its own (a wrapper), not the page's — its save while the
+          // page's question is open asks a second question, which can be answered with the older text (P6)
+          const s = ctx.saver;
+          out.saver = { save: (i, c) => s.save(i, c), download: (i) => s.download(i), handleKey: () => s.handleKey() };
+        }
         if (v === 'no-dirty-post' && ctx?.host) out.host = { ...ctx.host, setDirty() { /* BUG (mutation): dirty never posted */ } };
         if (v === 'name-handle') out.saver = nameProvedSaver(uid, location.href.replace(/[?#].*$/s, ''));
         if (v === 'copy-overwrite') out.saver = nameProvedSaver(uid, `file:///orz-stub/${pageFileName()}`); // BUG (mutation): every copy is told one page location
@@ -346,6 +367,8 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
       if (!app) return;
       // BUG (mutation) prefetch-bundle: the file fetches its release's bundle at boot, before the reader asked for an update
       if (v === 'prefetch-bundle') void fetch(bundleUrl({ kind: 'md', version, bundle: { path: STUB_BUNDLE_PATH, integrity: '' } }), { credentials: 'omit' }).catch(() => undefined);
+      // BUG (mutation, round 4): the carrier hides the carrier app's page save (OrzCarrier.standalone.save)
+      if (v === 'r4-no-app-handle') (app as unknown as { save?: unknown }).save = undefined;
       if (v === 'page-overwrites-conflict') {
         // BUG (mutation): the page's own save (no editor open) answers a conflict itself, writing over the file
         const save = app.save;
@@ -354,7 +377,9 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
           if (!r.ok && r.conflict && !app.editor()) {
             const c = app.editorContext();
             const t = app.getText();
-            const w = await c.saver!.save({ text: t, html: await c.assemble(t, c.includes ? { includes: c.includes } : undefined) }, { overwrite: true });
+            const input = { text: t, html: await c.assemble(t, c.includes ? { includes: c.includes } : undefined) };
+            const again = await c.saver!.save(input);
+            const w = again.via === 'file' && again.conflict ? await c.saver!.save(input, { overwrite: true, conflictToken: again.conflictToken }) : again;
             return w.ok ? { ok: true, via: w.via === 'served-notice' ? 'download' : w.via } as never : r;
           }
           return r;

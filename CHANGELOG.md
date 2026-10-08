@@ -265,6 +265,51 @@ The closed loop on orz-mdhtml 1.0 and this kit, round 3 (claims in
 - Sizes (what ships): shell 65.8 KB (S.11 bound 68 KB), chrome 19.2 KB (V.5
   bound raised to 21 KB), app 34.3 KB (A.2 bound 36 KB).
 
+### Round 4 of the carrier-app loop (kit side)
+
+The closed loop on orz-mdhtml 1.0 and this kit, round 4 (claims in
+`notes/CLAIMS.md`; the saver's `overwrite` change is breaking for 2.2.0's
+unreleased API).
+
+- **Two conflict questions, the older text won** (S.14, A.15, V.6; F2, HIGH):
+  a page save's question and an editor's save made a second question (and a
+  second picker); answering Replace on both wrote the older page text over
+  the editor's save while the page reported nothing unsaved. Now ONE
+  question per saver: new `answerSaveConflict({ saver, root, input,
+  result? })`, `saveConflictOpen(saver)`, `dropSaveConflict(saver, root?)`
+  and `SAVE_CONFLICT_STALE` (`orz-markdown/carrier/shell`); the carrier app
+  and the editor shell use them, so a save of the page or of any editor of
+  the file while the question is open calls no saver, focuses that question
+  and makes it answer for the newest text; only the text actually written
+  is marked saved; an editor's `destroy()` takes its question with it.
+  **Changed (saver):** each `conflict` result carries a `conflictToken`;
+  `save(input, { overwrite: true, conflictToken })` writes only while that
+  conflict is the pending one — otherwise (superseded, none pending, no
+  token) nothing is written: `{ via: 'file', ok: false, error:
+  'stale-conflict' }` (before, an `overwrite` with no conflict pending
+  wrote the session's file unchecked).
+- **A revert seen through a remembered handle** (S.14; F4): after an agent's
+  edit dropped the session handle, the opened version put back on disk was
+  written silently through the remembered handle; it is now asked about
+  like the session-file revert (`picked: false`), unless this page wrote
+  nothing into the opened file.
+- **A false question after `refreshPreview({ includes })`** (S.14, E.31; F5):
+  new saver option `knownHtml()`; the editor shell passes the mounted text
+  assembled with the latest includes, so a file on disk holding it (an
+  app's server resolved the includes again) is no change.
+- **Harness** (H.5; F3): `C.save.conflict` also checks that the save after
+  "Download a copy instead" asks again, that a revert of the opened bytes
+  over the page's own save asks, that a page save followed by its editor's
+  save shows one question and Replace leaves the newest text, and FAILS
+  (no longer skips) a file without `OrzCarrier.standalone.save`; stub
+  mutants `r4-after-download`, `r4-revert-silent`, `r4-two-questions`,
+  `r4-no-app-handle` fail it. `C.save.conflict` gets three times the
+  per-check time limit (it walks a dozen files).
+- **Tests** (F6, K02): the revert check's exceptions (the opened content in
+  other bytes being saved, or last written) are each tested.
+- Sizes (what ships): shell 68.5 KB (S.11 bound raised to 75 KB), chrome
+  19.2 KB (V.5, 21 KB), app 34.4 KB (A.2, 36 KB).
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers
