@@ -31,12 +31,15 @@ IndexedDB handle store), `preferences.ts` (`createPreferenceStore`),
 `protocol.ts` (message constants, types, timeouts, kinds), `update.ts`
 (`checkForUpdate`, `skipVersion`, `reassemble`, `performUpdate`, manifest and
 URL helpers, semver), `indicator.ts` (`mountUpdateIndicator`), `chrome.ts`
-(`CHROME_CSS`, `ICONS`, `createShadowRoot`, `showToast`), `types.ts`
+(`CHROME_CSS`, `ICONS`, `createShadowRoot`, `showToast`, `askSaveConflict`),
+`conflict.ts` (2.2.0: one save-conflict question per saver —
+`answerSaveConflict`, `saveConflictOpen`, `focusSaveConflict`,
+`dropSaveConflict`), `types.ts`
 (structural browser types) — exported as `orz-markdown/carrier/shell`
 (parser-free — the update verifies with the parser-free `extract` — and
-Node-safe; not re-exported by `orz-markdown/carrier`). Claims S.1–S.13, tests
+Node-safe; not re-exported by `orz-markdown/carrier`). Claims S.1–S.15, tests
 in `tests/carrier-shell.test.ts` (real Chrome for the cross-origin handshake,
-downloads and IndexedDB); claims U.1–U.13 and V.1–V.5, tests in
+downloads and IndexedDB); claims U.1–U.13 and V.1–V.6, tests in
 `tests/carrier-update.test.ts` (real Chrome for the sandboxed update against a
 fake CDN, downloads and CSS isolation).
 
@@ -52,10 +55,10 @@ owner decision B-2, FC-19 §8.4 — its bridge, the authenticated channel (a per
 the bridge reads first; keys, links and scrolls act only through the port — a document's
 scripts taking the keyboard focus in the preview is an accepted limit, FC-19 §5) and the
 message protocol, asset rewriting, CSP
-nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`), `styles.ts`
+nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.26, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.31, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).
@@ -66,7 +69,7 @@ by side in lanes, each in browser contexts of its own), `catalog.ts`
 (`CHECKS`: ids, titles, spec references), `checks.ts` (the checks),
 `session.ts` (local origins, browser contexts on a closed network, the
 jsDelivr routes), `page.ts` (page-side scripts: init script, editor driver,
-the protocol host page), `texts.ts` (hazard texts), `node.ts` (Node built-ins
+the protocol host page), `helpers.ts` (2.2.0: page helpers for a carrier's own tests), `texts.ts` (hazard texts), `node.ts` (Node built-ins
 through `process.getBuiltinModule`, the corpus loader, lazy `playwright-core`)
 — exported as `orz-markdown/carrier/conformance` (Node only; no other entry
 imports it; `playwright-core` is an optional peer dependency). Claims
@@ -83,8 +86,9 @@ and the boot), `file.ts` (`readOpenedFile`, `openedFileName`, `copyName`),
 `StandaloneContext`, `CarrierReadView`, `SettingControl`, `CarrierAction`,
 `CarrierApp`, structural DOM types) — exported as `orz-markdown/carrier/app`
 (it may import `carrier/shell`, `carrier/editor` and `carrier/read`; none of
-them imports it; Node-safe at load). Claims A.1–A.12, tests in
+them imports it; Node-safe at load). Claims A.1–A.19, tests in
 `tests/carrier-app.test.ts` (happy-dom against a fake kind; real Chrome
 against the stub carrier, which is built on it). In-page enhancement for a
-read view is `enhanceDocument` in `orz-markdown/preview-frame` (M.24); the
+read view is `enhanceDocument` in `orz-markdown/preview-frame` (M.24;
+`disposeEnhancement` M.26, `swapStylesheet` M.27); the
 theme list is `THEMES` (main entry and `orz-markdown/themes`, M.25).

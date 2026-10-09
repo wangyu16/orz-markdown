@@ -7,343 +7,227 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The carrier app and the kit gaps the orz-mdhtml 1.0 rebuild found (2.2.0
-content; family plan REBUILD §3a, owner decision 2). Additive for `^2.1.0`
-consumers; the parser's output is unchanged.
+## [2.2.0] - 2026-10-08
+
+The carrier app and the kit gaps the orz-mdhtml 1.0 rebuild found (family
+plan REBUILD §3a): a new entry, `orz-markdown/carrier/app` (the runtime of
+every standalone assembled file), a theme list, in-page enhancement, the AI
+review flow in the editor, and a save that no longer overwrites a file that
+changed on disk. The parser's `md.render` output is unchanged. Additive for
+`^2.1.0` consumers, except the behaviour changes listed under **Changed**
+(see "Upgrading from 2.1.0" at the end). The pinned CodeMirror bundle
+`vendor/codemirror6.js` has the same bytes as in 2.1.0 (only its URL moves to
+`orz-markdown@2.2.0/vendor/codemirror6.js`).
 
 ### Added
 
-**`orz-markdown/carrier/app`** (new entry; [spec/carrier-app.md](spec/carrier-app.md)):
-the standalone assembled file's runtime every carrier bundle runs, lifted
-from orz-mdhtml 1.0 behind one seam, `StandaloneKind` (the kind supplies its
+**`orz-markdown/carrier/app`** (new entry; [spec/carrier-app.md](spec/carrier-app.md),
+claims A.1–A.19) — the standalone assembled file's runtime every carrier
+bundle runs, behind one seam, `StandaloneKind` (the kind supplies its
 assemble, creation tool, `mountEditor`, read view, header settings and extra
-actions; the app knows no kind). `startCarrier(kind)` sets
-`globalThis.OrzCarrier` (FC-19 §2) and boots in an assembled file:
-`readOpenedFile` (text, uid, format, delivery, includes, inline engine, file
-name), the read view in the page, the chrome in a shadow root (brand, Edit,
-settings, actions, Save, Download a copy, New document, Save as new copy),
-edit mode, header settings with undo, the unsaved-changes warning
-(`beforeunload`, top-level only, never for the update's reload), the host
-connection (save, include, AI with the review flow), the quiet update
-(who checks, read-only while it runs, reload only when the kit says so),
-reader preferences, the page keymap (respecting `defaultPrevented`) and the
-`OrzCarrier.standalone` handle (`CarrierApp`). Also `bootCarrierApp`,
-`carrierGlobal`, `captureEngineSource`, the widgets (`menuButton`,
-`settingPicker`, `attachSettings`, `reviewProposal`, `attachAiMenu`,
-`followPresentation`, `WIDGET_CSS`) and a test seam (`services`). Notes on
-how orz-paged (Paged.js read view, Print) and orz-slides (navigation,
-Present) fit, in the spec. Claims A.1–A.13.
+actions; the app knows no kind).
 
-**Editor (`orz-markdown/carrier/editor`, FC-19, additive)**
+- `startCarrier(kind)` sets `globalThis.OrzCarrier` (FC-19 §2) and boots in
+  an assembled file: `readOpenedFile` (text, uid, format, delivery, includes,
+  inline engine, file name), the read view, the chrome in a shadow root
+  (brand, Edit, settings, actions, Save, Download a copy, New document, Save
+  as new copy), edit mode, header settings with undo, the unsaved-changes
+  warning (`beforeunload`, top level only, never for the update's reload),
+  the host connection (save, include, AI with the review flow), the quiet
+  update (read-only while it runs; reload only when the kit says so), reader
+  preferences, the page keymap (respecting `defaultPrevented`) and the
+  `OrzCarrier.standalone` handle (`CarrierApp`).
+- Also `bootCarrierApp`, `carrierGlobal`, `APP_CSS`, `captureEngineSource`
+  (takes only the carrier's bundle — a script named like it, the file's
+  `#orz-engine`, or the update sandbox's — else the release's CDN URL),
+  `openedFileName`, `copyName`, the widgets (`menuButton`, `settingPicker`,
+  `attachSettings`, `reviewProposal`, `attachAiMenu`, `followPresentation`,
+  `WIDGET_CSS`), the messages `UPDATE_CONFLICT_MESSAGE` and
+  `UPDATE_QUESTION_OPEN`, and a test seam (`AppServices`).
+- Behaviour worth knowing: in edit mode Cmd/Ctrl+S anywhere in the page saves
+  the editor (never "Save page as") and Cmd/Ctrl+E leaves edit mode;
+  navigation keys on a chrome button reach the read view; presenting
+  (`setChromeVisible(false)`) hides the bar and editor and moves a keyboard
+  focus to the page; every editor opened or attached during a quiet update is
+  read-only and given back; a framed file whose host never connected asks
+  before leaving with unsaved changes. The app hands ONE saver to the page
+  and every editor, so whichever surface writes, the text written is marked
+  saved; an attached editor's save becomes the page's text. An update
+  started while a save-conflict question is open is refused (that question
+  is focused); an update that finds the file changed on disk writes nothing
+  and says so. File includes go through the kind's `fetchInclude`, never
+  through `orz-host-include@1` (URLs only).
 
-- `proposeAi(op, { selection? })` and `applyAi(proposal, { proposed? })`:
-  the review flow of host-protocols §4 — a proposal with its exact-text
-  range, applied as one undoable edit, refused if the text changed.
-  `requestAi` is unchanged. Types `AiProposal`, `AiProposalOutcome` (E.26).
-- `createEditorShell({ nonce })` — FC-19 §3 `nonce`: the preview frame's
-  (when `preview.nonce` is not given) and the default CodeMirror adapter's.
-- `shell.preview.setOptions({ articleClass })` (a measure change).
-- `renderMarkdownPreview(text, { includes })` and
+**`orz-markdown/themes`** (new entry; also on the main entry) — `THEMES`
+(the bundled themes' ids, names and colour schemes), `DEFAULT_THEME`,
+`isThemeId`, `themeInfo` (M.25).
+
+**`orz-markdown/preview-frame`**
+
+- `enhanceDocument(root, { scheme, assets, nonce, runtime })`: the preview
+  frame's enhancement (highlight.js, Mermaid, SMILES, Chart.js, KaTeX's and
+  highlight.js's stylesheets, the orz runtime) for content rendered in the
+  page itself, loading only what the content needs; idempotent; each call
+  destroys the Chart.js charts whose canvas left the root; a library that
+  failed to load is retried after 15 s (doubled per failure), at most 3 times
+  (`ENHANCE_RETRY_MS`, `ENHANCE_MAX_ATTEMPTS`) (M.24).
+- `disposeEnhancement(root)` releases the remaining charts (M.26).
+- `swapStylesheet(document, id, href, { nonce })` swaps a `<link id>` without
+  a flash: the old sheet goes when the new one has loaded (M.27).
+
+**`orz-markdown/carrier`** — header lint `unknown-theme` (warning, kind md):
+a `theme` not in `THEMES`; the default theme is shown (K.10).
+
+**`orz-markdown/carrier/shell`**
+
+- Save conflicts (S.14, spec/shell-runtime.md §1 step 3.4): with
+  `openedHtml`, a save whose target file is an orz file of this document
+  (same well-formed `uid`, or no uid on either side) and whose content
+  (text, includes, delivery) is neither the opened content, this page's last
+  write nor the text being saved writes nothing and returns
+  `{ via: 'file', ok: false, error: 'conflict', conflict: true,
+  conflictToken, … }`. `save(input, { overwrite: true, conflictToken })`
+  then writes that file without a second picker. New saver options
+  `readUid` (the page's header reader), `knownHtml()` (other bytes that
+  count as "this page's") and `servedNotice` (S.15); `SaveCallOptions`,
+  `headerUidOf`.
+- The conflict question: `askSaveConflict(root, name?, { returnFocus?,
+  opened? })` — an `alertdialog` titled "The file changed on disk" whose
+  default (focused, primary) action is **Download a copy instead**;
+  **Replace it (the version on disk is lost)** is second; Escape dismisses
+  it (nothing written) and the focus returns. One question per saver:
+  `answerSaveConflict({ saver, root, input, result? })`,
+  `saveConflictOpen(saver)`, `focusSaveConflict(saver)`,
+  `dropSaveConflict(saver, root?)`. Messages `SAVE_CONFLICT_TITLE`,
+  `SAVE_CONFLICT_MESSAGE`, `SAVE_CONFLICT_PICKED_MESSAGE`,
+  `SAVE_CONFLICT_LABELS`, `SAVE_CONFLICT_DOWNLOADED`, `SAVE_CONFLICT_STALE`.
+- Chrome: `ICONS` gains `measure`, `new`, `copy`, `present`, `print`,
+  `pageSize`; a kind's action may bring its own `KindIcon` (path data only,
+  built as SVG elements: `anyIconElement`, `isKindIcon`,
+  `KIND_ICON_MAX_PATHS`); at narrow widths only buttons with an icon drop
+  their label (`orz-btn--has-icon`). `showToast` takes `actions` (with
+  `autofocus`), `onDismiss`, `focus` and `title`; Escape dismisses a toast;
+  `Toast` gains `focus()` and `setMessage()`. A toast with actions is a
+  question (`role="alertdialog"`, outside the polite status region).
+- Editor syntax tokens `--orz-chrome-syntax-*` (light and dark, ≥ 4.5:1 on
+  the editor background) (E.27).
+
+**`orz-markdown/carrier/editor`** (FC-19, additive)
+
+- `proposeAi(op, { selection? })` and `applyAi(proposal, { proposed? })`: the
+  review flow of host-protocols §4 — a proposal with its exact-text range,
+  applied as one undoable edit, refused if the text changed. `requestAi` is
+  unchanged. Types `AiProposal`, `AiProposalOutcome` (E.26).
+- `createEditorShell({ nonce })` (FC-19 §3): the preview frame's (unless
+  `preview.nonce` is given) and the default CodeMirror adapter's nonce.
+- `shell.preview.setOptions({ articleClass })` (a measure change);
+  `refreshPreview({ includes? })` replaces the include record, forgets
+  fetched includes and renders even for an unchanged text (E.31); the
+  `includes` and `fileName` options (FC-19 §3); `Editor.ready` documented.
+- `renderMarkdownPreview(text, { includes, missingIncludes })` and
   `renderMarkdownPreviewWithIncludes(text, { includes, fetchInclude })` read
   an `#orz-includes` record (file includes through `includeRecordEnv`, a
-  `readFile` on a virtual root; URL includes after the host's
-  `fetchInclude`); the shell passes its `includes` option as
-  `ctx.includes`. `includeRecordEnv` is exported.
+  `readFile` on a virtual root; a file include the record lacks and URL
+  includes through the host's `fetchInclude`); a missing record is an empty
+  one. `includeRecordEnv` is exported.
+- Unresolved file includes are visible (E.30): the preview and the md read
+  view render "Included file not available: part.md"
+  (`p.orz-include-missing`, `role="note"`, the directive kept in `data-md`;
+  `missingIncludes: false` turns it off). `themes/common.css` dims it and
+  hides it in print. `md.render` is unchanged.
+- `ORZ_HIGHLIGHTER`: the kit's CodeMirror highlighter on the
+  `--orz-chrome-syntax-*` tokens, so editor syntax colours follow the
+  chrome's light or dark scheme (measured 5.97 / 6.44 : 1) (E.27).
 
-**Shell, preview frame, themes, harness**
+**`orz-markdown/carrier/conformance`**
 
-- `ICONS`: `measure`, `new`, `copy`.
-- `enhanceDocument(root, { scheme, assets, nonce, runtime })` in
-  `orz-markdown/preview-frame`: the preview frame's enhancement (highlight.js,
-  Mermaid, SMILES, Chart.js, KaTeX's and highlight.js's stylesheets, the orz
-  runtime) for content rendered in a page, loading only what the content
-  needs; idempotent (M.24).
-- `THEMES`, `DEFAULT_THEME`, `isThemeId`, `themeInfo` (main entry and the
-  new `orz-markdown/themes`): the bundled themes' ids, names and colour
-  schemes (M.25).
-- `orz-markdown/carrier/conformance` exports its page helpers for a
-  carrier's own tests: `initScript` (pickers incl. the OPFS one; a page log
-  `PAGE_LOG`), `readOpfs`, `writeOpfs`, `pageRecords`, `callPage`, the
-  page-side sources, `FILE_ACCESS_FLAG`, `CODEMIRROR_URL` (H.6).
+- Page helpers for a carrier's own tests (H.6): `initScript` (pickers incl.
+  the OPFS one; page log `PAGE_LOG`), `readOpfs`, `writeOpfs`,
+  `pageRecords`, `callPage`, the page-side sources, `FILE_ACCESS_FLAG`,
+  `CODEMIRROR_URL`.
+- New check `C.save.conflict` (H.5): an agent's edit on disk between two
+  saves is asked about (text with and without uid, includes-only and
+  delivery-only changes, a page save with no editor open, the same text in a
+  newer shell, the quiet update, the save after "Download a copy instead", a
+  revert, one question for a page save then its editor's save). It requires
+  `OrzCarrier.standalone.save` and gets three times the per-check time limit.
 
 ### Changed
 
-- `renderMarkdownPreviewWithIncludes` passes the render env to
-  `prepareSources` as `includeEnv`: a text with a live file include now gets
-  its URL includes too (before, they stayed directives).
-- The include directive names are one list (`INCLUDE_DIRECTIVES` of the
-  include plugin) that `prepareSources` builds its patterns from; a URL
-  scheme in any case (`HTTPS://`) is now resolved, as the renderer already
-  treated it as a URL.
-- `sandboxDocument` puts nothing after the bundle in its `<script>`: a bundle
-  that reads its own script text in the update sandbox gets exactly the
-  verified bytes.
-- A read-only CodeMirror editor stays focusable and selectable (state
+- **Saves ask before overwriting a changed file** (`carrier/shell`
+  `createSaver` with `openedHtml`; S.14). In 2.1.0 such a save wrote
+  silently; now it returns `conflict: true` and writes nothing until the
+  caller answers (above). "Changed" compares content (text, resolved
+  includes, delivery), not bytes: the same content in other bytes (CR LF,
+  another or older shell) is no change, but the same content in a **newer
+  shell** on disk (an agent's `upgrade`) is, unless this page wrote it; the
+  opened bytes put back over this page's own save (a **revert**, through the
+  session file or a remembered handle) is asked about too (`picked: false`).
+  After **Download a copy instead** every later save asks again (the
+  download's toast says so). **Replace it** replaces whatever is on disk when
+  the reader answers.
+- **One question per saver; overwrite needs its token.** While a question is
+  open, a save of the page or of any editor of the file calls no saver (no
+  second picker), focuses that question and makes it answer for the newest
+  text; only the text actually written is marked saved; an editor's
+  `destroy()` takes its question with it. `overwrite: true` writes only with
+  the pending conflict's `conflictToken`; otherwise nothing is written and
+  the result is `{ ok: false, error: 'stale-conflict' }`.
+- **Served-page notice off for app pages** (S.15, E.28): the editor's own
+  saver passes `servedNotice: false` unless it is an assembled file
+  (`standalone: true` or `openedHtml`), so an app's editor without a save
+  hook uses the picker, else a download. The notice now reads "This file was
+  opened from a web address, so it cannot be saved over…".
+- An app's editor assembles the opened bytes only at its first save (not at
+  idle on every mount); a failed assembly is not memoized. Saves after
+  `refreshPreview({ includes })` write the latest include record (none after
+  `null`).
+- **A read-only CodeMirror editor stays focusable and selectable** (state
   read-only, content `tabindex="0"`, `aria-readonly`), so selection, copy and
   Cmd/Ctrl+S work in it (FC-19 §5 invariant 7).
-- Conformance harness: `C.update.indicator`, `C.update.other-format` and
-  `C.update.prerelease` count only bundle requests (any file of
-  `<pkg>-browser@<version>/` but the manifest), so a file may load its own
-  stylesheets (H.7); dialogs stay dismissed except a `beforeunload` where a
-  check leaves a page it expects clean (`CheckContext.leave`, the reload of
-  `C.update.once-a-day`, which now also asserts no dialog) (H.8). The stub
-  carrier is rebuilt on `carrier/app`; every broken build is still caught,
-  and a file that fetches its bundle early (`prefetch-bundle`) is.
+- `codemirror6Adapter` uses `ORZ_HIGHLIGHTER` instead of CodeMirror's
+  `defaultHighlightStyle` (dark-scheme syntax colours).
+- `renderMarkdownPreview` emits the "Included file not available" note for
+  an unresolved file include (it rendered nothing).
+- `sandboxDocument` puts nothing after the bundle in its `<script>`.
+- Includes (main entry): `renderMarkdownPreviewWithIncludes` passes the
+  render env to `prepareSources` as `includeEnv`, so a text with a live file
+  include gets its URL includes too (they stayed directives); the include
+  directive names are one list that `prepareSources` builds its patterns
+  from; a URL scheme in any case (`HTTPS://`) is resolved, as the renderer
+  already treated it as a URL.
+- Conformance harness: the `C.update.*` checks count only bundle requests
+  (any file of `<pkg>-browser@<version>/` but the manifest), so a file may
+  load its own stylesheets (H.7); dialogs stay dismissed except a
+  `beforeunload` where a check leaves a page it expects clean (H.8;
+  `C.update.once-a-day` also asserts no dialog). The stub carrier is rebuilt
+  on `carrier/app`.
+- Chrome: the bar comes first in the page order after the islands, narrow
+  pages get a top padding under it, and the edit-mode title follows the
+  header `title`. A pointer's choice in a menu leaves the focus to the page.
 
-### Round 1 of the carrier-app loop (orz-mdhtml 1.0 on the 2.2.0 kit)
+### Accepted limits
 
-Findings of the design audit and the adversary, fixed on the kit side
-(additive unless noted; claims in `notes/CLAIMS.md`).
+- Replace it writes over whatever is on disk at the moment the reader
+  answers, including a second outside write made while the question was
+  open (the reader never sees the disk version either way).
+- A document's scripts taking the keyboard focus in the preview remain an
+  accepted limit (FC-19 §5).
 
-- **A file that changed on disk is not overwritten silently** (S.14, A.15):
-  when the picked (or re-picked) file is an orz file of this document (its
-  header `uid`) whose text is neither the opened text, this page's last
-  write nor the text being saved, `createSaver().save` writes nothing and
-  returns `{ via: 'file', ok: false, error: 'conflict', conflict: true, … }`;
-  `save(input, { overwrite: true })` then writes that file without a second
-  picker. The app and the editor ask the reader ("This file changed on disk
-  since you opened it (another program or an agent edited it). Replace it
-  with your version?" — Replace it / Download a copy instead) through the new
-  `askSaveConflict`; `SaveOutcome` / `AppSaveOutcome` gain `conflict`. Also
-  `headerUidOf`, `SaveCallOptions`, `SAVE_CONFLICT_MESSAGE`
-  (shell-runtime §1).
-- **No served-page notice on an app's page** (S.15, E.28): `createSaver({
-  servedNotice: false })`; the editor's own saver passes it unless it is an
-  assembled file (`standalone: true` or `openedHtml`), so an app's editor
-  without a save hook uses the picker, else a download. The notice now reads
-  "This file was opened from a web address, so it cannot be saved over…".
-- **Keys** (A.10, A.14, A.16): in edit mode Cmd/Ctrl+S with the focus on the
-  chrome or the page saves the editor (never "Save page as") and Cmd/Ctrl+E
-  leaves edit mode; navigation keys on a chrome button reach the read view's
-  `onKey` (not Space, Enter, Tab, Escape); a pointer's choice in a menu and a
-  pointer's Done leave the focus to the page.
-- **The page's save runs one at a time** (A.15); **every editor opened or
-  attached during a quiet update is read-only and given back** (A.9); **a
-  framed file whose host never connected asks before leaving** with unsaved
-  changes (A.7).
-- **Chrome**: at narrow widths only buttons with an icon drop their label
-  (`orz-btn--has-icon`); `ICONS` gains `present`, `print`, `pageSize`; a
-  kind's action may bring its own `KindIcon` (path data only, built as SVG
-  elements: `anyIconElement`, `isKindIcon`, `KIND_ICON_MAX_PATHS`) (A.17,
-  V.2, V.6). The chrome is first in the page order after the islands, and
-  narrow pages get a top padding under the bar; the edit-mode title follows
-  the header `title` (A.18, A.14). `showToast` takes `actions`, `onDismiss`,
-  `focus` (V.6).
-- **Editor syntax colours follow the chrome's scheme** (E.27): a kit
-  highlighter (`ORZ_HIGHLIGHTER`) with `--orz-chrome-syntax-*` tokens (light
-  and dark), ≥ 4.5:1 on the editor background (measured 5.97 / 6.44). The
-  default `defaultHighlightStyle` is no longer used by `codemirror6Adapter`.
-- **Includes in apps** (E.29): `renderMarkdownPreviewWithIncludes` sends a
-  file include the record lacks to `fetchInclude(path)`; FC-19 §3 gains the
-  `includes` option (`KindEditorOptions.includes`). The app never sends a
-  path through `orz-host-include@1` (URLs only).
-- **Unresolved includes are visible** (E.30): the preview and the md read
-  view render "Included file not available: part.md"
-  (`p.orz-include-missing`, the directive kept in `data-md`; option
-  `missingIncludes: false`); `themes/common.css` dims it and hides it in
-  print. `md.render` is unchanged.
-- **`enhanceDocument` releases charts** (M.26): each call destroys the
-  Chart.js instances whose canvas left the root; `disposeEnhancement(root)`
-  destroys the rest. **`swapStylesheet`** (M.27) swaps a `<link id>` without
-  a flash (the old one goes when the new one has loaded); `enhanceDocument`'s
-  highlight.js swap uses it.
-- **Engine source** (A.12): `captureEngineSource(document?, { bundle?,
-  integrity? })` takes only the carrier's bundle — a script named like the
-  bundle (default `orz-<x>.browser.js`), the file's `#orz-engine`, or the
-  update sandbox's — so an app script that bundles the IIFE is not inlined
-  as the engine (the release's CDN URL is fetched instead). Changed: a
-  loaded script with another file name is no longer taken.
-- Size bounds re-measured on what ships (S.11 68 KB / 61.6 KB, U.10 45 KB /
-  40.9 KB, V.5 19 KB / 16.9 KB, E.10 75 KB / 68.5 KB, A.2 36 KB / 32.9 KB).
+### Upgrading from 2.1.0
 
-### Round 2 of the carrier-app loop (kit side)
+Nothing is removed or renamed. The `overwrite`/`conflictToken`, `knownHtml`,
+`readUid` and one-question-per-saver APIs changed during 2.2.0's development
+but were never published, so they do not affect 2.1.0 users. What a 2.1.0
+caller may notice:
 
-The closed loop on orz-mdhtml 1.0 and this kit, round 2 (claims in
-`notes/CLAIMS.md`; additive unless noted).
-
-- **A conflict was missed for most header forms** (S.14, A.15; HIGH): the
-  saver read the disk file's uid with a narrow parser-free reader, so a
-  document without a uid, a quoted (`uid: "doc-…"`) or `|` block uid, a
-  blank line before `{{nyml` or a `{{nyml kind: document` opener got no
-  conflict and an agent's edit on disk was overwritten. Now `createSaver({
-  readUid })` takes the page's own reader (the app and the editor pass
-  `readHeader`'s well-formed uid), `headerUidOf` reads all those forms, and
-  a file is this document unless both sides have different well-formed uids
-  (no uid on either side: this document).
-- **"Changed on disk" compares content, not bytes** (S.14): text, resolved
-  includes (as entries) and delivery. An agent that re-assembled the same
-  text with new includes or `cdn` delivery is now asked about (the next
-  save would have written back the page's old ones); the same content in
-  other bytes (another shell version, CR LF) is no change. Changed: such a
-  file was a conflict before when its text was not byte-identical.
-- **The conflict question** (V.6, A.15): focuses "Download a copy instead"
-  (non-destructive); Escape dismisses it (nothing written); the focus goes
-  back where it was; one question per page and per editor — a save while it
-  is open calls no saver (no second picker) and makes the open question
-  answer for the newer text (an older text is never written).
-  `askSaveConflict(root, name?, { returnFocus? })`; `showToast` actions take
-  `autofocus`, Escape dismisses a toast, and `Toast` gains `focus()` and
-  `setMessage()`. The conflict's picked file serves only the save that
-  answers it.
-- **An update that finds the file changed on disk** (A.9) writes nothing and
-  the indicator says so (`UPDATE_CONFLICT_MESSAGE`), not "conflict".
-- **Opened bytes** (E.8, S.14): an app's editor (not an assembled file) no
-  longer assembles the opened bytes at idle on every mount (its `assemble`
-  may fetch the carrier's engine) — only at its first save; a failed
-  assembly or `openedHtml` is not memoized, so it no longer disables the
-  conflict check for the page's life.
-- **Presenting** (A.19): `setChromeVisible(false)` hides the bar and the
-  editor, not the toast stack. A bar action clicked with the pointer leaves
-  the focus to the page, so the read view's Space/Enter work at once; keys
-  from a non-button chrome element never reach the read view (A.10).
-- **Editor** (FC-19 §3/§4, additive): `refreshPreview({ includes? })`
-  replaces the include record and forgets fetched includes (E.31), and
-  renders even for an unchanged text; `fileName` documented as an
-  `EditorOptions` field and `KindEditorOptions.fileName` added (an app's
-  editor's save name, E.28); `Editor.ready` documented.
-- **`enhanceDocument`** (M.24): a library that failed to load is retried
-  only after 15 s (doubled per failure), at most 3 times per window
-  (`ENHANCE_RETRY_MS`, `ENHANCE_MAX_ATTEMPTS`); re-renders meanwhile do not
-  inject it again.
-- **Lint** (K.10): `unknown-theme` — a md header `theme` not in `THEMES`.
-- **Harness** (H.5): `C.save.conflict` (an agent's edit between two saves:
-  nothing written until the reader answers; Replace it writes, Download a
-  copy instead downloads); the stub mutant `save-ignores-conflict` fails it.
-- Sizes (what ships): shell 63.0 KB (S.11 bound 68 KB), app 34.1 KB (A.2
-  bound 36 KB).
-
-### Round 3 of the carrier-app loop (kit side)
-
-The closed loop on orz-mdhtml 1.0 and this kit, round 3 (claims in
-`notes/CLAIMS.md`; additive unless noted).
-
-- **Keyboard users stuck in present mode** (A.19; M5):
-  `setChromeVisible(false)` with the focus in the bar or the editor (Present
-  pressed with the keyboard) moves the focus to the page — the read view's
-  element when it takes the focus, else the document — so Escape and Space
-  reach the read view's `onKey`; a focused toast keeps its focus.
-- **The conflict question for screen readers** (V.6; M6, L9): a toast with
-  actions is a question — `role="alertdialog"` outside the polite status
-  region, labelled by its new `title` option (else its message) and
-  described by its message — so focusing its default action announces it;
-  plain toasts stay in the status region. Changed wording: titled "The file
-  changed on disk"; "since this page opened or last saved it", and the
-  consequence is said ("Download a copy to keep both versions; replacing the
-  file loses the version on disk"); **Download a copy instead** comes first
-  and is the primary-styled default, **Replace it (the version on disk is
-  lost)** is no longer primary. `askSaveConflict(root, name?, { opened:
-  false })` (an app's editor with no opened file) asks "The file you chose
-  holds another version of this document…". New exports
-  `SAVE_CONFLICT_TITLE`, `SAVE_CONFLICT_PICKED_MESSAGE`,
-  `SAVE_CONFLICT_LABELS`, `SAVE_CONFLICT_DOWNLOADED` ("Download started; the
-  file on disk is unchanged. Your next save asks again.").
-- **Saves after `refreshPreview({ includes })`** (E.31, FC-19 §4; L7):
-  changed — saves write the latest include record (none after `null`), not
-  the one the editor was mounted with; the opened bytes keep the mounted
-  record.
-- **An agent's `upgrade` undone by a browser save** (S.14; L12): the same
-  content in a newer shell on disk than the file being saved is a change —
-  the save asks — unless this page wrote that shell; the same shell in
-  other bytes, or an older shell, is still no question.
-- **A revert of this page's save** (S.14, S.13; F3): the session's file
-  holding the opened bytes again over this page's own write is asked about
-  (no picker, `picked: false`); `overwrite` then writes it as the opened file
-  (round-2 m24's proof by content kept). Changed: it was written silently.
-- **After "Download a copy instead"** (L11): every later save asks again —
-  by design, now documented (shell-runtime §1 step 3.4) and said in the
-  download's toast.
-- **Harness** (H.5; F2): `C.save.conflict` also covers a text without a uid,
-  an includes-only and a delivery-only change, a page save with no editor
-  open (`OrzCarrier.standalone.save()` after a setting change), and with a
-  `next` release the same text in a newer shell (asked) and the quiet
-  update after an agent's edit (nothing written, the reason announced); the
-  stub mutants `page-overwrites-conflict` and `update-overwrites-conflict`
-  fail it.
-- **Tests** (K10, K12/K13, K25): the app keeps no failed opened assembly; a
-  third save while the question is open asks no saver (page and editor); a
-  saver without `openedHtml` never reports a conflict.
-- Sizes (what ships): shell 65.8 KB (S.11 bound 68 KB), chrome 19.2 KB (V.5
-  bound raised to 21 KB), app 34.3 KB (A.2 bound 36 KB).
-
-### Round 4 of the carrier-app loop (kit side)
-
-The closed loop on orz-mdhtml 1.0 and this kit, round 4 (claims in
-`notes/CLAIMS.md`; the saver's `overwrite` change is breaking for 2.2.0's
-unreleased API).
-
-- **Two conflict questions, the older text won** (S.14, A.15, V.6; F2, HIGH):
-  a page save's question and an editor's save made a second question (and a
-  second picker); answering Replace on both wrote the older page text over
-  the editor's save while the page reported nothing unsaved. Now ONE
-  question per saver: new `answerSaveConflict({ saver, root, input,
-  result? })`, `saveConflictOpen(saver)`, `dropSaveConflict(saver, root?)`
-  and `SAVE_CONFLICT_STALE` (`orz-markdown/carrier/shell`); the carrier app
-  and the editor shell use them, so a save of the page or of any editor of
-  the file while the question is open calls no saver, focuses that question
-  and makes it answer for the newest text; only the text actually written
-  is marked saved; an editor's `destroy()` takes its question with it.
-  **Changed (saver):** each `conflict` result carries a `conflictToken`;
-  `save(input, { overwrite: true, conflictToken })` writes only while that
-  conflict is the pending one — otherwise (superseded, none pending, no
-  token) nothing is written: `{ via: 'file', ok: false, error:
-  'stale-conflict' }` (before, an `overwrite` with no conflict pending
-  wrote the session's file unchecked).
-- **A revert seen through a remembered handle** (S.14; F4): after an agent's
-  edit dropped the session handle, the opened version put back on disk was
-  written silently through the remembered handle; it is now asked about
-  like the session-file revert (`picked: false`), unless this page wrote
-  nothing into the opened file.
-- **A false question after `refreshPreview({ includes })`** (S.14, E.31; F5):
-  new saver option `knownHtml()`; the editor shell passes the mounted text
-  assembled with the latest includes, so a file on disk holding it (an
-  app's server resolved the includes again) is no change.
-- **Harness** (H.5; F3): `C.save.conflict` also checks that the save after
-  "Download a copy instead" asks again, that a revert of the opened bytes
-  over the page's own save asks, that a page save followed by its editor's
-  save shows one question and Replace leaves the newest text, and FAILS
-  (no longer skips) a file without `OrzCarrier.standalone.save`; stub
-  mutants `r4-after-download`, `r4-revert-silent`, `r4-two-questions`,
-  `r4-no-app-handle` fail it. `C.save.conflict` gets three times the
-  per-check time limit (it walks a dozen files).
-- **Tests** (F6, K02): the revert check's exceptions (the opened content in
-  other bytes being saved, or last written) are each tested.
-- Sizes (what ships): shell 68.5 KB (S.11 bound raised to 75 KB), chrome
-  19.2 KB (V.5, 21 KB), app 34.4 KB (A.2, 36 KB).
-
-### Round 5 of the carrier-app loop (kit side; closing)
-
-The closing hardening pass of the closed loop on orz-mdhtml 1.0 and this
-kit (claims A.7, A.9, A.15, V.6 in `notes/CLAIMS.md`). Round 5 found
-nothing HIGH; these were fixed anyway.
-
-- **Late writes left the page dirty** (A.15, A.7; B1, B2): a conflict
-  answer or a save that settled after its editor was left (the editor
-  re-targeted the page's question, then Done; or Cmd/Ctrl+S then
-  Cmd/Ctrl+E at once) wrote the editor's text but left the page unsaved,
-  so leaving asked for nothing to lose. The carrier app now wraps its saver
-  once and hands that one object to the page and every editor: every write
-  marks the text written saved, whoever wrote it and whenever it lands.
-- **An attached editor's saved work could be written over** (A.15; B3): an
-  editor mounted on the file with `OrzCarrier.mountEditor` saved and was
-  destroyed; the page's older copy came back, and a later setting saved it
-  over the editor's work (Edit opened on the old text). An attached
-  editor's save is now the page's text; a read view with nothing unsaved
-  follows another surface's write; Done on a clean Edit editor leaves the
-  last written text (two editors: the last save wins); an attached editor
-  destroyed with unsaved edits leaves the read view on the page's text.
-- **Update now while the conflict question was open** (A.9; B4): it ran a
-  second save (and could open a picker). Now refused before anything runs,
-  with new `UPDATE_QUESTION_OPEN` (`orz-markdown/carrier/app`) and the
-  question focused through new `focusSaveConflict(saver)`
-  (`orz-markdown/carrier/shell`); a question that opens while the update
-  re-assembles stops its save the same way.
-- **Documented** (shell-runtime §1 step 3.4; B5): Replace it replaces
-  whatever is on disk when the reader answers, also a second write made
-  while the question was open (by design; the reader never sees the disk
-  version either way).
-- **Tests** (T1): a setting changed while the page's question is open is
-  not lost (K11); a re-target that brings its own conflict passes that
-  conflict's token (K04). Real-Chrome tests for P1, P3/P4, P5 and P6.
+- `createSaver` with `openedHtml` can now resolve `{ ok: false, conflict:
+  true }` and write nothing; handle it (`answerSaveConflict`, or
+  `askSaveConflict` and `save(input, { overwrite: true, conflictToken })`).
+  Callers built on `carrier/app` or the editor shell get this for free.
+- A conformance target must expose `OrzCarrier.standalone.save` to pass
+  `C.save.conflict` (a carrier built on `carrier/app` does).
+- Visual: the editor's syntax colours and the include note in the preview.
 
 ## [2.1.0] - 2026-10-06
 

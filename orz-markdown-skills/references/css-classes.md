@@ -210,6 +210,12 @@ Note: `span.success/info/warning/danger` also have `display: inline-flex; align-
 
 > Note: the parser does **not** emit a `<nav class="toc">` wrapper or a `.toc-wrapper`. `{{toc}}` produces a single `<ul class="toc-list">`. If your host wants a wrapper, add it around the rendered TOC yourself.
 
+### Unresolved include (carrier preview and read view, ≥ 2.2.0)
+
+| Class | Element | Description |
+|---|---|---|
+| `p.orz-include-missing` | `<p role="note">` | "Included file not available: part.md" in a `<small>`, with the directive in `data-md`. Emitted by the carrier kit's preview renderer (`renderMarkdownPreview`, option `missingIncludes: false` turns it off), not by `md.render`. common.css dims it and hides it in print. |
+
 ### Test elements (development only)
 
 | Class | Element | Description |

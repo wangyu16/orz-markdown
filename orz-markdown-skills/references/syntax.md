@@ -460,6 +460,8 @@ The file is spliced in at parse time, so it is part of the one document: its foo
 
 For URL includes (`{{md https://…}}`), run `prepareSources()` first — outside a browser it needs `allowedHosts` or a `fetcher` (see SKILL.md).
 
+In a carrier's editor preview and read view (≥ 2.2.0) a file include that cannot be resolved shows a dimmed note instead of nothing — `<p class="orz-include-missing" role="note" data-md="{{md ./part.md}}"><small>Included file not available: part.md</small></p>` (hidden in print; the directive is kept for copy-as-Markdown). Plain `md.render` still renders nothing for it.
+
 ---
 
 ### yaml / yml — Invisible YAML metadata block

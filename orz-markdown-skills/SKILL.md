@@ -157,7 +157,12 @@ are kept. The parser renders nothing for this block. A file with no header is
 still a valid `md` document; an old leading `kind: meta` block is read as a
 legacy header. **Twin links:** link to the text twin
 (`[Week 2](week2.slides.md)`); it works on GitHub and becomes a link to
-`week2.slides.html` inside an assembled file. Full rules:
+`week2.slides.html` inside an assembled file. **In a carrier (≥ 2.2.0)** a md
+`theme` outside the 12 bundled ids is flagged (`unknown-theme` lint) and the
+default theme is shown; a file include the carrier cannot resolve shows
+"Included file not available: part.md" (`p.orz-include-missing`, dimmed,
+hidden in print) in the preview and read view — check the path or ask the
+host to supply the file. Full rules:
 [FC-18](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md).
 
 ### Building a carrier or host (≥ 2.0.0)
@@ -177,8 +182,12 @@ The carrier kit (≥ 2.1.0) adds `orz-markdown/carrier` (text format 1:
 header tools, `readDocument`, `assembleEnvelope` / `extract`),
 `orz-markdown/carrier/read` (parser-free reading), `orz-markdown/carrier/shell`
 (save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
-(the shared editor shell) and `orz-markdown/carrier/conformance` (test
-harness). They are for carrier and host builders; their binding specs are in
+(the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
+≥ 2.2.0), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
+`startCarrier(kind)`) and `orz-markdown/carrier/conformance` (test
+harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
+bundled themes: `THEMES` (id, name, light/dark), `DEFAULT_THEME`, `isThemeId`,
+`themeInfo`. They are for carrier and host builders; their binding specs are in
 the repository's [`spec/`](https://github.com/wangyu16/orz-markdown/tree/main/spec) folder.
 
 ---

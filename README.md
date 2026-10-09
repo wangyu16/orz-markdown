@@ -138,6 +138,13 @@ read as a legacy header. Relative links to a text twin
 GitHub, and point to the assembled twin (`week2.slides.html`) in an assembled
 file (the render env's `orzTwinLinks: true`).
 
+What authors see in a carrier (≥ 2.2.0): a md `theme` that is not one of the
+bundled themes is flagged by the header lint (`unknown-theme`) and the default
+theme is shown; a file include (`{{md ./part.md}}`) the carrier cannot
+resolve shows a dimmed note, "Included file not available: part.md", in the
+editor preview and the read view (hidden in print). `md.render` itself is
+unchanged: an unresolved include still renders nothing.
+
 ## Themes
 
 We provide multiple ready-to-use CSS themes for rendering the output! You do not need to style the custom plugins from scratch.
@@ -201,7 +208,7 @@ preview identically instead of re-deriving it.
 | `orz-markdown/carrier/app` | (≥ 2.2.0) the standalone assembled file's runtime every carrier bundle runs — `startCarrier(kind)`: read view, chrome, edit mode, saves, New document / Save as new copy, unsaved-changes warning, host connection with the AI review flow, quiet update — behind one seam, `StandaloneKind` ([spec/carrier-app.md](spec/carrier-app.md)) |
 | `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`), and its page helpers for a carrier's own tests (OPFS picker, `readOpfs`, `writeOpfs`) |
 | `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
-| `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes), `DEFAULT_THEME`, `themeInfo` |
+| `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes), `DEFAULT_THEME`, `isThemeId`, `themeInfo` — also on the main entry |
 | `orz-markdown/themes/*` | the CSS themes |
 
 orz-markdown has no static Node dependencies: it bundles for the browser
