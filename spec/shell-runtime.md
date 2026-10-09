@@ -319,6 +319,7 @@ well-formed uid (shared by such documents). Each key's value is JSON.
 | `viewMode` | `split` / `editor` / `preview` | `split` |
 | `editorFontSize` | number 8–40 (CSS px) | `14` |
 | `darkChrome` | boolean, or `null` to follow the system | `null` |
+| `fontScale` | integer 25–400 (percent): the read view's text size, a reader control of the carrier app (spec/carrier-app.md §4.10; 2.2.0) | `100` |
 
 A carrier may pass its own `schema` (`{ key: { default, valid } }`) for
 kind-specific preferences. **Validation both ways:** `set` refuses a value
@@ -539,7 +540,9 @@ mountUpdateIndicator(anchor, info, { onUpdate, onLater?, onSkip? }, { document? 
 ```
 
 - A small chip (update icon + dot) inserted **right after the anchor** (the
-  brand), rendered in its own shadow root. Its button is named
+  brand), rendered in its own shadow root. (The carrier app anchors it in
+  edit mode's bar; its read view offers the same choices in the handle's
+  list instead — spec/carrier-app.md §4.9.) Its button is named
   "Update available: x.y.z" (`aria-haspopup="dialog"`, `aria-expanded`,
   `aria-controls`).
 - Clicking (or Enter/Space) opens a small **non-modal** popover
@@ -594,6 +597,17 @@ shadow roots and does not compete with it.
   set as data, never markup: the only `innerHTML` stays the `ICONS`
   constants); a malformed one (`isKindIcon` false), an unknown name or a
   document without SVG elements gives null and the control keeps its label.
+- **Brand marks** (2.2.0, `brand.ts`) — `ORZ_SEAL_SVG`, the orz seal of
+  orz-mdhtml 0.9.3 (the "orz" wordmark knocked out of a weathered green
+  seal; viewBox 180 × 100; its ids namespaced `orzlogo-*`, its filters and
+  mask referring only to them), and `GITHUB_MARK_SVG` (16 × 16,
+  `currentColor`), both `aria-hidden`, with no script, handler, style, link
+  or external reference; `brandMark(doc, 'seal' | 'github')` writes one into
+  an `aria-hidden` span of a chrome shadow root (one seal per root: its ids
+  are unique there) — `brand.ts`'s only markup write, as `iconElement` is
+  `chrome.ts`'s; `ORZ_MARKDOWN_SITE` = `https://markdown.orz.how`. The
+  carrier app's edit mode links them quietly (spec/carrier-app.md §4.2). A
+  link is named by its `aria-label`, never by the mark.
 - **Syntax tokens** (2.2.0) — `--orz-chrome-syntax-heading`, `-mark`,
   `-link`, `-url`, `-code`, `-quote`, `-comment`, `-label`, light and dark
   like every token: the editor's syntax colours (FC-19 §8.6), each at least

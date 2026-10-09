@@ -762,7 +762,7 @@ exports.editChecks = {
         // no update check, no indicator
         await page.waitForTimeout(Math.max(0, 3000 - (Date.now() - t0)));
         p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 0, 'manifest requests from an editor in an app host (the app owns the version)');
-        p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, 'update indicators in an app host');
+        p.eq(await page.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, 'update indicators in an app host');
         p.eq(ctx.of('dialog').length, 0, 'dialogs');
     },
     async 'C.edit.preview-isolation'(s, p) {
@@ -1448,7 +1448,7 @@ async function conflictPhases(s, p, ctx) {
     const f = await conflictFile(s, uctx, 'conflict-update', opened, false);
     const agent = await s.assemble(`${texts_js_1.EDIT_TEXT}The agent's edit before the update.\r\n`, { delivery: 'inline' });
     await f.write(agent);
-    if (!p.check(await until(async () => (await f.page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'update after an agent\'s edit: no update indicator'))
+    if (!p.check(await until(async () => (await f.page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'update after an agent\'s edit: no update indicator'))
         return;
     await runUpdate(f.page, uctx, next.version);
     await f.page.waitForTimeout(500);
@@ -1458,17 +1458,47 @@ async function conflictPhases(s, p, ctx) {
     p.check(said.some((t) => /changed on disk/i.test(t)), `update after an agent's edit: no announced message saying the file changed on disk (${clip(JSON.stringify(said))})`);
 }
 // ── update ───────────────────────────────────────────────────────────────
-const chipName = (version) => new RegExp(`^Update available: ${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The kit indicator's chip (always mounted when an update is offered; hidden with the carrier app's edit bar in the read view). */
+const chipName = (version) => new RegExp(`^Update available: ${escapeRe(version)}$`);
+/** The carrier app's offer in the handle's list (2.2.0). */
+const offerItemName = (version) => new RegExp(`^Update to ${escapeRe(version)}$`);
 function needNext(s) {
     needBrowser(s);
     if (!s.releases.next)
         throw new Skip('no `next` release given (a build of this carrier with a higher version)');
     return s.releases.next;
 }
-/** Click the chip and Update now; wait until something was saved or the update settled (refused). */
+/**
+ * Choose Update now for the offered `version`: the kit's indicator chip when it shows (a carrier's bar),
+ * else the carrier app's read view (spec/carrier-app.md §4.2): its offer is "Update to x.y.z" in the
+ * handle's list (opened through `OrzCarrier.standalone.menu`, as a hover does).
+ */
+async function chooseUpdateNow(page, version) {
+    const chip = page.getByRole('button', { name: chipName(version) });
+    if ((await chip.count()) > 0 && (await chip.first().isVisible())) {
+        await chip.first().click();
+        await page.getByRole('button', { name: 'Update now' }).click();
+        return;
+    }
+    await page.evaluate('(function () { var a = globalThis.OrzCarrier && globalThis.OrzCarrier.standalone; if (a && a.menu) a.menu.open(); })()');
+    await page.getByRole('menuitem', { name: offerItemName(version) }).click();
+    await page.getByRole('menuitem', { name: 'Update now' }).click();
+}
+/** An update is running: the indicator's "Updating…" or the carrier app's `updating` (a reload in between: not running). */
+async function updateRunning(page) {
+    if ((await page.getByRole('button', { name: 'Updating…' }).count()) > 0)
+        return true;
+    try {
+        return await page.evaluate('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone && globalThis.OrzCarrier.standalone.updating)');
+    }
+    catch {
+        return false;
+    }
+}
+/** Choose Update now; wait until something was saved or the update settled (refused). */
 async function runUpdate(page, ctx, version) {
-    await page.getByRole('button', { name: chipName(version) }).click();
-    await page.getByRole('button', { name: 'Update now' }).click();
+    await chooseUpdateNow(page, version);
     const t0 = Date.now();
     let result = 'stuck';
     await until(async () => {
@@ -1478,8 +1508,7 @@ async function runUpdate(page, ctx, version) {
         }
         if (Date.now() - t0 < 400)
             return false;
-        const busy = await page.getByRole('button', { name: 'Updating…' }).count();
-        if (busy === 0) {
+        if (!(await updateRunning(page))) {
             result = 'settled';
             return true;
         }
@@ -1521,8 +1550,9 @@ exports.updateChecks = {
         return { island: window.__orzC.islandRaw(), title: document.title, modal: window.__orzC.modal() };
       }`);
             release();
-            const chip = page.getByRole('button', { name: chipName(next.version) });
-            const shown = await until(async () => (await chip.count()) > 0 && (await chip.first().isVisible()), 20000);
+            // offered: the kit's indicator (a carrier app shows it in edit mode; its read view marks the handle instead)
+            const chip = page.getByRole('button', { name: chipName(next.version), includeHidden: true });
+            const shown = await until(async () => (await chip.count()) > 0, 20000);
             if (!p.check(shown, `no "Update available: ${next.version}" indicator appeared within 20 s`))
                 return;
             await page.waitForTimeout(600);
@@ -1564,7 +1594,7 @@ exports.updateChecks = {
         let loads = 0;
         page.on('load', () => { loads++; });
         await page.goto(s.writeFile(fileName(s, 'update'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
-        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'no update indicator'))
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'no update indicator'))
             return;
         const r = await runUpdate(page, ctx, next.version);
         if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
@@ -1592,11 +1622,10 @@ exports.updateChecks = {
         try {
             await openEditor(s, page, url);
             await ed(page, '(window.__orzConformanceAlive = 1)');
-            const chip = page.getByRole('button', { name: chipName(next.version) });
+            const chip = page.getByRole('button', { name: chipName(next.version), includeHidden: true });
             if (!p.check(await until(async () => (await chip.count()) > 0, 20000), 'no update indicator'))
                 return;
-            await chip.click();
-            await page.getByRole('button', { name: 'Update now' }).click();
+            await chooseUpdateNow(page, next.version);
             // the new release is downloading (held): the reader edits
             const asked = await until(() => ctx.requests.some((u) => u.includes(`@${next.version}/`)), 15000);
             if (!p.check(asked, 'Update now did not request the new release\'s bundle'))
@@ -1606,7 +1635,7 @@ exports.updateChecks = {
             const accepted = (await ed(page, 'window.__orzEditor.getText()')) === edited;
             release();
             const t0 = Date.now();
-            await until(async () => Date.now() - t0 > 400 && (await page.getByRole('button', { name: 'Updating…' }).count()) === 0, 60000, 100);
+            await until(async () => Date.now() - t0 > 400 && !(await updateRunning(page)), 60000, 100);
             await page.waitForTimeout(800);
             p.eq(loads, 1, 'page loads (the update must not reload the page)');
             p.eq(await ed(page, 'window.__orzConformanceAlive'), 1, 'the page state after the update (it was reloaded)');
@@ -1646,7 +1675,7 @@ exports.updateChecks = {
         await page.goto(s.writeFile(fileName(s, 'other-format'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
         p.check(await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 10000), 'the file never asked for release.json');
         await page.waitForTimeout(2000);
-        p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, `update indicators for ${other.version}, whose formats [987] do not include the file's format 1`);
+        p.eq(await page.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, `update indicators for ${other.version}, whose formats [987] do not include the file's format 1`);
         p.eq(ctx.requests.filter((u) => s.isBundleRequest(u)), [], 'bundle requests');
     },
     async 'C.update.tampered'(s, p) {
@@ -1656,7 +1685,7 @@ exports.updateChecks = {
         await page.goto(s.writeFile(fileName(s, 'tampered'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
         await page.evaluate(page_js_1.PAGE_HELPERS);
         const island = await ed(page, 'window.__orzC.islandRaw()');
-        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'no update indicator'))
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'no update indicator'))
             return;
         const r = await runUpdate(page, ctx, next.version);
         p.check(r !== 'saved', 'a bundle that does not match its integrity was accepted: the file was written or downloaded');
@@ -1675,7 +1704,7 @@ exports.updateChecks = {
         await page.goto(s.writeFile(fileName(s, 'offline'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
         await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 5000);
         await page.waitForTimeout(1500);
-        p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, 'update indicators while offline');
+        p.eq(await page.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, 'update indicators while offline');
         p.eq(ctx.of('dialog').length, 0, 'dialogs');
         p.eq(ctx.of('pageerror').map((r) => r.data), [], 'uncaught errors');
         // the browser itself logs the failed request ("Failed to load resource: net::…"); anything else is the file's
@@ -1695,7 +1724,7 @@ exports.updateChecks = {
         const ctx = await s.context({ picker: 'stub', cdn: { latest: s.releases.target } });
         const page = await ctx.newPage();
         await page.goto(s.writeFile(fileName(s, 'previous'), old));
-        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(s.target.version) }).count()) > 0, 20000), `the previous release (${prev.version}) shows no indicator for ${s.target.version}`))
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(s.target.version), includeHidden: true }).count()) > 0, 20000), `the previous release (${prev.version}) shows no indicator for ${s.target.version}`))
             return;
         const r = await runUpdate(page, ctx, s.target.version);
         if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
@@ -1734,7 +1763,7 @@ exports.updateChecks = {
             await page.goto(s.writeFile(fileName(s, 'resigned'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
             await page.evaluate(page_js_1.PAGE_HELPERS);
             const island = await ed(page, 'window.__orzC.islandRaw()');
-            if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(rel.version) }).count()) > 0, 20000), `${what}: no update indicator for ${rel.version}`))
+            if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(rel.version), includeHidden: true }).count()) > 0, 20000), `${what}: no update indicator for ${rel.version}`))
                 continue;
             const r = await runUpdate(page, ctx, rel.version);
             p.check(r !== 'saved', `${what} was accepted: the file was written or downloaded`);
@@ -1756,14 +1785,14 @@ exports.updateChecks = {
         await page.goto(s.writeFile(fileName(s, 'prerelease'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' })));
         p.check(await until(() => ctx.requests.some((u) => u.endsWith('/release.json')), 10000), 'the file never asked for release.json');
         await page.waitForTimeout(2000);
-        p.eq(await page.getByRole('button', { name: /^Update available/ }).count(), 0, `update indicators for the prerelease ${pre.version} (never offered)`);
+        p.eq(await page.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, `update indicators for the prerelease ${pre.version} (never offered)`);
         p.eq(ctx.requests.filter((u) => s.isBundleRequest(u)), [], 'bundle requests');
     },
     async 'C.update.once-a-day'(s, p) {
         const next = needNext(s);
         const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
         const html = await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' });
-        const chip = (page) => until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000);
+        const chip = (page) => until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000);
         const page = await ctx.newPage();
         await page.goto(s.writeFile(fileName(s, 'daily'), html));
         if (!p.check(await chip(page), 'no update indicator on the first open'))
@@ -1786,7 +1815,7 @@ exports.updateChecks = {
         const f = await h.frame();
         await f.waitForTimeout(2500);
         p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 0, 'manifest requests from a file in an app host\'s frame (the app owns the version)');
-        p.eq(await f.getByRole('button', { name: /^Update available/ }).count(), 0, 'update indicators in an app host\'s frame');
+        p.eq(await f.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, 'update indicators in an app host\'s frame');
     },
     async 'C.update.cdn-delivery'(s, p) {
         const next = needNext(s);
@@ -1794,7 +1823,7 @@ exports.updateChecks = {
         const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
         const page = await ctx.newPage();
         await page.goto(s.writeFile(fileName(s, 'cdn-update'), await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'cdn' })));
-        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'a cdn-delivery file shows no update indicator'))
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'a cdn-delivery file shows no update indicator'))
             return;
         const r = await runUpdate(page, ctx, next.version);
         if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
@@ -1816,7 +1845,7 @@ exports.updateChecks = {
         const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
         const page = await ctx.newPage();
         await page.goto(s.writeFile(fileName(s, 'update-includes'), file));
-        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version) }).count()) > 0, 20000), 'a file with includes shows no update indicator'))
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'a file with includes shows no update indicator'))
             return;
         const r = await runUpdate(page, ctx, next.version);
         if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
@@ -1940,7 +1969,7 @@ exports.hostChecks = {
         p.eq(await ed(f, 'window.__orzEditor.isDirty()'), true, 'isDirty() (nothing was saved)');
         await f.waitForTimeout(Math.max(0, 3500 - (Date.now() - loaded)));
         p.eq(ctx.requests.filter((u) => u.endsWith('/release.json')).length, 0, 'manifest requests from a framed file whose parent never said hello (it must not decide it is standalone)');
-        p.eq(await f.getByRole('button', { name: /^Update available/ }).count(), 0, 'update indicators in a framed file');
+        p.eq(await f.getByRole('button', { name: /^Update available/, includeHidden: true }).count(), 0, 'update indicators in a framed file');
     },
     async 'C.host.no-ack'(s, p) {
         needBrowser(s);

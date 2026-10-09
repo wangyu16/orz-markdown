@@ -14,6 +14,11 @@ export declare const READER_PREFERENCES: {
     editorFontSize: PreferenceSpec<number>;
     /** Dark chrome: `null` follows the system. */
     darkChrome: PreferenceSpec<boolean | null>;
+    /**
+     * The read view's text size in percent, 25–400 (2.2.0): a reader control of
+     * the carrier app (spec/carrier-app.md §4.10), clamped to the kind's range.
+     */
+    fontScale: PreferenceSpec<number>;
 };
 export type ReaderPreferences = {
     [K in keyof typeof READER_PREFERENCES]: (typeof READER_PREFERENCES)[K]['default'];

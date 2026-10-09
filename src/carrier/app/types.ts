@@ -36,6 +36,12 @@ export interface AppEvent {
   readonly isComposing?: boolean;
   readonly defaultPrevented?: boolean;
   readonly target?: unknown;
+  /** Pointer events: `mouse`, `touch` or `pen` (the handle tells a hover from a tap). */
+  readonly pointerType?: string;
+  /** Click events: 0 when the keyboard activated the button. */
+  readonly detail?: number;
+  /** Focus events: where the focus goes. */
+  readonly relatedTarget?: unknown;
   returnValue?: unknown;
   preventDefault(): void;
   stopPropagation?(): void;
@@ -74,14 +80,19 @@ export interface AppElement {
   readonly firstElementChild?: unknown;
   readonly nextElementSibling?: unknown;
   before?(...nodes: unknown[]): void;
+  after?(...nodes: unknown[]): void;
+  click?(): void;
   remove(): void;
   focus(options?: { preventScroll?: boolean }): void;
   blur?(): void;
   contains(node: unknown): boolean;
+  querySelector(selector: string): AppElement | null;
   querySelectorAll(selector: string): ArrayLike<AppElement>;
   addEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean; passive?: boolean }): void;
   removeEventListener(type: string, listener: AppListener, options?: boolean | { capture?: boolean }): void;
   getRootNode?(): unknown;
+  readonly parentElement?: AppElement | null;
+  getBoundingClientRect?(): { readonly top: number; readonly left: number; readonly right: number; readonly bottom: number; readonly width: number; readonly height: number };
   scrollIntoView?(): void;
   attachShadow?(init: { mode: 'open' | 'closed' }): unknown;
 }
@@ -120,6 +131,8 @@ export interface AppWindow {
   readonly parent: unknown;
   readonly location: { readonly protocol: string; readonly href: string; readonly pathname: string; readonly hash: string; reload(): void };
   readonly navigator?: { readonly platform?: string; readonly userAgent?: string };
+  readonly innerWidth?: number;
+  readonly innerHeight?: number;
   /** The reader preferences' and the update check's storage (its getter may throw: opaque origins). */
   readonly localStorage?: StorageLike | null;
   readonly CSSStyleSheet?: new () => { replaceSync(css: string): void };
@@ -268,8 +281,9 @@ export interface SettingControl {
 
 /**
  * An extra chrome action of a kind (slides: Present; paged: Print). It acts
- * on the read view: in the bar (`placement: 'bar'`) or the More menu
- * (default), in the read view only unless `inEdit`.
+ * on the read view: an item of the handle's list (`placement: 'bar'` puts it
+ * right after Edit; `menu`, the default, after the settings); with `inEdit`
+ * also in edit mode (a bar button for `bar`, else an item of More).
  */
 export interface CarrierAction {
   /** Stable id (`present`, `print`). */
@@ -289,6 +303,24 @@ export interface CarrierAction {
   run(app: CarrierApp): void | Promise<void>;
 }
 
+/**
+ * Reader-side controls a kind opts in to (2.2.0, spec/carrier-app.md §4.10):
+ * reader preferences (D5) — stored per browser by the document's `uid`,
+ * never in the text, never marking it unsaved. The app offers them in the
+ * handle's list and applies them to the read view through CSS custom
+ * properties on its element (`view.element`, else the page's root), which
+ * the kind's read view uses.
+ */
+export interface ReaderControls {
+  /**
+   * The read view's text size in percent (`min` ≤ 100 ≤ `max`, `step` > 0;
+   * md: 80–160 in steps of 10): a row "A− 100% A+" (the percentage resets it
+   * to 100), applied as `--orz-font-scale` (100 % → `1`) and stored as the
+   * `fontScale` preference.
+   */
+  fontScale?: { min: number; max: number; step: number };
+}
+
 /** A carrier as the standalone runtime sees it — everything kind-specific is behind this interface. */
 export interface StandaloneKind {
   kind: CarrierKindName;
@@ -296,8 +328,20 @@ export interface StandaloneKind {
   version: string;
   /** The text formats it reads and writes. */
   formats: readonly number[];
-  /** The brand text in the chrome bar (default `orz`). */
+  /**
+   * The tool's name in the chrome's labels (2.2.0: the edit-mode GitHub link
+   * is "<brand> on GitHub"); default: the repository's name from `repo`,
+   * else `orz`.
+   */
   brand?: string;
+  /**
+   * The kind's source repository (2.2.0): an `https://github.com/<owner>/<repo>`
+   * URL; edit mode links to it quietly with the GitHub mark (next to the orz
+   * seal, which links to https://markdown.orz.how). Anything else shows no link.
+   */
+  repo?: string;
+  /** Reader-side controls the kind opts in to (2.2.0; §4.10). */
+  readerControls?: ReaderControls;
   /** The carrier's isomorphic assemble (FC-19 §2). */
   assemble(text: string, options?: AppAssembleOptions): string | Promise<string>;
   /** A new document text (the carrier's creation tool: header with `carrier` and a fresh `uid`). */
@@ -313,7 +357,7 @@ export interface StandaloneKind {
   createReadView(doc: AppDocument): CarrierReadView;
   /** The header settings the chrome offers. */
   settings?: readonly SettingControl[];
-  /** Extra chrome actions. */
+  /** Extra chrome actions (all of them in the handle's list; `inEdit` ones also in edit mode's More menu). */
   actions?: readonly CarrierAction[];
   /** FC-19 §2 `extract` (default: the kit's). */
   extract?(html: string): Extracted | null;
@@ -386,8 +430,23 @@ export interface CarrierApp {
   /** Show a toast in the chrome. */
   toast(message: string, tone?: 'info' | 'success' | 'warning' | 'error'): void;
   /**
-   * Show or hide the chrome (slides' presenter hides it): the bar and the
-   * editor, not the toasts. Hiding it while the focus is in the bar or the
+   * The handle's list of operations (2.2.0, spec/carrier-app.md §4.2): open
+   * it as a hover does (the focus stays where it is), close it, or ask
+   * whether it is open. Tests and the conformance driver use it.
+   */
+  readonly menu: { open(): void; close(): void; isOpen(): boolean };
+  /** The read view's text size in percent (null when the kind offers no `readerControls.fontScale`). */
+  fontScale(): number | null;
+  /**
+   * Set the read view's text size (clamped to the kind's range and snapped to
+   * its step; null: 100 %), stored per uid; the document is untouched (not
+   * marked unsaved, never in a saved file). Returns the size applied (null
+   * when the kind offers none).
+   */
+  setFontScale(percent: number | null): number | null;
+  /**
+   * Show or hide the chrome (slides' presenter hides it): the handle, the
+   * edit-mode bar and the editor, not the toasts. Hiding it while the focus is in the bar or the
    * editor moves the focus to the page (the read view's element when it
    * takes the focus, else the document), so the read view's keys work at
    * once (round 3 of the carrier-app loop).

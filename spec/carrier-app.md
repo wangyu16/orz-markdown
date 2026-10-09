@@ -6,7 +6,7 @@ of the [shell runtime](shell-runtime.md) and the file side of the
 [host protocols](host-protocols.md), for every carrier kind. Family plan:
 REBUILD §3a, owner decision 2 — the standalone file's startup code, written
 in orz-mdhtml 1.0 behind a seam, is lifted here before orz-paged. Claims
-A.1–A.18 in `notes/CLAIMS.md`; tests in `tests/carrier-app.test.ts` (and the
+A.1–A.22 in `notes/CLAIMS.md`; tests in `tests/carrier-app.test.ts` (and the
 conformance stub, H.2, which is built on it).
 
 ## 1. What it is
@@ -68,13 +68,15 @@ Everything kind-specific is behind this interface; the app names no kind
 | Member | What the kind supplies |
 |---|---|
 | `kind`, `version`, `formats` | `md` / `slides` / `paged`; the shell version (= the package version, FC-19 §7); the text formats it reads and writes |
-| `brand?` | the chrome's brand text (default `orz`) |
+| `brand?` | the tool's name in the chrome's labels (edit mode's "<brand> on GitHub"; default: the repo's name, else `orz`) |
+| `repo?` | (2.2.0) the kind's repository, an `https://github.com/<owner>/<repo>` URL: edit mode links to it with the GitHub mark (§4.2); anything else shows no link |
+| `readerControls?` | (2.2.0) reader-side controls (§4.10): `{ fontScale?: { min, max, step } }` in percent |
 | `assemble(text, { delivery?, engineSource?, includes? })` | the isomorphic assemble (FC-19 §2); string or promise |
 | `newDocument()` | the creation tool's new text (header with `carrier` and a fresh `uid`) |
 | `mountEditor(element, options, ctx?)` | FC-19 `mountEditor`: the kit's editor shell with the kind's renderer, preview and tools; `ctx` when mounted on the file (§3.2) |
 | `createReadView(document)` | the page's read view (§3.3) |
 | `settings?` | the header settings the chrome offers (`SettingControl[]`, §5) |
-| `actions?` | extra chrome actions (`CarrierAction[]`: slides' Present, paged's Print) |
+| `actions?` | extra chrome actions (`CarrierAction[]`: slides' Present, paged's Print): items of the handle's list; with `inEdit`, also in edit mode |
 | `readDocument(text)` | FC-19 `readDocument` (typically the kit's with the kind) |
 | `extract?(html)`, `renderPreview?(text, options?)` | FC-19 `extract` (default: the kit's parser-free one) and `renderPreview` |
 
@@ -135,21 +137,26 @@ has loaded, so a theme change does not flash unstyled.
 
 `SettingControl { key, label, icon?, choices: { value, label, swatch? }[],
 current(text) }` — a header key the chrome offers (FC-18 §5.1 user choices
-are document data, owner decision 4). `CarrierAction { id, label, icon?,
-placement?: 'bar' | 'menu', inEdit?, run(app) }` — run with the app handle
-(a presenter hides the chrome: `app.setChromeVisible(false)` hides the bar
-and the editor but not the toast stack, so a save's or an action's message
+are document data, owner decision 4): in the read view a submenu of the
+handle's list (radio choices), in edit mode a picker of the editor's
+toolbar (`attachSettings`). `CarrierAction { id, label, icon?,
+placement?: 'bar' | 'menu', inEdit?, run(app) }` — an item of the handle's
+list (`bar`: right after Edit; `menu`, the default: after the settings);
+with `inEdit` also in edit mode (`bar`: a button of its bar; `menu`: an
+item of More); run with the app handle
+(a presenter hides the chrome: `app.setChromeVisible(false)` hides the
+handle, the bar and the editor but not the toast stack, so a save's or an action's message
 and the conflict question still show while presenting — round 2 of the
 carrier-app loop; a kind that presents in the browser's full screen shows
-its own element only, so it shows its own messages there). Hiding the bar
-while the focus is in it (or in the editor) — a keyboard user pressed
+its own element only, so it shows its own messages there). Hiding the chrome
+while the focus is in it (or in the editor) — a keyboard user chose
 Present — moves the focus to the page: the read view's element when it
 takes the focus, else the document, so Escape and Space reach the read
 view's `onKey` at once (round 3, M5); a focused toast (the conflict
-question) keeps the focus. A bar action
-clicked with the pointer leaves the focus to the page afterwards (with the
-keyboard it stays on the button), so the read view's keys — slides' Space
-and Enter — work at once.
+question) keeps the focus. An action chosen in the handle's list with the
+pointer leaves the focus to the page afterwards (with the keyboard it
+returns to the pencil; an edit-mode bar button keeps it), so the read
+view's keys — slides' Space and Enter — work at once.
 
 **Icons** (decided in round 1 of the carrier-app loop). A setting's icon is
 a kit icon (`ICONS`; `theme`, `measure`, `pageSize`, …). An action's icon is
@@ -175,23 +182,68 @@ reproduces the file, FC-18 law 3), computed when the page is first idle
 
 ### 4.2 The chrome
 
-One shadow root on `#orz-chrome` (created when the shell markup lacks it):
-a bar (`role="toolbar"`) with the brand (`#orz-brand`, the update
-indicator's anchor), Edit, the kind's setting pickers and bar actions,
-Save (with an unsaved-changes dot), Done (edit mode) and More (Download a
-copy, New document, Save as new copy, the kind's menu actions). Tokens and
-components are the shell's (`CHROME_CSS`) plus `WIDGET_CSS` and `APP_CSS`.
-Its colour scheme is the document's (`present`), unless the reader's
-`darkChrome` preference says.
+One shadow root on `#orz-chrome` (created when the shell markup lacks it).
+Tokens and components are the shell's (`CHROME_CSS`) plus `WIDGET_CSS`,
+`HANDLE_CSS` and `APP_CSS`. Its colour scheme is the document's
+(`present`), unless the reader's `darkChrome` preference says.
 
-Accessibility (2.2.0, round 1): the chrome's host is moved to be first in
-the page's order after the islands, so a keyboard reaches Edit and Save
-before the document (the bar is drawn fixed, top right, so nothing moves on
-screen); at narrow widths (≤ 560 px) the bar sits over the start of the
-page, so the app sets the page's `padding-top` and `scroll-padding-top`
-(56 px) while the read view shows and the chrome is visible — the only
-styles it puts on the page besides the edit overlay's `overflow`; `dispose`
-removes them.
+**The read view: one handle** (2.2.0, owner: non-disturbing reading, as in
+orz-mdhtml 0.9.3). The page shows ONE control: a small round pencil fixed
+at the bottom-left corner (safe-area aware; semi-transparent at rest,
+opaque on hover and focus), named "Edit and more" (`aria-haspopup="menu"`,
+`aria-expanded`, `aria-controls`). It carries a dot while the document has
+unsaved changes and one while an update is offered (§4.9), both said in
+its description. Its list (`role="menu"`, opened above it) holds every
+operation:
+
+1. **Edit** (⌘/Ctrl+E), the kind's `bar` actions (paged: Print; slides:
+   Present), **Save** (⌘/Ctrl+S; a dot while unsaved), **Download a copy**;
+2. **New document**, **Save as new copy**;
+3. the kind's settings, each a submenu of radio choices (md: Theme,
+   Width), disabled while an update runs; the kind's `menu` actions;
+4. the kind's reader controls (§4.10: md's "Text size A− 100% A+");
+5. when an update is offered, **Update to x.y.z** (§4.9).
+
+- **Pointer.** A click on the pencil edits. Hovering it opens the list
+  after a short delay (140 ms); leaving the pencil and the list closes it
+  after a grace period (360 ms), so moving into the list — and into a
+  submenu, which opens on hover — keeps it open. A pointer-down outside
+  closes it.
+- **Touch and pen** (no hover). A tap on the pencil opens the list (Edit is
+  its first item), a second tap or a tap outside closes it.
+- **Keyboard and screen readers** (the menu-button pattern). Enter edits;
+  ArrowDown and Space open the list on its first item, ArrowUp on its last;
+  arrows, Home and End move (roving focus); ArrowRight (or Enter) opens a
+  submenu on its checked choice, ArrowLeft and Escape close it; Escape
+  closes the list and returns the focus to the pencil; Tab closes it. A
+  choice made with the keyboard returns the focus to the pencil, one made
+  with the pointer leaves it to the page. The text-size row keeps the list
+  open.
+- The toasts and the conflict question are not part of the handle; a
+  presenter (`setChromeVisible(false)`) hides the handle with its list.
+  `CarrierApp.menu` opens (as a hover does: the focus stays), closes and
+  asks about the list — tests and the conformance driver use it.
+
+**Edit mode** is a full-page overlay: a bar (`role="toolbar"`) with the
+title (it follows the header's `title`), the update indicator's anchor
+(`#orz-brand`), the kind's in-edit bar actions, **Done** and **More**
+(Download a copy, New document, Save as new copy, the kind's in-edit menu
+actions), then the editor with its own toolbar (view modes, the settings,
+Save, the kind's tools). At the bar's far end, quietly (muted until
+hovered), the family's brand (2.2.0, owner): the orz seal (`ORZ_SEAL_SVG`,
+shell-runtime §8; ~19 px tall) linking to https://markdown.orz.how
+("orz-markdown website") and, for a kind with a GitHub `repo`, the GitHub
+mark linking to it ("<brand> on GitHub"), both `target="_blank"
+rel="noopener noreferrer"`. The read view shows neither.
+
+Accessibility: the chrome's host is moved to be first in the page's order
+after the islands, so a keyboard reaches the pencil before the document
+(it is drawn fixed, so nothing moves on screen); at narrow widths (≤ 560
+px) the handle sits over the end of the lines, so the app sets the page's
+`padding-bottom` and `scroll-padding-bottom` (72 px) while the read view
+shows and the chrome is visible — the only styles it puts on the page
+besides the edit overlay's `overflow` and the reader controls' custom
+properties on the read view (§4.10); `dispose` removes them.
 
 ### 4.3 Header settings and undo
 
@@ -202,14 +254,14 @@ read view and marks the document unsaved; in edit mode it is the editor's
 
 ### 4.4 Edit mode
 
-Edit (or Cmd/Ctrl+E) mounts `kind.mountEditor(container, { text: saved },
+Edit (the pencil, the list's Edit, or Cmd/Ctrl+E) mounts `kind.mountEditor(container, { text: saved },
 context)` inside the chrome (a full-page overlay), then sets the current
 text (so the editor's undo and dirty state know both), hides the read view
 and focuses the editor; Done (or Cmd/Ctrl+E again) leaves with the editor's
 text — a clean editor's is the last written text (another editor of the
 file may have saved after it: the last save wins; round 5, B3), a dirty
 one's stays unsaved — and re-renders. The bar's title — and the page title — follow the
-header's `title` as it is edited. After Done the focus returns to Edit when
+header's `title` as it is edited. After Done the focus returns to the pencil when
 the keyboard drove it, and is left to the page after a pointer's click (a
 read view's keys — slides' Space — then work at once).
 
@@ -290,7 +342,7 @@ until the reader applies a proposal (host-protocols §4).
 ### 4.8 Keymap
 
 On the page: a key another handler already took (`defaultPrevented`) is
-never the page's. In edit mode the Edit button's editor has its own keymap;
+never the page's. In edit mode the editor has its own keymap;
 a key outside it — the focus on the chrome (Done, More) or the page — is
 still the document's: Cmd/Ctrl+S saves the editor (default prevented: the
 browser's "Save page as" never runs while a document is open) and
@@ -300,15 +352,21 @@ Cmd/Ctrl+E edits; Cmd/Ctrl+Z / Shift+Z undo / redo settings outside fields;
 other keys go to the read view's `onKey` — not while typing in a field, not
 while an editor is the document, and from the chrome only on a button and
 never that button's own keys (Space, Enter, Tab, Escape; a menu's keys are
-the menu's), so slides' arrows and Page Up/Down keep working after the
+the menu's; the pencil's ArrowUp/ArrowDown open its list), so slides' arrows and Page Up/Down keep working after the
 reader used a chrome button. A setting chosen with the pointer leaves the
-focus to the page (with the keyboard it returns to the picker button).
+focus to the page (with the keyboard it returns to the pencil).
 
 ### 4.9 The quiet update
 
 Only a top-level file checks (`checkForUpdate({ kind, current: version,
-format, page, storage })`, whose own guards add the served-page rule); an
-offer mounts the indicator after the brand. Update now runs `performUpdate`
+format, page, storage })`, whose own guards add the served-page rule). An
+offer (2.2.0) marks the pencil with a dot and adds **Update to x.y.z** to
+the handle's list — a submenu: Update now, What's new (the release notes, a
+link in a new tab, when there are some), Not now, Skip this version; while
+the update runs it reads "Updating…" and is disabled, and a refusal is a
+toast — and mounts the kit's indicator (shell-runtime §7.3) after
+`#orz-brand` in edit mode's bar; Not now or Skip this version in either
+drops both. Update now runs `performUpdate`
 with the file's saver, delivery and includes and the current text (read
 again before the save). While it runs every editor of the document and the
 setting pickers are read-only — also an editor opened (Edit) or attached
@@ -329,20 +387,43 @@ is still open, so the update wrote nothing. Answer it first …") and the
 question is focused (`focusSaveConflict`); a question that opens while the
 update re-assembles stops its save the same way.
 
-### 4.10 Reader preferences
+### 4.10 Reader preferences and reader controls
 
 One `createPreferenceStore(uid, the page's storage)`: passed to the editor
 (`ctx.preferences`: view mode, split, scroll sync, font size) and read by
-the chrome (`darkChrome`). Never in the text.
+the chrome (`darkChrome`, `fontScale`). Never in the text.
+
+**Reader controls** (2.2.0, D5). A kind opts in to reader-side controls
+that never change the document: `readerControls.fontScale = { min, max,
+step }` in percent (`min` ≤ 100 ≤ `max`, `step` > 0; anything else offers
+nothing; md: 80–160 in steps of 10). The app offers a row in the handle's
+list — "Text size", **A−**, the percentage (it resets to 100) and **A+**,
+disabled at the ends, the list staying open — and applies the value as the
+custom property `--orz-font-scale` (percent / 100) on the read view's
+element (`view.element`, else the page's root), snapped to the kind's steps
+and range. It is the `fontScale` reader preference (stored per uid; 100
+removes it), restored at boot; it never marks the document unsaved, never
+reaches the host and never enters a saved file. The kind's read view uses
+the property — md zooms its article by it (`zoom: var(--orz-font-scale,
+1)`, set at run time: every theme sizes text its own way — px, rem, em,
+`clamp()` with `vw` — so one zoom scales them all evenly and keeps the
+line length in characters), and its editor preview does not follow it (the
+editor has its own font-size preference). paged and slides decide later.
+`CarrierApp.fontScale()` / `setFontScale(percent | null)` read and set it
+(null when the kind offers none).
 
 ### 4.11 The handle (`CarrierApp`, `OrzCarrier.standalone`)
 
 `kind`, `file`, `getText()`, `isDirty()`, `edit()`, `leave()`, `editor()`,
 `setSetting(changes)`, `undo()`, `redo()`, `save()`, `download()`,
 `newDocument()`, `saveAsCopy()`, `editorContext()`, `attach(editor) → detach`,
-`toast(message, tone?)`, `setChromeVisible(visible)`, `view`, `root`,
+`toast(message, tone?)`, `menu` (2.2.0: `open()`, `close()`, `isOpen()` — the
+handle's list), `fontScale()`, `setFontScale(percent | null)` (2.2.0, §4.10),
+`setChromeVisible(visible)`, `view`, `root`,
 `host`, `updating`, `ready`, `dispose()`. The conformance target's editor
-driver uses `standalone.edit()` (the Edit button's path).
+driver uses `standalone.edit()` (the pencil's path); its update driver opens
+the list with `standalone.menu.open()` when the indicator's chip is not
+shown (the read view) and chooses Update to x.y.z → Update now.
 
 ### 4.12 Services (tests)
 
@@ -353,6 +434,9 @@ conformance stub's broken builds (H.5). Production passes none.
 
 ## 5. Widgets
 
+`mountHandle(doc, { label, activate, entries })` (`handle.ts`, 2.2.0): the
+read view's pencil and its list (§4.2) — entries are items, submenus
+(radio choices, actions, links) and rows of buttons that keep it open.
 `button`, `menuButton` (a non-modal `role="menu"` popover: arrows, Home/End,
 Enter/Space, Esc returns focus, outside pointer-down and Tab close),
 `settingPicker`, `attachSettings(shell, settings)`, `reviewProposal(root,
@@ -415,8 +499,9 @@ and the core modules the editor already loads; `carrier`, `carrier/read`,
 `carrier/shell`, `carrier/editor`, `carrier/conformance` and the parser
 entry never import it (A.1). No browser global is touched at module load
 (A.2). What ships — the CommonJS `dist/carrier/app/` bundled — holds the
-app's own modules under 39 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
-2026-10-08 after round 1 of the carrier-app loop; 35.5 KB after round 5) and adds under 62 KB to a
-bundle that already holds the editor (54.7 KB measured: the app and the
-update, indicator and file side of the shell, which the editor alone does
-not load).
+app's own modules under 58 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
+2026-10-08 after round 1 of the carrier-app loop; 35.5 KB after round 5;
+52.7 KB on 2026-10-09 with the handle and edit mode's brand) and adds under
+74 KB to a bundle that already holds the editor (66.9 KB measured: the app
+and the update, indicator, brand and file side of the shell, which the
+editor alone does not load).

@@ -241,11 +241,18 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
       return { ...base, async save(input, call) { const r = await base.save(input, call); return r.via === 'file' && r.conflict && r.picked === false ? base.save(input, { overwrite: true, conflictToken: r.conflictToken }) : r; } };
     };
   }
-  if (v === 'silent-refusal') services.mountUpdateIndicator = (a, i, h, o) => mountUpdateIndicator(a, i, { ...h, onUpdate: (x) => Promise.resolve(h.onUpdate(x)).catch(() => undefined) }, o); // BUG (mutation): a refused update is swallowed
+  if (v === 'silent-refusal') {
+    // BUG (mutation): a refused update is swallowed — the indicator's handler and the read view's offer (2.2.0) say nothing
+    services.mountUpdateIndicator = (a, i, h, o) => mountUpdateIndicator(a, i, { ...h, onUpdate: (x) => Promise.resolve(h.onUpdate(x)).catch(() => undefined) }, o);
+    services.performUpdate = async (o) => { const r = await performUpdate(o); return r.status === 'failed' ? { status: 'up-to-date' } : r; };
+  }
   if (v === 'steal-focus') {
     services.mountUpdateIndicator = (a, i, h, o) => {
       const ind = mountUpdateIndicator(a, i, h, o);
-      (ind.root as unknown as ShadowRoot).querySelector('button')?.focus(); // BUG (mutation)
+      // BUG (mutation): the offer takes the focus — the chip, or (2.2.0, the read view hides it with the edit bar) the handle's pencil
+      const chrome = (a as unknown as { getRootNode(): ShadowRoot }).getRootNode();
+      const chip = (ind.root as unknown as ShadowRoot).querySelector('button') as HTMLElement | null;
+      if (chip?.offsetParent) chip.focus(); else (chrome.querySelector('.orz-handle__pencil') as HTMLElement | null)?.focus();
       return ind;
     };
   }

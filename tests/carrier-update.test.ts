@@ -29,6 +29,7 @@ import {
   answerSaveConflict, saveConflictOpen, focusSaveConflict, dropSaveConflict, type Saver, type SaveCallOptions, type SaveInput,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, KIND_PACKAGE, type ShellParts } from '../src/carrier';
+import { BRAND_MARKS, GITHUB_MARK_SVG, ORZ_MARKDOWN_SITE, ORZ_SEAL_SVG, brandMark } from '../src/carrier/shell/brand';
 import { escapeScriptText } from '../src/html';
 
 afterEach(() => {
@@ -1085,7 +1086,7 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect(await again).toBeNull();
   });
 
-  it('[V.4] createShadowRoot installs CHROME_CSS (constructed sheet, else <style>), and the chrome writes only into its own shadow root: no DOM-reading API, innerHTML only from ICONS', async () => {
+  it('[V.4] createShadowRoot installs CHROME_CSS (constructed sheet, else <style>), and the chrome writes only into its own shadow root: no DOM-reading API, innerHTML only from ICONS (and, in brand.ts, the brand marks)', async () => {
     const { document } = await dom();
     const host = document.createElement('span');
     document.body.appendChild(host);
@@ -1102,12 +1103,39 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     expect([appended.length, texts]).toEqual([1, [CHROME_CSS]]);
     expect(() => createShadowRoot({} as UiElement)).toThrow(/shadow root/);
     const forbidden = /\b(outerHTML|innerText|textContent|documentElement|XMLSerializer|cloneNode|querySelector(All)?|getElementById|getElementsBy\w+|serializeToString|insertAdjacentHTML|DOMParser)\b/;
-    for (const f of ['chrome.ts', 'indicator.ts', 'update.ts']) {
+    for (const f of ['chrome.ts', 'indicator.ts', 'update.ts', 'brand.ts']) {
       const code = readFileSync(`src/carrier/shell/${f}`, 'utf8').split('\n').map((l) => l.replace(/\/\/.*$|^\s*\*.*$/, ''));
       expect(code.filter((l) => forbidden.test(l)), f).toEqual([]);
       const writes = code.filter((l) => /innerHTML/.test(l));
-      expect(writes, f).toEqual(f === 'chrome.ts' ? ['type IconSpan = UiElement & { innerHTML: string };', '  span.innerHTML = ICONS[name];'] : []);
+      expect(writes, f).toEqual(f === 'chrome.ts' ? ['type IconSpan = UiElement & { innerHTML: string };', '  span.innerHTML = ICONS[name];']
+        : f === 'brand.ts' ? ['type MarkSpan = UiElement & { innerHTML: string };', "  span.innerHTML = name === 'seal' ? ORZ_SEAL_SVG : GITHUB_MARK_SVG;"] : []);
     }
+  });
+});
+
+describe('the brand marks (2.2.0)', () => {
+  it('[V.7] ORZ_SEAL_SVG is the 0.9.3 orz seal — one aria-hidden <svg> whose ids are all orzlogo-* and whose references (url(#…), href="#…") point only at its own ids, with no script, handler, style, external reference or link — and GITHUB_MARK_SVG one aria-hidden, unfocusable 16×16 <svg> in currentColor; brandMark writes one of them into an aria-hidden span; ORZ_MARKDOWN_SITE is https://markdown.orz.how', async () => {
+    expect(ORZ_MARKDOWN_SITE).toBe('https://markdown.orz.how');
+    expect(BRAND_MARKS).toEqual({ seal: ORZ_SEAL_SVG, github: GITHUB_MARK_SVG });
+    for (const svg of [ORZ_SEAL_SVG, GITHUB_MARK_SVG]) {
+      expect(svg.match(/<svg\b/g)).toHaveLength(1);
+      expect(svg).toMatch(/^<svg [^>]*aria-hidden="true"/);
+      expect(svg).not.toMatch(/<script|<style|<a\b|<foreignObject|<image|\bon[a-z]+=|javascript:|style=/i);
+    }
+    const ids = [...ORZ_SEAL_SVG.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.every((id) => id.startsWith('orzlogo-'))).toBe(true);
+    const refs = [...ORZ_SEAL_SVG.matchAll(/url\(([^)]*)\)|href="([^"]*)"/g)].map((m) => m[1] ?? m[2]);
+    expect(refs.length).toBeGreaterThan(0);
+    expect(refs.every((r) => r.startsWith('#') && ids.includes(r.slice(1)))).toBe(true);
+    expect(ORZ_SEAL_SVG).toContain('viewBox="-5 -5 180 100"');
+    expect(GITHUB_MARK_SVG).toMatch(/^<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">/);
+    expect(GITHUB_MARK_SVG).not.toMatch(/url\(|href=/);
+    const { document } = await dom();
+    const seal = brandMark(document as never, 'seal') as unknown as HTMLElement;
+    expect([seal.className, seal.getAttribute('aria-hidden'), seal.querySelectorAll('svg').length]).toEqual(['orz-brand-mark orz-brand-mark--seal', 'true', 1]);
+    const gh = brandMark(document as never, 'github') as unknown as HTMLElement;
+    expect([gh.className, gh.querySelectorAll('svg').length, gh.querySelector('path')!.getAttribute('d')]).toEqual(['orz-brand-mark orz-brand-mark--github', 1, /d="([^"]+)"/.exec(GITHUB_MARK_SVG)![1]]);
   });
 });
 

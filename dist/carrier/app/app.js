@@ -9,10 +9,16 @@ exports.bootCarrierApp = bootCarrierApp;
  * orz-mdhtml 1.0's `standalone/app.ts` (REBUILD §3a, owner decision 2).
  *
  * On boot it reads the opened file (./file.ts), renders the kind's read view
- * in the page and mounts the chrome in a shadow root: the brand (the update
- * indicator's anchor), Edit, the kind's header settings and bar actions,
- * Save, and a menu with Download a copy, New document, Save as new copy and
- * the kind's menu actions.
+ * in the page and mounts the chrome in a shadow root. Reading is
+ * undisturbed (2.2.0): ONE control, a small pencil at the bottom-left
+ * (./handle.ts) — a click edits; hovering (or a tap, or the keyboard) opens
+ * the list of every operation: Edit, the kind's bar actions, Save, Download
+ * a copy, New document, Save as new copy, the kind's header settings (as
+ * submenus), its menu actions, its reader controls (text size) and the quiet
+ * update. Edit mode has a bar: the title, Done, More (Download a copy, New
+ * document, Save as new copy, the kind's in-edit actions) and, quietly at its
+ * far end, the orz seal (https://markdown.orz.how) and the kind's GitHub
+ * repository.
  *
  * - **The text is the document.** The page holds the current text and the
  *   last saved one; every save writes `assemble(currentText, { the file's
@@ -45,6 +51,7 @@ exports.bootCarrierApp = bootCarrierApp;
 const header_js_1 = require("../header.js");
 const uid_js_1 = require("../uid.js");
 const chrome_js_1 = require("../shell/chrome.js");
+const brand_js_1 = require("../shell/brand.js");
 const conflict_js_1 = require("../shell/conflict.js");
 const file_side_js_1 = require("../shell/file-side.js");
 const indicator_js_1 = require("../shell/indicator.js");
@@ -54,37 +61,54 @@ const save_js_1 = require("../shell/save.js");
 const update_js_1 = require("../shell/update.js");
 const file_js_1 = require("./file.js");
 const widgets_js_1 = require("./widgets.js");
-/** The chrome's own layout (the bar, the edit overlay), next to `CHROME_CSS` and `WIDGET_CSS`. */
+const handle_js_1 = require("./handle.js");
+/**
+ * The chrome's own layout, next to `CHROME_CSS`, `WIDGET_CSS` and the
+ * handle's `HANDLE_CSS`: in the read view the host is the handle, fixed at
+ * the bottom-left (safe-area aware); in edit mode it is the full-page
+ * overlay with the bar on top.
+ */
 exports.APP_CSS = `
-:host { position: fixed; top: 12px; right: 12px; z-index: 2147481000; display: block; }
+:host {
+  position: fixed; z-index: 2147481000; display: block;
+  left: max(16px, calc(env(safe-area-inset-left, 0px) + 12px)); bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px));
+}
 :host([data-mode="edit"]) { inset: 0; display: flex; flex-direction: column; background: var(--orz-chrome-bg); }
+:host([data-mode="edit"]) .orz-handle { display: none; }
+:host(:not([data-mode="edit"])) .orz-app__bar { display: none; }
 .orz-app__bar {
-  display: flex; align-items: center; gap: var(--orz-chrome-space-2); padding: var(--orz-chrome-space-2);
-  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-l);
-  background: var(--orz-chrome-surface); box-shadow: var(--orz-chrome-shadow);
+  display: flex; align-items: center; gap: var(--orz-chrome-space-2);
+  padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3) var(--orz-chrome-space-2) var(--orz-chrome-space-4);
+  border-bottom: 1px solid var(--orz-chrome-border); background: var(--orz-chrome-surface);
 }
-/* no transform, filter or backdrop-filter here: they would trap the kit's fixed popovers and toasts */
-:host([data-mode="edit"]) .orz-app__bar { border-width: 0 0 1px; border-radius: 0; box-shadow: none; padding: var(--orz-chrome-space-2) var(--orz-chrome-space-4); }
-.orz-app__brand { padding: 0 var(--orz-chrome-space-2); color: var(--orz-chrome-muted); font: 700 var(--orz-chrome-text-md)/1 var(--orz-chrome-font); letter-spacing: .02em; }
-.orz-app__title { display: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--orz-chrome-muted); }
-:host([data-mode="edit"]) .orz-app__title { display: block; }
-:host([data-mode="edit"]) .orz-app__read-only { display: none; }
-:host(:not([data-mode="edit"])) .orz-app__edit-only { display: none; }
-.orz-app__save { position: relative; }
-.orz-app__save[data-dirty="true"]::after {
-  content: ""; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--orz-chrome-accent); box-shadow: 0 0 0 2px var(--orz-chrome-surface);
+/* no transform, filter or backdrop-filter on the bar or the handle: they would trap the kit's fixed popovers and toasts */
+.orz-app__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--orz-chrome-muted); }
+.orz-app__brand { display: inline-flex; align-items: center; }
+.orz-app__brand-links { display: inline-flex; align-items: center; gap: var(--orz-chrome-space-1); margin-left: var(--orz-chrome-space-3); }
+.orz-app__brand-link {
+  display: inline-flex; align-items: center; justify-content: center; height: var(--orz-chrome-control); padding: 0 var(--orz-chrome-space-2);
+  border-radius: var(--orz-chrome-radius-s); color: var(--orz-chrome-muted); text-decoration: none; opacity: .6;
+  transition: opacity var(--orz-chrome-fast) var(--orz-chrome-ease), background var(--orz-chrome-fast) var(--orz-chrome-ease), color var(--orz-chrome-fast) var(--orz-chrome-ease);
 }
+.orz-app__brand-link:hover, .orz-app__brand-link:focus-visible { opacity: 1; color: var(--orz-chrome-fg); background: var(--orz-chrome-hover); }
+.orz-brand-mark { display: inline-flex; }
+.orz-brand-mark--seal svg { display: block; height: 19px; width: auto; }
+.orz-brand-mark--github svg { display: block; width: 16px; height: 16px; }
 .orz-app__editor { flex: 1; min-height: 0; display: flex; }
 .orz-app__editor > * { flex: 1; min-width: 0; }
-@media (max-width: 560px) { .orz-btn--has-icon .orz-btn__label { display: none; } .orz-btn { padding: 0 var(--orz-chrome-space-3); } }
-/* a presenter hides the bar, not the toasts (2.2.0): the stack is fixed bottom centre, outside the bar */
+@media (max-width: 560px) {
+  .orz-btn--has-icon .orz-btn__label { display: none; } .orz-btn { padding: 0 var(--orz-chrome-space-3); }
+  .orz-app__brand-links { margin-left: 0; }
+}
+/* a presenter hides the handle, the bar and the editor, not the toasts (2.2.0): the stack is fixed bottom centre */
 :host([data-hidden]) { display: block; inset: auto; top: auto; right: auto; width: 0; height: 0; background: none; }
-:host([data-hidden]) .orz-app__bar, :host([data-hidden]) .orz-app__editor, :host([data-hidden]) .orz-popover { display: none !important; }
+:host([data-hidden]) .orz-handle, :host([data-hidden]) .orz-app__bar, :host([data-hidden]) .orz-app__editor, :host([data-hidden]) .orz-popover { display: none !important; }
 `;
-/** The page's top padding at narrow widths, so the fixed bar does not cover the start of the document (2.2.0). */
+/** The page's bottom padding at narrow widths, so the last lines can scroll clear of the handle (2.2.0). */
 const NARROW = '(max-width: 560px)';
-const NARROW_TOP = '56px';
+const NARROW_BOTTOM = '72px';
+/** The orz seal's link and the GitHub link of edit mode (2.2.0). */
+const GITHUB_REPO = /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}\/?$/;
 const DEFAULT_SERVICES = {
     createSaver: save_js_1.createSaver,
     connectHost: file_side_js_1.connectHost,
@@ -312,31 +336,21 @@ function bootCarrierApp(k, options = {}) {
         catch { /* the view's own error */ }
     };
     present();
+    const modKey = isMac ? '⌘' : 'Ctrl+';
+    // ── edit mode's bar: the title, the update indicator's anchor, in-edit bar actions, Done, More, the brand links ──
     const bar = doc.createElement('div');
     bar.className = 'orz-app__bar';
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Document');
+    const title = doc.createElement('span');
+    title.className = 'orz-app__title';
+    /** The quiet update's indicator goes right after this anchor (edit mode; the read view offers it in the handle's list). */
     const brand = doc.createElement('span');
     brand.className = 'orz-app__brand';
     brand.id = 'orz-brand';
     brand.tabIndex = -1;
-    brand.textContent = k.brand ?? 'orz';
-    const title = doc.createElement('span');
-    title.className = 'orz-app__title';
-    const editBtn = (0, widgets_js_1.button)(doc, { label: 'Edit', icon: 'edit', variant: 'primary' });
-    editBtn.classList.add('orz-app__read-only');
     const doneBtn = (0, widgets_js_1.button)(doc, { label: 'Done', icon: 'preview', title: 'Back to the read view' });
-    doneBtn.classList.add('orz-app__edit-only');
-    const saveBtn = (0, widgets_js_1.button)(doc, { label: 'Save', icon: 'save' });
-    saveBtn.classList.add('orz-app__save', 'orz-app__read-only');
-    bar.append(brand, title, editBtn);
-    const pickers = [];
-    for (const control of k.settings ?? []) {
-        const p = (0, widgets_js_1.settingPicker)(doc, control, currentText, (key, value) => setSetting({ [key]: value }));
-        p.element.classList.add('orz-app__read-only');
-        pickers.push(p);
-        bar.append(p.element);
-    }
+    bar.append(title, brand);
     const actions = k.actions ?? [];
     const runAction = (id) => {
         const a = actions.find((x) => x.id === id);
@@ -344,11 +358,9 @@ function bootCarrierApp(k, options = {}) {
             return;
         Promise.resolve().then(() => a.run(api)).catch((e) => toast(`${a.label}: ${errorText(e)}`, 'error'));
     };
-    for (const a of actions.filter((x) => x.placement === 'bar')) {
+    for (const a of actions.filter((x) => x.placement === 'bar' && x.inEdit)) {
         const b = (0, widgets_js_1.button)(doc, { label: a.label, ...(a.icon ? { icon: a.icon } : {}) });
         b.setAttribute('data-orz-action', a.id);
-        if (!a.inEdit)
-            b.classList.add('orz-app__read-only');
         b.addEventListener('click', () => {
             runAction(a.id);
             // after a pointer's click the focus is the page's, so the read view's keys (Space, Enter) work at once
@@ -365,20 +377,159 @@ function bootCarrierApp(k, options = {}) {
             { label: 'Download a copy', run: () => { void download(); } },
             { label: 'New document', separator: true, run: () => { void newDocument(); } },
             { label: 'Save as new copy', run: () => { void saveAsCopy(); } },
-            ...actions.filter((a) => a.placement !== 'bar' && (a.inEdit || !editor)).map((a, i) => ({ label: a.label, ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) })),
+            ...actions.filter((a) => a.placement !== 'bar' && a.inEdit).map((a, i) => ({ label: a.label, ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) })),
         ],
     });
-    bar.append(saveBtn, doneBtn, more.element);
+    bar.append(doneBtn, more.element);
+    // the family's brand, quiet at the far end: the orz seal → the orz-markdown website, the GitHub mark → the kind's repository
+    const repo = typeof k.repo === 'string' && GITHUB_REPO.test(k.repo) ? k.repo : null;
+    const toolName = (typeof k.brand === 'string' && k.brand.trim()) || (repo ? repo.replace(/\/$/, '').split('/').pop() : 'orz');
+    const brandLinks = doc.createElement('span');
+    brandLinks.className = 'orz-app__brand-links';
+    const brandLink = (href, label, mark, cls) => {
+        const a = doc.createElement('a');
+        a.className = `orz-app__brand-link ${cls}`;
+        a.setAttribute('href', href);
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+        a.setAttribute('aria-label', label);
+        a.title = label;
+        a.append((0, brand_js_1.brandMark)(doc, mark));
+        return a;
+    };
+    brandLinks.append(brandLink(brand_js_1.ORZ_MARKDOWN_SITE, 'orz-markdown website', 'seal', 'orz-app__seal'));
+    if (repo)
+        brandLinks.append(brandLink(repo, `${toolName} on GitHub`, 'github', 'orz-app__github'));
+    bar.append(brandLinks);
     const editorSlot = doc.createElement('div');
     editorSlot.className = 'orz-app__editor';
     editorSlot.hidden = true;
-    root.append(bar, editorSlot);
+    // ── the reader controls (D5: reader preferences by uid, never the document) ──
+    const fontCfg = (() => {
+        const c = k.readerControls?.fontScale;
+        if (!c)
+            return null;
+        const min = Math.max(25, Math.ceil(Number(c.min)));
+        const max = Math.min(400, Math.floor(Number(c.max)));
+        const step = Math.round(Number(c.step));
+        return Number.isFinite(min) && Number.isFinite(max) && Number.isFinite(step) && step > 0 && min <= 100 && max >= 100 ? { min, max, step } : null;
+    })();
+    /** A percentage on the kind's grid (100 ± n steps), inside its range. */
+    const snapFont = (p) => {
+        const c = fontCfg;
+        const v = 100 + Math.round((p - 100) / c.step) * c.step;
+        return Math.min(c.max, Math.max(c.min, v));
+    };
+    let fontPct = fontCfg ? snapFont(preferences.get('fontScale')) : null;
+    /** Where the read view's custom properties go: its element, else the page's root. */
+    const scaleTarget = () => view.element ?? doc.documentElement;
+    const applyFont = () => {
+        if (fontPct !== null)
+            scaleTarget().style.setProperty('--orz-font-scale', String(fontPct / 100));
+    };
+    applyFont();
+    function setFontScale(p) {
+        if (!fontCfg)
+            return null;
+        const v = snapFont(p === null || !Number.isFinite(p) ? 100 : p);
+        fontPct = v;
+        applyFont();
+        if (v === 100)
+            preferences.remove('fontScale');
+        else
+            preferences.set('fontScale', v);
+        return v;
+    }
+    const fontButtons = () => {
+        const c = fontCfg;
+        const now = fontPct ?? 100;
+        return [
+            { text: 'A−', label: 'Smaller text', disabled: now <= c.min, run: () => { setFontScale(now - c.step); } },
+            { text: `${now}%`, label: `Reset text size, now ${now}%`, run: () => { setFontScale(null); } },
+            { text: 'A+', label: 'Larger text', disabled: now >= c.max, run: () => { setFontScale(now + c.step); } },
+        ];
+    };
+    // ── the quiet update's offer (set when a check offers one) ──
+    let offer = null;
+    let indicator = null;
+    // ── the read view's one control: the handle and its list ──
+    const listEntries = () => {
+        const e = [{ type: 'item', id: 'edit', label: 'Edit', icon: 'edit', hint: `${modKey}E`, run: () => { edit(); } }];
+        for (const a of actions.filter((x) => x.placement === 'bar'))
+            e.push({ type: 'item', id: `action:${a.id}`, label: a.label, ...(a.icon ? { icon: a.icon } : {}), run: () => runAction(a.id) });
+        e.push({ type: 'item', id: 'save', label: 'Save', icon: 'save', hint: `${modKey}S`, dot: isDirty(), run: () => { void save(); } }, { type: 'item', id: 'download', label: 'Download a copy', icon: 'download', run: () => { void download(); } }, { type: 'item', id: 'new', label: 'New document', icon: 'new', separator: true, run: () => { void newDocument(); } }, { type: 'item', id: 'copy', label: 'Save as new copy', icon: 'copy', run: () => { void saveAsCopy(); } });
+        (k.settings ?? []).forEach((control, i) => e.push({
+            type: 'submenu',
+            id: `setting:${control.key}`,
+            label: control.label,
+            ...(control.icon ? { icon: control.icon } : {}),
+            ...(i === 0 ? { separator: true } : {}),
+            disabled: updating,
+            items: () => {
+                const now = control.current(currentText());
+                return control.choices.map((c) => ({
+                    label: c.label,
+                    checked: c.value === now,
+                    ...(c.swatch ? { swatch: c.swatch } : {}),
+                    run: () => { if (c.value !== control.current(currentText()))
+                        setSetting({ [control.key]: c.value }); },
+                }));
+            },
+        }));
+        actions.filter((a) => a.placement !== 'bar').forEach((a, i) => e.push({ type: 'item', id: `action:${a.id}`, label: a.label, ...(a.icon ? { icon: a.icon } : {}), ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) }));
+        if (fontCfg)
+            e.push({ type: 'row', id: 'font-scale', label: 'Text size', separator: true, buttons: fontButtons });
+        const o = offer;
+        if (o) {
+            e.push({
+                type: 'submenu',
+                id: 'update',
+                label: updating ? 'Updating…' : `Update to ${o.latest}`,
+                icon: 'update',
+                dot: true,
+                separator: true,
+                disabled: updating,
+                items: () => [
+                    { label: 'Update now', run: () => { void runUpdate(o).catch((err) => { if (!disposed)
+                            toast(errorText(err), 'error'); }); } },
+                    ...(o.notes ? [{ label: 'What’s new', href: o.notes }] : []),
+                    { label: 'Not now', run: () => { dropOffer(); } },
+                    { label: 'Skip this version', run: () => { services.skipVersion(o.kind, o.latest); dropOffer(); } },
+                ],
+            });
+        }
+        return e;
+    };
+    const handle = (0, handle_js_1.mountHandle)(doc, { label: 'Edit and more', activate: () => { edit(); }, entries: listEntries });
+    (0, widgets_js_1.installCss)(root, handle_js_1.HANDLE_CSS);
+    root.append(handle.element, bar, editorSlot);
+    /** The pencil's marks and description: unsaved changes, an update on offer. */
+    const marks = () => {
+        const d = isDirty();
+        handle.setMarks({
+            dirty: d,
+            update: !!offer,
+            description: [d ? 'Unsaved changes.' : '', offer ? `An update is available (${offer.latest}).` : ''].filter(Boolean).join(' '),
+        });
+    };
+    function dropOffer() {
+        offer = null;
+        const i = indicator;
+        indicator = null;
+        i?.dispose();
+        marks();
+        handle.refresh();
+    }
     // ── dirty state outside the editor (the editor reports its own, also to the host) ──
     let lastDirty = false;
+    let lastMarked = null;
     const dirtyChanged = () => {
         const d = isDirty();
-        saveBtn.setAttribute('data-dirty', String(d));
-        saveBtn.setAttribute('aria-label', d ? 'Save (unsaved changes)' : 'Save');
+        if (d !== lastMarked) {
+            lastMarked = d;
+            marks();
+            handle.refresh();
+        }
         if (d !== lastDirty) {
             lastDirty = d;
             // an editor reports its own state to the host; the page reports the read view's
@@ -387,7 +538,7 @@ function bootCarrierApp(k, options = {}) {
         }
     };
     dirtyChanged();
-    // narrow screens: the bar sits over the top of the page, so the page starts below it (read view only)
+    // narrow screens: the page ends with room below its last line, so it can scroll clear of the handle (read view only)
     const narrow = typeof win.matchMedia === 'function' ? (() => { try {
         return win.matchMedia(NARROW);
     }
@@ -395,16 +546,16 @@ function bootCarrierApp(k, options = {}) {
         return null;
     } })() : null;
     const body = doc.body;
-    const padTop = () => {
+    const padBottom = () => {
         const on = !!narrow?.matches && chromeHost.getAttribute('data-mode') !== 'edit' && !chromeHost.hasAttribute('data-hidden');
-        body.style.setProperty('padding-top', on ? NARROW_TOP : '');
-        doc.documentElement.style.setProperty('scroll-padding-top', on ? NARROW_TOP : '');
+        body.style.setProperty('padding-bottom', on ? NARROW_BOTTOM : '');
+        doc.documentElement.style.setProperty('scroll-padding-bottom', on ? NARROW_BOTTOM : '');
     };
     if (narrow) {
-        padTop();
-        const onChange = () => padTop();
+        padBottom();
+        const onChange = () => padBottom();
         narrow.addEventListener?.('change', onChange);
-        cleanups.push(() => { narrow.removeEventListener?.('change', onChange); body.style.setProperty('padding-top', ''); doc.documentElement.style.setProperty('scroll-padding-top', ''); });
+        cleanups.push(() => { narrow.removeEventListener?.('change', onChange); body.style.setProperty('padding-bottom', ''); doc.documentElement.style.setProperty('scroll-padding-bottom', ''); });
     }
     const afterHeaderChange = () => {
         present();
@@ -668,8 +819,9 @@ function bootCarrierApp(k, options = {}) {
     function edit() {
         if (editor)
             return editor;
+        handle.close();
         chromeHost.setAttribute('data-mode', 'edit');
-        padTop();
+        padBottom();
         editorSlot.hidden = false;
         setViewVisible(false);
         doc.documentElement.style.setProperty('overflow', 'hidden');
@@ -708,7 +860,7 @@ function bootCarrierApp(k, options = {}) {
         editorSlot.replaceChildren();
         editorSlot.hidden = true;
         chromeHost.removeAttribute('data-mode');
-        padTop();
+        padBottom();
         setViewVisible(true);
         doc.documentElement.style.setProperty('overflow', '');
         undoStack.length = 0;
@@ -717,11 +869,11 @@ function bootCarrierApp(k, options = {}) {
         dirtyChanged();
         present();
         await renderView();
-        // the keyboard keeps its place (Edit); after a pointer's Done the focus is the page's (a read view's keys work at once)
+        // the keyboard keeps its place (the pencil); after a pointer's Done the focus is the page's (a read view's keys work at once)
         if (pointerUsed)
             doc.activeElement?.blur?.();
         else
-            editBtn.focus();
+            handle.button.focus();
     }
     function attach(ed) {
         attached.push(ed);
@@ -758,9 +910,7 @@ function bootCarrierApp(k, options = {}) {
             }
         };
     }
-    listen(editBtn, 'click', () => { edit(); });
     listen(doneBtn, 'click', () => { void leave(); });
-    listen(saveBtn, 'click', () => { void save(); });
     // keyboard on the page: Cmd/Ctrl+S saves the document being edited, Cmd/Ctrl+E edits,
     // Cmd/Ctrl+Z / Shift+Z undo / redo header settings; other keys go to the read view
     listen(chromeHost, 'pointerdown', () => { pointerUsed = true; }, true);
@@ -877,8 +1027,7 @@ function bootCarrierApp(k, options = {}) {
         updating = true;
         for (const ed of editors())
             lockForUpdate(ed);
-        for (const p of pickers)
-            p.button.disabled = true;
+        handle.refresh(); // the settings and the update item are disabled while it runs
         let reloading = false;
         try {
             // a question that opened while it re-assembled (an editor's save already in flight): no write (B4)
@@ -922,8 +1071,7 @@ function bootCarrierApp(k, options = {}) {
         finally {
             if (!reloading) {
                 updating = false;
-                for (const p of pickers)
-                    p.button.disabled = false;
+                handle.refresh();
                 // every editor made read-only for the update — also one opened or attached while it ran — is given back
                 for (const ed of [...lockedForUpdate])
                     if (editors().includes(ed))
@@ -936,11 +1084,17 @@ function bootCarrierApp(k, options = {}) {
         void services.checkForUpdate({ kind: k.kind, current: k.version, format: file.format, page: win, ...(storage ? { storage } : {}) }).then((info) => {
             if (!info || disposed)
                 return;
-            const indicator = services.mountUpdateIndicator(brand, info, {
+            // the offer: a dot on the pencil and "Update to x.y.z" in the handle's list (the read view), the
+            // kit's indicator after the brand anchor of edit mode's bar; Not now / Skip in either drops both
+            offer = info;
+            indicator = services.mountUpdateIndicator(brand, info, {
                 onUpdate: (i) => runUpdate(i),
-                onSkip: (i) => { services.skipVersion(i.kind, i.latest); },
+                onLater: () => { dropOffer(); },
+                onSkip: (i) => { services.skipVersion(i.kind, i.latest); dropOffer(); },
             });
-            cleanups.push(() => indicator.dispose());
+            marks();
+            handle.refresh();
+            cleanups.push(() => { indicator?.dispose(); indicator = null; });
         }, () => undefined);
     }
     const api = {
@@ -961,14 +1115,23 @@ function bootCarrierApp(k, options = {}) {
         editorContext,
         attach,
         toast,
+        menu: {
+            open: () => { if (!editor && !disposed)
+                handle.open(); },
+            close: () => handle.close(),
+            isOpen: () => handle.isOpen(),
+        },
+        fontScale: () => fontPct,
+        setFontScale,
         setChromeVisible(visible) {
             if (visible)
                 chromeHost.removeAttribute('data-hidden');
             else {
+                handle.close();
                 chromeHost.setAttribute('data-hidden', '');
                 hideFocus();
             }
-            padTop();
+            padBottom();
         },
         view,
         root,
@@ -998,8 +1161,9 @@ function bootCarrierApp(k, options = {}) {
             catch { /* gone */ }
             editor = null;
             (0, conflict_js_1.dropSaveConflict)(saver);
-            for (const p of pickers)
-                p.destroy();
+            handle.destroy();
+            if (fontPct !== null)
+                scaleTarget().style.setProperty('--orz-font-scale', '');
             more.destroy();
             try {
                 view.destroy?.();

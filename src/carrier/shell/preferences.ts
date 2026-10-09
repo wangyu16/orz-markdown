@@ -21,6 +21,7 @@ export type PreferenceSchema = Record<string, PreferenceSpec<unknown>>;
 
 const isNumberIn = (lo: number, hi: number) => (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean';
+const isIntegerIn = (lo: number, hi: number) => (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
 
 /** The reader preferences FC-18 §6 names. */
 export const READER_PREFERENCES = {
@@ -32,6 +33,11 @@ export const READER_PREFERENCES = {
   editorFontSize: { default: 14, valid: isNumberIn(8, 40) } as PreferenceSpec<number>,
   /** Dark chrome: `null` follows the system. */
   darkChrome: { default: null, valid: (v: unknown): v is boolean | null => v === null || typeof v === 'boolean' } as PreferenceSpec<boolean | null>,
+  /**
+   * The read view's text size in percent, 25–400 (2.2.0): a reader control of
+   * the carrier app (spec/carrier-app.md §4.10), clamped to the kind's range.
+   */
+  fontScale: { default: 100, valid: isIntegerIn(25, 400) } as PreferenceSpec<number>,
 } satisfies PreferenceSchema;
 
 export type ReaderPreferences = { [K in keyof typeof READER_PREFERENCES]: (typeof READER_PREFERENCES)[K]['default'] };

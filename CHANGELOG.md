@@ -22,21 +22,44 @@ changed on disk. The parser's `md.render` output is unchanged. Additive for
 ### Added
 
 **`orz-markdown/carrier/app`** (new entry; [spec/carrier-app.md](spec/carrier-app.md),
-claims A.1–A.19) — the standalone assembled file's runtime every carrier
+claims A.1–A.22) — the standalone assembled file's runtime every carrier
 bundle runs, behind one seam, `StandaloneKind` (the kind supplies its
 assemble, creation tool, `mountEditor`, read view, header settings and extra
 actions; the app knows no kind).
 
 - `startCarrier(kind)` sets `globalThis.OrzCarrier` (FC-19 §2) and boots in
   an assembled file: `readOpenedFile` (text, uid, format, delivery, includes,
-  inline engine, file name), the read view, the chrome in a shadow root
-  (brand, Edit, settings, actions, Save, Download a copy, New document, Save
-  as new copy), edit mode, header settings with undo, the unsaved-changes
+  inline engine, file name), the read view, the chrome in a shadow root,
+  edit mode, header settings with undo, the unsaved-changes
   warning (`beforeunload`, top level only, never for the update's reload),
   the host connection (save, include, AI with the review flow), the quiet
   update (read-only while it runs; reload only when the kit says so), reader
   preferences, the page keymap (respecting `defaultPrevented`) and the
   `OrzCarrier.standalone` handle (`CarrierApp`).
+- **Non-disturbing reading** (owner, as in orz-mdhtml 0.9.3): the read view
+  shows ONE control — a small round pencil at the bottom-left
+  ("Edit and more"; semi-transparent at rest; dots for unsaved changes and
+  an offered update). A click edits; hovering opens (with a short delay and
+  a grace period on leave) the list of every operation: Edit, the kind's
+  actions, Save, Download a copy, New document, Save as new copy, the kind's
+  settings as submenus, its reader controls and, when offered, "Update to
+  x.y.z" (Update now / What's new / Not now / Skip this version). A tap
+  opens the list on touch screens; the keyboard follows the menu-button
+  pattern (Tab reaches the pencil first, Enter edits, ArrowUp/ArrowDown or
+  Space open the list, Escape closes it and returns the focus). The
+  read-view top bar is gone (`handle.ts`, `mountHandle`, `HANDLE_CSS`;
+  `CarrierApp.menu`).
+- **Edit mode's brand** (owner): at the far end of edit mode's bar, quiet
+  until hovered, the orz seal linking to https://markdown.orz.how and the
+  GitHub mark linking to the kind's repository — `StandaloneKind.repo`
+  (an `https://github.com/<owner>/<repo>` URL); `brand` now names the tool
+  in that link's label. Not shown in the read view.
+- **Reader controls**: `StandaloneKind.readerControls.fontScale`
+  (`{ min, max, step }` in percent) adds a "Text size A− 100% A+" row to the
+  list; the app sets `--orz-font-scale` on the read view's element, stores
+  it per uid (the new `fontScale` reader preference) and restores it; it
+  never marks the document unsaved nor enters the file
+  (`CarrierApp.fontScale()` / `setFontScale()`).
 - Also `bootCarrierApp`, `carrierGlobal`, `APP_CSS`, `captureEngineSource`
   (takes only the carrier's bundle — a script named like it, the file's
   `#orz-engine`, or the update sandbox's — else the release's CDN URL),
@@ -47,7 +70,7 @@ actions; the app knows no kind).
 - Behaviour worth knowing: in edit mode Cmd/Ctrl+S anywhere in the page saves
   the editor (never "Save page as") and Cmd/Ctrl+E leaves edit mode;
   navigation keys on a chrome button reach the read view; presenting
-  (`setChromeVisible(false)`) hides the bar and editor and moves a keyboard
+  (`setChromeVisible(false)`) hides the handle, the bar and the editor and moves a keyboard
   focus to the page; every editor opened or attached during a quiet update is
   read-only and given back; a framed file whose host never connected asks
   before leaving with unsaved changes. The app hands ONE saver to the page
@@ -80,6 +103,11 @@ a `theme` not in `THEMES`; the default theme is shown (K.10).
 
 **`orz-markdown/carrier/shell`**
 
+- The brand marks (`brand.ts`, V.7): `ORZ_SEAL_SVG` (the orz seal of
+  orz-mdhtml 0.9.3, ids `orzlogo-*`), `GITHUB_MARK_SVG`, `brandMark(doc,
+  name)` and `ORZ_MARKDOWN_SITE`. The reader preference `fontScale`
+  (integer percent 25–400, default 100). The conformance harness finds the
+  update offer in a carrier app's read view through `standalone.menu`.
 - Save conflicts (S.14, spec/shell-runtime.md §1 step 3.4): with
   `openedHtml`, a save whose target file is an orz file of this document
   (same well-formed `uid`, or no uid on either side) and whose content

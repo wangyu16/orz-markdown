@@ -153,15 +153,20 @@ function boot(html = fileHtml(TEXT, { includes: INCLUDES }), o: { url?: string; 
   o.beforeBoot?.(win);
   const app = bootCarrierApp(fakeKind(rec, o.kind), { window: win as unknown as AppWindow, adapter: textareaAdapter(), services: fakeServices(rec, o.services) })!;
   const root = app.root as unknown as ShadowRoot;
+  /** Edit mode's bar buttons (2.2.0: the read view's one control is the handle). */
   const buttons = () => [...root.querySelectorAll('.orz-app__bar > button, .orz-app__bar > .orz-menu-wrap > button')].map((b) => b.getAttribute('aria-label'));
-  const click = (label: string) => { const b = [...root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === label)!; (b as HTMLButtonElement).click(); };
+  /** The handle's list as drawn: its items' and rows' names (opened as a hover does). */
+  const items = () => { if (!app.menu.isOpen()) app.menu.open(); return [...root.querySelectorAll('.orz-handle__list > .orz-handle__item, .orz-handle__list > .orz-handle__row')].map((x) => x.classList.contains('orz-handle__row') ? x.textContent : x.querySelector('.orz-handle__label')!.textContent); };
+  const find = (label: string) => [...root.querySelectorAll('button, a')].find((x) => x.getAttribute('aria-label') === label || x.querySelector(':scope > .orz-handle__label')?.textContent === label) as HTMLButtonElement | undefined;
+  /** Click a chrome control by name: a bar button, else an item of the handle's list (opened first). */
+  const click = (label: string) => { let b = find(label); if (!b && !app.menu.isOpen()) { app.menu.open(); b = find(label); } b!.click(); };
   const key = (k: string, mods: { meta?: boolean; shift?: boolean } = {}, target: EventTarget = doc.body) => {
     const e = new win.KeyboardEvent('keydown', { key: k, metaKey: !!mods.meta, shiftKey: !!mods.shift, bubbles: true, composed: true, cancelable: true });
     target.dispatchEvent(e as unknown as Event);
     return e;
   };
   const toasts = () => [...root.querySelectorAll('.orz-toast__message')].map((n) => n.textContent ?? '');
-  return { app, rec, win, doc, root, buttons, click, key, toasts };
+  return { app, rec, win, doc, root, buttons, items, click, key, toasts };
 }
 
 // ── A.1 boundaries ───────────────────────────────────────────────────────
@@ -186,16 +191,17 @@ function valueImports(entry: string): Set<string> {
 }
 
 // 32,933 B on 2026-10-08 (round 1 of the carrier-app loop); bound ~10 % above.
-const APP_OWN_LIMIT = 39_000;
-const APP_DELTA_LIMIT = 62_000;
-const EDITOR_AND_APP_LIMIT = 1_100_000;
+// 2026-10-09 (2.2.0, the handle and the brand of edit mode): own 52,682 B, delta 66,877 B, both 1,089,611 B; bounds ~10 % above.
+const APP_OWN_LIMIT = 58_000;
+const APP_DELTA_LIMIT = 74_000;
+const EDITOR_AND_APP_LIMIT = 1_150_000;
 
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
     const app = valueImports('src/carrier/app/index.ts');
     const allowed = new Set([...valueImports('src/carrier/editor/index.ts'), ...valueImports('src/carrier/shell/index.ts'), ...valueImports('src/carrier/read.ts')]);
     expect([...app].filter((f) => !f.startsWith('src/carrier/app/') && !allowed.has(f))).toEqual([]);
-    expect([...app].filter((f) => f.startsWith('src/carrier/app/')).sort()).toEqual(['app.ts', 'engine-source.ts', 'file.ts', 'index.ts', 'start.ts', 'widgets.ts'].map((f) => `src/carrier/app/${f}`));
+    expect([...app].filter((f) => f.startsWith('src/carrier/app/')).sort()).toEqual(['app.ts', 'engine-source.ts', 'file.ts', 'handle.ts', 'index.ts', 'start.ts', 'widgets.ts'].map((f) => `src/carrier/app/${f}`));
     for (const entry of ['src/index.ts', 'src/carrier.ts', 'src/carrier/read.ts', 'src/carrier/shell/index.ts', 'src/carrier/editor/index.ts', 'src/carrier/conformance/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/app/')), entry).toEqual([]);
     }
@@ -203,7 +209,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 39 KB and adds under 62 KB to a carrier bundle that already holds the editor (the whole under 1.1 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 58 KB and adds under 74 KB to a carrier bundle that already holds the editor (the whole under 1.15 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });
@@ -344,8 +350,13 @@ describe('the seam (StandaloneKind)', () => {
     const host = b.doc.getElementById('orz-chrome')!;
     expect(host.shadowRoot).toBe(b.app.root);
     expect(host.getAttribute('data-chrome')).toBe('dark');
-    expect(b.buttons()).toEqual(['Edit', 'Theme', 'Print', 'Save', 'Done', 'More']);
-    expect((b.root.querySelector('#orz-brand') as HTMLElement).textContent).toBe('orz');
+    // the read view's one control: the pencil (its list holds every operation); edit mode's bar: Done, More and the brand links
+    expect([...b.root.querySelectorAll('.orz-handle > button')].map((x) => x.getAttribute('aria-label'))).toEqual(['Edit and more']);
+    expect(b.items()).toEqual(['Edit', 'Print', 'Save', 'Download a copy', 'New document', 'Save as new copy', 'Theme', 'Present']);
+    b.app.menu.close();
+    expect(b.buttons()).toEqual(['Done', 'More']);
+    expect(b.root.querySelector('#orz-brand')).not.toBeNull(); // the update indicator's anchor
+    expect([...b.root.querySelectorAll('.orz-app__brand-links a')].map((a) => [a.getAttribute('aria-label'), a.getAttribute('href')])).toEqual([['orz-markdown website', 'https://markdown.orz.how']]);
     expect([...b.doc.body.children].map((e) => e.id || e.tagName)).toEqual(['orz-src', 'orz-includes', 'orz-chrome', 'orz-app', 'orz-engine']); // the chrome first after the islands (A.18)
     expect(b.doc.head.querySelectorAll('style, link').length).toBe(0);
     b.app.dispose();
@@ -353,9 +364,9 @@ describe('the seam (StandaloneKind)', () => {
     const rec2 = recorder();
     const p2 = filePage(fileHtml(TEXT));
     p2.win.localStorage.setItem(`orz-pref:${UID}:darkChrome`, 'true');
-    const a2 = bootCarrierApp(fakeKind(rec2, { brand: 'orz md' }), { window: p2.win as unknown as AppWindow, services: fakeServices(rec2) })!;
+    const a2 = bootCarrierApp(fakeKind(rec2, { brand: 'orz md', repo: 'https://github.com/wangyu16/orz-x' }), { window: p2.win as unknown as AppWindow, services: fakeServices(rec2) })!;
     expect(p2.doc.getElementById('orz-chrome')!.getAttribute('data-chrome')).toBe('dark');
-    expect((a2.root as unknown as ShadowRoot).querySelector('#orz-brand')!.textContent).toBe('orz md');
+    expect([...(a2.root as unknown as ShadowRoot).querySelectorAll('.orz-app__brand-links a')].map((a) => a.getAttribute('aria-label'))).toEqual(['orz-markdown website', 'orz md on GitHub']);
     a2.dispose();
   });
 
@@ -494,9 +505,13 @@ describe('saving from the page', () => {
     expect(extract(copy.html)!.includes).toEqual(INCLUDES);
     expect(b.app.getText() === TEXT).toBe(true);
     expect(b.app.isDirty()).toBe(false);
-    // the More menu offers them
+    // the handle's list offers them; edit mode's More menu too (with the kind's in-edit menu actions only)
+    expect(b.items()).toEqual(expect.arrayContaining(['Download a copy', 'New document', 'Save as new copy', 'Present']));
+    b.app.menu.close();
+    b.app.edit();
     b.click('More');
-    expect([...b.root.querySelectorAll('[role="menuitem"]')].map((x) => x.textContent)).toEqual(['Download a copy', 'New document', 'Save as new copy', 'Present']);
+    expect([...b.root.querySelectorAll('.orz-menu [role="menuitem"]')].map((x) => x.textContent)).toEqual(['Download a copy', 'New document', 'Save as new copy']);
+    await b.app.leave();
     b.app.dispose();
     // a page whose saver goes to a host / a served page: the new file is downloaded instead
     const h = boot(undefined, { services: { createSaver: (o) => ({ save: async () => ({ via: 'host', ok: true }), download: async ({ html }) => { h.rec.downloads.push({ suggestedName: o.suggestedName, html }); return { via: 'download', ok: true, confirmed: false, name: o.suggestedName }; }, handleKey: () => null }) } });
@@ -520,7 +535,7 @@ describe('edit mode and header settings', () => {
     expect(b.doc.getElementById('orz-chrome')!.getAttribute('data-chrome')).toBe('dark');
     await tick();
     expect(b.rec.rendered.at(-1)!.text === b.app.getText()).toBe(true);
-    expect((b.root.querySelector('.orz-app__save') as HTMLElement).getAttribute('data-dirty')).toBe('true');
+    expect((b.root.querySelector('.orz-handle__pencil') as HTMLElement).getAttribute('data-dirty')).toBe('true');
     expect(b.key('z', { meta: true }).defaultPrevented).toBe(true);
     expect(b.app.getText() === TEXT).toBe(true);
     expect(b.app.isDirty()).toBe(false);
@@ -561,21 +576,19 @@ describe('edit mode and header settings', () => {
     b.app.dispose();
   });
 
-  it('[A.6] a kind\'s actions: bar actions are buttons of the read view, menu actions items of More; they run with the app (Present hides the chrome: setChromeVisible); a failing action is a toast', async () => {
+  it('[A.6] a kind\'s actions: items of the handle\'s list (bar actions right after Edit, menu actions after the settings), in edit mode only with inEdit; they run with the app (Present hides the chrome: setChromeVisible); a failing action is a toast', async () => {
     const b = boot(undefined, { kind: { actions: [{ id: 'print', label: 'Print', placement: 'bar', run: () => { b.rec.actions.push('print'); } }, { id: 'present', label: 'Present', run: (app) => { b.rec.actions.push('present'); app.setChromeVisible(false); } }, { id: 'fail', label: 'Fail', run: () => { throw new Error('nope'); } }] } });
     b.click('Print');
     await tick();
     expect(b.rec.actions).toEqual(['print']);
-    expect((b.root.querySelector('[data-orz-action="print"]') as HTMLElement).classList.contains('orz-app__read-only')).toBe(true);
-    b.click('More');
-    ([...b.root.querySelectorAll('[role="menuitem"]')].find((x) => x.textContent === 'Present') as HTMLButtonElement).click();
+    expect(b.root.querySelector('[data-orz-action="print"]')).toBeNull(); // not in edit mode's bar (no inEdit)
+    b.click('Present');
     await tick();
     expect(b.rec.actions).toEqual(['print', 'present']);
     expect(b.doc.getElementById('orz-chrome')!.hasAttribute('data-hidden')).toBe(true);
     b.app.setChromeVisible(true);
     expect(b.doc.getElementById('orz-chrome')!.hasAttribute('data-hidden')).toBe(false);
-    b.click('More');
-    ([...b.root.querySelectorAll('[role="menuitem"]')].find((x) => x.textContent === 'Fail') as HTMLButtonElement).click();
+    b.click('Fail');
     await tick(10);
     expect(b.toasts()).toContain('Fail: nope');
     b.app.dispose();
@@ -703,7 +716,7 @@ describe('the quiet update', () => {
       services: {
         checkForUpdate: async (o) => { checked = o as never; return INFO; },
         mountUpdateIndicator: (a, _i, h) => { anchor = a; handlers = h; return { host: a, root: a, open() {}, close() {}, isOpen: () => false, dispose() {} } as never; },
-        performUpdate: async (o) => { seen = o; readOnlyDuring = [b.app.editor()!.isReadOnly(), (b.root.querySelector('.orz-menu-wrap > button[aria-label="Theme"]') as HTMLButtonElement).disabled]; await new Promise<void>((r) => { release = r; }); return result; },
+        performUpdate: async (o) => { seen = o; readOnlyDuring = [b.app.editor()!.isReadOnly()]; await new Promise<void>((r) => { release = r; }); return result; },
       },
     });
     Object.defineProperty(b.win.location, 'reload', { value: reload, configurable: true });
@@ -716,7 +729,7 @@ describe('the quiet update', () => {
     const running = handlers!.onUpdate(INFO) as Promise<void>;
     await tick();
     expect(b.app.updating).toBe(true);
-    expect(readOnlyDuring).toEqual([true, true]);
+    expect(readOnlyDuring).toEqual([true]);
     expect(seen).toMatchObject({ info: INFO, kind: 'md', current: '1.0.0', delivery: 'inline', includes: INCLUDES });
     expect(seen!.getText!()).toBe(`${TEXT}edit\r\n`);
     b.app.setSetting({ theme: 'beige-decent-1' }); // refused while updating
@@ -748,6 +761,178 @@ describe('the quiet update', () => {
     await tick(10);
     expect(check).not.toHaveBeenCalled();
     f.app.dispose();
+  });
+
+  it('[A.9] [A.20] the read view offers the update in the handle (2.2.0): a dot on the pencil (described), "Update to x.y.z" in its list with Update now, What\'s new, Not now and Skip this version; while it runs the settings and the item are disabled ("Updating…"); a failure is a toast; Not now (here or in the indicator) drops both the item and the indicator, Skip records the version', async () => {
+    let release!: () => void;
+    let handlers: { onLater?(i: UpdateInfo): void } | null = null;
+    const disposed: string[] = [];
+    const skipped: string[] = [];
+    const info = { ...INFO, notes: 'https://example.test/notes' };
+    const b = boot(undefined, {
+      services: {
+        checkForUpdate: async () => info,
+        mountUpdateIndicator: (_a, _i, h) => { handlers = h; return { dispose() { disposed.push('indicator'); } } as never; },
+        performUpdate: async () => { await new Promise<void>((r) => { release = r; }); return { status: 'failed', info, code: 'changed', error: 'the text changed' }; },
+        skipVersion: (_k, v) => { skipped.push(v); return true; },
+      },
+    });
+    await tick(10);
+    const pencil = b.root.querySelector('.orz-handle__pencil') as HTMLElement;
+    expect(pencil.getAttribute('data-update')).toBe('true');
+    expect(b.root.getElementById(pencil.getAttribute('aria-describedby')!)!.textContent).toContain('An update is available (1.1.0)');
+    expect(b.items().at(-1)).toBe('Update to 1.1.0');
+    b.click('Update to 1.1.0');
+    const sub = [...b.root.querySelectorAll('.orz-handle__sub [role="menuitem"]')];
+    expect(sub.map((x) => x.textContent)).toEqual(['Update now', 'What’s new', 'Not now', 'Skip this version']);
+    expect([sub[1].tagName, sub[1].getAttribute('href'), sub[1].getAttribute('target'), sub[1].getAttribute('rel')]).toEqual(['A', 'https://example.test/notes', '_blank', 'noopener noreferrer']);
+    (sub[0] as HTMLButtonElement).click();
+    await tick();
+    expect(b.app.updating).toBe(true);
+    b.app.menu.open();
+    expect((b.root.querySelector('[data-orz-item="update"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(b.root.querySelector('[data-orz-item="update"] .orz-handle__label')!.textContent).toBe('Updating…');
+    expect((b.root.querySelector('[data-orz-item="setting:theme"]') as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await tick(10);
+    expect(b.toasts()).toContain('the text changed');
+    expect((b.root.querySelector('[data-orz-item="setting:theme"]') as HTMLButtonElement).disabled).toBe(false);
+    // Not now in the indicator drops the list's item and the dot too
+    handlers!.onLater!(info);
+    expect(pencil.getAttribute('data-update')).toBe('false');
+    expect(b.items()).not.toContain('Update to 1.1.0');
+    b.app.dispose();
+    // Skip this version in the list: recorded, the indicator disposed
+    const c = boot(undefined, { services: { checkForUpdate: async () => info, mountUpdateIndicator: () => ({ dispose() { disposed.push('c'); } }) as never, skipVersion: (_k, v) => { skipped.push(v); return true; } } });
+    await tick(10);
+    c.click('Update to 1.1.0');
+    ([...c.root.querySelectorAll('.orz-handle__sub [role="menuitem"]')].find((x) => x.textContent === 'Skip this version') as HTMLButtonElement).click();
+    expect([skipped, disposed.includes('c'), c.app.menu.isOpen()]).toEqual([['1.1.0'], true, false]);
+    expect(c.items()).not.toContain('Update to 1.1.0');
+    c.app.dispose();
+  });
+});
+
+// ── A.20–A.22 the handle, reader controls, the brand (2.2.0) ─────────────
+
+describe('the handle, reader controls and the brand', () => {
+  it('[A.20] the read view shows one control, the pencil ("Edit and more", aria-haspopup menu, aria-expanded): a pointer click edits; Enter edits; ArrowUp opens its list on the last item, ArrowDown and Space on the first; arrows, Home and End move; ArrowRight opens a setting\'s submenu on the checked choice, ArrowLeft closes it; Escape closes the list and returns the focus to the pencil; Tab closes it; a tap (touch) opens and closes it; its dot says unsaved changes', async () => {
+    const b = boot();
+    await b.app.ready;
+    const pencil = b.root.querySelector('.orz-handle__pencil') as HTMLButtonElement;
+    const kd = (el: Element, key: string) => { const e = new b.win.KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }); el.dispatchEvent(e as unknown as Event); return e; };
+    const focused = () => (b.root.activeElement as HTMLElement | null)?.getAttribute('data-orz-item') ?? (b.root.activeElement === pencil ? 'pencil' : null);
+    expect([pencil.getAttribute('aria-label'), pencil.getAttribute('aria-haspopup'), pencil.getAttribute('aria-expanded')]).toEqual(['Edit and more', 'menu', 'false']);
+    expect(b.root.getElementById(pencil.getAttribute('aria-controls')!)!.getAttribute('role')).toBe('menu');
+    // keyboard
+    pencil.focus();
+    expect(kd(pencil, 'ArrowUp').defaultPrevented).toBe(true);
+    expect([b.app.menu.isOpen(), pencil.getAttribute('aria-expanded'), focused()]).toEqual([true, 'true', 'action:present']);
+    kd(b.root.activeElement as Element, 'Home');
+    expect(focused()).toBe('edit');
+    kd(b.root.activeElement as Element, 'ArrowDown');
+    expect(focused()).toBe('action:print');
+    kd(b.root.activeElement as Element, 'End');
+    kd(b.root.activeElement as Element, 'ArrowUp');
+    expect(focused()).toBe('setting:theme');
+    kd(b.root.activeElement as Element, 'ArrowRight');
+    expect((b.root.activeElement as HTMLElement).getAttribute('aria-checked')).toBe('true'); // the current theme
+    expect(b.root.querySelector('[data-orz-item="setting:theme"]')!.getAttribute('aria-expanded')).toBe('true');
+    kd(b.root.activeElement as Element, 'ArrowLeft');
+    expect([focused(), b.root.querySelector('.orz-handle__sub')]).toEqual(['setting:theme', null]);
+    kd(b.root.activeElement as Element, 'Escape');
+    expect([b.app.menu.isOpen(), focused()]).toEqual([false, 'pencil']);
+    kd(pencil, ' ');
+    expect([b.app.menu.isOpen(), focused()]).toEqual([true, 'edit']);
+    // its keyup lands on the focused item (the browser clicks nothing there); the pencil's clicks work again after it
+    b.root.activeElement!.dispatchEvent(new b.win.KeyboardEvent('keyup', { key: ' ', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    await tick(5);
+    kd(b.root.activeElement as Element, 'Tab');
+    expect(b.app.menu.isOpen()).toBe(false);
+    kd(pencil, 'ArrowDown');
+    expect(focused()).toBe('edit');
+    kd(b.root.activeElement as Element, 'Escape');
+    // touch: a tap opens the list (Edit is its first item), a second tap closes it; an outside tap closes it too
+    const tap = () => { pencil.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true, pointerType: 'touch' }) as unknown as Event); pencil.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 1 }) as unknown as Event); };
+    tap();
+    expect([b.app.menu.isOpen(), b.app.editor(), b.items()[0]]).toEqual([true, null, 'Edit']);
+    tap();
+    expect(b.app.menu.isOpen()).toBe(false);
+    tap();
+    b.doc.body.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true, pointerType: 'touch' }) as unknown as Event);
+    expect(b.app.menu.isOpen()).toBe(false);
+    // unsaved changes: the dot and the description
+    b.app.setSetting({ theme: 'beige-decent-1' });
+    expect(pencil.getAttribute('data-dirty')).toBe('true');
+    expect(b.root.getElementById(pencil.getAttribute('aria-describedby')!)!.textContent).toBe('Unsaved changes.');
+    // a pointer click edits; Enter (a keyboard click: detail 0) too
+    pencil.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true, pointerType: 'mouse' }) as unknown as Event);
+    pencil.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 1 }) as unknown as Event);
+    expect(b.app.editor()).not.toBeNull();
+    await b.app.leave();
+    pencil.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 0 }) as unknown as Event);
+    expect(b.app.editor()).not.toBeNull();
+    b.app.dispose();
+  });
+
+  it('[A.21] reader controls: a kind\'s fontScale is a "Text size" row (A−, the percentage — it resets — and A+) that keeps the list open; it sets --orz-font-scale on the read view\'s element, snaps to the kind\'s steps and range, is stored per uid (fontScale) and restored at boot, never marks the document unsaved nor enters a saved file; a kind without it shows no row and setFontScale is null', async () => {
+    const kind = { readerControls: { fontScale: { min: 80, max: 160, step: 10 } } };
+    const b = boot(undefined, { kind });
+    await b.app.ready;
+    const view = b.doc.getElementById('orz-app')!;
+    expect([b.app.fontScale(), view.style.getPropertyValue('--orz-font-scale')]).toEqual([100, '1']);
+    expect(b.items().at(-1)).toBe('Text sizeA−100%A+');
+    const row = () => [...b.root.querySelectorAll('[data-orz-row="font-scale"] button')] as HTMLButtonElement[];
+    expect(row().map((x) => [x.textContent, x.getAttribute('aria-label'), x.disabled])).toEqual([['A−', 'Smaller text', false], ['100%', 'Reset text size, now 100%', false], ['A+', 'Larger text', false]]);
+    row()[2].click();
+    row()[2].click();
+    expect([b.app.menu.isOpen(), b.app.fontScale(), view.style.getPropertyValue('--orz-font-scale'), row()[1].textContent]).toEqual([true, 120, '1.2', '120%']);
+    expect(b.win.localStorage.getItem(`orz-pref:${UID}:fontScale`)).toBe('120');
+    expect(b.app.isDirty()).toBe(false);
+    expect(b.app.setFontScale(1000)).toBe(160);
+    expect(row()[2].disabled).toBe(false); // drawn at the next opening or press
+    b.app.menu.close();
+    b.app.menu.open();
+    expect(row()[2].disabled).toBe(true);
+    expect(b.app.setFontScale(84)).toBe(80);
+    expect(b.app.setFontScale(null)).toBe(100);
+    expect(b.win.localStorage.getItem(`orz-pref:${UID}:fontScale`)).toBeNull();
+    b.app.setFontScale(140);
+    await b.app.save();
+    expect(b.rec.saves.at(-1)!.html).not.toMatch(/font-scale|fontScale/);
+    expect(b.rec.saves.at(-1)!.text === TEXT).toBe(true);
+    b.app.dispose();
+    expect(view.style.getPropertyValue('--orz-font-scale')).toBe('');
+    // restored at boot (same uid, same storage)
+    const again = boot(undefined, { kind, beforeBoot: (w) => { w.localStorage.setItem(`orz-pref:${UID}:fontScale`, '130'); } });
+    expect([again.app.fontScale(), again.doc.getElementById('orz-app')!.style.getPropertyValue('--orz-font-scale')]).toEqual([130, '1.3']);
+    again.app.dispose();
+    // no readerControls: no row, no property
+    const none = boot();
+    expect([none.items().includes('Text sizeA−100%A+'), none.app.fontScale(), none.app.setFontScale(120), none.doc.getElementById('orz-app')!.style.getPropertyValue('--orz-font-scale')]).toEqual([false, null, null, '']);
+    none.app.dispose();
+    // a malformed range offers nothing
+    const bad = boot(undefined, { kind: { readerControls: { fontScale: { min: 120, max: 160, step: 10 } } } });
+    expect(bad.app.fontScale()).toBeNull();
+    bad.app.dispose();
+  });
+
+  it('[A.22] edit mode shows the brand quietly at the far end of its bar: the orz seal linking to https://markdown.orz.how ("orz-markdown website") and, for a kind with an https://github.com repo, the GitHub mark linking to it ("<name> on GitHub", the repo\'s name unless the kind names itself), both target _blank rel noopener noreferrer; the read view shows neither; another repo URL shows no GitHub link', async () => {
+    const b = boot(undefined, { kind: { repo: 'https://github.com/wangyu16/orz-mdhtml' } });
+    const links = () => [...b.root.querySelectorAll('.orz-app__bar .orz-app__brand-links a')].map((a) => [a.getAttribute('aria-label'), a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]);
+    expect(links()).toEqual([
+      ['orz-markdown website', 'https://markdown.orz.how', '_blank', 'noopener noreferrer'],
+      ['orz-mdhtml on GitHub', 'https://github.com/wangyu16/orz-mdhtml', '_blank', 'noopener noreferrer'],
+    ]);
+    expect(b.root.querySelector('.orz-app__seal svg')!.getAttribute('aria-hidden')).toBe('true');
+    expect(b.root.querySelector('.orz-app__bar')!.lastElementChild!.className).toBe('orz-app__brand-links'); // the far end
+    expect(APP_CSS).toContain(':host(:not([data-mode="edit"])) .orz-app__bar { display: none; }'); // the read view: not shown
+    b.app.dispose();
+    for (const repo of ['http://github.com/a/b', 'https://gitlab.com/a/b', 'https://github.com/a', 'javascript:alert(1)//github.com/a/b']) {
+      const o = boot(undefined, { kind: { repo } });
+      expect([...o.root.querySelectorAll('.orz-app__brand-links a')].map((a) => a.getAttribute('aria-label')), repo).toEqual(['orz-markdown website']);
+      o.app.dispose();
+    }
   });
 });
 
@@ -912,36 +1097,37 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
     c.app.dispose();
   });
 
-  it('[A.16] slides fitness: after a setting is chosen with the pointer the focus leaves the picker (the read view\'s keys work at once; with the keyboard it returns to the picker), after a pointer\'s Done the focus is the page\'s (the keyboard\'s Done returns to Edit), and navigation keys from a chrome button reach the view\'s onKey', async () => {
+  it('[A.16] slides fitness: after a setting is chosen with the pointer the focus leaves the handle (the read view\'s keys work at once; with the keyboard it returns to the pencil), after a pointer\'s Done the focus is the page\'s (the keyboard\'s Done returns to the pencil), and navigation keys from the pencil reach the view\'s onKey — not its own keys (Space, Enter, ArrowUp/Down open its list)', async () => {
     const b = boot();
     await b.app.ready;
-    const theme = byLabel(b.root, 'Theme');
+    const pencil = b.root.querySelector('.orz-handle__pencil') as HTMLButtonElement;
     const choose = (detail: number) => {
-      theme.click();
-      const item = [...b.root.querySelectorAll('[role="menuitemradio"]')].find((x) => x.getAttribute('aria-checked') === 'false') as HTMLButtonElement;
+      b.click('Theme');
+      const item = [...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].find((x) => x.getAttribute('aria-checked') === 'false') as HTMLButtonElement;
       item.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail }) as unknown as Event);
     };
-    theme.focus();
+    pencil.focus();
     choose(1); // a pointer
-    expect(b.root.activeElement).not.toBe(theme);
-    theme.focus();
+    expect(b.root.activeElement).not.toBe(pencil);
+    expect(b.app.menu.isOpen()).toBe(false);
+    pencil.focus();
     choose(0); // the keyboard (Enter on the item)
-    expect(b.root.activeElement).toBe(theme);
-    // navigation from the focused picker button reaches the view; its own keys do not
-    theme.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
-    theme.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: ' ', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    expect(b.root.activeElement).toBe(pencil);
+    // navigation from the focused pencil reaches the view; its own keys do not
+    for (const key of ['ArrowRight', ' ', 'ArrowUp', 'Escape', 'Enter']) pencil.dispatchEvent(new b.win.KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }) as unknown as Event);
     expect(b.rec.keys).toEqual(['ArrowRight']);
-    // Done by pointer: the focus is not put back on Edit; by keyboard it is
+    b.app.menu.close();
+    // Done by pointer: the focus is not put back on the pencil; by keyboard it is
     b.app.edit();
     b.root.host.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event);
     byLabel(b.root, 'Done').click();
     await tick(10);
-    expect(b.root.activeElement).not.toBe(byLabel(b.root, 'Edit'));
+    expect(b.root.activeElement).not.toBe(pencil);
     b.app.edit();
     b.key('Tab');
     byLabel(b.root, 'Done').click();
     await tick(10);
-    expect(b.root.activeElement).toBe(byLabel(b.root, 'Edit'));
+    expect(b.root.activeElement).toBe(pencil);
     b.app.dispose();
   });
 
@@ -951,10 +1137,10 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
     const b = boot(undefined, {
       kind: {
         actions: [
-          { id: 'print', label: 'Print', placement: 'bar', icon: 'print', run: () => undefined },
-          { id: 'plain', label: 'Plain', placement: 'bar', run: () => undefined },
-          { id: 'own', label: 'Own', placement: 'bar', icon: { paths: ['M4 4h16v16H4z', 'M8 12h8'] }, run: () => undefined },
-          { id: 'bad', label: 'Bad', placement: 'bar', icon: { paths: ['M4 4"/><script>alert(1)</script>'] }, run: () => undefined },
+          { id: 'print', label: 'Print', placement: 'bar', inEdit: true, icon: 'print', run: () => undefined },
+          { id: 'plain', label: 'Plain', placement: 'bar', inEdit: true, run: () => undefined },
+          { id: 'own', label: 'Own', placement: 'bar', inEdit: true, icon: { paths: ['M4 4h16v16H4z', 'M8 12h8'] }, run: () => undefined },
+          { id: 'bad', label: 'Bad', placement: 'bar', inEdit: true, icon: { paths: ['M4 4"/><script>alert(1)</script>'] }, run: () => undefined },
         ],
       },
     });
@@ -968,29 +1154,37 @@ describe('round 1: keys, saves, the update lock, the frame, the chrome', () => {
     expect(btn('bad').querySelector('svg')).toBeNull();
     expect(btn('bad').querySelector('script')).toBeNull();
     expect(btn('bad').classList.contains('orz-btn--has-icon')).toBe(false);
+    // the handle's list draws the same icons (a malformed one: none, the label stays)
+    b.items();
+    const item = (id: string) => b.root.querySelector(`[data-orz-item="action:${id}"]`) as HTMLElement;
+    expect([...item('own').querySelectorAll('path')].map((p) => p.getAttribute('d'))).toEqual(['M4 4h16v16H4z', 'M8 12h8']);
+    expect([item('bad').querySelector('svg'), item('bad').querySelector('script'), item('bad').textContent]).toEqual([null, null, 'Bad']);
     b.app.dispose();
   });
 
-  it('[A.18] accessibility: the chrome is first in the page\'s order after the islands (a keyboard reaches Edit before the document); at narrow widths the page gets top padding so the fixed bar does not cover it (not in edit mode, not with the chrome hidden), removed by dispose', async () => {
+  it('[A.18] accessibility: the chrome is first in the page\'s order after the islands and its first focusable control in the read view is the pencil (a keyboard reaches it before the document); at narrow widths the page gets bottom padding so its last lines scroll clear of the handle (not in edit mode, not with the chrome hidden), removed by dispose', async () => {
     let listener: (() => void) | null = null;
     const mq = { matches: true, addEventListener: (_t: string, l: () => void) => { listener = l; }, removeEventListener: () => { listener = null; } };
     const b = boot(undefined, { beforeBoot: (w) => { Object.defineProperty(w, 'matchMedia', { value: () => mq, configurable: true }); } });
     expect([...b.doc.body.children].find((e) => e.tagName !== 'SCRIPT')).toBe(b.doc.getElementById('orz-chrome'));
-    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('56px');
-    b.app.edit();
+    expect([...b.root.children].find((e) => e.tagName !== 'STYLE')!.querySelector('button')).toBe(b.root.querySelector('.orz-handle__pencil'));
+    const pad = () => [b.doc.body.style.getPropertyValue('padding-bottom'), b.doc.documentElement.style.getPropertyValue('scroll-padding-bottom')];
+    expect(pad()).toEqual(['72px', '72px']);
     expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    b.app.edit();
+    expect(pad()).toEqual(['', '']);
     await b.app.leave();
-    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('56px');
+    expect(pad()).toEqual(['72px', '72px']);
     mq.matches = false;
     listener!();
-    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    expect(pad()).toEqual(['', '']);
     mq.matches = true;
     listener!();
     b.app.setChromeVisible(false);
-    expect(b.doc.body.style.getPropertyValue('padding-top')).toBe('');
+    expect(pad()).toEqual(['', '']);
     b.app.setChromeVisible(true);
     b.app.dispose();
-    expect([b.doc.body.style.getPropertyValue('padding-top'), listener]).toEqual(['', null]);
+    expect([...pad(), listener]).toEqual(['', '', null]);
   });
 
   it('[A.8] a file include\'s path is never sent to the host (orz-host-include@1 resolves URLs only): the context\'s fetchInclude answers null for it without a request', async () => {
@@ -1035,7 +1229,7 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     expect(saverOpts!.readUid!(`{{nyml\nkind: document\nuid: "${UID}"\n}}\n`)).toBe(UID);
     expect(saverOpts!.readUid!('# no header\n')).toBeUndefined();
     b.app.setSetting({ theme: 'beige-decent-2' });
-    const save = byLabel(b.root, 'Save');
+    const save = b.root.querySelector('.orz-handle__pencil') as HTMLButtonElement; // the read view's one control (2.2.0)
     save.focus();
     expect(await b.app.save()).toMatchObject({ conflict: true });
     const older = b.app.getText();
@@ -1143,15 +1337,16 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     b.app.dispose();
   });
 
-  it('[A.19] round 3 (M5): Present pressed with the keyboard hides the bar and moves the focus out of it to the page, so Escape and Space reach the read view\'s onKey at once; a toast keeps its focus (it stays shown)', async () => {
+  it('[A.19] round 3 (M5): Present chosen with the keyboard hides the handle and moves the focus out of it to the page, so Escape and Space reach the read view\'s onKey at once; a toast keeps its focus (it stays shown)', async () => {
     const b = boot(undefined, { kind: { actions: [{ id: 'present', label: 'Present', placement: 'bar', run: (app) => { app.setChromeVisible(false); } }] } });
     await b.app.ready;
-    const present = [...b.root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === 'Present' || x.textContent === 'Present') as HTMLButtonElement;
+    // the keyboard: the handle's list, Present focused, Enter (the browser then clicks it: detail 0)
+    b.app.menu.open();
+    const present = b.root.querySelector('[data-orz-item="action:present"]') as HTMLButtonElement;
     present.focus();
     expect(b.root.activeElement).toBe(present);
-    // the keyboard: Enter on the button (the browser then clicks it)
     b.key('Enter', {}, present);
-    present.click();
+    present.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 0 }) as unknown as Event);
     await tick(5);
     expect(b.root.activeElement).toBeNull();
     const target = (b.doc.activeElement ?? b.doc.body) as unknown as EventTarget;
@@ -1187,27 +1382,26 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     b.app.dispose();
   });
 
-  it('[A.19] presenting hides the bar and the editor, not the toasts: with setChromeVisible(false) the toast stack still shows (the hidden host keeps no box over the page); a pointer click on a bar action leaves the focus to the page (the keyboard\'s stays on the button), so the read view\'s Space and Enter reach onKey', async () => {
+  it('[A.19] presenting hides the handle, the bar and the editor, not the toasts: with setChromeVisible(false) the toast stack still shows (the hidden host keeps no box over the page); an action chosen in the handle\'s list with the pointer leaves the focus to the page (with the keyboard it returns to the pencil), so the read view\'s Space and Enter reach onKey', async () => {
     expect(APP_CSS).not.toMatch(/:host\(\[data-hidden\]\)\s*\{[^}]*display:\s*none/);
     expect(APP_CSS).toMatch(/:host\(\[data-hidden\]\) \.orz-app__bar, :host\(\[data-hidden\]\) \.orz-app__editor[^{]*\{ display: none !important; \}/);
     const b = boot();
     await b.app.ready;
-    const print = b.root.querySelector('[data-orz-action="print"]') as HTMLButtonElement;
-    // the keyboard: the focus stays on the button
-    print.focus();
-    b.key('Tab');
-    print.click();
-    expect(b.root.activeElement).toBe(print);
+    const pencil = b.root.querySelector('.orz-handle__pencil') as HTMLButtonElement;
+    const print = () => { b.app.menu.open(); return b.root.querySelector('[data-orz-item="action:print"]') as HTMLButtonElement; };
+    // the keyboard (Enter on the item: detail 0): the focus goes back to the pencil
+    pencil.focus();
+    print().dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 0 }) as unknown as Event);
+    expect(b.root.activeElement).toBe(pencil);
     // a pointer: the focus is the page's, and Space reaches the read view
-    b.root.host.dispatchEvent(new b.win.PointerEvent('pointerdown', { bubbles: true, composed: true }) as unknown as Event);
-    print.focus();
-    print.click();
-    expect(b.root.activeElement).not.toBe(print);
+    pencil.focus();
+    print().dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 1 }) as unknown as Event);
+    expect(b.root.activeElement).toBeNull();
     await tick();
     expect(b.rec.actions).toEqual(['print', 'print']);
     // Space where the focus is (as the browser sends it): it reaches the read view
-    b.key(' ', {}, (b.root.activeElement as Element | null) ?? (b.doc.activeElement as Element | null) ?? b.doc.body);
-    expect(b.rec.keys).toEqual(['Tab', ' ']);
+    b.key(' ', {}, (b.doc.activeElement as Element | null) ?? b.doc.body);
+    expect(b.rec.keys).toEqual([' ']);
     b.app.dispose();
   });
 
@@ -1221,7 +1415,7 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
     const msg = b.root.querySelector('.orz-toast__message') as HTMLElement;
     msg.dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
     expect(b.rec.keys).toEqual([]);
-    byLabel(b.root, 'Edit').dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
+    (b.root.querySelector('.orz-handle__pencil') as HTMLElement).dispatchEvent(new b.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }) as unknown as Event);
     expect(b.rec.keys).toEqual(['ArrowRight']);
     b.app.dispose();
   });
@@ -1604,6 +1798,12 @@ type Browser = import('playwright-core').Browser;
 type BrowserContext = import('playwright-core').BrowserContext;
 type Page = import('playwright-core').Page;
 
+/** Open the handle's list as a pointer does (hover the pencil) and choose its items in order (a submenu's parent, then its item). */
+async function chooseInHandle(page: Page, ...names: string[]): Promise<void> {
+  await page.getByRole('button', { name: 'Edit and more', exact: true }).hover();
+  for (const name of names) await page.getByRole('menuitem', { name, exact: true }).click();
+}
+
 async function launch(): Promise<Browser | null> {
   try {
     const { chromium } = await import('playwright-core');
@@ -1692,7 +1892,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await page.locator('#orz-doc h1').textContent()).toBe('Real file');
     expect(await page.locator('#orz-theme').getAttribute('href')).toContain(`/themes/${THEMES[0].id}.css`);
     // the theme, through the seam
-    await page.getByRole('button', { name: 'Theme', exact: true }).click();
+    await chooseInHandle(page, 'Theme');
     await page.getByRole('menuitemradio', { name: 'Nocturne', exact: true }).click();
     expect(await page.evaluate(`${APP}.getText()`)).toBe(editHeader(text, { theme: 'dark-elegant-3' }));
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
@@ -1702,7 +1902,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.keyboard.press(`${MOD}+z`);
     expect(await page.evaluate(`${APP}.getText()`)).toBe(text);
     // Edit, type, save in place
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.evaluate(`${APP}.editor().focus()`);
     await page.keyboard.press(`${MOD}+ArrowDown`);
@@ -1764,7 +1964,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
     // edit mode: Cmd/Ctrl+S with the focus on Done saves the editor, never the browser's "Save page as"
     await writeOpfs(page, { name: 'conflict.md.html' }, await assembleStub(await page.evaluate(`${APP}.getText()`) as string));
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.getByRole('button', { name: 'Done', exact: true }).focus();
     await page.evaluate(() => { addEventListener('keydown', (e) => { if (e.key === 's') setTimeout(() => { (window as unknown as { __prevented?: boolean }).__prevented = e.defaultPrevented; }); }); });
@@ -1842,7 +2042,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.getByRole('alertdialog').waitFor();
     const older = await page.evaluate(`${APP}.getText()`) as string;
     const picks = (await pageRecords(page, 'picker')).length;
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.evaluate(`${APP}.editor().focus()`);
     await page.keyboard.press(`${MOD}+ArrowDown`);
@@ -1872,7 +2072,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     // the other order: the editor asks, Done, then the page saves
     const text2 = '{{nyml\nkind: document\ntitle: P6b\nuid: doc-psixpsixpsix0009b\n}}\n\n# P6b\n\nBody.\n';
     const two = await open('p6b.md.html', text2);
-    await two.getByRole('button', { name: 'Edit', exact: true }).click();
+    await two.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await two.evaluate(`${APP}.editor().ready`);
     await two.evaluate(`${APP}.editor().focus()`);
     await two.keyboard.press(`${MOD}+ArrowDown`);
@@ -1922,7 +2122,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.evaluate(`${APP}.setSetting({ theme: 'beige-decent-2' })`);
     expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ conflict: true });
     await page.getByRole('alertdialog').waitFor();
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.evaluate(`${APP}.editor().focus()`);
     await page.keyboard.press(`${MOD}+ArrowDown`);
@@ -1948,7 +2148,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await five.mouse.click(600, 400);
     await five.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
     expect(await five.evaluate(`${APP}.save()`)).toMatchObject({ ok: true }); // the session's handle
-    await five.getByRole('button', { name: 'Edit', exact: true }).click();
+    await five.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await five.evaluate(`${APP}.editor().ready`);
     await five.evaluate(`${APP}.editor().focus()`);
     await five.keyboard.press(`${MOD}+ArrowDown`);
@@ -1989,7 +2189,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
     expect(await page.getByRole('alertdialog').count()).toBe(0);
     expect(extract((await readOpfs(page, { name: 'p3.md.html' }))!)!.text).toContain("Attached editor's saved work.");
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     expect(await page.evaluate(`${APP}.editor().getText()`)).toContain("Attached editor's saved work.");
     // P4: the Edit editor (A) saves, then an attached one (B): B is on disk and the page follows it after Done
@@ -2024,10 +2224,9 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ conflict: true });
     await page.getByRole('alertdialog').waitFor();
     const picks = (await pageRecords(page, 'picker')).length;
-    const indicator = page.getByRole('button', { name: 'Update available: 1.2.0' });
-    await indicator.waitFor();
-    await indicator.click();
-    await page.getByRole('button', { name: 'Update now' }).click();
+    // the offer: a dot on the pencil, "Update to 1.2.0" in its list (the read view)
+    await page.locator('#orz-chrome .orz-handle__pencil[data-update="true"]').waitFor();
+    await chooseInHandle(page, 'Update to 1.2.0', 'Update now');
     await page.getByText(UPDATE_QUESTION_OPEN).waitFor();
     await page.waitForTimeout(300);
     expect([await page.getByRole('alertdialog').count(), (await pageRecords(page, 'picker')).length - picks]).toEqual([1, 0]);
@@ -2051,11 +2250,11 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.evaluate(`${APP}.setChromeVisible(false)`);
     await page.evaluate(`${APP}.toast('Shown while presenting')`);
     expect(await page.getByText('Shown while presenting').isVisible()).toBe(true);
-    expect(await page.getByRole('button', { name: 'Edit', exact: true }).isVisible()).toBe(false);
+    expect(await page.getByRole('button', { name: 'Edit and more', exact: true }).isVisible()).toBe(false);
     const box = await page.locator('#orz-chrome').boundingBox();
     expect((box?.width ?? 0) * (box?.height ?? 0)).toBe(0); // no box over the page
     await page.evaluate(`${APP}.setChromeVisible(true)`);
-    expect(await page.getByRole('button', { name: 'Edit', exact: true }).isVisible()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Edit and more', exact: true }).isVisible()).toBe(true);
     // an app's page (not an assembled file): its editor saves through the picker under fileName
     extra.set('app-page.html', `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="m" style="width:900px;height:500px"></div><script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${stub.version}/orz-stub.browser.js"></script></body></html>`);
     const app = await ctx.newPage();
@@ -2071,6 +2270,116 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await ctx.close();
   }, 120_000);
 
+  it('[A.20] [A.21] [A.22] in Chrome: the read view at rest shows exactly one visible control (the pencil, bottom-left); hovering opens its list and moving into it keeps it open, leaving closes it; a click on the pencil edits; the keyboard reaches the pencil first (Tab), Enter edits, ArrowUp opens the list and Escape closes it with the focus back; a tap opens it on a touch screen; the text size zooms the article, survives a reload (per uid), leaves the document clean and stays out of the saved file; edit mode shows the seal (https://markdown.orz.how) and the GitHub link (the kind\'s repo), both in a new tab, and the read view neither', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ntitle: Handle\nuid: doc-handlehandle00a20\n}}\n\n# Handle\n\nA paragraph of body text to measure.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    const url = write('handle.md.html', html);
+    await page.goto(url);
+    await bootDone(page);
+    await writeOpfs(page, { name: 'handle.md.html' }, html);
+    const visibleControls = () => page.evaluate(() => {
+      const out: string[] = [];
+      const walk = (root: Document | ShadowRoot) => {
+        for (const el of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))) {
+          if (el.checkVisibility({ opacityProperty: false, visibilityProperty: true }) && el.getBoundingClientRect().width > 0) out.push(el.getAttribute('aria-label') ?? el.textContent ?? el.tagName);
+        }
+        for (const el of Array.from(root.querySelectorAll('*'))) if (el.shadowRoot) walk(el.shadowRoot);
+      };
+      walk(document);
+      return out;
+    });
+    const pencil = page.getByRole('button', { name: 'Edit and more', exact: true });
+    expect(await visibleControls()).toEqual(['Edit and more']);
+    const box = (await pencil.boundingBox())!;
+    expect(box.x).toBeLessThan(40);
+    expect(860 - (box.y + box.height)).toBeLessThan(40); // bottom-left
+    // hover: the list opens after a short delay; moving into it (and onto a submenu) keeps it; leaving closes it
+    await pencil.hover();
+    const list = page.getByRole('menu', { name: 'Edit and more' });
+    await list.waitFor();
+    expect(await pencil.getAttribute('aria-expanded')).toBe('true');
+    await page.getByRole('menuitem', { name: 'Download a copy', exact: true }).hover();
+    await page.getByRole('menuitem', { name: 'Theme', exact: true }).hover();
+    await page.getByRole('menu', { name: 'Theme' }).waitFor();
+    await page.getByRole('menuitemradio', { name: 'Nocturne', exact: true }).hover();
+    await page.waitForTimeout(600);
+    expect(await list.isVisible()).toBe(true);
+    await page.mouse.move(900, 300);
+    await page.waitForTimeout(700);
+    expect([await list.count(), await pencil.getAttribute('aria-expanded')]).toEqual([0, 'false']);
+    // a click on the pencil: Edit
+    await pencil.click();
+    expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
+    // edit mode: the seal and the GitHub link, quiet, in a new tab
+    const seal = page.getByRole('link', { name: 'orz-markdown website' });
+    const gh = page.getByRole('link', { name: 'orz stub on GitHub' });
+    expect([await seal.isVisible(), await seal.getAttribute('href'), await seal.getAttribute('target'), await seal.getAttribute('rel')]).toEqual([true, 'https://markdown.orz.how', '_blank', 'noopener noreferrer']);
+    expect([await gh.isVisible(), await gh.getAttribute('href'), await gh.getAttribute('target'), await gh.getAttribute('rel')]).toEqual([true, 'https://github.com/wangyu16/orz-markdown', '_blank', 'noopener noreferrer']);
+    const sealBox = (await seal.boundingBox())!;
+    expect(sealBox.height).toBeLessThanOrEqual(30);
+    expect(sealBox.x).toBeGreaterThan(1280 - 120); // the far end of the bar
+    expect(Number(await seal.evaluate((a) => getComputedStyle(a).opacity))).toBeLessThan(1); // muted until hovered
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.waitForFunction(`!${APP}.editor()`);
+    expect([await seal.isVisible(), await gh.isVisible()]).toEqual([false, false]);
+    // the keyboard: Tab reaches the pencil first, Enter edits; ArrowUp opens the list, Escape closes it with the focus back
+    await page.reload();
+    await bootDone(page);
+    await page.keyboard.press('Tab');
+    const focusedName = () => page.evaluate(() => { let a: Element | null = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a?.getAttribute('aria-label') ?? a?.textContent?.trim() ?? null; });
+    expect(await focusedName()).toBe('Edit and more');
+    await page.keyboard.press('ArrowUp');
+    await list.waitFor();
+    expect(await focusedName()).toBe('Larger text'); // the last item (the text size row's A+)
+    await page.keyboard.press('Escape');
+    expect([await list.count(), await focusedName()]).toEqual([0, 'Edit and more']);
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
+    await page.evaluate(`${APP}.leave()`);
+    // the text size: the article zooms, the document stays clean, the file never holds it, a reload keeps it
+    const textHeight = () => page.locator('#orz-doc p').evaluate((p) => p.getBoundingClientRect().height);
+    const h100 = await textHeight();
+    await pencil.hover();
+    await page.getByRole('menuitem', { name: 'Larger text' }).click();
+    await page.getByRole('menuitem', { name: 'Larger text' }).click();
+    expect(await list.isVisible()).toBe(true); // the row keeps the list open
+    expect(await page.getByRole('menuitem', { name: 'Reset text size, now 120%' }).isVisible()).toBe(true);
+    expect((await textHeight()) / h100).toBeCloseTo(1.2, 1);
+    expect(await page.locator('#orz-doc').evaluate((a) => getComputedStyle(a).zoom)).toBe('1.2');
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(false);
+    await page.reload();
+    await bootDone(page);
+    expect([await page.evaluate(`${APP}.fontScale()`), await page.locator('#orz-doc').evaluate((a) => getComputedStyle(a).zoom)]).toEqual([120, '1.2']);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    const saved = (await readOpfs(page, { name: 'handle.md.html' }))!;
+    expect(saved === await assembleStub(editHeader(text, { theme: 'dark-elegant-1' }))).toBe(true);
+    expect(saved.replace(/<script id="orz-engine">[\s\S]*?<\/script>/, '')).not.toMatch(/font-scale|fontScale|zoom|120%/); // only the engine's code names it
+    await page.close();
+    // a touch screen: a tap opens the list (Edit first), a tap outside closes it
+    const touch = await browser!.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 760 } });
+    await touch.addInitScript({ content: initScript('opfs') });
+    await touch.route(/^https:\/\//, (r) => r.abort('internetdisconnected'));
+    const t = await touch.newPage();
+    await t.goto(url);
+    await bootDone(t);
+    await t.getByRole('button', { name: 'Edit and more', exact: true }).tap();
+    await t.getByRole('menu', { name: 'Edit and more' }).waitFor();
+    expect(await t.evaluate(`!!${APP}.editor()`)).toBe(false);
+    expect(await t.getByRole('menuitem').first().textContent()).toContain('Edit');
+    // narrow (the layout's width; the stub's page has no viewport meta): room below the last line
+    expect(await t.evaluate(() => [matchMedia('(max-width: 560px)').matches, getComputedStyle(document.body).paddingBottom]).then(([m, p]) => p === (m ? '72px' : '0px'))).toBe(true);
+    await t.tap('#orz-doc h1');
+    expect(await t.getByRole('menu', { name: 'Edit and more' }).count()).toBe(0);
+    await t.getByRole('button', { name: 'Edit and more', exact: true }).tap();
+    await t.getByRole('menuitem', { name: 'Edit', exact: true }).tap();
+    expect(await t.evaluate(`!!${APP}.editor()`)).toBe(true);
+    await touch.close();
+    await ctx.close();
+  }, 180_000);
+
   it('[A.13] New document and Save as new copy (the More menu) write new files through the picker — a new uid, lint-clean, the file\'s delivery, the copy with the text — that open; the opened file is untouched; over http: the Save is the served notice and Download a copy downloads assemble(text)', async () => {
     const ctx = await context();
     const text = '{{nyml\nkind: document\ntitle: Origin\nuid: doc-originorigin0002b\n}}\n\n# Origin\n\nText.\n';
@@ -2080,11 +2389,9 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
       await page.goto(write(`origin-${delivery}.md.html`, html));
       await bootDone(page);
       await writeOpfs(page, { name: `origin-${delivery}.md.html` }, html);
-      await page.getByRole('button', { name: 'More', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'New document' }).click();
+      await chooseInHandle(page, 'New document');
       await page.waitForFunction(() => (window as unknown as { __orzConformanceLog: Array<{ type: string }> }).__orzConformanceLog.filter((r) => r.type === 'picker').length === 1);
-      await page.getByRole('button', { name: 'More', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'Save as new copy' }).click();
+      await chooseInHandle(page, 'Save as new copy');
       await page.waitForFunction(() => (window as unknown as { __orzConformanceLog: Array<{ type: string }> }).__orzConformanceLog.filter((r) => r.type === 'picker').length === 2);
       expect((await pageRecords(page, 'picker')).map((r) => (r.data as { suggestedName: string }).suggestedName)).toEqual(['Untitled.md.html', `origin-${delivery} copy.md.html`]);
       for (const name of ['Untitled.md.html', `origin-${delivery} copy.md.html`]) {
@@ -2116,8 +2423,7 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: false, via: 'served-notice' });
     expect(await pageRecords(page, 'picker')).toEqual([]);
     const dl = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Download a copy' }).click();
+    await chooseInHandle(page, 'Download a copy');
     const d = await dl;
     expect(d.suggestedFilename()).toBe('served.md.html');
     expect(readFileSync((await d.path())!, 'utf8') === await assembleStub(editHeader(text, { theme: 'beige-decent-1' }))).toBe(true);
@@ -2193,11 +2499,10 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await page.waitForTimeout(500);
     expect(page.isClosed()).toBe(false);
     expect(dialogs).toEqual(['beforeunload']);
-    const indicator = page.getByRole('button', { name: 'Update available: 1.2.0' });
-    await indicator.waitFor();
-    await indicator.click();
+    // the offer in the read view: a dot on the pencil and "Update to 1.2.0" in its list (hover, then the items)
+    await page.locator('#orz-chrome .orz-handle__pencil[data-update="true"]').waitFor();
     const reloaded = page.waitForEvent('load');
-    await page.getByRole('button', { name: 'Update now' }).click();
+    await chooseInHandle(page, 'Update to 1.2.0', 'Update now');
     await reloaded;
     expect(dialogs).toEqual(['beforeunload']); // the update's reload asked nothing
     const written = (await readOpfs(page, { name: 'update-me.md.html' }))!;

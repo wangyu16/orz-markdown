@@ -24,5 +24,7 @@ export * from './update.js';
 export * from './indicator.js';
 export { CHROME_CSS, ICONS, createShadowRoot, showToast, iconElement, anyIconElement, isKindIcon, KIND_ICON_MAX_PATHS, askSaveConflict, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_PICKED_MESSAGE, SAVE_CONFLICT_TITLE, SAVE_CONFLICT_LABELS, SAVE_CONFLICT_DOWNLOADED } from './chrome.js';
 export type { IconName, KindIcon, ToastTone, ToastOptions, Toast, SaveConflictOptions } from './chrome.js';
+export { ORZ_SEAL_SVG, GITHUB_MARK_SVG, ORZ_MARKDOWN_SITE, BRAND_MARKS, brandMark } from './brand.js';
+export type { BrandMarkName } from './brand.js';
 export type { UiElement, UiDocument, UiView, UiEventLike, UiListener, ShadowRootLike, TextLike, StyleLike } from './types.js';
 //# sourceMappingURL=index.d.ts.map

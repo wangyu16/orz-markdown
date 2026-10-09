@@ -184,7 +184,8 @@ header tools, `readDocument`, `assembleEnvelope` / `extract`),
 (save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
 (the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
 ≥ 2.2.0), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
-`startCarrier(kind)`) and `orz-markdown/carrier/conformance` (test
+`startCarrier(kind)`; a file's read view shows one pencil at the bottom-left
+whose list holds every operation) and `orz-markdown/carrier/conformance` (test
 harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
 bundled themes: `THEMES` (id, name, light/dark), `DEFAULT_THEME`, `isThemeId`,
 `themeInfo`. They are for carrier and host builders; their binding specs are in

@@ -147,7 +147,12 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   chrome in a shadow root, edit mode, Save / Download a copy / New document /
   Save as new copy, `beforeunload` while dirty, the host connection with the
   AI menu + review panel, the quiet update, reader preferences, the page
-  keymap, the `CarrierApp` handle = `OrzCarrier.standalone`). THE SEAM is
+  keymap, the `CarrierApp` handle = `OrzCarrier.standalone`). Reading is
+  quiet (owner, 2026-10-09): at rest only the pencil handle (`handle.ts`,
+  bottom-left; click = Edit, hover/tap/keys open the list of every
+  operation, A.20); the kind's `readerControls` (e.g. md's text size, a
+  reader preference, A.21); in edit mode the orz seal → markdown.orz.how and
+  the kind's `repo` GitHub link (`shell/brand.ts`, A.22). THE SEAM is
   `StandaloneKind` (`types.ts`): never name a kind (md, slides, paged
   specifics) in `src/carrier/app/` (A.4 greps for it). It may import
   `carrier/shell`, `carrier/editor` (types only today) and `carrier/read`

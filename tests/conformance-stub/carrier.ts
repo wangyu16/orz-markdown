@@ -66,6 +66,8 @@ function createReadView(doc: AppDocument): CarrierReadView {
   if (!article) { article = doc.createElement('article'); article.id = 'orz-doc'; article.className = 'markdown-body'; main.append(article); }
   const view = main;
   const body = article as AppElement & { innerHTML: string };
+  // the reader's text size (carrier/app's reader control): the article zooms by the view's --orz-font-scale
+  article.style.setProperty('zoom', 'var(--orz-font-scale, 1)');
   let generation = 0;
   const present = (text: string): { scheme: 'light' | 'dark' } => {
     const t = themeOf(text);
@@ -146,6 +148,8 @@ const STUB_KIND: StandaloneKind = {
   version: VERSION,
   formats: bugs.formats,
   brand: 'orz stub',
+  repo: 'https://github.com/wangyu16/orz-markdown',
+  readerControls: { fontScale: { min: 80, max: 160, step: 10 } },
   assemble,
   newDocument: () => createStubText(),
   mountEditor,

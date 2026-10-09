@@ -18,6 +18,7 @@ const save_js_1 = require("./save.js");
 const types_js_1 = require("./types.js");
 const isNumberIn = (lo, hi) => (v) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const isBoolean = (v) => typeof v === 'boolean';
+const isIntegerIn = (lo, hi) => (v) => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
 /** The reader preferences FC-18 §6 names. */
 exports.READER_PREFERENCES = {
     /** Editor share of the split view, 0.1–0.9. */
@@ -28,6 +29,11 @@ exports.READER_PREFERENCES = {
     editorFontSize: { default: 14, valid: isNumberIn(8, 40) },
     /** Dark chrome: `null` follows the system. */
     darkChrome: { default: null, valid: (v) => v === null || typeof v === 'boolean' },
+    /**
+     * The read view's text size in percent, 25–400 (2.2.0): a reader control of
+     * the carrier app (spec/carrier-app.md §4.10), clamped to the kind's range.
+     */
+    fontScale: { default: 100, valid: isIntegerIn(25, 400) },
 };
 exports.PREFERENCE_PREFIX = 'orz-pref:';
 function preferenceNamespace(uid) {

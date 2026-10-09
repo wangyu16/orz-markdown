@@ -414,8 +414,8 @@ describe('save order and fallbacks (spec/shell-runtime.md §1)', () => {
 
   it('[S.4] the save never reads the live DOM: no shell module names a DOM-reading or serializing API, and save writes exactly the html it is given', async () => {
     const forbidden = /\b(outerHTML|innerHTML|innerText|textContent|documentElement|XMLSerializer|cloneNode|querySelector(All)?|getElementById|getElementsBy\w+|serializeToString|\.head\b)\b/;
-    // chrome.ts is the UI module that writes icons into its own shadow root (V.4 binds it); every other module is checked.
-    const files = readdirSync('src/carrier/shell').filter((f) => f.endsWith('.ts') && f !== 'chrome.ts');
+    // chrome.ts and brand.ts are the UI modules that write icons and the brand marks into their own shadow root (V.4 binds them); every other module is checked.
+    const files = readdirSync('src/carrier/shell').filter((f) => f.endsWith('.ts') && f !== 'chrome.ts' && f !== 'brand.ts');
     expect(files.sort()).toEqual(['conflict.ts', 'file-side.ts', 'host-side.ts', 'index.ts', 'indicator.ts', 'preferences.ts', 'protocol.ts', 'save.ts', 'types.ts', 'update.ts']);
     const hits: string[] = [];
     for (const f of files) {
@@ -859,8 +859,13 @@ describe('reader preferences (FC-18 §6)', () => {
     expect([a.get('editorFontSize'), a.get('scrollSync')]).toEqual([14, true]);
     a.remove('viewMode');
     expect(a.get('viewMode')).toBe('split');
-    expect(a.all()).toEqual({ splitRatio: 0.3, scrollSync: true, viewMode: 'split', editorFontSize: 14, darkChrome: null });
-    expect(Object.keys(READER_PREFERENCES)).toEqual(['splitRatio', 'scrollSync', 'viewMode', 'editorFontSize', 'darkChrome']);
+    expect(a.all()).toEqual({ splitRatio: 0.3, scrollSync: true, viewMode: 'split', editorFontSize: 14, darkChrome: null, fontScale: 100 });
+    expect(Object.keys(READER_PREFERENCES)).toEqual(['splitRatio', 'scrollSync', 'viewMode', 'editorFontSize', 'darkChrome', 'fontScale']);
+    // the read view's text size (2.2.0): an integer percentage, 25–400
+    expect([a.set('fontScale', 120), a.get('fontScale'), a.set('fontScale', 12.5), a.set('fontScale', 500), a.set('fontScale', 20)]).toEqual([true, 120, false, false, false]);
+    s.map.set(`orz-pref:${UID}:fontScale`, '1000');
+    expect(a.get('fontScale')).toBe(100);
+    a.remove('fontScale');
     expect([...s.map.keys()].every((k) => k.startsWith('orz-pref:'))).toBe(true);
   });
 
@@ -1238,18 +1243,18 @@ function valueImports(entry: string): Set<string> {
 // and revert checks, the question's alertdialog and wordings): the bound stands. 68,451 after round 4
 // (one conflict question per saver — conflict.ts — tokens, the remembered-handle revert, knownHtml):
 // bound raised to 75 KB (~10 % above).
-const SHELL_BUNDLE_LIMIT = 75_000;
+const SHELL_BUNDLE_LIMIT = 82_000; // 74,775 B on 2026-10-09 with the brand marks (2.2.0: the orz seal and the GitHub mark, ~5 KB)
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
 const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
-  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 75 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
+  it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 82 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {
     const graph = [...valueImports('src/carrier/shell/index.ts')].sort();
     expect(graph).toEqual([
       ...READER_GRAPH,
-      'src/carrier/shell/chrome.ts', 'src/carrier/shell/conflict.ts', 'src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/indicator.ts',
+      'src/carrier/shell/brand.ts', 'src/carrier/shell/chrome.ts', 'src/carrier/shell/conflict.ts', 'src/carrier/shell/file-side.ts', 'src/carrier/shell/host-side.ts', 'src/carrier/shell/index.ts', 'src/carrier/shell/indicator.ts',
       'src/carrier/shell/preferences.ts', 'src/carrier/shell/protocol.ts', 'src/carrier/shell/save.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts',
     ].sort());
     const { build } = await import('esbuild');
