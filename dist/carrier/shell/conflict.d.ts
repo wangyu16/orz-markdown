@@ -45,6 +45,12 @@ export declare const SAVE_CONFLICT_STALE = "Nothing was written: the file was ch
 /** A conflict question of this saver is open: a save must not call the saver but {@link answerSaveConflict}. */
 export declare function saveConflictOpen(saver: object): boolean;
 /**
+ * Focus the open conflict question of `saver`, wherever it is shown (round 5
+ * of the carrier-app loop, B4: Update now while it is open refuses and points
+ * the reader at it). False when none is open.
+ */
+export declare function focusSaveConflict(saver: object): boolean;
+/**
  * Ask the reader about a save of `saver` that found the file changed on disk
  * — or, while that saver's question is open, re-target the open question to
  * this newer text (focused, in the root it is shown in). Resolves this

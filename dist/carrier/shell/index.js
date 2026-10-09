@@ -47,7 +47,7 @@ Object.defineProperty(exports, "HELLO_MAX_MS", { enumerable: true, get: function
 __exportStar(require("./file-side.js"), exports); // connectHost, NOT_CONNECTED; ConnectHostOptions, HostConnection
 __exportStar(require("./host-side.js"), exports); // embedCarrierFrame; EmbedOptions, CarrierFrame
 __exportStar(require("./save.js"), exports); // createSaver, createIndexedDbHandleStore, HANDLE_DB, HANDLE_STORE, SHELL_UID_PATTERN, headerUidOf; Saver, SaverOptions, SaveInput, SaveCallOptions, SaveResult, HandleStore, StoredHandle
-__exportStar(require("./conflict.js"), exports); // answerSaveConflict, saveConflictOpen, dropSaveConflict, SAVE_CONFLICT_STALE; SaveConflictAnswer, SaveConflictRequest (round 4: one question per saver)
+__exportStar(require("./conflict.js"), exports); // answerSaveConflict, saveConflictOpen, focusSaveConflict, dropSaveConflict, SAVE_CONFLICT_STALE; SaveConflictAnswer, SaveConflictRequest (round 4: one question per saver)
 __exportStar(require("./preferences.js"), exports); // createPreferenceStore, preferenceNamespace, READER_PREFERENCES, PREFERENCE_PREFIX; PreferenceStore, PreferenceSpec, PreferenceSchema, ReaderPreferences
 // checkForUpdate, reassemble, performUpdate, skipVersion, skippedVersion, parseManifest, manifestUrl, bundleUrl, browserPackage,
 // isBundlePath, isScriptSafe, sandboxDocument, sha384Integrity, parseSemver, compareSemver, UpdateError, RELEASE_KINDS,

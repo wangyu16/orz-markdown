@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SAVE_CONFLICT_STALE = void 0;
 exports.saveConflictOpen = saveConflictOpen;
+exports.focusSaveConflict = focusSaveConflict;
 exports.answerSaveConflict = answerSaveConflict;
 exports.dropSaveConflict = dropSaveConflict;
 /**
@@ -25,6 +26,15 @@ const questions = new WeakMap();
 /** A conflict question of this saver is open: a save must not call the saver but {@link answerSaveConflict}. */
 function saveConflictOpen(saver) {
     return questions.has(saver);
+}
+/**
+ * Focus the open conflict question of `saver`, wherever it is shown (round 5
+ * of the carrier-app loop, B4: Update now while it is open refuses and points
+ * the reader at it). False when none is open.
+ */
+function focusSaveConflict(saver) {
+    const q = questions.get(saver);
+    return !!q && (0, chrome_js_1.focusConflictQuestion)(q.root);
 }
 /**
  * Ask the reader about a save of `saver` that found the file changed on disk

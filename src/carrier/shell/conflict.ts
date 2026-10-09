@@ -12,7 +12,7 @@
  *
  * Reads no page DOM: the caller passes where the focus goes back.
  */
-import { askSaveConflict } from './chrome.js';
+import { askSaveConflict, focusConflictQuestion } from './chrome.js';
 import type { Saver, SaveInput, SaveResult } from './save.js';
 import type { ShadowRootLike, UiElement } from './types.js';
 
@@ -61,6 +61,16 @@ const questions = new WeakMap<object, Pending>();
 /** A conflict question of this saver is open: a save must not call the saver but {@link answerSaveConflict}. */
 export function saveConflictOpen(saver: object): boolean {
   return questions.has(saver);
+}
+
+/**
+ * Focus the open conflict question of `saver`, wherever it is shown (round 5
+ * of the carrier-app loop, B4: Update now while it is open refuses and points
+ * the reader at it). False when none is open.
+ */
+export function focusSaveConflict(saver: object): boolean {
+  const q = questions.get(saver);
+  return !!q && focusConflictQuestion(q.root);
 }
 
 /**

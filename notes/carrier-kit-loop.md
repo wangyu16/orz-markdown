@@ -442,3 +442,66 @@ the page's next save asks the saver again (the document stays dirty).
 
 Size bounds re-measured on what ships: shell 68.5 KB (S.11 raised to 75 KB),
 chrome 19.2 KB (V.5, 21 KB stands), app 34.4 KB (A.2, 36 KB stands).
+
+### Round 5 (closing) — 2026-10-08, kit-side fixes
+
+An adversary against the round-4 fixes (probes `/tmp/r5`: real-Chrome
+`r5probe.test.ts` P1–P7 on orz-mdhtml's built files; 18 kit mutations in
+`mut/kit-mutants.mjs` — K04 and K11 survived — and orz-mdhtml CLI mutants).
+**No HIGH finding.** Fixed in `orz-markdown` anyway (orz-mdhtml fixed its
+side in parallel); each kit fix bound to a claim (reworded: A.2, A.7, A.9,
+A.15, V.6).
+
+| Finding | Sev | Disposition (claim) |
+|---|---|---|
+| G1, G2 orz-mdhtml's CLI | — | orz-mdhtml's (fixed there in parallel) |
+| B1 (P1) the page asks, the editor re-targets the question with its text, Done, then Replace it: the editor's text written, the page left dirty (its own answer was `superseded`, the editor's was dropped by `destroyed`) → a false leave prompt | MED | the app wraps its saver once and hands that one object everywhere; every write marks its text saved, whenever it lands (A.15, A.7; unit + real Chrome) |
+| B2 (P5) Cmd/Ctrl+S then Cmd/Ctrl+E at once: the save landed after the editor was gone (no `save` event after `destroy`) → the page dirty with its text on disk | MED | the same: the write tells the page (A.15, A.7; an edit typed after the save started stays unsaved; unit + real Chrome) |
+| B3 (P3/P4) an attached editor (`OrzCarrier.mountEditor`) saved and was destroyed; the page's older copy came back, a later setting wrote it over the editor's work silently, Edit opened on the old text; with two editors the Edit editor's stale text became "saved" on Done | MED | an attached editor's save is the page's text; a clean read view follows another surface's write; Done on a clean editor leaves the last written text (the last save wins), a dirty one its own; an attached editor destroyed with unsaved edits re-renders the read view on the page's text (A.15; unit + real Chrome) |
+| B4 (P6) Update now while the conflict question was open ran a second save (a second picker possible) | LOW | refused before anything runs: `UPDATE_QUESTION_OPEN` and the question focused (`focusSaveConflict`); a question that opens during the re-assembly stops the update's save (A.9, V.6; unit + real Chrome) |
+| B5 (P2) Replace it writes over a second on-disk write made while the question was open | LOW | by design, documented (shell-runtime §1 step 3.4: "Replace replaces whatever is on disk when you answer") |
+| T1 K11 survived: the page's Replace marking the current text saved instead of the written one (a setting changed while the question was open would be lost from the dirty state) | LOW | test: the setting stays in the page and unsaved, the next save writes it (A.15); the behaviour was right |
+| T1 K04 survived: a re-target with its own conflict kept the older token | LOW | test: two surfaces' conflicts, Replace passes the newer token and name (V.6); the behaviour was right |
+| P7 timing (an editor save with the session handle; pointer Save then Done 150 ms later) | — | no defect; covered by B2's fix |
+
+Decisions. B1–B3: one rule instead of per-path patches — the text a write
+of the file carries is the saved text, learned at the one saver every
+surface shares (wrapped once by the app; the spec's "a carrier must not wrap
+it" now reads "must not wrap it again"); a clean editor's text is never
+taken as saved unless it is the last written. Two editors on one file: the
+last save wins and the page follows it — visible, never a silent write of
+the older text. B5: keep — the reader never sees the disk version, and
+"Replace it (the version on disk is lost)" already chose to drop it; asking
+again about a second invisible change would repeat the same question. B4:
+refuse rather than queue — the update writes the file, so it waits for the
+reader's answer; the indicator stays for a second try.
+
+Size bounds re-measured on what ships: app 35.5 KB (A.2 raised from 36 to
+39 KB), shell 68.6 KB (S.11, 75 KB stands), chrome 19.3 KB (V.5, 21 KB
+stands).
+
+### Loop 3 closed — 2026-10-08
+
+Five rounds on orz-mdhtml 1.0 and the 2.2.0 kit (`carrier/app`, the
+shell's save conflict, the editor shell), each an adversary and/or a design
+audit in real Chrome, with mutation runs from round 2 on:
+
+1. Round 1 (design audit, 15 findings, 2 HIGH): silent overwrite of an
+   agent's on-disk edit, "Save page as" in edit mode — the conflict
+   question, the edit-mode keymap, include and preview gaps, accessibility.
+2. Round 2 (1 HIGH): the conflict check missed uid-less and quoted/block
+   uids and include/delivery-only changes — `readUid`, content comparison,
+   the question's safe default, the harness's `C.save.conflict`.
+3. Round 3 (no HIGH; MED harness gaps, revert, present-mode focus): the
+   revert asks, a newer shell on disk asks, the question is an alertdialog.
+4. Round 4 (1 HIGH): two questions let the older text win — one question per
+   saver, conflict tokens, `stale-conflict`.
+5. Round 5 (no HIGH): late writes and attached editors left the page's
+   saved state wrong — one saver that learns every write; the update waits
+   for the open question.
+
+The loop stops here (owner's stop rule: a round with no HIGH, the trust
+boundaries stated and the per-construct limits documented). Accepted
+limits on record: after "Download a copy instead" every save asks again
+(round 3, L11); Replace it replaces whatever is on disk when answered
+(round 5, B5); two editors of one file in one page — the last save wins.

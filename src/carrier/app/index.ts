@@ -12,7 +12,7 @@
  * `carrier`, `carrier/read`, `carrier/shell` and `carrier/editor` never import
  * it (claim A.1). No browser global is touched at module load (A.2).
  */
-export { bootCarrierApp, APP_CSS, UPDATE_CONFLICT_MESSAGE } from './app.js';
+export { bootCarrierApp, APP_CSS, UPDATE_CONFLICT_MESSAGE, UPDATE_QUESTION_OPEN } from './app.js';
 export { startCarrier, carrierGlobal } from './start.js';
 export type { StartOptions } from './start.js';
 export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, openedFileName, copyName } from './file.js';

@@ -206,7 +206,9 @@ Edit (or Cmd/Ctrl+E) mounts `kind.mountEditor(container, { text: saved },
 context)` inside the chrome (a full-page overlay), then sets the current
 text (so the editor's undo and dirty state know both), hides the read view
 and focuses the editor; Done (or Cmd/Ctrl+E again) leaves with the editor's
-text and re-renders. The bar's title — and the page title — follow the
+text — a clean editor's is the last written text (another editor of the
+file may have saved after it: the last save wins; round 5, B3), a dirty
+one's stays unsaved — and re-renders. The bar's title — and the page title — follow the
 header's `title` as it is edited. After Done the focus returns to Edit when
 the keyboard drove it, and is left to the page after a pointer's click (a
 read view's keys — slides' Space — then work at once).
@@ -242,7 +244,18 @@ read view's keys — slides' Space — then work at once).
   refuses an `overwrite` of a superseded conflict (`conflictToken`). Only
   the text actually written is marked saved. Done with an editor's question
   open takes the question with the editor; the page's next save asks
-  again. The opened bytes the saver proves files with (`openedHtml`) are
+  again. **Every write marks its text saved** (round 5 of the carrier-app
+  loop, B1–B3): the app's saver is one object (it wraps the kit's saver
+  once and hands that object to the page and to every editor through
+  `context.saver`), and each write through it tells the page the text the
+  file now holds — also an editor's save or a conflict answer that settles
+  after the editor was destroyed (Done or Cmd/Ctrl+E while it was in
+  flight, or a page question the editor re-targeted), so a page whose text
+  is on disk is clean and leaving asks nothing. A read view with nothing
+  unsaved follows another surface's write. An attached editor's save is
+  the page's text (also over an unsaved page setting), so the page never
+  writes an older copy over it and Edit opens on it; an attached editor
+  destroyed with unsaved edits leaves the read view on the page's text. The opened bytes the saver proves files with (`openedHtml`) are
   assembled once they succeed: a failed assembly is not kept (round 3, K10). The saver reads the disk file's uid as the page reads its own
   (`readUid` = `readHeader`'s well-formed `uid`), so a quoted or block uid,
   or no uid on either side, is still this document (shell-runtime §1 step
@@ -308,7 +321,13 @@ An update whose save finds the file changed on disk (shell-runtime §1 step
 3.4) writes nothing; the indicator says so (`UPDATE_CONFLICT_MESSAGE`: "The
 file changed on disk since you opened it (another program or an agent
 edited it), so the update wrote nothing. Reload the page to open its
-version, then update.").
+version, then update."). Update now while the file's save-conflict question
+is open (§4.5) is refused before anything runs (round 5, B4): no
+re-assembly, no picker, nothing written; the reader is told
+`UPDATE_QUESTION_OPEN` ("The file changed on disk and the question about it
+is still open, so the update wrote nothing. Answer it first …") and the
+question is focused (`focusSaveConflict`); a question that opens while the
+update re-assembles stops its save the same way.
 
 ### 4.10 Reader preferences
 
@@ -396,8 +415,8 @@ and the core modules the editor already loads; `carrier`, `carrier/read`,
 `carrier/shell`, `carrier/editor`, `carrier/conformance` and the parser
 entry never import it (A.1). No browser global is touched at module load
 (A.2). What ships — the CommonJS `dist/carrier/app/` bundled — holds the
-app's own modules under 36 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
-2026-10-08 after round 1 of the carrier-app loop) and adds under 62 KB to a
+app's own modules under 39 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
+2026-10-08 after round 1 of the carrier-app loop; 35.5 KB after round 5) and adds under 62 KB to a
 bundle that already holds the editor (54.7 KB measured: the app and the
 update, indicator and file side of the shell, which the editor alone does
 not load).

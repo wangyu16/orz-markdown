@@ -166,6 +166,8 @@ export interface SaveConflictOptions {
      */
     opened?: boolean;
 }
+/** Focus the open conflict question of `root` (its default action), if any (round 5 of the carrier-app loop, B4). */
+export declare function focusConflictQuestion(root: ShadowRootLike | UiElement): boolean;
 /**
  * Ask the reader about a save that found the file changed on disk (2.2.0,
  * shell-runtime §1 step 3.4): a question (`role="alertdialog"`, titled

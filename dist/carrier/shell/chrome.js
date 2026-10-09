@@ -9,6 +9,7 @@ exports.documentOf = documentOf;
 exports.viewOf = viewOf;
 exports.createShadowRoot = createShadowRoot;
 exports.showToast = showToast;
+exports.focusConflictQuestion = focusConflictQuestion;
 exports.askSaveConflict = askSaveConflict;
 /** Light tokens (the default). */
 const LIGHT = `
@@ -476,6 +477,14 @@ exports.SAVE_CONFLICT_LABELS = { download: 'Download a copy instead', replace: '
 exports.SAVE_CONFLICT_DOWNLOADED = 'Download started; the file on disk is unchanged. Your next save asks again.';
 /** The open conflict question of a root: one at a time. */
 const conflictQuestions = new WeakMap();
+/** Focus the open conflict question of `root` (its default action), if any (round 5 of the carrier-app loop, B4). */
+function focusConflictQuestion(root) {
+    const open = conflictQuestions.get(root);
+    if (!open)
+        return false;
+    open.toast.focus();
+    return true;
+}
 /**
  * Ask the reader about a save that found the file changed on disk (2.2.0,
  * shell-runtime §1 step 3.4): a question (`role="alertdialog"`, titled

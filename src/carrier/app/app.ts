@@ -42,12 +42,12 @@ import { editHeader, readHeader, UID_PATTERN, type HeaderChange } from '../heade
 import { mintUid } from '../uid.js';
 import type { EditorShell } from '../editor/shell.js';
 import { createShadowRoot, SAVE_CONFLICT_DOWNLOADED, showToast } from '../shell/chrome.js';
-import { answerSaveConflict, dropSaveConflict, saveConflictOpen, SAVE_CONFLICT_STALE } from '../shell/conflict.js';
+import { answerSaveConflict, dropSaveConflict, focusSaveConflict, saveConflictOpen, SAVE_CONFLICT_STALE } from '../shell/conflict.js';
 import { connectHost } from '../shell/file-side.js';
 import { mountUpdateIndicator } from '../shell/indicator.js';
 import { createPreferenceStore } from '../shell/preferences.js';
 import { KIND_EXTENSIONS } from '../shell/protocol.js';
-import { createSaver, type SaveResult } from '../shell/save.js';
+import { createSaver, type SaveInput, type SaveResult, type Saver } from '../shell/save.js';
 import { checkForUpdate, performUpdate, skipVersion, type UpdateInfo } from '../shell/update.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiElement } from '../shell/types.js';
@@ -103,6 +103,9 @@ const errorText = (e: unknown): string => (e instanceof Error ? e.message : Stri
 
 /** The update found the file changed on disk (S.14): nothing was written (2.2.0, round 2 of the carrier-app loop). */
 export const UPDATE_CONFLICT_MESSAGE = 'The file changed on disk since you opened it (another program or an agent edited it), so the update wrote nothing. Reload the page to open its version, then update.';
+
+/** Update now while the file's save-conflict question is open (S.14): refused, the question focused (round 5 of the carrier-app loop, B4). */
+export const UPDATE_QUESTION_OPEN = 'The file changed on disk and the question about it is still open, so the update wrote nothing. Answer it first (Replace it, or Download a copy instead), then update.';
 
 /** A text's header facts the app needs: its `format` (default 1, as `readDocument` reads it) and its well-formed `uid`. */
 function headerFacts(text: string): { format: number; uid?: string } {
@@ -201,7 +204,21 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     : undefined;
 
   // the file on disk's uid is read as the page reads its own (a quoted or block uid is one: S.14)
-  const saver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml, readUid: (t) => headerFacts(t).uid });
+  const fileSaver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml, readUid: (t) => headerFacts(t).uid });
+  /** What the page itself saves (its own save and its own question's input): a write of one of them is the page's text. */
+  const ownInputs = new WeakSet<object>();
+  /**
+   * The ONE saver of this file (round 5 of the carrier-app loop, B1–B3): the
+   * page, the Edit button's editor and every attached editor save through it
+   * (one question per saver object, S.14), so every write of the file — also
+   * an editor's save or conflict answer that settles after the editor was
+   * destroyed (Done, Cmd/Ctrl+E) — tells the page which text the file holds.
+   */
+  const saver: Saver = {
+    save: (input, o) => fileSaver.save(input, o).then((r) => { if ('ok' in r && r.ok) wrote(input); return r; }),
+    download: (input) => fileSaver.download(input),
+    handleKey: () => fileSaver.handleKey(),
+  };
   /** The page's storage (reader preferences, the once-a-day record); absent or throwing: the kit's fail-closed defaults. */
   let storage: StorageLike | undefined;
   try { storage = win.localStorage ?? undefined; } catch { storage = undefined; }
@@ -367,6 +384,30 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     if (!editor) void renderView().catch(() => undefined);
   };
 
+  /**
+   * A write of the file landed (round 5 of the carrier-app loop, B1–B3): the
+   * file now holds `input.text`, so that is the saved text — whoever wrote it
+   * (the page, the Edit button's editor, an attached editor, the update; also
+   * a save or a conflict answer that settles after its editor was destroyed),
+   * so a page whose text is on disk is never left dirty (no false leave
+   * prompt). A read view with nothing unsaved follows another surface's write
+   * (its text becomes the written one), so it never writes an older text over
+   * it later; one with unsaved changes keeps them (and stays unsaved).
+   */
+  function wrote(input: SaveInput): void {
+    if (disposed) return;
+    const before = saved;
+    saved = input.text;
+    if (!editor && !ownInputs.has(input) && text === before && text !== input.text) {
+      text = input.text;
+      undoStack.length = 0;
+      redoStack.length = 0;
+      afterHeaderChange();
+      return;
+    }
+    dirtyChanged();
+  }
+
   function setSetting(changes: Record<string, HeaderChange>): void {
     if (updating) { toast('An update is running; try again when it is done.', 'warning'); return; }
     const a = active();
@@ -428,13 +469,16 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
    * a save of any of them while it is open re-targets it; only the newest text is ever written.
    */
   function resolveConflict(t: string, html: string, r?: SaveResult): void {
-    void answerSaveConflict({ saver, root: root as never, input: { text: t, html }, ...(r ? { result: r } : {}), returnFocus: focusedNow() as never }).then((a) => {
+    const input: SaveInput = { text: t, html };
+    ownInputs.add(input);
+    void answerSaveConflict({ saver, root: root as never, input, ...(r ? { result: r } : {}), returnFocus: focusedNow() as never }).then((a) => {
       if (disposed) return;
       if (a.choice === 'replace') {
         const w = a.result;
         if (w.via === 'served-notice') return;
         if (w.ok) {
-          // the text actually written is saved — not whatever the page holds now
+          // the text actually written is saved — not whatever the page holds now (a setting changed
+          // while the question was open stays unsaved: K11); `wrote` marked it as the write landed
           saved = t;
           dirtyChanged();
           toast(w.via === 'download' ? 'Download started.' : 'Saved.', 'success');
@@ -464,7 +508,9 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       resolveConflict(t, html);
       return { ok: false, via: 'file', error: 'conflict', conflict: true };
     }
-    const r = await saver.save({ text: t, html });
+    const input: SaveInput = { text: t, html };
+    ownInputs.add(input);
+    const r = await saver.save(input);
     if (r.via === 'served-notice') {
       toast('This file was opened from a web address, so it cannot be saved over. Use “Download a copy” (⋯) to keep your changes.', 'warning');
       return { ok: false, via: 'served-notice', error: 'served page' };
@@ -585,8 +631,10 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
   async function leave(): Promise<void> {
     const ed = editor;
     if (!ed) return;
-    text = ed.getText();
-    if (!ed.isDirty()) saved = text;
+    // a dirty editor leaves its text (unsaved — also while its save or its question's answer is still
+    // in flight: `wrote` marks it saved when it lands, B1/B2); a clean one the file's text, the last
+    // written (its own save, or a later one of another editor of the file: the last save wins, B3)
+    text = ed.isDirty() ? ed.getText() : saved;
     for (const off of offEditor) off();
     offEditor = [];
     editor = null;
@@ -610,7 +658,19 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
   function attach(ed: EditorShell): () => void {
     attached.push(ed);
     lockForUpdate(ed);
-    const offs = [ed.on('dirty', () => dirtyChanged()), withAiMenu(ed)];
+    /** The file holds `t` now (this editor's save): the page's copy follows, so it never writes an older text over it (B3). */
+    const adopt = (t: string): void => {
+      saved = t;
+      if (text === t) return;
+      text = t;
+      undoStack.length = 0;
+      redoStack.length = 0;
+    };
+    const offs = [
+      ed.on('dirty', () => dirtyChanged()),
+      ed.on('save', (e) => { adopt(e.text); dirtyChanged(); }),
+      withAiMenu(ed),
+    ];
     let done = false;
     return () => {
       if (done) return;
@@ -619,6 +679,8 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       const i = attached.indexOf(ed);
       if (i >= 0) attached.splice(i, 1);
       dirtyChanged();
+      // the read view shows the page's text again (it showed this editor's while it was the document)
+      if (!editor) { present(); void renderView().catch(() => undefined); }
     };
   }
 
@@ -696,15 +758,27 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
 
   // ── the quiet update (FD-05): only a top-level standalone file checks (the kit's guards) ──
   const editors = (): EditorShell[] => [...(editor ? [editor] : []), ...attached];
+  /** Update now while the file's conflict question is open: refused (no second picker), the question focused (B4). */
+  const questionFirst = (): void => {
+    toast(UPDATE_QUESTION_OPEN, 'warning');
+    focusSaveConflict(saver);
+  };
   async function runUpdate(info: UpdateInfo): Promise<void> {
     if (updating) return;
+    if (saveConflictOpen(saver)) { questionFirst(); return; }
     updating = true;
     for (const ed of editors()) lockForUpdate(ed);
     for (const p of pickers) p.button.disabled = true;
     let reloading = false;
     try {
+      // a question that opened while it re-assembled (an editor's save already in flight): no write (B4)
+      const updateSaver: Saver = {
+        save: (input, o) => (saveConflictOpen(saver) ? Promise.resolve({ via: 'file', ok: false, error: 'question', picked: false, opened: false }) : saver.save(input, o)),
+        download: (input) => saver.download(input),
+        handleKey: () => saver.handleKey(),
+      };
       const r = await services.performUpdate({
-        info, kind: k.kind, current: k.version, getText: currentText, saver, delivery: file.delivery,
+        info, kind: k.kind, current: k.version, getText: currentText, saver: updateSaver, delivery: file.delivery,
         ...(file.includes ? { includes: file.includes } : {}),
       });
       if (r.status === 'up-to-date') return;
@@ -716,6 +790,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
         return;
       }
       if (r.save.via === 'file' && r.save.conflict) throw new Error(UPDATE_CONFLICT_MESSAGE);
+      if (r.save.via === 'file' && r.save.error === 'question') { questionFirst(); return; }
       if (!r.save.ok) throw new Error(r.save.error ?? 'The updated file could not be saved.');
       if (r.reload) {
         reloading = true;

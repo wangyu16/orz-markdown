@@ -228,8 +228,9 @@ caller words it "Download started", never "Saved". Its `name` is
       replaces the file, saves elsewhere, or reloads the page to open the
       file's own version. **One question per saver** (round 4, F2): a page
       and every editor of its file share ONE saver object (the carrier app
-      hands its saver to the editors through `context.saver`; a carrier
-      must not wrap it), and `answerSaveConflict({ saver, root, input,
+      hands its saver to the editors through `context.saver` — since round
+      5 a wrapper it makes once, to learn every write, and the only object
+      it hands out; a carrier must not wrap it again), and `answerSaveConflict({ saver, root, input,
       result })` keeps one question per saver: while it is open, every
       further save of that page or any of its editors does not call the
       saver (no second picker, `saveConflictOpen(saver)`) but calls
@@ -240,7 +241,15 @@ caller words it "Download started", never "Saved". Its `name` is
       Replace it calls `save(input, { overwrite: true, conflictToken })`
       with the pending conflict's token; only the text actually written is
       marked saved (an edit made while the question was open stays
-      unsaved). A question's root that goes away (`dropSaveConflict`: an
+      unsaved). A save that reached the saver before the question opened
+      (two surfaces saving at once) re-targets it with its own conflict:
+      its token and file name replace the older ones. **Replace replaces
+      whatever is on disk when you answer** (round 5, B5; by design): the
+      file is not read again, so a second write by another program while
+      the question is open is replaced too — the reader never sees the
+      disk version in either case, and "Replace it (the version on disk is
+      lost)" already chose to drop it; re-reading and asking again would
+      ask the same question about content the reader cannot see. A question's root that goes away (`dropSaveConflict`: an
       editor destroyed, Done; the app disposed) takes its question: its
       caller is told `null` and the next save asks the saver again. Another document's
       file, a file that is not an orz file, the opened content, this page's
@@ -625,7 +634,10 @@ shadow roots and does not compete with it.
   but `answerSaveConflict` (§1 step 3.4; round 4), which keeps one question
   per saver on top of it — across roots, so the page's question also
   answers its editors' saves — and says `SAVE_CONFLICT_STALE` when Replace
-  it found the conflict no longer pending.
+  it found the conflict no longer pending. `focusSaveConflict(saver)`
+  (round 5) focuses the saver's open question wherever it is shown (false
+  when none is open): a caller that must not run while it is open (the
+  quiet update) points the reader at it.
 
 Vocabulary origin: orz-mdhtml's light/dark `--c-*` tokens and dark editor bar
 (`src/template.ts`) and orz-poster's floating launcher and toast

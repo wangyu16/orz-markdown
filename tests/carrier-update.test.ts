@@ -26,7 +26,7 @@ import {
   UPDATE_CHECK_INTERVAL_MS, UPDATE_CACHE_PREFIX, UPDATE_SKIP_PREFIX, RELEASE_CDN_BASE, MANIFEST_TIMEOUT_MS, REASSEMBLE_TIMEOUT_MS,
   type ReleaseManifest, type FetchLike, type ResponseLike, type StorageLike, type UpdateInfo, type MessageListener, type UiDocument, type UiElement,
   type SaveResult, createSaver, type FileHandleLike, type HandleStore, type StoredHandle,
-  answerSaveConflict, saveConflictOpen, dropSaveConflict, type Saver, type SaveCallOptions, type SaveInput,
+  answerSaveConflict, saveConflictOpen, focusSaveConflict, dropSaveConflict, type Saver, type SaveCallOptions, type SaveInput,
 } from '../src/carrier/shell';
 import { assembleEnvelope, extract, KIND_PACKAGE, type ShellParts } from '../src/carrier';
 import { escapeScriptText } from '../src/html';
@@ -1016,6 +1016,33 @@ describe('the shell chrome (spec/shell-runtime.md §8)', { timeout: 20_000 }, ()
     ([...editorRoot.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[]).find((b) => b.textContent === SAVE_CONFLICT_LABELS.replace)?.click();
     await new Promise((r) => setTimeout(r, 5));
     expect(calls).toHaveLength(1);
+  });
+
+  it('[V.6] round 5 (K04): a save that reached the saver before the question opened (two surfaces saving at once) re-targets it with its own conflict — Replace passes THAT conflict\'s token (the saver keeps only the latest pending: the first token would write nothing) and the question takes its file name; focusSaveConflict focuses the open question (none open: false)', async () => {
+    const { document } = await dom();
+    const mk = () => { const h = document.createElement('div'); document.body.appendChild(h); return createShadowRoot(h as unknown as UiElement) as unknown as ShadowRoot; };
+    const pageRoot = mk();
+    const editorRoot = mk();
+    const calls: Array<{ input: SaveInput; call?: SaveCallOptions }> = [];
+    const saver: Saver = {
+      async save(input, call) { calls.push({ input, call }); return { via: 'file', ok: true, picked: true, opened: false }; },
+      async download() { return { via: 'download', ok: true, confirmed: false }; },
+      handleKey: () => null,
+    };
+    const conflict = (token: number, name: string): SaveResult => ({ via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, name, conflictToken: token });
+    const first = answerSaveConflict({ saver, root: pageRoot as never, input: { text: 'page', html: 'PAGE' }, result: conflict(1, 'a.md.html') });
+    const second = answerSaveConflict({ saver, root: editorRoot as never, input: { text: 'editor', html: 'EDITOR' }, result: conflict(2, 'b.md.html') });
+    expect(await first).toEqual({ choice: 'superseded' });
+    expect([pageRoot.querySelectorAll('[role="alertdialog"]').length, editorRoot.querySelectorAll('[role="alertdialog"]').length]).toEqual([1, 0]);
+    expect(pageRoot.querySelector('.orz-toast__message')!.textContent).toContain('b.md.html: ');
+    // round 5 (B4): focusSaveConflict focuses the saver's open question wherever it is shown
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(focusSaveConflict(saver)).toBe(true);
+    expect(pageRoot.activeElement?.textContent).toBe(SAVE_CONFLICT_LABELS.download);
+    ([...pageRoot.querySelectorAll('.orz-toast__action')] as HTMLButtonElement[]).find((b) => b.textContent === SAVE_CONFLICT_LABELS.replace)!.click();
+    expect(await second).toMatchObject({ choice: 'replace', input: { text: 'editor', html: 'EDITOR' } });
+    expect(calls).toEqual([{ input: { text: 'editor', html: 'EDITOR' }, call: { overwrite: true, conflictToken: 2 } }]);
+    expect(focusSaveConflict(saver)).toBe(false); // none open
   });
 
   it('[V.6] round 3 (M6, L9): the question is an alertdialog outside the polite status region — labelled by its title, described by its message — so focusing its default action announces it; plain toasts stay in the status region; the safe default (Download a copy instead) is the primary-styled first action and Replace it says the version on disk is lost; an editor with no opened file is not told "since this page opened it"', async () => {

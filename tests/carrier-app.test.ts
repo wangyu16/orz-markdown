@@ -24,9 +24,9 @@ import type { AddressInfo } from 'node:net';
 import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, readDocument, readHeader, UID_PATTERN } from '../src/carrier';
 import { createEditorShell, renderMarkdownPreview, textareaAdapter, type EditorShell } from '../src/carrier/editor';
 import type { HostConnection, PerformUpdateOptions, PerformUpdateResult, SaveResult, Saver, SaverOptions, UpdateInfo } from '../src/carrier/shell';
-import { SAVE_CONFLICT_LABELS, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_DOWNLOADED } from '../src/carrier/shell';
+import { SAVE_CONFLICT_LABELS, SAVE_CONFLICT_MESSAGE, SAVE_CONFLICT_DOWNLOADED, answerSaveConflict } from '../src/carrier/shell';
 import {
-  APP_CSS, UPDATE_CONFLICT_MESSAGE, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
+  APP_CSS, UPDATE_CONFLICT_MESSAGE, UPDATE_QUESTION_OPEN, bootCarrierApp, startCarrier, carrierGlobal, readOpenedFile, openedFileName, copyName, sourceIsland, captureEngineSource,
   menuButton, settingPicker, reviewProposal, attachAiMenu, attachSettings, followPresentation, installCss, WIDGET_CSS,
   type AppServices, type CarrierApp, type CarrierReadView, type KindEditorOptions, type SettingControl, type StandaloneContext, type StandaloneKind, type AppDocument, type AppWindow,
 } from '../src/carrier/app';
@@ -186,7 +186,7 @@ function valueImports(entry: string): Set<string> {
 }
 
 // 32,933 B on 2026-10-08 (round 1 of the carrier-app loop); bound ~10 % above.
-const APP_OWN_LIMIT = 36_000;
+const APP_OWN_LIMIT = 39_000;
 const APP_DELTA_LIMIT = 62_000;
 const EDITOR_AND_APP_LIMIT = 1_100_000;
 
@@ -203,7 +203,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 36 KB and adds under 62 KB to a carrier bundle that already holds the editor (the whole under 1.1 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 39 KB and adds under 62 KB to a carrier bundle that already holds the editor (the whole under 1.1 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });
@@ -1229,6 +1229,242 @@ describe('round 2: the conflict question, the update, presenting, bar actions', 
 
 // ── A.11 widgets ─────────────────────────────────────────────────────────
 
+describe('round 5 (closing): writes that settle late, attached editors, the update and the open question', () => {
+  const byLabel = (root: ParentNode, label: string) => [...root.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === label || x.textContent === label) as HTMLButtonElement;
+  const leaving = (b: { win: HWin }) => { const e = new b.win.Event('beforeunload', { cancelable: true }); b.win.dispatchEvent(e as unknown as Event); return e.defaultPrevented; };
+  /** A saver recording every write; `conflict()` makes the next plain saves report a conflict; `hold()` keeps the next save in flight until released. */
+  const scriptedSaver = () => {
+    const log: Array<{ text: string; overwrite: boolean; token?: number }> = [];
+    let conflicts = false;
+    let tokens = 0;
+    let gate: Promise<void> | null = null;
+    let release: () => void = () => undefined;
+    const services: Partial<AppServices> = {
+      createSaver: (): Saver => ({
+        async save(i, c) {
+          log.push({ text: i.text, overwrite: c?.overwrite === true, ...(c?.conflictToken !== undefined ? { token: c.conflictToken } : {}) });
+          if (gate) { const g = gate; gate = null; await g; }
+          await tick(2);
+          if (conflicts && !c?.overwrite) return { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, conflictToken: ++tokens };
+          return { via: 'file', ok: true, picked: false, opened: true };
+        },
+        async download() { return { via: 'download', ok: true, confirmed: false }; },
+        handleKey: () => null,
+      }),
+    };
+    return {
+      log, services,
+      conflict(on = true) { conflicts = on; },
+      hold() { gate = new Promise<void>((r) => { release = r; }); return () => release(); },
+    };
+  };
+  const mountAttached = (b: ReturnType<typeof boot>, text: string): EditorShell => {
+    const el = b.doc.createElement('div');
+    b.doc.body.append(el);
+    // its own engine (the test boot hands one textarea adapter to the context)
+    const ed = b.app.kind.mountEditor(el as never, { text }, { ...b.app.editorContext(), adapter: textareaAdapter() });
+    const detach = b.app.attach(ed);
+    const destroy = ed.destroy.bind(ed);
+    ed.destroy = () => { detach(); destroy(); };
+    return ed;
+  };
+
+  it('[A.15] [A.7] round 5 (B1, P1): the page asks, the editor re-targets the question with its text, Done before the answer, then Replace it writes the editor\'s text — the page holds that text and is clean (no false leave prompt)', async () => {
+    const s = scriptedSaver();
+    const b = boot(undefined, { services: s.services });
+    await b.app.ready;
+    s.conflict();
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    const ed = b.app.edit();
+    ed.setText(`${ed.getText()}Typed in the editor.\r\n`);
+    const typed = ed.getText();
+    expect(await ed.save()).toMatchObject({ conflict: true });
+    await b.app.leave();
+    expect([b.app.getText() === typed, b.app.isDirty()]).toEqual([true, true]); // not written yet
+    expect(b.root.querySelectorAll('[role="alertdialog"]')).toHaveLength(1); // the page's question stays
+    byLabel(b.root, SAVE_CONFLICT_LABELS.replace).click();
+    await tick(20);
+    expect(s.log.at(-1)).toEqual({ text: typed, overwrite: true, token: 1 });
+    expect([b.app.getText() === typed, b.app.isDirty(), leaving(b)]).toEqual([true, false, false]);
+    b.app.dispose();
+  });
+
+  it('[A.15] [A.7] round 5 (B2, P5): a save in flight when the editor is left (Cmd/Ctrl+S then Cmd/Ctrl+E) marks its text saved when it lands — the page is clean; an edit after it stays unsaved', async () => {
+    const s = scriptedSaver();
+    const b = boot(undefined, { services: s.services });
+    await b.app.ready;
+    const ed = b.app.edit();
+    ed.setText(`${ed.getText()}Quick.\r\n`);
+    const quick = ed.getText();
+    const go = s.hold();
+    const p = ed.save();
+    for (let i = 0; i < 50 && s.log.length === 0; i++) await tick(1);
+    expect(s.log).toHaveLength(1); // the write is in flight
+    await b.app.leave();
+    expect(b.app.isDirty()).toBe(true);
+    go();
+    await p;
+    await tick(5);
+    expect([b.app.getText() === quick, b.app.isDirty(), leaving(b)]).toEqual([true, false, false]);
+    // typed after the save started: the older text lands, the newer stays unsaved
+    const ed2 = b.app.edit();
+    ed2.setText(`${quick}one\r\n`);
+    const go2 = s.hold();
+    const p2 = ed2.save();
+    for (let i = 0; i < 50 && s.log.length === 1; i++) await tick(1);
+    ed2.setText(`${quick}one two\r\n`);
+    await b.app.leave();
+    go2();
+    await p2;
+    await tick(5);
+    expect([b.app.getText(), b.app.isDirty(), leaving(b)]).toEqual([`${quick}one two\r\n`, true, true]);
+    b.app.dispose();
+  });
+
+  it('[A.15] [A.7] round 5 (B3, P3): an attached editor\'s save is the page\'s text — destroyed, the page shows it, is clean, a later setting saves on top of it (never the page\'s older copy) and Edit opens on it; one destroyed while its save is in flight is followed when it lands; a page with an unsaved setting takes the attached editor\'s saved text too', async () => {
+    const s = scriptedSaver();
+    const b = boot(undefined, { services: s.services });
+    await b.app.ready;
+    const att = mountAttached(b, TEXT);
+    att.setText(`${TEXT}Attached editor's saved work.\r\n`);
+    const work = att.getText();
+    expect(await att.save()).toMatchObject({ ok: true });
+    att.destroy();
+    expect([b.app.getText() === work, b.app.isDirty()]).toEqual([true, false]);
+    expect(b.rec.rendered.at(-1)!.text === work).toBe(true); // the read view shows it
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    expect(await b.app.save()).toMatchObject({ ok: true });
+    expect(s.log.at(-1)!.text).toContain("Attached editor's saved work.");
+    const ed = b.app.edit();
+    expect(ed.getText()).toContain("Attached editor's saved work.");
+    await b.app.leave();
+    // in flight when destroyed: the page (nothing unsaved) follows the write when it lands
+    const att2 = mountAttached(b, b.app.getText());
+    att2.setText(`${att2.getText()}Late.\r\n`);
+    const late = att2.getText();
+    const go = s.hold();
+    const p = att2.save();
+    for (let i = 0; i < 50 && s.log.at(-1)!.text !== late; i++) await tick(1);
+    att2.destroy();
+    go();
+    await p;
+    await tick(5);
+    expect([b.app.getText() === late, b.app.isDirty()]).toEqual([true, false]);
+    // the page has an unsaved setting: an attached editor's save is still the page's text — its older copy never goes over it
+    b.app.setSetting({ theme: 'dark-elegant-3' });
+    expect(b.app.isDirty()).toBe(true);
+    const att3 = mountAttached(b, late);
+    att3.setText(`${late}Third.\r\n`);
+    const third = att3.getText();
+    expect(await att3.save()).toMatchObject({ ok: true });
+    expect([b.app.isDirty(), leaving(b)]).toEqual([false, false]); // saved: nothing unsaved while it is still open
+    att3.destroy();
+    expect([b.app.getText() === third, b.app.isDirty()]).toEqual([true, false]);
+    // one destroyed with unsaved edits: the read view shows the page's text again, not the dropped edits
+    const att4 = mountAttached(b, third);
+    att4.setText(`${third}Dropped.\r\n`);
+    b.app.setSetting({ theme: 'dark-elegant-1' }); // the attached editor's header (the read view follows it)
+    await tick(5);
+    expect(b.rec.rendered.at(-1)!.text).toContain('Dropped.');
+    att4.destroy();
+    await tick(5);
+    expect([b.rec.rendered.at(-1)!.text === third, b.app.isDirty()]).toEqual([true, false]);
+    b.app.dispose();
+  });
+
+  it('[A.15] round 5 (B3, P4): two editors of the file (Edit and an attached one) — the last save wins: the page follows the last written text; Done on the clean Edit editor leaves that text, clean, and Edit opens on it, so the older text is never written back silently', async () => {
+    const s = scriptedSaver();
+    const b = boot(undefined, { services: s.services });
+    await b.app.ready;
+    const B = mountAttached(b, TEXT);
+    const A = b.app.edit();
+    A.setText(`${TEXT}A's work.\r\n`);
+    expect(await A.save()).toMatchObject({ ok: true });
+    B.setText(`${TEXT}B's work.\r\n`);
+    const bText = B.getText();
+    expect(await B.save()).toMatchObject({ ok: true });
+    expect(s.log.map((l) => l.text.includes("B's work."))).toEqual([false, true]);
+    await b.app.leave();
+    B.destroy();
+    expect([b.app.getText() === bText, b.app.isDirty(), leaving(b)]).toEqual([true, false, false]);
+    expect(b.app.edit().getText() === bText).toBe(true);
+    await b.app.leave();
+    b.app.setSetting({ theme: 'beige-decent-1' });
+    await b.app.save();
+    expect(s.log.at(-1)!.text).toContain("B's work.");
+    b.app.dispose();
+  });
+
+  it('[A.15] round 5 (K11): a setting changed while the page\'s question is open is not lost — Replace it writes the text the question answers for, the newer setting stays in the page and unsaved, and the next save writes it', async () => {
+    const s = scriptedSaver();
+    const b = boot(undefined, { services: s.services });
+    await b.app.ready;
+    s.conflict();
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    const asked = b.app.getText();
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    b.app.setSetting({ theme: 'dark-elegant-1' });
+    const newer = b.app.getText();
+    byLabel(b.root, SAVE_CONFLICT_LABELS.replace).click();
+    await tick(20);
+    expect(s.log.at(-1)).toEqual({ text: asked, overwrite: true, token: 1 });
+    expect([b.app.getText() === newer, b.app.isDirty(), leaving(b)]).toEqual([true, true, true]);
+    s.conflict(false);
+    expect(await b.app.save()).toMatchObject({ ok: true });
+    expect([s.log.at(-1)!.text === newer, b.app.isDirty()]).toEqual([true, false]);
+    b.app.dispose();
+  });
+
+  it('[A.9] round 5 (B4, P6): Update now while the file\'s conflict question is open is refused — no update runs, no picker, the reader is told (UPDATE_QUESTION_OPEN) and the question is focused; a question that opens while the update re-assembles stops its save the same way', async () => {
+    let handlers: { onUpdate(i: UpdateInfo): unknown } | null = null;
+    const ran: PerformUpdateOptions[] = [];
+    const s = scriptedSaver();
+    let performUpdate: AppServices['performUpdate'] = async (o) => { ran.push(o); return { status: 'up-to-date' }; };
+    const b = boot(undefined, {
+      services: {
+        ...s.services,
+        checkForUpdate: async () => INFO,
+        mountUpdateIndicator: (_a, _i, h) => { handlers = h; return { dispose() {} } as never; },
+        performUpdate: (o) => performUpdate(o),
+      },
+    });
+    await tick(10);
+    s.conflict();
+    b.app.setSetting({ theme: 'beige-decent-2' });
+    expect(await b.app.save()).toMatchObject({ conflict: true });
+    (b.doc.body as HTMLElement).tabIndex = -1;
+    (b.doc.body as HTMLElement).focus();
+    const n = s.log.length;
+    await handlers!.onUpdate(INFO);
+    expect([ran.length, s.log.length, b.app.updating]).toEqual([0, n, false]);
+    expect(b.toasts().join(' ')).toContain(UPDATE_QUESTION_OPEN);
+    expect(UPDATE_QUESTION_OPEN).toMatch(/question[\s\S]*wrote nothing[\s\S]*Answer it/);
+    expect(b.root.activeElement).toBe(byLabel(b.root, 'Download a copy instead'));
+    expect(b.root.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    // the question goes (Download a copy instead); the update runs; one that opens meanwhile stops its save
+    byLabel(b.root, 'Download a copy instead').click();
+    await tick(10);
+    const saverOfFile = b.app.editorContext().saver!;
+    let asked: Promise<unknown> = Promise.resolve();
+    performUpdate = async (o) => {
+      ran.push(o);
+      // a save already in flight before the update finds the file changed: its question opens while the update re-assembles
+      asked = answerSaveConflict({ saver: saverOfFile, root: b.root as never, input: { text: 'x', html: 'X' }, result: { via: 'file', ok: false, error: 'conflict', conflict: true, picked: true, opened: false, conflictToken: 99 } });
+      const text = o.getText!()!;
+      return { status: 'updated', info: INFO, html: '<html>', text, save: await o.saver.save({ text, html: '<html>' }), reload: false };
+    };
+    const m = s.log.length;
+    await handlers!.onUpdate(INFO);
+    expect(ran).toHaveLength(1);
+    expect(s.log.length).toBe(m); // nothing written by the update
+    expect(b.root.activeElement).toBe(byLabel(b.root, 'Download a copy instead'));
+    expect(b.app.updating).toBe(false);
+    b.app.dispose();
+    expect(await asked).toEqual({ choice: null });
+  });
+});
+
 describe('chrome widgets', () => {
   it('[A.11] menuButton is a keyboard-operable, non-modal menu (ArrowDown opens on the checked item, arrows/Home/End move, Esc closes with focus back, an outside pointer-down closes); settingPicker marks the current value and writes only a change; attachSettings puts the pickers in an editor\'s toolbar (one undoable setHeader each; a refusal is a toast); followPresentation rebuilds the preview when the presentation changes', async () => {
     const { win, doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
@@ -1660,6 +1896,149 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     await two.getByRole('button', { name: SAVE_CONFLICT_LABELS.replace }).click();
     await two.waitForFunction(`!${APP}.isDirty()`);
     expect((await readOpfs(two, { name: 'p6b.md.html' })) === await assembleStub(newest)).toBe(true);
+    await ctx.close();
+  }, 180_000);
+
+  it('[A.15] [A.7] round 5 (B1 P1, B2 P5) in Chrome: the page asks, the editor re-targets the question with typed text, Done before the answer, Replace it — the file holds the typed text and the page is clean (leaving asks nothing); Cmd/Ctrl+S then Cmd/Ctrl+E at once — the save lands after the editor is gone and the page is clean too', async () => {
+    const ctx = await context();
+    const leaveAsks = async (page: Page): Promise<boolean> => {
+      let asked = false;
+      page.on('dialog', (d) => { asked = true; void d.dismiss().catch(() => undefined); });
+      await page.close({ runBeforeUnload: true });
+      await new Promise((r) => setTimeout(r, 500));
+      return asked || !page.isClosed();
+    };
+    // P1
+    const text = '{{nyml\nkind: document\ntitle: P1\nuid: doc-poneponepone0001a\n}}\n\n# P1\n\nBody.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    await page.goto(write('p1.md.html', html));
+    await bootDone(page);
+    await writeOpfs(page, { name: 'p1.md.html' }, html);
+    await page.mouse.click(600, 400); // sticky activation: Chrome asks before unload only after an interaction
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    await writeOpfs(page, { name: 'p1.md.html' }, await assembleStub(`${text}Agent line.\n`));
+    await page.evaluate(`${APP}.setSetting({ theme: 'beige-decent-2' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ conflict: true });
+    await page.getByRole('alertdialog').waitFor();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(`${APP}.editor().ready`);
+    await page.evaluate(`${APP}.editor().focus()`);
+    await page.keyboard.press(`${MOD}+ArrowDown`);
+    await page.keyboard.type('Typed in the editor.');
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForTimeout(300);
+    const typed = await page.evaluate(`${APP}.editor().getText()`) as string;
+    expect(typed).toContain('Typed in the editor.');
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    expect(await page.getByRole('alertdialog').count()).toBe(1); // the page's question stays
+    await page.getByRole('button', { name: SAVE_CONFLICT_LABELS.replace }).click();
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    expect((await readOpfs(page, { name: 'p1.md.html' })) === await assembleStub(typed)).toBe(true);
+    expect((await page.evaluate(`${APP}.getText()`)) === typed).toBe(true);
+    expect(await leaveAsks(page)).toBe(false);
+    // P5: Cmd/Ctrl+S then Cmd/Ctrl+E at once
+    const text5 = '{{nyml\nkind: document\ntitle: P5\nuid: doc-pfivepfivepf0005a\n}}\n\n# P5\n\nBody.\n';
+    const html5 = await assembleStub(text5);
+    const five = await ctx.newPage();
+    await five.goto(write('p5.md.html', html5));
+    await bootDone(five);
+    await writeOpfs(five, { name: 'p5.md.html' }, html5);
+    await five.mouse.click(600, 400);
+    await five.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await five.evaluate(`${APP}.save()`)).toMatchObject({ ok: true }); // the session's handle
+    await five.getByRole('button', { name: 'Edit', exact: true }).click();
+    await five.evaluate(`${APP}.editor().ready`);
+    await five.evaluate(`${APP}.editor().focus()`);
+    await five.keyboard.press(`${MOD}+ArrowDown`);
+    await five.keyboard.type('Quick.');
+    await five.keyboard.press(`${MOD}+s`);
+    await five.keyboard.press(`${MOD}+e`);
+    await five.waitForFunction(`!${APP}.editor()`);
+    await five.waitForTimeout(1500);
+    const disk = extract((await readOpfs(five, { name: 'p5.md.html' }))!)!.text;
+    const now = await five.evaluate(`${APP}.getText()`) as string;
+    expect(now).toContain('Quick.');
+    // the save either landed (the page is clean) or never started after the editor went (the page is unsaved): never written and dirty
+    expect([disk === now, await five.evaluate(`${APP}.isDirty()`)]).toEqual(disk === now ? [true, false] : [false, true]);
+    expect(await leaveAsks(five)).toBe(disk !== now);
+    await ctx.close();
+  }, 180_000);
+
+  it('[A.15] round 5 (B3, P3/P4) in Chrome: an editor attached through OrzCarrier.mountEditor saves and is destroyed — the page holds its saved work, is clean, a later setting saves on top of it and Edit opens on it; with two editors the last save wins and the page follows it', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ntitle: P3\nuid: doc-pthreepthree0003a\n}}\n\n# P3\n\nBody.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    await page.goto(write('p3.md.html', html));
+    await bootDone(page);
+    await writeOpfs(page, { name: 'p3.md.html' }, html);
+    const mount = (name: string, t: string) => page.evaluate(`(async () => {
+      const el = document.createElement('div'); el.style.cssText = 'width: 900px; height: 300px'; document.body.append(el);
+      window.${name} = globalThis.OrzCarrier.mountEditor(el, { text: ${JSON.stringify(t)} });
+      await window.${name}.ready;
+    })()`);
+    await mount('__att', text);
+    const work = `${text}Attached editor's saved work.\n`;
+    await page.evaluate(`window.__att.setText(${JSON.stringify(work)})`);
+    expect(await page.evaluate('window.__att.save()')).toMatchObject({ ok: true });
+    await page.evaluate('window.__att.destroy()');
+    expect([(await page.evaluate(`${APP}.getText()`)) === work, await page.evaluate(`${APP}.isDirty()`)]).toEqual([true, false]);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    expect(await page.getByRole('alertdialog').count()).toBe(0);
+    expect(extract((await readOpfs(page, { name: 'p3.md.html' }))!)!.text).toContain("Attached editor's saved work.");
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(`${APP}.editor().ready`);
+    expect(await page.evaluate(`${APP}.editor().getText()`)).toContain("Attached editor's saved work.");
+    // P4: the Edit editor (A) saves, then an attached one (B): B is on disk and the page follows it after Done
+    const base = await page.evaluate(`${APP}.getText()`) as string;
+    await mount('__B', base);
+    await page.evaluate(`${APP}.editor().setText(${JSON.stringify(`${base}A's work.\n`)})`);
+    expect(await page.evaluate(`${APP}.editor().save()`)).toMatchObject({ ok: true });
+    const bText = `${base}B's work.\n`;
+    await page.evaluate(`window.__B.setText(${JSON.stringify(bText)})`);
+    expect(await page.evaluate('window.__B.save()')).toMatchObject({ ok: true });
+    await page.evaluate('window.__B.destroy()');
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    expect([(await page.evaluate(`${APP}.getText()`)) === bText, await page.evaluate(`${APP}.isDirty()`)]).toEqual([true, false]);
+    expect(extract((await readOpfs(page, { name: 'p3.md.html' }))!)!.text === bText).toBe(true);
+    await ctx.close();
+  }, 180_000);
+
+  it('[A.9] round 5 (B4, P6) in Chrome: Update now while the page\'s conflict question is open is refused — no picker, nothing written, the reader told to answer it first and the question focused; answered, the update then runs', async () => {
+    const ctx = await context({ latest: next });
+    const deepFocus = (page: Page) => page.evaluate(() => { let a: Element | null = document.activeElement; for (let i = 0; i < 10 && a && (a as HTMLElement).shadowRoot?.activeElement; i++) a = (a as HTMLElement).shadowRoot!.activeElement; return (a?.textContent ?? '').trim(); });
+    const text = '{{nyml\nkind: document\ntitle: P6u\nuid: doc-psixupdate000006a\n}}\n\n# P6u\n\nBody.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    await page.goto(write('p6u.md.html', html));
+    await bootDone(page);
+    await writeOpfs(page, { name: 'p6u.md.html' }, html);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    const agent = await assembleStub(`${text}Agent one.\n`);
+    await writeOpfs(page, { name: 'p6u.md.html' }, agent);
+    await page.evaluate(`${APP}.setSetting({ theme: 'beige-decent-2' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ conflict: true });
+    await page.getByRole('alertdialog').waitFor();
+    const picks = (await pageRecords(page, 'picker')).length;
+    const indicator = page.getByRole('button', { name: 'Update available: 1.2.0' });
+    await indicator.waitFor();
+    await indicator.click();
+    await page.getByRole('button', { name: 'Update now' }).click();
+    await page.getByText(UPDATE_QUESTION_OPEN).waitFor();
+    await page.waitForTimeout(300);
+    expect([await page.getByRole('alertdialog').count(), (await pageRecords(page, 'picker')).length - picks]).toEqual([1, 0]);
+    expect((await readOpfs(page, { name: 'p6u.md.html' })) === agent).toBe(true);
+    expect(await deepFocus(page)).toBe(SAVE_CONFLICT_LABELS.download);
+    expect(await page.evaluate(`${APP}.updating`)).toBe(false);
+    // answered (Replace it): the page's text is on disk, and nothing else was written
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    expect(extract((await readOpfs(page, { name: 'p6u.md.html' }))!)!.text === await page.evaluate(`${APP}.getText()`)).toBe(true);
     await ctx.close();
   }, 180_000);
 

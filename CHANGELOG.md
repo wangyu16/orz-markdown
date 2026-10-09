@@ -310,6 +310,41 @@ unreleased API).
 - Sizes (what ships): shell 68.5 KB (S.11 bound raised to 75 KB), chrome
   19.2 KB (V.5, 21 KB), app 34.4 KB (A.2, 36 KB).
 
+### Round 5 of the carrier-app loop (kit side; closing)
+
+The closing hardening pass of the closed loop on orz-mdhtml 1.0 and this
+kit (claims A.7, A.9, A.15, V.6 in `notes/CLAIMS.md`). Round 5 found
+nothing HIGH; these were fixed anyway.
+
+- **Late writes left the page dirty** (A.15, A.7; B1, B2): a conflict
+  answer or a save that settled after its editor was left (the editor
+  re-targeted the page's question, then Done; or Cmd/Ctrl+S then
+  Cmd/Ctrl+E at once) wrote the editor's text but left the page unsaved,
+  so leaving asked for nothing to lose. The carrier app now wraps its saver
+  once and hands that one object to the page and every editor: every write
+  marks the text written saved, whoever wrote it and whenever it lands.
+- **An attached editor's saved work could be written over** (A.15; B3): an
+  editor mounted on the file with `OrzCarrier.mountEditor` saved and was
+  destroyed; the page's older copy came back, and a later setting saved it
+  over the editor's work (Edit opened on the old text). An attached
+  editor's save is now the page's text; a read view with nothing unsaved
+  follows another surface's write; Done on a clean Edit editor leaves the
+  last written text (two editors: the last save wins); an attached editor
+  destroyed with unsaved edits leaves the read view on the page's text.
+- **Update now while the conflict question was open** (A.9; B4): it ran a
+  second save (and could open a picker). Now refused before anything runs,
+  with new `UPDATE_QUESTION_OPEN` (`orz-markdown/carrier/app`) and the
+  question focused through new `focusSaveConflict(saver)`
+  (`orz-markdown/carrier/shell`); a question that opens while the update
+  re-assembles stops its save the same way.
+- **Documented** (shell-runtime §1 step 3.4; B5): Replace it replaces
+  whatever is on disk when the reader answers, also a second write made
+  while the question was open (by design; the reader never sees the disk
+  version either way).
+- **Tests** (T1): a setting changed while the page's question is open is
+  not lost (K11); a re-target that brings its own conflict passes that
+  conflict's token (K04). Real-Chrome tests for P1, P3/P4, P5 and P6.
+
 ## [2.1.0] - 2026-10-06
 
 The carrier kit: the shared building blocks the family's single-file carriers
