@@ -10,7 +10,8 @@ below; this guide is the checklist for when you *don't* use them.
 > overflowing, copy losing `{{sp}}`/`:::` source) precisely because these points
 > weren't gathered in one place. Follow this and you skip all of it.
 
-There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
+There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown
+(and, when you embed a carrier's editor, print and the preview: §4).
 
 > **Bundling and versions (≥ 2.0.0).** orz-markdown bundles for the browser
 > with no `fs`/`path`/`process` shims — delete any you carried. Read the
@@ -216,6 +217,42 @@ Convert a node directly: `OrzMarkdownRuntime.elementToMarkdown(node)`.
 
 ---
 
+## 4. Embedding a carrier's editor (FC-19): print and the preview
+
+When your app mounts a carrier's editor (`mountEditor`, built on
+`orz-markdown/carrier/editor`):
+
+- **Print the document, not your page (≥ 2.3.0).** The reader's Cmd/Ctrl+P in
+  the editor or its preview is the editor's `print` event. Without a listener
+  the editor prints *your page* (the editor chrome). Listen and print the
+  document instead:
+
+  ```js
+  import { printDocument } from 'orz-markdown/carrier/editor';
+  editor.on('print', async () => {
+    await printDocument(await carrier.assemble(editor.getText()), { nonce });
+  });
+  ```
+
+  `printDocument(html)` puts the whole document in a hidden iframe sandboxed
+  `allow-scripts allow-modals` (opaque origin: its scripts run — a paginator
+  lays the pages out — but cannot reach your page), waits for the document's
+  `window.__orzPrintReady` (a carrier's paginator sets it) and the fonts, and
+  calls the frame's own `print()`. Never open a blob URL of the document in a
+  tab to print it: it would run in your origin. Under a nonce CSP pass
+  `nonce`, and give the frame a document whose scripts carry it (or none).
+- **The preview frame** is sandboxed (`allow-scripts`, opaque origin), and
+  only the reader's own keys and clicks — reported by the kit's bridge
+  through a private, authenticated port — can save, print, switch views,
+  open links or scroll the editor; the bridge captures every built-in it
+  uses before the document runs, so a document script that overrides them
+  gets nothing. That protects your app's actions, not the document: for
+  content you do not trust, also use the nonce CSP (FC-19 §8.4 recipe: the
+  `nonce` option, no `'unsafe-inline'` scripts), so the document's own
+  scripts do not run at all.
+
+---
+
 ## Pre-flight checklist
 
 - [ ] Output wrapped in `.markdown-body`; rules scoped under it.
@@ -226,3 +263,4 @@ Convert a node directly: `OrzMarkdownRuntime.elementToMarkdown(node)`.
 - [ ] Runtime loaded; `init` re-run on dynamically rendered content; tab `data-js="1"` aligned (§2a).
 - [ ] mermaid / smiles-drawer / Chart.js loaded and drawn; KaTeX CSS loaded (§2b).
 - [ ] `data-md`, `data-orz-container`, `data-footnote-label` and plugin/container classes preserved end-to-end for copy (§3).
+- [ ] An embedded editor's `print` event prints the document (`printDocument`), not the app page; untrusted content runs under the nonce CSP (§4).

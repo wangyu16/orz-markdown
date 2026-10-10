@@ -505,3 +505,21 @@ boundaries stated and the per-construct limits documented). Accepted
 limits on record: after "Download a copy instead" every save asks again
 (round 3, L11); Replace it replaces whatever is on disk when answered
 (round 5, B5); two editors of one file in one page — the last save wins.
+
+## Loop 4 — orz-paged 1.0 on the 2.3.0 kit
+
+Rounds 1 and 2 are recorded in orz-paged's own loop record and the 2.3.0
+CHANGELOG (claims A.29–A.31, E.32–E.34, M.28–M.30, N.10).
+
+### Round 3 — 2026-10-10, kit-side fixes
+
+| Finding | Sev | Disposition |
+|---|---|---|
+| Port theft through overridden built-ins: a document script replaces a getter or method the bridge calls later (`MessageEvent.prototype.data`, `Event` getters, `addEventListener`, `MessagePort` methods, `Function.prototype.call`, `Reflect.apply`, …) or walks `fn.caller` from a page hook or a DOM method, gets the event carrying the private port and posts forged save / print / view keys and a link (FC-19 §5 inv. 3 broken); key getters, `closest` and `Date.now` overrides forge from the reader's plain input without the port | HIGH | fixed — the bridge captures every native it uses at its first statement, calls them through the captured `Reflect.apply`, listens with the captured `addEventListener`, is strict, freezes what it exposes, ignores window messages once it holds the port (E.35; real-Chrome attacks for nine override families, and the round-2 bridge as the control: it leaks to four) |
+| Embedded print: without a `print` listener Cmd+P in an app's preview prints the host page | MED | kit part added — `printDocument(html)` (sandboxed `allow-scripts allow-modals` frame, `__orzPrintReady`) and the recipe in FC-19 §8.4 and the embedding reference (E.37); carriers add what prints |
+| Editor toolbar's settings group overflows a ~500 px column | LOW | fixed — the carrier slot wraps (E.36, Chrome layout check + screenshot) |
+| `renderPreview(…, { document: true })` `<style>` under a nonce CSP | LOW | carrier-side: the kit's `renderMarkdownPreview` returns body HTML only, no `<style>`; orz-paged's (and orz-mdhtml's) document helper must stamp its own `<style>`/`<link>` with a `nonce` option |
+
+Accepted limit unchanged: a document script may take the keyboard focus.
+The bridge protects the channel, not the document: the nonce CSP stays the
+recommendation for untrusted content (FC-19 §8.4).

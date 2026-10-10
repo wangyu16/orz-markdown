@@ -150,7 +150,8 @@ the browser's print and the listener decides (a standalone file: the kind's
 Print action, carrier-app §4.8); without one, a key from the frame prints
 the host page (`window.print()` — the frame's own print is prevented, so a
 reader in the preview never prints the frame alone) and a key in the editor
-is the browser's own.
+is the browser's own. An app that wants the document's pages listens and calls
+`printDocument` (§8.4, 2.3.0).
 
 **The review flow** (2.2.0, additive). host-protocols §4 says an AI result
 is a proposal the reader applies; `requestAi` applies at once (kept,
@@ -345,7 +346,9 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   (Editor / Split / Preview with `aria-pressed`, the carrier's slot, the save
   state, Sync scroll, Save), an optional served-page notice, the editor pane,
   a separator and the preview pane. `chrome: 'compact'` hides the labels
-  (icons stay, controls keep their `aria-label`); `'none'` has no toolbar.
+  (icons stay, controls keep their `aria-label`); `'none'` has no toolbar. The
+  toolbar wraps onto more lines in a narrow column, the carrier's slot too
+  (2.3.0: its settings group wraps instead of overflowing).
 - Modes `split` / `editor` / `preview`. Cmd/Ctrl+\ cycles split → editor →
   preview → split. Below `narrowWidth` (640 px) of the shell's **own** width
   (a `ResizeObserver`; an app may give it a narrow column) only one pane
@@ -478,6 +481,44 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   with the secret and a channel, take the port from `orz-preview-port`, and
   send its reports through it. Carriers should use the default bridge with
   its page hooks (below) instead of their own.
+- **What the bridge defends** (2.3.0, round 3 of the orz-paged loop). The
+  document's scripts share the frame's realm with the bridge, so they can
+  replace any built-in the bridge would call after them — a getter of
+  `MessageEvent.prototype` (`data`, `ports`, `source`) or `Event.prototype`
+  (`target`, …), `EventTarget.prototype.addEventListener`, the
+  `MessagePort.prototype` methods, `Function.prototype.call/apply`,
+  `Reflect.apply`, `Date.now`, the timers, the key and mouse getters — and
+  the replacement is then called with the bridge's event or port as `this`
+  or an argument (or reads it with `fn.caller` / `fn.arguments` / a stack
+  walk from a page hook it defines). So the default bridge captures, at its
+  first statement and before any document content exists, every native its
+  trust path uses — `Reflect.apply`, `Object.getOwnPropertyDescriptor`,
+  `Object.freeze`, `Date.now`, `setTimeout` / `clearTimeout` /
+  `requestAnimationFrame`, the `MessageEvent` `data` / `ports` / `source`
+  getters, the `Event` `target` / `defaultPrevented` getters,
+  `preventDefault`, `stopImmediatePropagation`, an event's own `isTrusted`
+  getter, the `KeyboardEvent` `key` / `metaKey` / `ctrlKey` / `altKey` /
+  `shiftKey` getters, `MouseEvent.buttons`, `Element.prototype.closest` /
+  `getAttribute`, `EventTarget.prototype.addEventListener`,
+  `MessagePort.prototype.postMessage` / `start` — and calls them only through
+  the captured `Reflect.apply`. It listens on the port with the captured
+  `addEventListener` (never `onmessage`), reads the event's data with the
+  captured getter and drops the event before anything else runs; it runs in
+  strict mode (a strict function is invisible to `fn.caller`, has no
+  `fn.arguments`, and a stack walk's `getThis()` / `getFunction()` give
+  nothing for it); what it exposes (`__orzPreview` and its functions,
+  `__orzLibsReady`) is frozen; once it holds the port it ignores the
+  window's messages. So a document script cannot get the port, forge a key
+  or link through it, turn the reader's plain key or click into a save, a
+  print or a link, or keep the 1.5 s scroll window open. What it still can,
+  as before: take the focus (the accepted limit below), scroll its own frame
+  within that window, define the page hooks (they get data: renders and a
+  carrier's messages), and post window messages (data). A carrier's own
+  bridge doing the handshake must do the same captures to give the same
+  guarantee. The bridge protects the channel, not the document: for content
+  the app does not trust, the nonce CSP of the recipe below (scripts only
+  by nonce, so the document's own scripts do not run at all) is still
+  recommended.
 - **When renders run.** A render runs until the frame acknowledges it
   (`orz-preview-rendered` with its `id`; a bridge that reports no id
   acknowledges any render; one that never reports is not waited for after
@@ -616,6 +657,31 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   of a blank pane (it goes when the frame starts after all); the message
   suggests a policy that blocks the bridge, the usual cause — a slow
   stylesheet no longer delays the ready.
+- **Printing the document** (2.3.0, additive; round 3 of the orz-paged
+  loop). The `print` event (§4) tells an app that the reader pressed
+  Cmd/Ctrl+P in the editor or its preview; without a listener the editor
+  prints the host page, which is rarely what an app wants. The kit's part
+  is `printDocument(html, { nonce?, readyTimeoutMs?, document?, title? })
+  → Promise<boolean>` (`orz-markdown/carrier/editor`): it prints a whole
+  document — an assembled file (`assemble(text)`), or a carrier's print
+  document (`renderPreview(text, { document: true })`) — in a hidden
+  `srcdoc` iframe sandboxed exactly `allow-scripts allow-modals`
+  (`PRINT_SANDBOX`: an opaque origin; the document's scripts run, e.g. a
+  paginator, but cannot reach the app; never `allow-same-origin`). A script
+  added at the end of its `<body>` waits for the load, the fonts and
+  `window.__orzPrintReady` when the document defines it (a promise, or a
+  function returning one; at most `readyTimeoutMs`, default 30 s), calls the
+  frame's own `print()` — the browser prints that document alone — and tells
+  the page (a per-call token); the promise resolves `true` after the print
+  and the frame is removed a moment later, `false` when the frame says
+  nothing within `readyTimeoutMs` + 5 s (a policy that blocks its script).
+  The frame inherits the page's CSP: pass `nonce` (stamped on the added
+  script); the document's own scripts need it too, or the document must need
+  none. The recipe for an app: `editor.on('print', async () => printDocument(await
+  carrier.assemble(editor.getText())))` — or the carrier's print document.
+  Do not open a blob URL of the document in a tab instead: it would run in
+  the app's own origin. A carrier adds the specifics: what document prints
+  (orz-paged: the paginated pages) and its `__orzPrintReady`.
 
 ### 8.5 Save
 

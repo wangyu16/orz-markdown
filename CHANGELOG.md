@@ -124,6 +124,19 @@ E.34):
   unacknowledged, so the next render was paced by the parent's render time
   only.
 
+**`orz-markdown/carrier/editor`** (round 3 of the paged loop, claim E.37):
+**`printDocument(html, { nonce?, readyTimeoutMs?, document?, title? })`**,
+`PRINT_SANDBOX`, `PRINT_READY_TIMEOUT_MS` — print a whole document (an
+assembled file, a carrier's print document) from an app's page without
+printing the page: a hidden `srcdoc` frame sandboxed `allow-scripts
+allow-modals` (opaque origin, never `allow-same-origin`) waits for the load,
+the fonts and the document's `window.__orzPrintReady` (a carrier's paginator
+resolves it), calls its own `print()` and goes away; resolves `true` after the
+print, `false` when the frame never speaks (a CSP that blocks its script —
+pass `nonce`). An app listens to the editor's `print` event and calls it
+(FC-19 §8.4 "Printing the document", embedding reference §4); without a
+listener the editor still prints the host page.
+
 **`orz-markdown/carrier/editor`** (claim E.32): **`preview.maxWaitMs`** — while
 edits continue a render is forced at least every `max(maxWaitMs, 4 × the
 last render)` (default 1000, as before); `Infinity` never forces one while
@@ -146,6 +159,31 @@ destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
 
 ### Fixed
 
+- **Preview port theft through overridden built-ins** (security; round 3 of
+  the paged loop; claim E.35, FC-19 §8.4). A document script in the preview
+  could replace a built-in the bridge called after it — the
+  `MessageEvent.prototype.data` getter, an `Event` getter,
+  `addEventListener`, a `MessagePort` method, `Function.prototype.call`,
+  `Reflect.apply`, … — or walk `fn.caller` / `fn.arguments` from a page hook
+  or any DOM method the bridge called, and so get the event carrying the
+  private port; it could then post forged keys (an unsolicited save, a print,
+  a view change) and a link (a phishing href to `resolveLink`) as the
+  reader's own. Overridden key getters, `Element.prototype.closest` and
+  `Date.now` could also turn the reader's plain key into a save, a plain
+  click into a link, or keep the scroll window open. The default bridge now
+  captures every native it uses at its first statement (before any document
+  content) and calls them through the captured `Reflect.apply`, listens on
+  the port with the captured `addEventListener`, runs in strict mode,
+  freezes what it exposes and ignores window messages once it holds the
+  port. Real-Chrome attack tests override each of those built-ins; the
+  round-2 bridge leaks to four of them, the new one to none. The accepted
+  limit stays (a document script may take the focus). **`PREVIEW_BRIDGE_HASH`
+  changed.** Carriers pick the new bridge up when they rebuild against
+  2.3.0 (orz-mdhtml 1.0.0 needs a 1.0.1 for it).
+- **The editor toolbar overflowed a narrow column** (round 3 of the paged
+  loop; claim E.36): the carrier's slot (a settings group, the AI menu) did
+  not wrap, so in a ~500 px column its last controls ran past the bar and
+  were clipped. It wraps now.
 - **Labels of the handle's items without an icon** (round 2 of the paged
   loop; claim A.31): an action, setting or reader control without an icon
   (orz-paged has several; the stub's Notes, Word count, Line spacing) drew

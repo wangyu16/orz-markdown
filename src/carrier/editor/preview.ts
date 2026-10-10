@@ -120,7 +120,9 @@ export interface PreviewFrameOptions {
    * must do the default bridge's handshake: read and remove
    * {@link PREVIEW_SECRET_ATTRIBUTE} from `document.currentScript` first
    * thing, post `orz-preview-ready { channel, secret }`, take the port from
-   * `orz-preview-port { channel }` and send its reports through it.
+   * `orz-preview-port { channel }` and send its reports through it — and,
+   * for the same guarantee, capture every native it uses before the document
+   * runs, as the default bridge does (E.35).
    */
   bridge?: string;
   /**
@@ -168,7 +170,26 @@ export const PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * it never gets a port. From then on the shell's messages come through the
  * port, and the bridge sends its own reports through it with `Reflect.apply`
  * and `MessagePort.prototype.postMessage` as they were when it started, so the
- * document's scripts cannot send on it. It reports keys, link clicks, input
+ * document's scripts cannot send on it.
+ *
+ * Captured natives (2.3.0, round 3 of the paged loop; FC-19 §8.4, claim E.35).
+ * The document's scripts share the frame's realm: a built-in the bridge called
+ * after them could be replaced and handed the bridge's event or port (a
+ * `MessageEvent.prototype.data` getter called with the port's event as
+ * `this`, `Function.prototype.call`, `addEventListener`, a caller walk from a
+ * page hook…). So its first statement captures every native its trust path
+ * uses — `Reflect.apply`, the MessageEvent / Event / KeyboardEvent /
+ * MouseEvent getters and methods, an event's own `isTrusted` getter,
+ * `Element.prototype.closest` / `getAttribute`,
+ * `EventTarget.prototype.addEventListener`, `MessagePort.prototype.postMessage`
+ * / `start`, `Date.now`, the timers, `Object.freeze` — and calls them only
+ * through the captured `Reflect.apply` (`C(fn, this, args)`); it listens on
+ * the port with the captured `addEventListener` (never `onmessage`) and drops
+ * the event after reading its data; it is strict (invisible to `fn.caller`,
+ * `fn.arguments` and stack walks); `__orzPreview` and `__orzLibsReady` are
+ * frozen; once it holds the port it ignores window messages. The document
+ * cannot get the port nor make the reader's plain key or click a save, print
+ * or link. It reports keys, link clicks, input
  * and scrolls only for trusted events (`isTrusted`) — scrolls (and
  * `navigated`) only within 1.5 s of the reader's own pointer (a press, or a
  * drag), wheel, touch or key in the frame, since a script's scrolling fires trusted scroll events
@@ -191,65 +212,75 @@ export const PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * carrier's own message to the shell as a plain window message (data).
  */
 export const PREVIEW_BRIDGE = [
-  '(function(){',
-  'var P=window.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,sec=null,chan=String(Math.random()).slice(2),lastIn=-1e9,busy=0,next=null;',
-  'try{var me=document.currentScript;if(me){sec=me.getAttribute("data-orz-preview-secret");me.removeAttribute("data-orz-preview-secret")}}catch(e){}',
-  'var RA=Reflect.apply,PM=typeof MessagePort==="function"?MessagePort.prototype.postMessage:null;',
+  '(function(){"use strict";',
+  'var W=window,D=document,P=W.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,sec=null,chan=String(Math.random()).slice(2),lastIn=-1e9,busy=0,next=null;',
+  'try{var me=D.currentScript;if(me){sec=me.getAttribute("data-orz-preview-secret");me.removeAttribute("data-orz-preview-secret")}}catch(e){}',
+  // every native the bridge's trust path uses, as it is now (before any document content): only these are used after
+  'var RA=Reflect.apply,GOD=Object.getOwnPropertyDescriptor,FZ=Object.freeze,NOW=Date.now,ST=W.setTimeout,CT=W.clearTimeout,RAF=W.requestAnimationFrame;',
+  'function G(o,n){try{var x=GOD(o,n);return x?x.get||x.value:null}catch(e){return null}}',
+  'var EP=W.MessageEvent?MessageEvent.prototype:null,VP=Event.prototype,KP=W.KeyboardEvent?KeyboardEvent.prototype:null,LP=Element.prototype,MP=W.MessagePort?MessagePort.prototype:null,',
+  'AEL=G(EventTarget.prototype,"addEventListener"),DATA=G(EP,"data"),PORTS=G(EP,"ports"),SRC=G(EP,"source"),TGT=G(VP,"target"),PD=G(VP,"preventDefault"),SIP=G(VP,"stopImmediatePropagation"),DP=G(VP,"defaultPrevented"),',
+  'TRU=G(new Event("orz"),"isTrusted"),KEY=G(KP,"key"),META=G(KP,"metaKey"),CTRL=G(KP,"ctrlKey"),ALT=G(KP,"altKey"),SHIFT=G(KP,"shiftKey"),BTN=W.MouseEvent?G(MouseEvent.prototype,"buttons"):null,',
+  'CLO=G(LP,"closest"),GA=G(LP,"getAttribute"),PM=G(MP,"postMessage"),PS=G(MP,"start");',
+  'function C(f,o,a){return RA(f,o,a||[])}',
+  'function on(t,n,f,o){C(AEL,t,[n,f,o])}',
+  'function tr(e){try{return TRU?C(TRU,e)===true:false}catch(x){return false}}',
   'try{var rv=new Uint32Array(4);crypto.getRandomValues(rv);chan=Array.prototype.join.call(rv,"-")}catch(e){}',
-  'window.addEventListener("message",function(e){var d=e.data;',
-  'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){e.stopImmediatePropagation();if(!port&&d.channel===chan&&e.ports&&e.ports[0]){port=e.ports[0];port.onmessage=function(m){handle(m.data)}}return}',
-  'if(e.source===P)handle(d)},true);',
-  'function active(k){lastIn=Date.now();send({type:"orz-preview-active",input:k})}',
-  'window.addEventListener("pointerdown",function(e){if(e.isTrusted)active("pointer")},true);',
-  'window.addEventListener("wheel",function(e){if(e.isTrusted)active("wheel")},{passive:true,capture:true});',
-  'window.addEventListener("touchstart",function(e){if(e.isTrusted)active("touch")},{passive:true,capture:true});',
-  'window.addEventListener("pointermove",function(e){if(e.isTrusted&&e.buttons)lastIn=Date.now()},{passive:true,capture:true});',
-  'var sch=document.documentElement.getAttribute("data-scheme");if(sch==="dark")window.__orzSmilesTheme="dark";',
-  'function A(){return art||(art=document.getElementById("orz-doc"))}',
+  'on(W,"message",function(e){var d=C(DATA,e);',
+  'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){C(SIP,e);if(!port&&d.channel===chan){var q=C(PORTS,e);q=q&&q.length>0?q[0]:null;if(q&&PM){port=q;on(q,"message",function(m){var x=C(DATA,m);m=null;handle(x)});if(PS)C(PS,q)}}return}',
+  'if(!port&&C(SRC,e)===P)handle(d)},true);',
+  'function active(k){lastIn=NOW();send({type:"orz-preview-active",input:k})}',
+  'on(W,"pointerdown",function(e){if(tr(e))active("pointer")},true);',
+  'on(W,"wheel",function(e){if(tr(e))active("wheel")},{passive:true,capture:true});',
+  'on(W,"touchstart",function(e){if(tr(e))active("touch")},{passive:true,capture:true});',
+  'on(W,"pointermove",function(e){if(tr(e)&&C(BTN,e))lastIn=NOW()},{passive:true,capture:true});',
+  'var sch=D.documentElement.getAttribute("data-scheme");if(sch==="dark")W.__orzSmilesTheme="dark";',
+  'function A(){return art||(art=D.getElementById("orz-doc"))}',
   'function post(m){try{P.postMessage(m,"*")}catch(e){}}',
-  'function send(m){if(port&&PM){try{RA(PM,port,[m])}catch(e){}}}',
+  'function send(m){if(port&&PM){try{C(PM,port,[m])}catch(e){}}}',
   'function strip(h){return h.replace(/<[a-zA-Z][^>]*>/g,function(t){return t.replace(/ data-src-line="[^"]*"/g,"")})}',
   'function keyOf(n){return n.nodeType===1?strip(n.outerHTML):n.nodeType===3?"#"+n.data:n.nodeType===8?"!"+n.data:""}',
   'function lines(n){var l=[],q,i;if(n.nodeType!==1)return l;if(n.hasAttribute("data-src-line"))l.push(n);q=n.querySelectorAll("[data-src-line]");for(i=0;i<q.length;i++)l.push(q[i]);return l}',
   'function keep(o,n){if(o.__orzKey!==n.__orzKey)return false;var a=lines(o),b=lines(n),i;if(a.length!==b.length)return false;for(i=0;i<a.length;i++)a[i].setAttribute("data-src-line",b[i].getAttribute("data-src-line"));return true}',
-  'function apply(html){var root=A(),t=document.createElement("template");t.innerHTML=html;var next=Array.prototype.slice.call(t.content.childNodes),old=Array.prototype.slice.call(root.childNodes),a=old.length,b=next.length,p=0,s=0,i;',
-  'for(i=0;i<b;i++)next[i].__orzKey=keyOf(next[i]);',
-  'while(p<a&&p<b&&keep(old[p],next[p]))p++;',
-  'while(s<a-p&&s<b-p&&keep(old[a-1-s],next[b-1-s]))s++;',
+  'function apply(html){var root=A(),t=D.createElement("template");t.innerHTML=html;var nx=Array.prototype.slice.call(t.content.childNodes),old=Array.prototype.slice.call(root.childNodes),a=old.length,b=nx.length,p=0,s=0,i;',
+  'for(i=0;i<b;i++)nx[i].__orzKey=keyOf(nx[i]);',
+  'while(p<a&&p<b&&keep(old[p],nx[p]))p++;',
+  'while(s<a-p&&s<b-p&&keep(old[a-1-s],nx[b-1-s]))s++;',
   'var ref=s>0?old[a-s]:null;for(i=p;i<a-s;i++)root.removeChild(old[i]);',
-  'for(i=p;i<b-s;i++)root.insertBefore(next[i],ref)}',
+  'for(i=p;i<b-s;i++)root.insertBefore(nx[i],ref)}',
   'function whole(html){var y=se().scrollTop;A().innerHTML=html;se().scrollTop=y}',
-  'function se(){return document.scrollingElement||document.documentElement}',
-  'function max(){return Math.max(0,se().scrollHeight-window.innerHeight)}',
+  'function se(){return D.scrollingElement||D.documentElement}',
+  'function max(){return Math.max(0,se().scrollHeight-W.innerHeight)}',
   'function anchors(){var root=A(),out=[];if(!root)return out;var els=root.querySelectorAll("[data-src-line]"),y=se().scrollTop||0,i,l,r;',
   'for(i=0;i<els.length;i++){l=parseInt(els[i].getAttribute("data-src-line"),10);if(isNaN(l))continue;r=els[i].getBoundingClientRect();if(!r.height&&!r.width)continue;out.push([l,r.top+y])}',
   'out.sort(function(x,z){return x[1]-z[1]});return out}',
   'function report(){var m={type:"orz-preview-rendered",id:last,anchors:anchors(),max:max()};if(port)send(m);else post(m)}',
-  'function navigated(l){if(typeof l==="number"&&isFinite(l)&&Date.now()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})}',
-  'function enhance(){try{if(typeof window.__orzEnhance==="function")window.__orzEnhance()}catch(e){}}',
-  'function later(){clearTimeout(timer);timer=setTimeout(function(){enhance();report()},350)}',
+  'function navigated(l){if(typeof l==="number"&&isFinite(l)&&NOW()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})}',
+  'function enhance(){try{if(typeof W.__orzEnhance==="function")W.__orzEnhance()}catch(e){}}',
+  'function later(){CT(timer);timer=ST(function(){enhance();report()},350)}',
   'function done(){enhance();report();later()}',
-  'function render(d,n){var h=window.__orzPreviewApply,r;want=d.id;',
+  'function render(d,n){var h=W.__orzPreviewApply,r;want=d.id;',
   'if(typeof h==="function"){if(busy){next=d;return}try{r=h(String(d.html),d)}catch(x){r=null}',
-  'if(r&&typeof r.then==="function"){busy=1;var fin=function(ok){busy=0;var q=next;next=null;if(q){render(q,0);return}if(want===d.id){last=d.id;if(ok)done();else report()}};r.then(function(){fin(1)},function(){fin(0)})}else{last=d.id;done()}return}',
-  'if(!A()){if((n||0)<400)setTimeout(function(){if(want===d.id)render(d,(n||0)+1)},25);return}',
+  'if(r&&typeof r.then==="function"){busy=1;var fin=function(ok){busy=0;var q=next;next=null;if(q){render(q,0);return}if(want===d.id){last=d.id;if(ok)done();else report()}};try{r.then(function(){fin(1)},function(){fin(0)})}catch(x){fin(0)}}else{last=d.id;done()}return}',
+  'if(!A()){if((n||0)<400)ST(function(){if(want===d.id)render(d,(n||0)+1)},25);return}',
   'last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}done()}',
   'function handle(d){if(!d||typeof d!=="object")return;',
   'if(d.type==="orz-preview-render")render(d,0);',
-  'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=Date.now()+150;se().scrollTop=d.top}',
-  'else if(d.type==="orz-preview-navigate"){if(typeof window.__orzPreviewNavigate==="function"&&typeof d.line==="number")try{window.__orzPreviewNavigate(d.line)}catch(x){}}',
-  'else if(typeof window.__orzPreviewMessage==="function")try{window.__orzPreviewMessage(d)}catch(x){}}',
-  'if(window.ResizeObserver)new ResizeObserver(later).observe(document.documentElement);',
-  'window.addEventListener("scroll",function(e){if(!e.isTrusted||Date.now()<mute||Date.now()-lastIn>1500||queued)return;queued=1;requestAnimationFrame(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
-  'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;var k=e.key;active("key");',
-  'if((e.metaKey||e.ctrlKey)&&!e.altKey&&(k==="s"||k==="S"||k==="\\\\")){e.preventDefault();send({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
-  'else if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey&&(k==="p"||k==="P")){e.preventDefault();send({type:"orz-preview-key",key:"p"})}',
+  'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=NOW()+150;se().scrollTop=d.top}',
+  'else if(d.type==="orz-preview-navigate"){if(typeof W.__orzPreviewNavigate==="function"&&typeof d.line==="number")try{W.__orzPreviewNavigate(d.line)}catch(x){}}',
+  'else if(typeof W.__orzPreviewMessage==="function")try{W.__orzPreviewMessage(d)}catch(x){}}',
+  'if(W.ResizeObserver)new ResizeObserver(later).observe(D.documentElement);',
+  'on(W,"scroll",function(e){if(!tr(e)||NOW()<mute||NOW()-lastIn>1500||queued)return;queued=1;RAF(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
+  'on(D,"keydown",function(e){if(!tr(e))return;var k=C(KEY,e),mod=(C(META,e)===true||C(CTRL,e)===true)&&C(ALT,e)!==true;active("key");',
+  'if(mod&&(k==="s"||k==="S"||k==="\\\\")){C(PD,e);send({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
+  'else if(mod&&C(SHIFT,e)!==true&&(k==="p"||k==="P")){C(PD,e);send({type:"orz-preview-key",key:"p"})}',
   'else if(k==="Escape")send({type:"orz-preview-key",key:"Escape"})});',
-  'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||e.defaultPrevented)return;var h=a.getAttribute("href")||"";e.preventDefault();',
-  'if(h.charAt(0)==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=document.getElementById(id);if(t)t.scrollIntoView();return}',
-  'if(e.isTrusted)send({type:"orz-preview-link",href:h})});',
-  'window.__orzLibsReady=function(){enhance();report()};',
-  'window.__orzPreview={report:report,post:post,navigated:navigated};',
+  'on(D,"click",function(e){var t=C(TGT,e),a=null;try{a=t?C(CLO,t,["a[href]"]):null}catch(x){}if(!a||C(DP,e))return;var h=C(GA,a,["href"]);h=typeof h==="string"?h:"";C(PD,e);',
+  'if(h[0]==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var g=D.getElementById(id);if(g)g.scrollIntoView();return}',
+  'if(tr(e))send({type:"orz-preview-link",href:h})});',
+  'function libs(){enhance();report()}',
+  'W.__orzLibsReady=FZ(libs);',
+  'W.__orzPreview=FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)});',
   'post(sec?{type:"orz-preview-ready",channel:chan,secret:sec}:{type:"orz-preview-ready"});sec=null;',
   '})();',
 ].join('');
@@ -261,7 +292,7 @@ export const PREVIEW_BRIDGE = [
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-export const PREVIEW_BRIDGE_HASH = 'sha256-kEN9UwotdxNpKe7G72LLIuLL1fOPkcd/UceWQPmo94I=';
+export const PREVIEW_BRIDGE_HASH = 'sha256-gmHpAbiWKC12kYJI9qu74nDUvxtnNNn2DEphqeEbmkg=';
 
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';

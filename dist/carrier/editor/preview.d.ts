@@ -79,7 +79,9 @@ export interface PreviewFrameOptions {
      * must do the default bridge's handshake: read and remove
      * {@link PREVIEW_SECRET_ATTRIBUTE} from `document.currentScript` first
      * thing, post `orz-preview-ready { channel, secret }`, take the port from
-     * `orz-preview-port { channel }` and send its reports through it.
+     * `orz-preview-port { channel }` and send its reports through it — and,
+     * for the same guarantee, capture every native it uses before the document
+     * runs, as the default bridge does (E.35).
      */
     bridge?: string;
     /**
@@ -125,7 +127,26 @@ export declare const PREVIEW_SECRET_ATTRIBUTE = "data-orz-preview-secret";
  * it never gets a port. From then on the shell's messages come through the
  * port, and the bridge sends its own reports through it with `Reflect.apply`
  * and `MessagePort.prototype.postMessage` as they were when it started, so the
- * document's scripts cannot send on it. It reports keys, link clicks, input
+ * document's scripts cannot send on it.
+ *
+ * Captured natives (2.3.0, round 3 of the paged loop; FC-19 §8.4, claim E.35).
+ * The document's scripts share the frame's realm: a built-in the bridge called
+ * after them could be replaced and handed the bridge's event or port (a
+ * `MessageEvent.prototype.data` getter called with the port's event as
+ * `this`, `Function.prototype.call`, `addEventListener`, a caller walk from a
+ * page hook…). So its first statement captures every native its trust path
+ * uses — `Reflect.apply`, the MessageEvent / Event / KeyboardEvent /
+ * MouseEvent getters and methods, an event's own `isTrusted` getter,
+ * `Element.prototype.closest` / `getAttribute`,
+ * `EventTarget.prototype.addEventListener`, `MessagePort.prototype.postMessage`
+ * / `start`, `Date.now`, the timers, `Object.freeze` — and calls them only
+ * through the captured `Reflect.apply` (`C(fn, this, args)`); it listens on
+ * the port with the captured `addEventListener` (never `onmessage`) and drops
+ * the event after reading its data; it is strict (invisible to `fn.caller`,
+ * `fn.arguments` and stack walks); `__orzPreview` and `__orzLibsReady` are
+ * frozen; once it holds the port it ignores window messages. The document
+ * cannot get the port nor make the reader's plain key or click a save, print
+ * or link. It reports keys, link clicks, input
  * and scrolls only for trusted events (`isTrusted`) — scrolls (and
  * `navigated`) only within 1.5 s of the reader's own pointer (a press, or a
  * drag), wheel, touch or key in the frame, since a script's scrolling fires trusted scroll events
@@ -155,7 +176,7 @@ export declare const PREVIEW_BRIDGE: string;
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-export declare const PREVIEW_BRIDGE_HASH = "sha256-kEN9UwotdxNpKe7G72LLIuLL1fOPkcd/UceWQPmo94I=";
+export declare const PREVIEW_BRIDGE_HASH = "sha256-gmHpAbiWKC12kYJI9qu74nDUvxtnNNn2DEphqeEbmkg=";
 /** The pieces of the frame document for these options. */
 export declare function previewFrameParts(options?: PreviewFrameOptions): PreviewFrameParts;
 /** The preview frame's `srcdoc`. */

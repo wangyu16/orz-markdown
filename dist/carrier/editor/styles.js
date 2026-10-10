@@ -33,7 +33,9 @@ exports.EDITOR_CSS = `
 .orz-editor__mode:hover { color: var(--orz-chrome-fg); }
 .orz-editor__mode[aria-pressed="true"] { background: var(--orz-chrome-surface); color: var(--orz-chrome-fg); box-shadow: 0 1px 2px oklch(22% 0.02 260 / 0.14); }
 .orz-editor__mode .orz-icon { width: 14px; height: 14px; }
-.orz-editor__tools { display: flex; align-items: center; gap: var(--orz-chrome-space-2); flex: 1 1 auto; min-width: 0; }
+/* the carrier's slot (settings, AI menu): wraps in a narrow column (2.3.0, E.36); a long label ellipsizes */
+.orz-editor__tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--orz-chrome-space-2); flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.orz-editor__tools > * { min-width: 0; max-width: 100%; }
 .orz-editor__status { display: inline-flex; align-items: center; gap: 6px; color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); white-space: nowrap; }
 .orz-editor__status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orz-chrome-success); }
 .orz-editor[data-dirty="true"] .orz-editor__status::before { background: var(--orz-chrome-warning); }

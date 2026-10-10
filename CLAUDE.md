@@ -138,11 +138,16 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   reader's click, and no save, mode change, link or editor scroll except by
   the reader's own keys/clicks through the port. The bridge must keep
   reading the secret and taking the port first (a capture listener
-  registered before anything else) and send with the
-  `Reflect.apply`/`postMessage` it cached at start; recompute
+  registered before anything else) and use ONLY the natives it captured
+  at its first statement (getters, methods, timers, `Date.now`), called
+  through the captured `Reflect.apply`, in strict mode, never
+  `port.onmessage` (E.35: a document script can override any built-in the
+  bridge calls later and so steal the port); recompute
   `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. Patches and other
   strings the editor keeps go through `detachString` (V8 slices keep the whole
-  text alive; E.21). `render-md.ts`
+  text alive; E.21). `print.ts` (`printDocument`, 2.3.0, E.37: a hidden
+  `allow-scripts allow-modals` frame prints a whole document; never
+  `allow-same-origin`). `render-md.ts`
   (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`,
   `includeRecordEnv`, `data-src-line` anchors; an `#orz-includes` record
   renders offline, and URL includes pass the render env to `prepareSources`
@@ -265,8 +270,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `tests/carrier-kit.test.ts` (K.9, K.12), `tests/carrier-shell.test.ts`
   (S.12) and `tests/carrier-update.test.ts` (U.11, and the Chrome halves of
   U.5–U.9, V.4; it also needs `dist/carrier.js`, so build first) and
-  `tests/carrier-editor.test.ts` (E.13, E.23 and the Chrome halves of E.1, E.3–E.11,
-  E.14, E.15, E.19–E.22, E.25) and `tests/conformance.test.ts` (H.2, the browser half of H.5,
+  `tests/carrier-editor.test.ts` (E.13, E.23, E.36 and the Chrome halves of E.1, E.3–E.11,
+  E.14, E.15, E.19–E.22, E.25, E.35, E.37) and `tests/conformance.test.ts` (H.2, the browser half of H.5,
   H.6–H.8) and `tests/carrier-app.test.ts` (A.13 and the Chrome halves of A.7–A.9, A.15, A.19, E.28; it builds
   the stub carrier) and `tests/browser-copy.test.ts` (M.24).
 - **Claims.** `notes/CLAIMS.md` lists the guarantees; a test binds one by carrying its

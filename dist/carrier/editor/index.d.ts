@@ -25,5 +25,7 @@ export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewCon
 export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes, includeRecordEnv } from './render-md.js';
 export type { MarkdownPreviewOptions } from './render-md.js';
 export { EDITOR_CSS } from './styles.js';
+export { printDocument, PRINT_SANDBOX, PRINT_READY_TIMEOUT_MS } from './print.js';
+export type { PrintDocumentOptions } from './print.js';
 export type { EdElement, EdDocument, EdView, EdEvent, EdFile, EdDataTransfer, EdPort } from './types.js';
 //# sourceMappingURL=index.d.ts.map

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EDITOR_CSS = exports.includeRecordEnv = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.ORZ_HIGHLIGHTER = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
+exports.PRINT_READY_TIMEOUT_MS = exports.PRINT_SANDBOX = exports.printDocument = exports.EDITOR_CSS = exports.includeRecordEnv = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.ORZ_HIGHLIGHTER = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
 /**
  * `orz-markdown/carrier/editor` — the editor shell (FC-19 §8): the
  * kind-independent base each carrier's `mountEditor` wraps. Chrome toolbar,
@@ -59,4 +59,8 @@ Object.defineProperty(exports, "renderMarkdownPreviewWithIncludes", { enumerable
 Object.defineProperty(exports, "includeRecordEnv", { enumerable: true, get: function () { return render_md_js_1.includeRecordEnv; } });
 var styles_js_1 = require("./styles.js");
 Object.defineProperty(exports, "EDITOR_CSS", { enumerable: true, get: function () { return styles_js_1.EDITOR_CSS; } });
+var print_js_1 = require("./print.js");
+Object.defineProperty(exports, "printDocument", { enumerable: true, get: function () { return print_js_1.printDocument; } });
+Object.defineProperty(exports, "PRINT_SANDBOX", { enumerable: true, get: function () { return print_js_1.PRINT_SANDBOX; } });
+Object.defineProperty(exports, "PRINT_READY_TIMEOUT_MS", { enumerable: true, get: function () { return print_js_1.PRINT_READY_TIMEOUT_MS; } });
 //# sourceMappingURL=index.js.map
