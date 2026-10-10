@@ -59,12 +59,48 @@ unchanged against it); the parser's `md.render` output is unchanged.
   `looksHtml`, `shellWord`, `scriptElement`, `assembledStructure`,
   `storedText`, `heldText`, `twinCheck`.
 
+**`orz-markdown/carrier/node`** (new entry, Node only;
+[spec/carrier-node.md](spec/carrier-node.md); claims N.1–N.9) — the CLI core
+orz-mdhtml 1.0 and orz-paged copied (`src/{known-states,includes,cli}.ts`),
+bound to one tool by `carrierNode({ name, kind, cacheName?, textSuffix?,
+readLegacy?, storedText? })`:
+
+- the overwrite guards `assembledOutputCheck` and `textOutputCheck`, `guard`,
+  the uid-identity gate (`sameDocument`, `uidOf`), `otherName`, `shown`,
+  `commandLine`, `libReason`, `changedAfter`, `earlierSource`;
+- known earlier states: git (HEAD, index, 20 recent commits, 8 s budget) and
+  the CLI's pair and last-writer records under `$XDG_CACHE_HOME/<cache>` or
+  `~/.cache/<cache>` (an unwritable cache is not read; an unrecorded pair
+  warns with the `--replaces` token) — `rememberPair`, `earlierStateOf`,
+  `twinStateOf`, `lastWriter`, `cleanInGit`;
+- files: `readText`, `writeOut` (atomic; mode and symbolic link kept;
+  folders created), `backup` (`~`, `~1`…; never through a link; identical
+  bytes reused);
+- includes: `includeTargets`, `resolveFileIncludes` (the twin's folder only),
+  `keepReferenced`, `unresolvedIncludes`, `includePlan` (assemble's
+  keep / `--resolve-includes` / stale / unresolved decision with its warnings);
+- the vocabulary: `Reason` / `REASONS`, `CliError`, `Next`, `EXIT_*`,
+  `cliIo`, `emit`, `reportFailure`, `sh`, `assembleArgs`, `replacesToken`.
+
+Node built-ins only through `process.getBuiltinModule`; no other entry
+imports it, so no browser bundle holds it (N.1). The strongest CLI tests of
+both carriers (T.7, T.9, T.11, T.12, T.14, T.16–T.21 — "following every
+`next` verbatim never loses a text") run against it through a reference CLI.
+
 **`orz-markdown/preview-frame`** (claim M.28): `enhanceDocument(root, {
 static: true })` for print and pagination — draws everything, then turns every
 drawn chart and SMILES canvas into an image (`data-orz-frozen`, class,
 `data-md` breadcrumb, accessible name and width kept; charts stopped,
 destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
 `runtime: true`; the result counts the images (`frozen`).
+
+### Fixed
+
+- Conformance harness: `C.save.conflict` waited a fixed 10 s for the
+  "Download a copy instead" download and for "Replace it"'s write; a
+  carrier's ~2 MB inline file under the load of a full run missed it once
+  (orz-paged). The waits now scale with the file's size (10 s + 10 s per
+  started MB, at most 2 min).
 
 ### Changed
 

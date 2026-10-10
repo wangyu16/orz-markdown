@@ -74,8 +74,14 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `sha256.ts` (synchronous SHA-256, imports nothing), `legacy.ts`
   (`readLegacyIsland`: a carrier's 0.x source island, parser-free) and
   `inspect.ts` (the kind-independent core of a carrier's `inspect`); each
-  carrier keeps its report shape, legacy fields and advice wording. Node-only
-  CLI helpers (git/known-states, backups, file includes) are NOT in the kit.
+  carrier keeps its report shape, legacy fields and advice wording. The
+  Node-only CLI core (git/known states, pair records, backups, atomic writes,
+  file includes, the overwrite guards, reason codes and `next`) is its own
+  entry, `src/carrier/node/` = `orz-markdown/carrier/node` (2.3.0,
+  spec/carrier-node.md, N.1–N.9): Node built-ins only via
+  `process.getBuiltinModule`, and NO other entry may import it (N.1 bundles
+  the browser entries with esbuild to prove it). Its tests drive a reference
+  CLI built only from the API (`tests/helpers/node-cli.ts`, in process).
 - `src/carrier/shell/` — `orz-markdown/carrier/shell`, the browser runtime of
   every assembled file (spec/shell-runtime.md, spec/host-protocols.md):
   `createSaver` (host → served notice → File System Access with the handle in

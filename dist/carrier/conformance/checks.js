@@ -119,6 +119,13 @@ const until = async (cond, ms, step = 50) => {
         await new Promise((r) => setTimeout(r, step));
     }
 };
+/**
+ * How long to wait for a file of `bytes` to be written or downloaded: 10 s,
+ * plus 10 s per started megabyte (a carrier's inline files reach ~2 MB, and a
+ * download is recorded only once Chrome has saved it all — under the load of
+ * a full run that took longer than a fixed 10 s), at most 2 minutes.
+ */
+const sizeBound = (bytes) => Math.min(120000, 10000 + Math.ceil(bytes / 1000000) * 10000);
 /** Open a page, install the helpers, mount the editor through the driver; returns the text the page read from the file. */
 async function openEditor(s, frame, url) {
     if (url)
@@ -1228,7 +1235,7 @@ exports.saveChecks = {
         // "Replace it" writes the page's text into that file, with no second picker
         if (p.check(await choose('Replace it'), 'no "Replace it" button (the kit\'s askSaveConflict question) after the conflicting save')) {
             const want = await s.assemble(text2);
-            await until(async () => (await read()) === want, 10000);
+            await until(async () => (await read()) === want, sizeBound(want.length));
             p.check((await read()) === want, 'Replace it did not write assemble(text) into the file that changed on disk');
             p.eq(ctx.of('picker').length, picks, 'pickers opened by Replace it (it writes the file picked for the conflicting save)');
             await until(async () => !(await ed(page, 'window.__orzEditor.isDirty()')), 5000);
@@ -1241,7 +1248,7 @@ exports.saveChecks = {
         const r3 = await save(text3);
         p.check(r3?.conflict === true, `the second conflicting save did not resolve conflict: true (${clip(JSON.stringify(r3))})`);
         if (p.check(await choose('Download a copy instead'), 'no "Download a copy instead" button after the second conflicting save')) {
-            await until(() => ctx.downloads.length > 0, 10000);
+            await until(() => ctx.downloads.length > 0, sizeBound((await s.assemble(text3)).length));
             if (p.check(ctx.downloads.length === 1, `${ctx.downloads.length} downloads after Download a copy instead`)) {
                 p.check(ctx.downloads[0].data === (await s.assemble(text3)), `the download is not assemble(text) — ${firstDiff(ctx.downloads[0].data, await s.assemble(text3))}`);
             }
@@ -1424,7 +1431,7 @@ async function conflictPhases(s, p, ctx) {
             p.check((await f.read()) === agent, `${what}: a save wrote over the file that changed on disk without asking`);
             if (p.check(await chooseIn(f.page, 'Replace it'), `${what}: no "Replace it" button`)) {
                 const want = await s.assemble(newest, { delivery: 'inline' });
-                await until(async () => (await f.read()) === want, 10000);
+                await until(async () => (await f.read()) === want, sizeBound(want.length));
                 // a second question left on screen, answered too, must not write the older text
                 await chooseIn(f.page, 'Replace it');
                 await f.page.waitForTimeout(500);

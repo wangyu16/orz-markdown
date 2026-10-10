@@ -18,6 +18,7 @@
     "./carrier/editor": "./dist/carrier/editor/index.js",
     "./carrier/app": "./dist/carrier/app/index.js",
     "./carrier/conformance": "./dist/carrier/conformance/index.js",
+    "./carrier/node": "./dist/carrier/node/index.js",
     "./package.json": "./package.json"
   },
   "files": [
