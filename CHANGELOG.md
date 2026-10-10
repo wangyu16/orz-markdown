@@ -180,6 +180,33 @@ destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
   limit stays (a document script may take the focus). **`PREVIEW_BRIDGE_HASH`
   changed.** Carriers pick the new bridge up when they rebuild against
   2.3.0 (orz-mdhtml 1.0.0 needs a 1.0.1 for it).
+- **Preview port theft through `window.event`** (security; round 4 of the
+  paged loop; claim E.35, FC-19 §8.4). The round-3 bridge handled the
+  shell's message inside the port's listener, where `window.event` is the
+  port's message event (its `target` is the port) — also for the
+  microtasks queued during it. Any document code that ran during the render
+  (a MutationObserver, an overridden `String` or `String.prototype.replace`,
+  an `Object.prototype` getter, a custom element's `connectedCallback`, the
+  `scrollingElement` getter, an `innerHTML` / template `content` override, a
+  page hook) could read `window.event.target` and forge saves, prints, view
+  changes and links. The bridge now reads the data, drops the event and
+  handles the message in a captured `setTimeout`, so no document code runs
+  inside its listeners (window messages and in-page `#` links the same way);
+  `__orzPreview` and `__orzLibsReady` are now non-writable, non-configurable
+  window properties. New tests: the eight `window.event` vectors and
+  script-dispatched (untrusted) input in Chrome, the round-3 bridge as the
+  control (it leaks to all eight), and a vm test of the deferral, the
+  `isTrusted` checks, `navigated` outside the reader's input window and the
+  pinned API. **`PREVIEW_BRIDGE_HASH` changed again**
+  (`sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=`); carriers pick it
+  up when they rebuild.
+- **`printDocument` limits written down** (round 4 of the paged loop; claim
+  E.37, FC-19 §8.4). `allow-modals` stays (Chrome ignores a sandboxed
+  frame's `print()` without it; it also allows the document's own
+  `alert`/`confirm`/`prompt`); the done token sits in the frame's DOM, so
+  the printed document — the reader's own — can end or withhold its own
+  call. A test now proves that messages without the call's token do not
+  end it.
 - **The editor toolbar overflowed a narrow column** (round 3 of the paged
   loop; claim E.36): the carrier's slot (a settings group, the AI menu) did
   not wrap, so in a ~500 px column its last controls ran past the bar and

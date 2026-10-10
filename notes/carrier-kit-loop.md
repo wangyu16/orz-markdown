@@ -523,3 +523,72 @@ CHANGELOG (claims A.29–A.31, E.32–E.34, M.28–M.30, N.10).
 Accepted limit unchanged: a document script may take the keyboard focus.
 The bridge protects the channel, not the document: the nonce CSP stays the
 recommendation for untrusted content (FC-19 §8.4).
+
+### Round 4 — 2026-10-10, kit-side fixes
+
+Target: orz-paged 1.0 on the 2.3.0 kit (`orz-markdown@cca2f58`). Two
+adversaries: A against the preview channel's isolation (real-Chrome attacks,
+`attack.mts`), B a mutation run over orz-paged's and the kit's new code (47
+mutants, each against the suite that claims to catch it).
+
+**Adversary A — isolation**
+
+| Finding | Class | Sev | Disposition |
+|---|---|---|---|
+| `window.event` exposes the port: the bridge handled the shell's message inside the port's listener, where `window.event` is the port's MessageEvent (`target` = the port) — also for microtasks queued during it. A MutationObserver, overridden `String` / `String.prototype.replace`, an `Object.prototype` getter (`diff`), a page hook, a custom element's `connectedCallback`, the `scrollingElement` getter or an `innerHTML` / template `content` override read it during the render and forge save / print / view / link | ISOLATION | HIGH | fixed — the port's listener reads the data with the captured getter, drops the event and handles the message in the captured `setTimeout`; window messages and in-page `#` links likewise; the key / pointer / click listeners run only captured natives (E.35: eight `window.event` probes in Chrome, the round-3 bridge as the control — it leaks to all eight; a vm test of the deferral) |
+| `__orzPreview` / `__orzLibsReady` were frozen objects on writable window properties | ORZ | LOW | fixed — `Object.defineProperty`, non-writable, non-configurable (E.35) |
+| `printDocument`: the done token is in the frame's DOM, so the printed document can forge `orz-print-done`; `allow-modals` also allows `prompt()` | ORZ | LOW | documented limit (FC-19 §8.4, E.37) — `allow-modals` is required (Chrome: "Ignored call to 'print()'. The document is sandboxed, and the 'allow-modals' keyword is not set", checked); the page cannot observe an opaque frame's `afterprint`, so no done signal is unforgeable; the document is the reader's own and can spoil only its own printing |
+
+**Adversary B — mutation (kit part; orz-paged's own survivors are fixed in
+orz-paged and recorded there)**
+
+| Mutant | Before | Now |
+|---|---|---|
+| K01 data via the overridable getter, K02 not strict, K06 overridable `postMessage`, K10 print frame same-origin | caught | caught |
+| K05 `isTrusted` ignored | survived | caught — script-dispatched keys / clicks / pointer / wheel / touch (Chrome, `synthetic`) and the vm test |
+| K07 page API unfrozen | survived | caught — descriptor and `isFrozen` checks (Chrome and vm), also for a plain-assignment `pin` |
+| K08 `navigated` without reader input | survived | caught — `navigated(40)` with no or only untrusted input (Chrome and vm) |
+| K11 print token unchecked | survived | caught — a document posting token-less and wrong-token start/done still resolves only after it printed (E.37) |
+| K03 `onmessage`, K04 window messages after the port, K09 handover without the channel | survived | caught — the vm test (a listener on the port, a window message after the port, a decoy handover with another channel) |
+| the round-4 fix reverted (port or window message handled in the listener) | — | caught (Chrome `window.event` probes, vm) |
+
+orz-paged's survivors (P01, P03–P05, P09, P11–P14, P20, C01, C03, T02–T05,
+L01, L02, W03 — incremental layout, code-break, table-header, column-flow
+and print-ready gaps in orz-paged's own suite) are orz-paged's to close.
+
+**A structural option for the record (not implemented; the owner may
+choose it later).** Every isolation finding of rounds 3 and 4 has one root:
+the bridge and the document's scripts share a realm, so anything the bridge
+does after the document runs — a built-in it calls, an event it handles,
+`window.event`, a microtask checkpoint — is a place the document can stand.
+Each round closes the places found; the class stays open. The structural
+alternative: the preview frame becomes an outer opaque frame that holds
+only the bridge (no document content, no document script), and the document
+renders in a *nested* opaque frame (`sandbox="allow-scripts"`, `srcdoc`)
+inside it, with which the bridge never shares a realm. The bridge sends the
+nested frame the HTML by `postMessage` (data), receives anchors / sizes /
+link hrefs back as untrusted data, and owns the port alone. Keys, clicks,
+wheel and pointer that act are the ones the outer frame itself receives —
+trusted events in the bridge's own realm — so the nested document cannot
+forge them, cannot reach `window.event`, the port or any native the bridge
+uses. *Benefits:* the whole override / `window.event` / caller-walk class
+ends by construction; the bridge no longer needs captured natives or strict
+discipline; a carrier's own page code (paginator) could live in the nested
+frame without becoming trusted. *Costs:* keys and clicks typed *inside* the
+nested document reach the nested realm, not the bridge — Cmd/Ctrl+S / P / \
+and link clicks there would have to be forwarded by the nested frame as
+untrusted data (and so not act), or the outer frame must intercept them
+(focus stays in the outer frame, a transparent overlay — losing text
+selection and in-document interaction), which changes what "the reader's own
+key" means; scroll sync needs the nested frame's numbers as data (a document
+could lie about its own scroll — harmless) and its size; one more frame and
+message hop per render (latency, memory; the paginated preview's layout
+time dominates anyway); the nested frame inherits the CSP, the nonce must be
+passed down; `allow-same-origin` for the standalone `file:` case (B-2) must
+be decided again for the inner frame; FC-19 §8.4's bridge protocol and the
+carriers' `frameDocument` / page hooks change (a 3.0-level contract change,
+FC-19 owner first, then all carriers).
+
+Accepted limits unchanged: a document script may take the keyboard focus;
+the bridge protects the channel, not the document — the nonce CSP stays
+the recommendation for untrusted content.

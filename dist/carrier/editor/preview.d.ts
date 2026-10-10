@@ -81,7 +81,9 @@ export interface PreviewFrameOptions {
      * thing, post `orz-preview-ready { channel, secret }`, take the port from
      * `orz-preview-port { channel }` and send its reports through it — and,
      * for the same guarantee, capture every native it uses before the document
-     * runs, as the default bridge does (E.35).
+     * runs and run no document-visible code inside its listeners (handle a
+     * message in a captured `setTimeout`: `window.event`), as the default
+     * bridge does (E.35).
      */
     bridge?: string;
     /**
@@ -141,10 +143,23 @@ export declare const PREVIEW_SECRET_ATTRIBUTE = "data-orz-preview-secret";
  * `EventTarget.prototype.addEventListener`, `MessagePort.prototype.postMessage`
  * / `start`, `Date.now`, the timers, `Object.freeze` — and calls them only
  * through the captured `Reflect.apply` (`C(fn, this, args)`); it listens on
- * the port with the captured `addEventListener` (never `onmessage`) and drops
- * the event after reading its data; it is strict (invisible to `fn.caller`,
- * `fn.arguments` and stack walks); `__orzPreview` and `__orzLibsReady` are
- * frozen; once it holds the port it ignores window messages. The document
+ * the port with the captured `addEventListener` (never `onmessage`); it is
+ * strict (invisible to `fn.caller`, `fn.arguments` and stack walks);
+ * `__orzPreview` and `__orzLibsReady` are frozen, non-writable and
+ * non-configurable window properties; once it holds the port it ignores
+ * window messages.
+ *
+ * No document code inside a listener (2.3.0, round 4 of the paged loop).
+ * While an event listener runs, `window.event` is its event — for the port's
+ * message, an event whose `target` is the port — and so is it for any
+ * microtask that runs before the dispatch ends (a MutationObserver's). So each
+ * of the bridge's listeners runs only captured natives: the port's listener
+ * reads the data with the captured getter, drops the event and handles the
+ * message in a captured `setTimeout` (where `window.event` is undefined); a
+ * window message (a bridge without the port) and an in-page `#` link are
+ * handled the same way; the key, pointer, wheel, touch and click listeners
+ * read what they need with captured getters and post through the port
+ * without calling anything the document can replace. The document
  * cannot get the port nor make the reader's plain key or click a save, print
  * or link. It reports keys, link clicks, input
  * and scrolls only for trusted events (`isTrusted`) — scrolls (and
@@ -176,7 +191,7 @@ export declare const PREVIEW_BRIDGE: string;
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-export declare const PREVIEW_BRIDGE_HASH = "sha256-gmHpAbiWKC12kYJI9qu74nDUvxtnNNn2DEphqeEbmkg=";
+export declare const PREVIEW_BRIDGE_HASH = "sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=";
 /** The pieces of the frame document for these options. */
 export declare function previewFrameParts(options?: PreviewFrameOptions): PreviewFrameParts;
 /** The preview frame's `srcdoc`. */

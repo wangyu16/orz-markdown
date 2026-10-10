@@ -141,7 +141,9 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   registered before anything else) and use ONLY the natives it captured
   at its first statement (getters, methods, timers, `Date.now`), called
   through the captured `Reflect.apply`, in strict mode, never
-  `port.onmessage` (E.35: a document script can override any built-in the
+  `port.onmessage`, and run no document-visible code inside its listeners —
+  handle a message in the captured `setTimeout`, since `window.event` is the
+  port's event during the listener and its microtasks (E.35: a document script can override any built-in the
   bridge calls later and so steal the port); recompute
   `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. Patches and other
   strings the editor keeps go through `detachString` (V8 slices keep the whole

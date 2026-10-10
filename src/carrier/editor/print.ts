@@ -22,6 +22,22 @@
  * frame's own `print()` — the browser prints that document alone — and tells
  * the page; the frame is then removed.
  *
+ * Limits (round 4 of the orz-paged loop, owner's trust rule: the printed
+ * document is the reader's own document — the same trust as its read view).
+ * `allow-modals` stays: without it Chrome ignores the frame's `print()`
+ * ("the document is sandboxed, and the 'allow-modals' keyword is not set");
+ * it also lets the document's scripts open `alert` / `confirm` / `prompt`
+ * while the frame lives. The done signal is the document's word: the
+ * frame's messages count only from that frame and with the call's token,
+ * but the token sits in the frame's own DOM (the added script), so the
+ * document's scripts can read it and say `orz-print-done` early (the frame
+ * then goes before it printed) or never (the call resolves `false` after
+ * the timeout when nothing started, or stays pending after a start) — it
+ * can only spoil the printing of itself. The page cannot observe the
+ * opaque frame's `afterprint`, so there is no signal the document could not
+ * forge; no page state depends on it beyond the promise and the frame's
+ * removal.
+ *
  * The frame inherits the page's Content-Security-Policy: under a nonce
  * policy pass `nonce` (stamped on the added script); the document's own
  * scripts must carry it too, or the document must need none (a static print

@@ -400,7 +400,7 @@ describe('the preview', () => {
     expect(f.iframe.attrs).toMatchObject({ sandbox: 'allow-scripts', title: 'Document preview' });
     expect(String(f.iframe.srcdoc)).toContain(PREVIEW_BRIDGE);
     expect(PREVIEW_BRIDGE).not.toMatch(/<\/?script/i);
-    expect(PREVIEW_BRIDGE).toContain('if(!port&&C(SRC,e)===P)handle(d)'); // the parent's window messages, until the port (2.3.0 round 3: then only the port)
+    expect(PREVIEW_BRIDGE).toContain('if(!port&&C(SRC,e)===P)defer(function(){if(!port)handle(d)})'); // the parent's window messages, until the port (2.3.0 round 3: then only the port; round 4: handled after the dispatch)
     p.render('<p>one</p>');
     expect(f.posted).toEqual([]);
     f.emit({ type: 'orz-preview-ready' }, f.frameWindow);
@@ -2045,8 +2045,8 @@ describe('work in flight and after destroy (round 2: F3/#11, LOW7)', () => {
  * context: prototypes with the getters and methods it takes, an event's own `isTrusted`, and `addEventListener`
  * on EventTarget.prototype (calling `add(type, listener)` for the window and the document).
  */
-function bridgeDomStubs(add: (type: string, listener: (e: unknown) => void) => void): Record<string, unknown> {
-  class EventTarget { addEventListener(t: string, l: (e: unknown) => void) { add(t, l); } }
+function bridgeDomStubs(add: (type: string, listener: (e: unknown) => void, target?: unknown) => void): Record<string, unknown> {
+  class EventTarget { addEventListener(t: string, l: (e: unknown) => void) { add(t, l, this); } }
   class Event {
     _i: Record<string, unknown>;
     constructor(init: Record<string, unknown> | string = {}) { this._i = typeof init === 'string' ? {} : init; Object.defineProperty(this, 'isTrusted', { get() { return (this as Event)._i.trusted === true; } }); }
@@ -2260,7 +2260,7 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     expect(bridgeAt).toBeGreaterThan(0);
     expect(bridgeAt).toBeLessThan(full.indexOf('<link'));
     expect(bridgeAt).toBeLessThan(full.indexOf('id="orz-doc"'));
-    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', '__orzPreview=FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)})']) expect(PREVIEW_BRIDGE).toContain(hook);
+    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', 'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}))']) expect(PREVIEW_BRIDGE).toContain(hook);
     const custom = previewFrameDocument({ assets: false, bridge: 'void 0', head: '<link rel="stylesheet" href="t.css">' });
     expect(custom.indexOf('<script>void 0</script>')).toBeGreaterThan(custom.indexOf('id="orz-doc"'));
     // the frame's secret rides on the bridge's own <script> (its text, and so its hash, stays the same), first in <head>, nonce-stamped
@@ -2297,6 +2297,7 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     fromShell({ type: 'orz-preview-render', id: 1, html: 'one' });
     fromShell({ type: 'orz-preview-render', id: 2, html: 'two' });
     fromShell({ type: 'orz-preview-render', id: 3, html: 'three' });
+    await tick(5); // (2.3.0 round 4: a message is handled after its dispatch)
     expect(applied).toEqual(['one']);
     settle[0]();
     await tick(5);
@@ -2422,7 +2423,80 @@ describe('the authenticated preview channel (option B: the frame secret)', () =>
       'if(tr(e))send({type:"orz-preview-link"', 'if(!tr(e)||NOW()<mute||NOW()-lastIn>1500||queued)return;', 'NOW()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})',
     ]) expect(PREVIEW_BRIDGE).toContain(guard);
     for (const gone of ['orz-preview-focus', 'orz-preview-ping', 'orz-preview-pong', 'hasFocus']) expect(PREVIEW_BRIDGE).not.toContain(gone);
-    expect(PREVIEW_BRIDGE).toContain('W.__orzPreview=FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)})'); // post: a window message, never the port
+    expect(PREVIEW_BRIDGE).toContain('pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}))'); // post: a window message, never the port
+  });
+
+  it('[E.35] (2.3.0 round 4) the default bridge, run in a bare vm: a handover without its channel is not taken; the port\'s message is handled after its listener returns (never inside the dispatch, where window.event is the port\'s event), as is a window message before the port, and after it window messages do nothing; untrusted key, pointer, wheel, touch and click events report nothing and __orzPreview.navigated reports nothing without the reader\'s input — trusted ones do; __orzPreview (and its functions) and __orzLibsReady are frozen, non-writable, non-configurable window properties', async () => {
+    type L = { t: string; l: (e: unknown) => void; on: unknown };
+    const ls: L[] = [];
+    const ready: Array<Record<string, unknown>> = [];
+    const sent: Array<Record<string, unknown>> = [];
+    const scroller = { scrollTop: 0, scrollHeight: 100 };
+    const stubs = bridgeDomStubs((t, l, on) => { ls.push({ t, l, on }); });
+    const EventTargetC = stubs.EventTarget as new () => object;
+    class MessagePort extends EventTargetC { postMessage(m: Record<string, unknown>) { sent.push(m); } start() {} }
+    class Element { _h: string; constructor(h = '') { this._h = h; } closest() { return this._h ? this : null; } getAttribute() { return this._h; } }
+    const win: Record<string, unknown> = {
+      setTimeout, clearTimeout, Reflect, Uint32Array, Array, Math, Date, String, Object, isFinite, isNaN, parseInt, crypto: globalThis.crypto,
+      ...stubs, MessagePort, Element, innerHeight: 50,
+    };
+    win.window = win;
+    win.parent = { postMessage: (m: Record<string, unknown>) => ready.push(m) };
+    win.document = {
+      currentScript: { getAttribute: () => 'sekret', removeAttribute: () => {} }, documentElement: { getAttribute: () => null }, scrollingElement: scroller,
+      getElementById: () => null,
+    };
+    win.requestAnimationFrame = (f: () => void) => setTimeout(f, 0);
+    vm.runInNewContext(PREVIEW_BRIDGE, win);
+    expect(ready[0]).toMatchObject({ type: 'orz-preview-ready', secret: 'sekret' });
+    const E = win as unknown as Record<string, new (i: Record<string, unknown>) => unknown>;
+    /** Dispatch to the bridge's listeners on `on` (the window: neither the port nor the document — inside the vm the window is the context's global proxy). */
+    const fire = (t: string, e: unknown, on: unknown) => { for (const x of ls) if (x.t === t && (on === win ? x.on !== port && x.on !== win.document : x.on === on)) x.l(e); };
+    const port = new MessagePort();
+    // before the port, the parent's window message: also handled after the dispatch
+    fire('message', new E.MessageEvent({ data: { type: 'orz-preview-scroll', top: 10 }, source: win.parent, trusted: true }), win);
+    expect(scroller.scrollTop).toBe(0);
+    await tick(5);
+    expect(scroller.scrollTop).toBe(10);
+    // a handover without this bridge's channel is not taken (K09)
+    const decoy = new MessagePort();
+    fire('message', new E.MessageEvent({ data: { type: 'orz-preview-port', channel: 'guess' }, ports: [decoy], source: win.parent, trusted: true }), win);
+    expect(ls.some((x) => x.on === decoy)).toBe(false);
+    fire('message', new E.MessageEvent({ data: { type: 'orz-preview-port', channel: ready[0].channel }, ports: [port], source: win.parent, trusted: true }), win);
+    expect(ls.some((x) => x.on === port && x.t === 'message')).toBe(true);
+    // the port's message: nothing happens inside the listener — the bridge handles it after the dispatch
+    fire('message', new E.MessageEvent({ data: { type: 'orz-preview-scroll', top: 30 }, trusted: true }), port);
+    expect(scroller.scrollTop).toBe(10);
+    await tick(5);
+    expect(scroller.scrollTop).toBe(30);
+    // once it holds the port, the window's messages do nothing (K04)
+    fire('message', new E.MessageEvent({ data: { type: 'orz-preview-scroll', top: 99 }, source: win.parent, trusted: true }), win);
+    await tick(5);
+    expect(scroller.scrollTop).toBe(30);
+    // untrusted (script-dispatched) input: nothing reported; navigated without the reader's input: nothing
+    const doc = win.document;
+    fire('keydown', new E.KeyboardEvent({ key: 's', metaKey: true, trusted: false }), doc);
+    fire('keydown', new E.KeyboardEvent({ key: 'Escape', trusted: false }), doc);
+    for (const t of ['pointerdown', 'wheel', 'touchstart']) fire(t, new E.MouseEvent({ trusted: false }), win);
+    fire('pointermove', new E.MouseEvent({ buttons: 1, trusted: false }), win);
+    fire('click', new E.MouseEvent({ target: new Element('https://evil.example/'), trusted: false }), doc);
+    const api = win.__orzPreview as { navigated(l: number): void; report(): void };
+    api.navigated(40);
+    await tick(5);
+    expect(sent).toEqual([]);
+    // the reader's own (trusted) input does report, and opens the navigated window
+    fire('keydown', new E.KeyboardEvent({ key: 's', metaKey: true, trusted: true }), doc);
+    fire('click', new E.MouseEvent({ target: new Element('https://ok.example/'), trusted: true }), doc);
+    api.navigated(40);
+    expect(sent.map((m) => `${m.type}:${m.key ?? m.href ?? m.input ?? m.line ?? ''}`)).toEqual(['orz-preview-active:key', 'orz-preview-key:s', 'orz-preview-link:https://ok.example/', 'orz-preview-scrolled:40']);
+    // what the bridge exposes cannot be replaced
+    for (const n of ['__orzPreview', '__orzLibsReady']) {
+      const d = Object.getOwnPropertyDescriptor(win, n)!;
+      expect([n, d.writable, d.configurable, Object.isFrozen(d.value)]).toEqual([n, false, false, true]);
+    }
+    for (const f of ['report', 'post', 'navigated'] as const) expect(Object.isFrozen((api as unknown as Record<string, unknown>)[f])).toBe(true);
+    expect(() => { 'use strict'; (win as Record<string, unknown>).__orzPreview = {}; }).toThrow(TypeError);
+    expect(win.__orzPreview).toBe(api);
   });
 
   it('[E.14] focus entering the preview frame — a document script\'s focus(), or the reader\'s click — moves nothing: the shell does not take it back, replaces no frame, shows no note and emits no error, and a Tab, a window blur and focus round trip leave the preview as it was', async () => {
@@ -3196,7 +3270,7 @@ if(o instanceof Event){var a=[RA0(oT,o,[]),RA0(oCT,o,[]),RA0(oSE,o,[])];if(o ins
 if(typeof o==='object'&&typeof o.length==='number'&&!(o instanceof Node)&&o!==window){for(var j=0;j<o.length&&j<8;j++)scan1(o[j],d+1)}}catch(e){}}
 function walk(){if(busy)return;busy=1;try{var f=walk.caller,n=0;while(f&&n++<30){try{var args=f.arguments;for(var i=0;args&&i<args.length;i++)scan1(args[i],0)}catch(e){}f=f.caller}}catch(e){}
 try{var op=Error.prepareStackTrace;Error.prepareStackTrace=function(e,cs){for(var i=0;i<cs.length;i++){try{scan1(cs[i].getThis(),0)}catch(x){}try{var fn=cs[i].getFunction();if(fn&&fn.arguments)for(var j=0;j<fn.arguments.length;j++)scan1(fn.arguments[j],0)}catch(x){}}return ''};void new Error().stack;Error.prepareStackTrace=op}catch(e){}busy=0}
-function hit(t,a){window.__hits++;scan(t);if(a)for(var i=0;i<a.length;i++)scan(a[i]);walk()}
+function hit(t,a){window.__hits++;var we=null;try{we=window.event}catch(e){}scan(we);scan(t);if(a)for(var i=0;i<a.length;i++)scan(a[i]);walk()}
 function getter(proto,name){var d=GOD(proto,name);if(!d||!d.configurable)return;DP0(proto,name,{configurable:true,enumerable:d.enumerable,get:function(){hit(this);return d.get?RA0(d.get,this,[]):d.value},set:d.set?function(v){hit(this,[v]);return RA0(d.set,this,[v])}:undefined})}
 function method(owner,name){var f=owner[name];if(typeof f!=='function')return;owner[name]=function(){hit(this,arguments);return RA0(f,this,arguments)}}
 function hooks(){window.__orzPreviewApply=function(html){hit(null,arguments);document.getElementById('orz-doc').innerHTML=html};window.__orzPreviewMessage=function(m){hit(null,arguments)};window.__orzPreviewNavigate=function(){hit(null,arguments)};var e=window.__orzEnhance;window.__orzEnhance=function(){hit(null,arguments);if(typeof e==='function')return e()}}
@@ -3214,13 +3288,29 @@ if(V==='keys'){var fk=function(n,v){DP0(KeyboardEvent.prototype,n,{configurable:
 DP0(MouseEvent.prototype,'buttons',{configurable:true,get:function(){hit(this);return 1}});var fake=document.createElement('a');fake.setAttribute('href','https://evil.example/click');
 var oc=Element.prototype.closest;Element.prototype.closest=function(){hit(this,arguments);return fake};var og=Element.prototype.getAttribute;Element.prototype.getAttribute=function(n){hit(this,arguments);return n==='href'?'https://evil.example/click':RA0(og,this,arguments)};
 getter(Event.prototype,'target');getter(Event.prototype,'defaultPrevented')}
+if(V==='mutation')new MutationObserver(function(){hit(null)}).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});
+if(V==='string'){var S0=String;window.String=function(x){hit(null,arguments);return S0(x)}}
+if(V==='replace')method(String.prototype,'replace');
+if(V==='ce')customElements.define('x-y',class extends HTMLElement{connectedCallback(){hit(null)}});
+if(V==='scrolling')getter(Document.prototype,'scrollingElement');
+if(V==='innerhtml'){getter(Element.prototype,'innerHTML');getter(HTMLTemplateElement.prototype,'content')}
+if(V==='synthetic'){var a=document.createElement('a');a.setAttribute('href','https://evil.example/synthetic');a.textContent='x';document.body.appendChild(a);
+window.__api0=window.__orzPreview;try{window.__orzPreview={report:function(){},post:function(){},navigated:function(){}}}catch(e){}try{window.__api0.navigated=function(){}}catch(e){}try{window.__orzLibsReady=function(){}}catch(e){}
+var ev=function(t,e){try{t.dispatchEvent(e)}catch(x){}};
+oSI(function(){var ks=['s','p','\\','Escape'];for(var i=0;i<ks.length;i++)ev(document.body,new KeyboardEvent('keydown',{key:ks[i],metaKey:true,ctrlKey:true,bubbles:true,cancelable:true}));
+ev(document.body,new PointerEvent('pointerdown',{bubbles:true}));ev(document.body,new WheelEvent('wheel',{bubbles:true}));ev(document.body,new PointerEvent('pointermove',{bubbles:true,buttons:1}));
+try{ev(document.body,new TouchEvent('touchstart',{bubbles:true}))}catch(x){}ev(a,new MouseEvent('click',{bubbles:true,cancelable:true}));
+try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scrollingElement||document.documentElement).scrollTop=(window.__hits*37)%400},100)}
 })`;
   const OLD_BRIDGE = readFileSync('tests/fixtures/preview-bridge-2.3.0-round2.js', 'utf8').trim();
+  /** The round-3 bridge (2.3.0 round 3): every native captured, but the port's message handled inside its listener (window.event). */
+  const ROUND3_BRIDGE = readFileSync('tests/fixtures/preview-bridge-2.3.0-round3.js', 'utf8').trim();
   const attackText = (v: string, id: string) => `{{nyml\nkind: document\nuid: doc-${`attack${id}`.padEnd(16, '0')}\n}}\n\n# Attack ${v}\n\n<img src="x" onerror="eval(atob('${Buffer.from(`${ATTACK}(${JSON.stringify(v)})`).toString('base64')}'))">\n\n${Array.from({ length: 80 }, (_, i) => `Line ${i} of the attack.\n`).join('\n')}`;
   /** Mount a shell on a document running the attack `v`, make the shell post through the port, and report what reached the host. (Each new shell goes first in the page: a frame at the viewport's bottom edge gets no input in headless Chrome.) */
-  const runAttack = async (p: Page, v: string, id: string, old = false) => {
+  const runAttack = async (p: Page, v: string, id: string, oldBridge: boolean | string = false) => {
+    const old = oldBridge === true ? OLD_BRIDGE : oldBridge || '';
     await p.evaluate(`(function(id){var d=document.createElement('div');d.id=id;d.className='box';document.body.insertBefore(d,document.body.firstChild);scrollTo(0,0);window.__saved[id]=[];})(${JSON.stringify(id)})`);
-    const opts = `{ print: true, links: true, preview: ${old ? `{ bridge: ${JSON.stringify(OLD_BRIDGE)} }` : '{}'} }`;
+    const opts = `{ print: true, links: true, preview: ${old ? `{ bridge: ${JSON.stringify(old)} }` : '{}'} }`;
     expect(await p.evaluate(`mountOpts(${JSON.stringify(id)}, ${JSON.stringify(attackText(v, id))}, ${JSON.stringify(`${A}/cm6.js`)}, ${opts})`)).toEqual({ engine: 'codemirror6', error: null });
     const f = await frameOf(p, `Attack ${v}`);
     await expect.poll(() => f.evaluate('window.__atk'), { timeout: 10_000 }).toBe(1);
@@ -3228,7 +3318,8 @@ getter(Event.prototype,'target');getter(Event.prototype,'defaultPrevented')}
     const top0 = await p.evaluate(`shell_${id}.root.querySelector('.cm-scroller').scrollTop`);
     // the shell posts through the port: renders (and their acknowledgement), a carrier's message, a scroll
     for (let i = 0; i < 2; i++) {
-      await p.evaluate(`shell_${id}.setText(shell_${id}.getText() + "\\n\\nMore ${i}.\\n")`);
+      // (a custom element in each new paragraph: its connectedCallback runs when the bridge inserts it)
+      await p.evaluate(`shell_${id}.setText(shell_${id}.getText() + "\\n\\nMore ${i}. <x-y>new</x-y>\\n")`);
       // (the round-2 bridge's stolen port switches the view away from the preview: no render then)
       if (old) await p.waitForTimeout(800);
       else await expect.poll(() => f.evaluate('document.getElementById("orz-doc").textContent.indexOf("More ' + i + '.") >= 0'), { timeout: 10_000 }).toBe(true);
@@ -3241,6 +3332,7 @@ getter(Event.prototype,'target');getter(Event.prototype,'defaultPrevented')}
     }
     await p.waitForTimeout(1200);
     return {
+      frame: f,
       got: await f.evaluate('window.__got'),
       hits: Number(await f.evaluate('window.__hits')),
       saved: await p.evaluate(`window.__saved[${JSON.stringify(id)}].length`),
@@ -3262,6 +3354,33 @@ getter(Event.prototype,'target');getter(Event.prototype,'defaultPrevented')}
       expect({ v, got: r.got, saved: r.saved, prints: r.prints, links: r.links, mode: r.mode, heard, moved: r.moved }).toEqual({ v, got: '', saved: 0, prints: 0, links: 0, mode: 'split', heard: [], moved: false });
       if (v === 'keys') expect(r.heard).toContain('active:key'); // the reader's key did reach the bridge (plain)
       if (v === 'hooks' || v === 'keys') expect(r.hits, v).toBeGreaterThan(0); // the override ran (the others: the bridge never calls them now)
+    }
+    await p.close();
+  });
+
+  it('[E.35] (2.3.0 round 4 of the paged loop) window.event never holds the port while document code runs: a MutationObserver, an overridden String / String.prototype.replace, a custom element\'s connectedCallback, the scrollingElement getter, the innerHTML setter and template content getter, Object.prototype getters and the page hooks — each runs during the bridge\'s render and reads window.event — never find the port; untrusted (script-dispatched) keys, clicks, pointer, wheel and touch events and __orzPreview.navigated without the reader\'s input report nothing; __orzPreview and __orzLibsReady are frozen, non-writable and non-configurable', { timeout: 240_000 }, async () => {
+    const p = await open();
+    await p.evaluate('window.__prints = []; window.__printed = 0; window.print = function () { window.__printed++; };');
+    const variants = ['mutation', 'string', 'replace', 'ce', 'scrolling', 'innerhtml', 'object', 'hooks', 'synthetic'];
+    for (const [i, v] of variants.entries()) {
+      const r = await runAttack(p, v, `w${i}`);
+      expect({ v, got: r.got, saved: r.saved, prints: r.prints, links: r.links, mode: r.mode, heard: r.heard, moved: r.moved }).toEqual({ v, got: '', saved: 0, prints: 0, links: 0, mode: 'split', heard: [], moved: false });
+      expect(r.hits, v).toBeGreaterThan(0); // the document's code did run (during the render, or its synthetic events)
+      if (v === 'synthetic') {
+        const api = await r.frame.evaluate(`(function(){var d=Object.getOwnPropertyDescriptor(window,'__orzPreview'),l=Object.getOwnPropertyDescriptor(window,'__orzLibsReady'),o=window.__orzPreview;
+          return {kept:o===window.__api0,frozen:[Object.isFrozen(o),Object.isFrozen(o.report),Object.isFrozen(o.post),Object.isFrozen(o.navigated),Object.isFrozen(window.__orzLibsReady)],writable:[d.writable,l.writable],configurable:[d.configurable,l.configurable]}})()`);
+        expect(api).toEqual({ kept: true, frozen: [true, true, true, true, true], writable: [false, false], configurable: [false, false] });
+      }
+    }
+    await p.close();
+  });
+
+  it('[E.35] the window.event attacks are real: the round-3 bridge (as a carrier\'s own bridge), which handled the port\'s message inside its listener, leaks the port through window.event to a MutationObserver, String, String.prototype.replace, a custom element, scrollingElement, innerHTML / template content, an Object.prototype getter and a page hook; the forged keys then save, print and switch the view, and the forged link arrives', { timeout: 240_000 }, async () => {
+    const p = await open();
+    await p.evaluate('window.__prints = []; window.__printed = 0; window.print = function () { window.__printed++; };');
+    for (const [i, v] of ['mutation', 'string', 'replace', 'ce', 'scrolling', 'innerhtml', 'object', 'hooks'].entries()) {
+      const r = await runAttack(p, v, `r3${i}`, ROUND3_BRIDGE);
+      expect([v, r.got, r.saved > 0, r.prints > 0, r.links > 0 || r.heard.some((h) => h.startsWith('link:'))]).toEqual([v, '[port]', true, true, true]);
     }
     await p.close();
   });
@@ -3308,6 +3427,12 @@ getter(Event.prototype,'target');getter(Event.prototype,'defaultPrevented')}
     expect(probes.filter((x) => x.kind === 'print')).toEqual([{ kind: 'print', ready: 'laid out', title: 'Doc to print', reach: 'SecurityError' }]);
     expect(await p.evaluate('window.__printed')).toBe(0);
     await expect.poll(() => p.evaluate("document.querySelectorAll('iframe[data-orz-print]').length"), { timeout: 5000 }).toBe(0);
+    // round 4 (K11): the frame's messages count only with the call's token — a done (or start) without it, or with
+    // another token, posted by the document at once, does not end the call before the document has printed
+    const FORGE = "['orz-print-start','orz-print-done'].forEach(function(t){parent.postMessage({type:t},'*');parent.postMessage({type:t,token:'guess'},'*')});";
+    const DOC2 = DOC.replace('<h1>Pages</h1>', `<h1>Pages</h1><script>${FORGE}</script>`).replace('Doc to print', 'Doc with forged done');
+    await p.evaluate('window.__probes = []');
+    expect(await p.evaluate(`OrzEditor.printDocument(${JSON.stringify(DOC2)}).then(function(ok){return [ok, window.__probes.map(function(x){return x.ready+'/'+x.title})]})`)).toEqual([true, ['laid out/Doc with forged done']]);
     await p.close();
     // a nonce Content-Security-Policy: the frame inherits it
     const q = await browser!.newPage({ viewport: { width: 1200, height: 900 } });

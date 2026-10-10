@@ -109,10 +109,23 @@ exports.PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * `EventTarget.prototype.addEventListener`, `MessagePort.prototype.postMessage`
  * / `start`, `Date.now`, the timers, `Object.freeze` — and calls them only
  * through the captured `Reflect.apply` (`C(fn, this, args)`); it listens on
- * the port with the captured `addEventListener` (never `onmessage`) and drops
- * the event after reading its data; it is strict (invisible to `fn.caller`,
- * `fn.arguments` and stack walks); `__orzPreview` and `__orzLibsReady` are
- * frozen; once it holds the port it ignores window messages. The document
+ * the port with the captured `addEventListener` (never `onmessage`); it is
+ * strict (invisible to `fn.caller`, `fn.arguments` and stack walks);
+ * `__orzPreview` and `__orzLibsReady` are frozen, non-writable and
+ * non-configurable window properties; once it holds the port it ignores
+ * window messages.
+ *
+ * No document code inside a listener (2.3.0, round 4 of the paged loop).
+ * While an event listener runs, `window.event` is its event — for the port's
+ * message, an event whose `target` is the port — and so is it for any
+ * microtask that runs before the dispatch ends (a MutationObserver's). So each
+ * of the bridge's listeners runs only captured natives: the port's listener
+ * reads the data with the captured getter, drops the event and handles the
+ * message in a captured `setTimeout` (where `window.event` is undefined); a
+ * window message (a bridge without the port) and an in-page `#` link are
+ * handled the same way; the key, pointer, wheel, touch and click listeners
+ * read what they need with captured getters and post through the port
+ * without calling anything the document can replace. The document
  * cannot get the port nor make the reader's plain key or click a save, print
  * or link. It reports keys, link clicks, input
  * and scrolls only for trusted events (`isTrusted`) — scrolls (and
@@ -141,7 +154,7 @@ exports.PREVIEW_BRIDGE = [
     'var W=window,D=document,P=W.parent,art=null,last=0,want=0,mute=0,queued=0,timer=0,port=null,sec=null,chan=String(Math.random()).slice(2),lastIn=-1e9,busy=0,next=null;',
     'try{var me=D.currentScript;if(me){sec=me.getAttribute("data-orz-preview-secret");me.removeAttribute("data-orz-preview-secret")}}catch(e){}',
     // every native the bridge's trust path uses, as it is now (before any document content): only these are used after
-    'var RA=Reflect.apply,GOD=Object.getOwnPropertyDescriptor,FZ=Object.freeze,NOW=Date.now,ST=W.setTimeout,CT=W.clearTimeout,RAF=W.requestAnimationFrame;',
+    'var RA=Reflect.apply,GOD=Object.getOwnPropertyDescriptor,DFP=Object.defineProperty,FZ=Object.freeze,NOW=Date.now,ST=W.setTimeout,CT=W.clearTimeout,RAF=W.requestAnimationFrame;',
     'function G(o,n){try{var x=GOD(o,n);return x?x.get||x.value:null}catch(e){return null}}',
     'var EP=W.MessageEvent?MessageEvent.prototype:null,VP=Event.prototype,KP=W.KeyboardEvent?KeyboardEvent.prototype:null,LP=Element.prototype,MP=W.MessagePort?MessagePort.prototype:null,',
     'AEL=G(EventTarget.prototype,"addEventListener"),DATA=G(EP,"data"),PORTS=G(EP,"ports"),SRC=G(EP,"source"),TGT=G(VP,"target"),PD=G(VP,"preventDefault"),SIP=G(VP,"stopImmediatePropagation"),DP=G(VP,"defaultPrevented"),',
@@ -150,10 +163,12 @@ exports.PREVIEW_BRIDGE = [
     'function C(f,o,a){return RA(f,o,a||[])}',
     'function on(t,n,f,o){C(AEL,t,[n,f,o])}',
     'function tr(e){try{return TRU?C(TRU,e)===true:false}catch(x){return false}}',
+    // run f after the current event's dispatch: while a listener runs, window.event is its event (for the port's, the port), so no document-visible code runs inside one
+    'function defer(f){ST(f,0)}',
     'try{var rv=new Uint32Array(4);crypto.getRandomValues(rv);chan=Array.prototype.join.call(rv,"-")}catch(e){}',
     'on(W,"message",function(e){var d=C(DATA,e);',
-    'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){C(SIP,e);if(!port&&d.channel===chan){var q=C(PORTS,e);q=q&&q.length>0?q[0]:null;if(q&&PM){port=q;on(q,"message",function(m){var x=C(DATA,m);m=null;handle(x)});if(PS)C(PS,q)}}return}',
-    'if(!port&&C(SRC,e)===P)handle(d)},true);',
+    'if(d&&typeof d==="object"&&d.type==="orz-preview-port"){C(SIP,e);if(!port&&d.channel===chan){var q=C(PORTS,e);q=q&&q.length>0?q[0]:null;if(q&&PM){port=q;on(q,"message",function(m){var x=C(DATA,m);m=null;defer(function(){handle(x)})});if(PS)C(PS,q)}}return}',
+    'if(!port&&C(SRC,e)===P)defer(function(){if(!port)handle(d)})},true);',
     'function active(k){lastIn=NOW();send({type:"orz-preview-active",input:k})}',
     'on(W,"pointerdown",function(e){if(tr(e))active("pointer")},true);',
     'on(W,"wheel",function(e){if(tr(e))active("wheel")},{passive:true,capture:true});',
@@ -201,11 +216,12 @@ exports.PREVIEW_BRIDGE = [
     'else if(mod&&C(SHIFT,e)!==true&&(k==="p"||k==="P")){C(PD,e);send({type:"orz-preview-key",key:"p"})}',
     'else if(k==="Escape")send({type:"orz-preview-key",key:"Escape"})});',
     'on(D,"click",function(e){var t=C(TGT,e),a=null;try{a=t?C(CLO,t,["a[href]"]):null}catch(x){}if(!a||C(DP,e))return;var h=C(GA,a,["href"]);h=typeof h==="string"?h:"";C(PD,e);',
-    'if(h[0]==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var g=D.getElementById(id);if(g)g.scrollIntoView();return}',
+    'if(h[0]==="#"){defer(function(){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var g=D.getElementById(id);if(g)g.scrollIntoView()});return}',
     'if(tr(e))send({type:"orz-preview-link",href:h})});',
     'function libs(){enhance();report()}',
-    'W.__orzLibsReady=FZ(libs);',
-    'W.__orzPreview=FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)});',
+    'function pin(n,v){try{DFP(W,n,{value:v,writable:false,configurable:false,enumerable:true})}catch(e){try{W[n]=v}catch(x){}}}',
+    'pin("__orzLibsReady",FZ(libs));',
+    'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}));',
     'post(sec?{type:"orz-preview-ready",channel:chan,secret:sec}:{type:"orz-preview-ready"});sec=null;',
     '})();',
 ].join('');
@@ -216,7 +232,7 @@ exports.PREVIEW_BRIDGE = [
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-exports.PREVIEW_BRIDGE_HASH = 'sha256-gmHpAbiWKC12kYJI9qu74nDUvxtnNNn2DEphqeEbmkg=';
+exports.PREVIEW_BRIDGE_HASH = 'sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=';
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';
 const BASE_STYLE = 'html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}';

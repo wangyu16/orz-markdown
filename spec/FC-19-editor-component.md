@@ -502,13 +502,26 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   `getAttribute`, `EventTarget.prototype.addEventListener`,
   `MessagePort.prototype.postMessage` / `start` — and calls them only through
   the captured `Reflect.apply`. It listens on the port with the captured
-  `addEventListener` (never `onmessage`), reads the event's data with the
-  captured getter and drops the event before anything else runs; it runs in
-  strict mode (a strict function is invisible to `fn.caller`, has no
-  `fn.arguments`, and a stack walk's `getThis()` / `getFunction()` give
-  nothing for it); what it exposes (`__orzPreview` and its functions,
-  `__orzLibsReady`) is frozen; once it holds the port it ignores the
-  window's messages. So a document script cannot get the port, forge a key
+  `addEventListener` (never `onmessage`); it runs in strict mode (a strict
+  function is invisible to `fn.caller`, has no `fn.arguments`, and a stack
+  walk's `getThis()` / `getFunction()` give nothing for it); what it exposes
+  (`__orzPreview` and its functions, `__orzLibsReady`) is frozen and bound
+  as non-writable, non-configurable window properties; once it holds the
+  port it ignores the window's messages. **No document code runs inside the
+  bridge's listeners** (round 4): while a listener runs — and while the
+  microtasks queued during it run, a MutationObserver's among them —
+  `window.event` is that listener's event, and the port's message event
+  has the port as its `target`. So the port's listener reads the event's
+  data with the captured getter, drops the event and returns; the message
+  is handled in a task of its own (the captured `setTimeout`), where
+  `window.event` is undefined — the render, the page hooks, every DOM call
+  and anything the document has overridden (`String`,
+  `String.prototype.replace`, `Object.prototype` getters, `innerHTML`,
+  `scrollingElement`, a custom element's callbacks) run only there. The
+  same for a window message (a bridge without the port) and an in-page `#`
+  link; the key, pointer, wheel, touch, scroll and click listeners only read
+  the event with captured getters and post through the port with captured
+  natives. A carrier's own bridge must do the same. So a document script cannot get the port, forge a key
   or link through it, turn the reader's plain key or click into a save, a
   print or a link, or keep the 1.5 s scroll window open. What it still can,
   as before: take the focus (the accepted limit below), scroll its own frame
@@ -682,6 +695,16 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   Do not open a blob URL of the document in a tab instead: it would run in
   the app's own origin. A carrier adds the specifics: what document prints
   (orz-paged: the paginated pages) and its `__orzPrintReady`.
+  Limits (round 4 of the orz-paged loop; the printed document is the
+  reader's own document, the same trust as its read view): `allow-modals`
+  is required — without it Chrome ignores a sandboxed frame's `print()` —
+  and also lets the document's scripts open `alert` / `confirm` / `prompt`
+  while the frame lives. The frame's messages count only from that frame
+  and with the call's token, but the token is in the frame's own DOM, so the
+  document's scripts can say "done" early (the frame goes before it
+  printed) or never: the document can spoil only its own printing. The page
+  cannot observe the opaque frame's `afterprint`; nothing but the promise
+  and the frame's removal depends on the signal.
 
 ### 8.5 Save
 
