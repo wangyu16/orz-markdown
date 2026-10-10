@@ -593,11 +593,14 @@ Designed now so that neither needs a breaking change later:
   **Page zoom** — `readerControls.choices` (`apply(view, id)` zooms the
   pages). Two columns across a page break (owner, 2026-10-09: the
   **hybrid**, family REBUILD §3b decision 1): a Paged.js handler of the
-  carrier's own moves a short `.cols` block whole to the next page and
-  splits a long one column by column at each page bottom (column 1
-  continues in column 1); its limits are the carrier's, documented there (a
-  lone long column stays narrow; only paragraphs, list items, blockquotes
-  and plain divs split; one-line widows; over-tall blocks clip) — a
+  carrier's own moves a short `.cols` block whole to the next page only
+  when that leaves less than about a third of the page empty (owner,
+  orz-paged loop round 3), and otherwise splits it — and any long one —
+  column by column at the page bottom (column 1 continues in column 1);
+  its limits are the carrier's, documented there (a lone long column stays
+  narrow; only paragraphs, list items, blockquotes, plain divs and tables
+  (between rows) split; a block no cut can place falls back to plain flow;
+  one-line widows; over-tall blocks clip) — a
   registered print-first limit, not a kit concern (the kit knows nothing
   of columns). Its pagination enhances with `enhanceDocument(root, { static: true
   })` (2.3.0, `orz-markdown/preview-frame`): drawn canvases become images
