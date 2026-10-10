@@ -16,9 +16,10 @@ import { type IconName, type KindIcon } from '../shell/chrome.js';
 import type { ShadowRootLike } from '../shell/types.js';
 import type { AiProposal, EditorShell } from '../editor/shell.js';
 import type { ColorScheme } from '../../preview-frame.js';
-import type { AppDocument, AppElement, AppShadowRoot, SettingControl } from './types.js';
+import type { HeaderChange } from '../header.js';
+import type { AppDocument, AppElement, AppShadowRoot, SettingChoice, SettingControl } from './types.js';
 /** CSS of these widgets (installed next to `CHROME_CSS`, in the shadow root that holds them). */
-export declare const WIDGET_CSS = "\n.orz-menu-wrap { position: relative; display: inline-flex; }\n.orz-menu {\n  position: absolute; z-index: var(--orz-chrome-z); top: calc(100% + 6px); right: 0; min-width: 180px;\n  max-height: min(70vh, 420px); overflow: auto; padding: var(--orz-chrome-space-2);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-m);\n  background: var(--orz-chrome-surface); color: var(--orz-chrome-fg); box-shadow: var(--orz-chrome-shadow);\n  animation: orz-chrome-pop var(--orz-chrome-slow) var(--orz-chrome-ease) both;\n}\n.orz-menu[data-align=\"left\"] { right: auto; left: 0; }\n.orz-menu__label { padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3); color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }\n.orz-menu__item {\n  display: flex; align-items: center; gap: var(--orz-chrome-space-3); width: 100%; min-height: 30px;\n  padding: 0 var(--orz-chrome-space-3); border: 0; border-radius: var(--orz-chrome-radius-s);\n  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;\n}\n.orz-menu__item:hover, .orz-menu__item:focus-visible { background: var(--orz-chrome-hover); }\n.orz-menu__item:disabled { opacity: .55; cursor: default; }\n.orz-menu__item[aria-checked=\"true\"] { font-weight: 600; }\n.orz-menu__check { width: 16px; display: inline-flex; color: var(--orz-chrome-accent); }\n.orz-menu__swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--orz-chrome-border); flex: none; }\n.orz-menu__sep { height: 1px; margin: var(--orz-chrome-space-2) 0; background: var(--orz-chrome-border); }\n.orz-review {\n  position: fixed; z-index: var(--orz-chrome-z); right: var(--orz-chrome-space-5); bottom: var(--orz-chrome-space-6);\n  width: min(520px, calc(100vw - 32px)); padding: var(--orz-chrome-space-4);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-l);\n  background: var(--orz-chrome-surface); color: var(--orz-chrome-fg); box-shadow: var(--orz-chrome-shadow);\n}\n.orz-review__title { margin: 0 0 var(--orz-chrome-space-2); font: 600 var(--orz-chrome-text-md)/1.3 var(--orz-chrome-font); }\n.orz-review__note { margin: 0 0 var(--orz-chrome-space-2); color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); }\n.orz-review textarea {\n  display: block; width: 100%; min-height: 160px; resize: vertical; padding: var(--orz-chrome-space-3);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-s);\n  background: var(--orz-chrome-bg); color: var(--orz-chrome-fg); font: 12px/1.5 var(--orz-chrome-mono);\n}\n.orz-review__actions { display: flex; justify-content: flex-end; gap: var(--orz-chrome-space-2); margin-top: var(--orz-chrome-space-3); }\n";
+export declare const WIDGET_CSS = "\n.orz-menu-wrap { position: relative; display: inline-flex; }\n.orz-menu {\n  position: absolute; z-index: var(--orz-chrome-z); top: calc(100% + 6px); right: 0; min-width: 180px;\n  max-height: min(70vh, 420px); overflow: auto; padding: var(--orz-chrome-space-2);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-m);\n  background: var(--orz-chrome-surface); color: var(--orz-chrome-fg); box-shadow: var(--orz-chrome-shadow);\n  animation: orz-chrome-pop var(--orz-chrome-slow) var(--orz-chrome-ease) both;\n}\n.orz-menu[data-align=\"left\"] { right: auto; left: 0; }\n.orz-menu__label { padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3); color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }\n.orz-menu__item {\n  display: flex; align-items: center; gap: var(--orz-chrome-space-3); width: 100%; min-height: 30px;\n  padding: 0 var(--orz-chrome-space-3); border: 0; border-radius: var(--orz-chrome-radius-s);\n  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;\n}\n.orz-menu__item:hover, .orz-menu__item:focus-visible { background: var(--orz-chrome-hover); }\n.orz-menu__item:disabled { opacity: .55; cursor: default; }\n.orz-menu__item[aria-checked=\"true\"] { font-weight: 600; }\n.orz-menu__check { width: 16px; display: inline-flex; color: var(--orz-chrome-accent); }\n.orz-menu__swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--orz-chrome-border); flex: none; }\n.orz-menu__sep { height: 1px; margin: var(--orz-chrome-space-2) 0; background: var(--orz-chrome-border); }\n.orz-menu__label-text { flex: 1; min-width: 0; }\n.orz-menu__chevron { color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); }\n.orz-menu__item[aria-expanded=\"true\"] { background: var(--orz-chrome-hover); }\n.orz-menu--sub { position: fixed; top: auto; right: auto; max-height: calc(100vh - 16px); }\n.orz-review {\n  position: fixed; z-index: var(--orz-chrome-z); right: var(--orz-chrome-space-5); bottom: var(--orz-chrome-space-6);\n  width: min(520px, calc(100vw - 32px)); padding: var(--orz-chrome-space-4);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-l);\n  background: var(--orz-chrome-surface); color: var(--orz-chrome-fg); box-shadow: var(--orz-chrome-shadow);\n}\n.orz-review__title { margin: 0 0 var(--orz-chrome-space-2); font: 600 var(--orz-chrome-text-md)/1.3 var(--orz-chrome-font); }\n.orz-review__note { margin: 0 0 var(--orz-chrome-space-2); color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); }\n.orz-review textarea {\n  display: block; width: 100%; min-height: 160px; resize: vertical; padding: var(--orz-chrome-space-3);\n  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-s);\n  background: var(--orz-chrome-bg); color: var(--orz-chrome-fg); font: 12px/1.5 var(--orz-chrome-mono);\n}\n.orz-review__actions { display: flex; justify-content: flex-end; gap: var(--orz-chrome-space-2); margin-top: var(--orz-chrome-space-3); }\n";
 type CssRoot = Pick<AppShadowRoot, 'adoptedStyleSheets' | 'appendChild'> & {
     readonly ownerDocument?: AppDocument | null;
 };
@@ -44,8 +45,15 @@ export declare function button(doc: AppDocument, o: ButtonOptions): AppElement;
 /** One entry of a menu. */
 export interface MenuItem {
     label: string;
-    /** Called when chosen (the menu closes first). */
+    /** Called when chosen (the menu closes first). An item with `items` is a submenu and is not run. */
     run(): void;
+    /**
+     * (2.3.0) A submenu: its items, read when it opens. ArrowRight, Enter,
+     * Space or a click opens it (on its checked item, else its first);
+     * ArrowLeft and Escape close it with the focus back on its item; hovering
+     * opens it. One level (a submenu's own `items` are ignored).
+     */
+    items?(): MenuItem[];
     /** For a choice: whether it is the current one (`menuitemradio`). */
     checked?: boolean;
     /** A colour swatch before the label (theme pickers). */
@@ -73,7 +81,18 @@ export declare function menuButton(doc: AppDocument, o: ButtonOptions & {
     heading?: string;
     align?: 'left' | 'right';
 }): MenuButton;
-/** A picker for one header setting: choosing calls `apply(key, value)` (the caller writes the header). */
+/** The choices a setting offers for a text (2.3.0: `choicesFor(text)` when it has one, else `choices`). */
+export declare function settingChoices(control: SettingControl, text: string): ReadonlyArray<SettingChoice>;
+/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden). */
+export declare function settingOffered(control: SettingControl, text: string): boolean;
+/** The header changes of choosing `value` (2.3.0: the setting's `apply(text, value)`, else `{ [key]: value }`). */
+export declare function settingChanges(control: SettingControl, text: string, value: string): Readonly<Record<string, HeaderChange>>;
+/**
+ * A picker for one header setting: choosing calls `apply(key, value)` (the
+ * caller writes the header; with the setting's own `apply` (2.3.0) it writes
+ * `settingChanges(control, text, value)` — `attachSettings` does). Its items
+ * are `choicesFor(text)` when the setting has it (read at each opening).
+ */
 export declare function settingPicker(doc: AppDocument, control: SettingControl, getText: () => string, apply: (key: string, value: string) => void, o?: {
     iconOnly?: boolean;
 }): MenuButton;

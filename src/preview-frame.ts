@@ -143,14 +143,31 @@ export interface EnhanceOptions {
   assets?: boolean;
   /** A CSP nonce stamped on every `<script>` and `<link>` this adds. */
   nonce?: string;
-  /** Install the orz browser runtime (copy-as-Markdown, QR expansion, tab bars) once per window and run it on `root`. Default `true`. */
+  /** Install the orz browser runtime (copy-as-Markdown, QR expansion, tab bars) once per window and run it on `root`. Default `true` (`false` with `static`). */
   runtime?: boolean;
+  /**
+   * Static enhancement (2.3.0), for print and pagination (orz-paged lays the
+   * content out with Paged.js, which re-parses its HTML): everything is drawn
+   * as usual — the result resolves only after the libraries loaded (or
+   * failed) and the last pass ran — then every canvas drawn here becomes an
+   * image of itself (`<img data-orz-frozen="chart" | "smiles">`, its class,
+   * `data-md` breadcrumb, accessible name and drawn width kept): a chart is
+   * stopped, drawn at least at 2× the CSS pixel ratio (unless its own options
+   * set `devicePixelRatio`) and destroyed, so nothing animates, resizes or
+   * listens afterwards. The interactive runtime (copy-as-Markdown, QR
+   * expansion, tab bars) is not installed unless `runtime: true` is given. A
+   * canvas nothing drew (its library failed to load, offline) or that cannot
+   * be read (tainted) stays a canvas.
+   */
+  static?: boolean;
 }
 
 /** What {@link enhanceDocument} did: the library URLs it loaded now (or found loading) and those that failed. */
 export interface EnhanceResult {
   loaded: string[];
   failed: string[];
+  /** With `static` (2.3.0): how many drawn canvases became images. */
+  frozen?: number;
 }
 
 /** A rendered region (an `.markdown-body` article) in a page, structurally. */
@@ -234,8 +251,9 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
     if (has('pre code')) ensure(scheme === 'dark' ? PREVIEW_CDN.hljsDarkCss : PREVIEW_CDN.hljsLightCss, 'orz-hljs');
   }
 
-  // the runtime: once per window
-  if (options.runtime !== false) {
+  // the runtime: once per window (a static enhancement skips it unless asked)
+  const isStatic = options.static === true;
+  if (isStatic ? options.runtime === true : options.runtime !== false) {
     if (!win.OrzMarkdownRuntime) {
       const s = doc.createElement('script') as AnyEl;
       if (nonce) s.setAttribute('nonce', nonce);
@@ -247,9 +265,13 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
 
   // charts of content no longer in root (a re-render replaced it) are destroyed first (M.26)
   releaseDetached(root);
-  const pass = async (): Promise<void> => { await enhanceRoot(root, win); };
+  const pass = async (): Promise<void> => { await enhanceRoot(root, win, isStatic); };
+  const finish = (): EnhanceResult => {
+    if (isStatic) result.frozen = freezeCanvases(root);
+    return result;
+  };
   await pass();
-  if (!assets) return result;
+  if (!assets) return finish();
 
   let loads = pageLoads.get(win);
   if (!loads) { loads = new Map(); pageLoads.set(win, loads); }
@@ -288,7 +310,52 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
     pending.push(p.then(async (ok) => { (ok ? result.loaded : result.failed).push(lib.url); if (ok) await pass(); }));
   }
   await Promise.all(pending);
-  return result;
+  return finish();
+}
+
+/**
+ * A static enhancement's last step (2.3.0): every canvas drawn in `root` (a
+ * chart, a SMILES drawing) becomes an image of what it shows. Returns how
+ * many did.
+ */
+function freezeCanvases(root: EnhanceRoot): number {
+  let n = 0;
+  const all = (sel: string): AnyEl[] => { try { return Array.from(root.querySelectorAll(sel) as ArrayLike<AnyEl>); } catch { return []; } };
+  const charts = drawnCharts.get(root) ?? [];
+  for (const v of all('canvas.orz-chart[data-chart], canvas[data-smiles]')) {
+    if (!v.__d) continue; // nothing drew it
+    const tracked = charts.find((x) => x.canvas === v);
+    try {
+      tracked?.chart?.stop?.();
+      const src = String(v.toDataURL('image/png'));
+      if (!src.startsWith('data:image/png')) continue;
+      const img = v.ownerDocument.createElement('img') as AnyEl;
+      img.setAttribute('src', src);
+      const cls = v.getAttribute('class');
+      if (cls) img.setAttribute('class', cls);
+      img.setAttribute('data-orz-frozen', v.hasAttribute('data-smiles') ? 'smiles' : 'chart');
+      const md = v.getAttribute('data-md');
+      if (md !== null) img.setAttribute('data-md', md); // the copy-as-Markdown breadcrumb
+      const name = v.getAttribute('aria-label');
+      img.setAttribute('alt', name ?? '');
+      const r = typeof v.getBoundingClientRect === 'function' ? v.getBoundingClientRect() : null;
+      const width = v.style?.width || (r && r.width > 0 ? `${Math.round(r.width)}px` : '') || (v.__ow ? `${v.__ow}px` : '');
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      if (width) img.style.width = width;
+      v.replaceWith(img);
+      n++;
+    } catch {
+      continue; // a tainted or unreadable canvas stays
+    }
+    if (tracked) {
+      destroyChart(tracked.chart);
+      const i = charts.indexOf(tracked);
+      if (i >= 0) charts.splice(i, 1);
+    }
+  }
+  if (drawnCharts.has(root) && charts.length === 0) drawnCharts.delete(root);
+  return n;
 }
 
 /** Chart.js instances drawn per enhanced root, with their canvas (M.26). */
@@ -377,7 +444,7 @@ export function swapStylesheet(doc: unknown, id: string, href: string, options: 
 }
 
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
-async function enhanceRoot(root: EnhanceRoot, w: EnhanceWin): Promise<void> {
+async function enhanceRoot(root: EnhanceRoot, w: EnhanceWin, isStatic = false): Promise<void> {
   const all = (sel: string): AnyEl[] => { try { return Array.from(root.querySelectorAll(sel) as ArrayLike<AnyEl>); } catch { return []; } };
   try { if (w.hljs) for (const b of all('pre code:not(.hljs)')) w.hljs.highlightElement(b); } catch { /* highlight.js's own error */ }
   let drawn: unknown = null;
@@ -412,6 +479,11 @@ async function enhanceRoot(root: EnhanceRoot, w: EnhanceWin): Promise<void> {
         try {
           const g = JSON.parse(v.getAttribute('data-chart') || '{}');
           g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
+          // a static (print) drawing: sharp at print resolution, never animated (2.3.0)
+          if (isStatic) {
+            g.options.animation = false;
+            if (g.options.devicePixelRatio === undefined) g.options.devicePixelRatio = Math.max(2, Number(w.devicePixelRatio) || 1);
+          }
           if (!((g.data && g.data.datasets) || []).some((d: { label?: unknown } | null) => d && d.label)) g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
           track(root, new w.Chart(v, g), v);
         } catch { /* a bad chart */ }

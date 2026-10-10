@@ -52,6 +52,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   nonce })` (2.2.0): the same enhancement for content rendered in a page (a
   carrier's read view), loading only the libraries the content needs; keep
   its pass (`enhanceRoot`) and `ENHANCE_BODY` doing the same thing (M.8, M.24).
+  `{ static: true }` (2.3.0, M.28) is a page-only last step (drawn canvases
+  → images, no runtime) for print/pagination; the frame has no static mode.
 - `src/themes.ts` — `THEMES` (ids, picker names, colour schemes), `DEFAULT_THEME`,
   `themeInfo`: the ONE theme list (main entry and `orz-markdown/themes`);
   `tests/themes.test.ts` checks it against `themes/*.css` (M.25). Add a theme
@@ -68,7 +70,12 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `md.set()` cannot change assembled bytes; K.19). The parser entry must
   never import `src/carrier/` (claim K.8); envelope code stays deterministic
   (K.2). `src/nyml-body.ts` is the flat nyml reader shared by the scanner and
-  the header tools.
+  the header tools. 2.3.0 added what the carriers had copied (K.25–K.27):
+  `sha256.ts` (synchronous SHA-256, imports nothing), `legacy.ts`
+  (`readLegacyIsland`: a carrier's 0.x source island, parser-free) and
+  `inspect.ts` (the kind-independent core of a carrier's `inspect`); each
+  carrier keeps its report shape, legacy fields and advice wording. Node-only
+  CLI helpers (git/known-states, backups, file includes) are NOT in the kit.
 - `src/carrier/shell/` — `orz-markdown/carrier/shell`, the browser runtime of
   every assembled file (spec/shell-runtime.md, spec/host-protocols.md):
   `createSaver` (host → served notice → File System Access with the handle in
@@ -161,8 +168,13 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   a DOM-typed carrier must keep compiling against them (A.4 runs tsc with the
   DOM lib). Kit services it calls are replaceable for tests only
   (`services`); the conformance stub's broken builds use that seam.
-  `widgets.ts` holds the menu button, setting picker, `attachSettings`,
-  `reviewProposal`, `attachAiMenu`, `followPresentation`.
+  `widgets.ts` holds the menu button (2.3.0: one level of submenus), setting
+  picker, `attachSettings`, `reviewProposal`, `attachAiMenu`,
+  `followPresentation`. 2.3.0 (orz-paged's kit gaps, A.23–A.28): action
+  submenus (`items`) and conditional actions (`hidden`), settings with
+  `choicesFor` / `apply` (block values) / `hidden`, reader controls with
+  named choices (`readerControls.choices`, preference `reader.<key>`),
+  `app.newDocument({ text, name })`; the stub carrier exercises them.
 - `src/carrier/conformance/` — `orz-markdown/carrier/conformance`, the
   Node-side conformance harness each carrier runs against itself
   (spec/conformance.md): `runConformance` / `registerConformance` over the

@@ -185,8 +185,11 @@ header tools, `readDocument`, `assembleEnvelope` / `extract`),
 (the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
 ≥ 2.2.0), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
 `startCarrier(kind)`; a file's read view shows one pencil at the bottom-left
-whose list holds every operation) and `orz-markdown/carrier/conformance` (test
-harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
+whose list holds every operation — ≥ 2.3.0 also a kind's submenus such as
+paged's "New document from template…", options that appear only when the
+document offers them such as paged's Version, and reader choices such as a
+page zoom, which stay in the browser and never change the text) and
+`orz-markdown/carrier/conformance` (test harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
 bundled themes: `THEMES` (id, name, light/dark), `DEFAULT_THEME`, `isThemeId`,
 `themeInfo`. They are for carrier and host builders; their binding specs are in
 the repository's [`spec/`](https://github.com/wangyu16/orz-markdown/tree/main/spec) folder.

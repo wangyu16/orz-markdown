@@ -321,6 +321,8 @@ well-formed uid (shared by such documents). Each key's value is JSON.
 | `darkChrome` | boolean, or `null` to follow the system | `null` |
 | `fontScale` | integer 25–400 (percent): the read view's text size, a reader control of the carrier app (spec/carrier-app.md §4.10; 2.2.0) | `100` |
 
+| `reader.<key>` | one of the ids of the kind's reader choice control `<key>` (spec/carrier-app.md §4.10; 2.3.0): validated against the control's ids by a schema the carrier app builds | the control's `default` |
+
 A carrier may pass its own `schema` (`{ key: { default, valid } }`) for
 kind-specific preferences. **Validation both ways:** `set` refuses a value
 its validator rejects (returns `false`); `get` returns the default for an

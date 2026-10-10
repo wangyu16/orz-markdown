@@ -33,6 +33,8 @@ export interface HandleSubItem {
     disabled?: boolean;
     /** A link (opens in a new tab, `noopener noreferrer`) instead of an action. */
     href?: string;
+    /** A separator before this item (2.3.0: groups of a kind's submenu). */
+    separator?: boolean;
     run?(): void;
 }
 /** A button of a row (stays open after it runs: the row is drawn again). */

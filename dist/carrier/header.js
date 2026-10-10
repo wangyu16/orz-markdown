@@ -4,6 +4,7 @@ exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.CO
 exports.readHeader = readHeader;
 exports.withoutHeader = withoutHeader;
 exports.editHeader = editHeader;
+exports.normalizeHeader = normalizeHeader;
 exports.setHeaderValue = setHeaderValue;
 exports.removeHeaderKey = removeHeaderKey;
 exports.lintHeader = lintHeader;
@@ -473,6 +474,20 @@ function editHeader(text, changes) {
     return out;
 }
 /**
+ * Merge a legacy header into the format-1 form without changing any value
+ * (FC-18 §5, §9; 2.3.0): a leading `kind: meta` + `kind: document` pair
+ * becomes one `kind: document` block (the document block's lines first, then
+ * the meta-only keys' lines; the document block wins a clash), a lone
+ * `kind: meta` header has its kind line's value changed to `document`. This is
+ * the upgrade every header edit performs first, available without an edit
+ * (`editHeader` with no effective change returns the text as is). A text
+ * without a legacy header — no header, or a format-1 one — is returned as is;
+ * everything outside the header is unchanged.
+ */
+function normalizeHeader(text) {
+    return locateForEdit(text).text;
+}
+/**
  * Set one header value (FC-18 §9): `editHeader(text, { [key]: value })` — the
  * value's line is edited in place, or `key: value` is inserted before the
  * closing `}}` line, or a header is created; a legacy header is upgraded
@@ -516,14 +531,22 @@ const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
  * `bad-ratio` (warnings: value shapes), `unknown-theme` (warning, kind md: a
- * `theme` not in `THEMES`, 2.2.0). Text codes, with or without a header:
+ * `theme` not in `THEMES`, 2.2.0; any kind: a `theme` not in `options.themes`,
+ * 2.3.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
  * `kind: document` block that is not the header; it renders nothing).
  */
 function lintHeader(text, kind) {
-    return lintLocated(text, locate(text), kind);
+    const o = typeof kind === 'object' && kind !== null ? kind : kind === undefined ? {} : { kind };
+    return lintLocated(text, locate(text), o.kind, undefined, themeList(o.themes));
+}
+/** A caller's theme list, or undefined when it gave none (or not a list of strings). */
+function themeList(themes) {
+    if (!Array.isArray(themes))
+        return undefined;
+    return new Set(themes.filter((t) => typeof t === 'string').map((t) => t.trim()));
 }
 /**
  * The header and its lint in one scan (for `readDocument`). `blocks`, when
@@ -531,11 +554,11 @@ function lintHeader(text, kind) {
  * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-function readHeaderAndLint(text, kind, blocks) {
+function readHeaderAndLint(text, kind, blocks, themes) {
     const loc = locate(text);
-    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind, blocks) };
+    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind, blocks, themeList(themes)) };
 }
-function lintLocated(text, loc, kind, blocks) {
+function lintLocated(text, loc, kind, blocks, themes) {
     const out = [];
     const at = (from, to) => ({ line: lineAt(text, from), from, to });
     if (text.includes('\u0000'))
@@ -699,7 +722,10 @@ function lintLocated(text, loc, kind, blocks) {
     check('measure', (v) => v === 'normal' || v === 'wide' || v === 'full', 'warning', 'bad-measure', 'measure is normal, wide or full');
     check('ratio', (v) => /^[1-9][0-9]*(?:\.[0-9]+)?:[1-9][0-9]*(?:\.[0-9]+)?$/.test(v), 'warning', 'bad-ratio', 'ratio is W:H (e.g. 16:9, 4:3)');
     // md themes are orz-markdown's (THEMES); slides and paged keep their own lists
-    if (effective === 'md')
+    // md themes are orz-markdown's (THEMES); slides and paged pass their own lists (2.3.0)
+    if (themes)
+        check('theme', (v) => themes.has(v.trim()), 'warning', 'unknown-theme', 'theme is not one of this kind\'s themes; the default theme is shown');
+    else if (effective === 'md')
         check('theme', (v) => (0, themes_js_1.isThemeId)(v.trim()), 'warning', 'unknown-theme', 'theme is not one of the bundled themes (THEMES); the default theme is shown');
     return out;
 }

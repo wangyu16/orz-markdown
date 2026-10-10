@@ -52,9 +52,12 @@ export declare function twinName(name: string): string | null;
  * level-1 heading (plain text; for slides only after the first slide marker),
  * else — for `paged` — the `title` (or `text`) of the first title element
  * (the first nyml block whose kind ends in `-title`), else `Untitled`.
+ * `opts.themes` (2.3.0): the kind's theme ids, passed to the lint
+ * (`lintHeader`'s `themes`: a header `theme` not among them is `unknown-theme`).
  */
 export declare function readDocument(text: string, opts?: {
     kind?: Kind;
     filename?: string;
+    themes?: readonly string[];
 }): DocumentInfo;
 //# sourceMappingURL=document.d.ts.map

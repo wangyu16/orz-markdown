@@ -35,6 +35,8 @@ export interface HandleSubItem {
   disabled?: boolean;
   /** A link (opens in a new tab, `noopener noreferrer`) instead of an action. */
   href?: string;
+  /** A separator before this item (2.3.0: groups of a kind's submenu). */
+  separator?: boolean;
   run?(): void;
 }
 
@@ -325,6 +327,7 @@ export function mountHandle(doc: AppDocument, o: HandleOptions): Handle {
     m.setAttribute('role', 'menu');
     m.setAttribute('aria-label', e.label);
     for (const [i, it] of e.items().entries()) {
+      if (it.separator && i > 0) m.append(separator());
       const role = it.checked === undefined ? 'menuitem' : 'menuitemradio';
       let b: AppElement;
       if (it.href) {

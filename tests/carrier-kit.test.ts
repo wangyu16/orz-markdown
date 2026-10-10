@@ -628,7 +628,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'links.ts', 'parser.ts', 'read.ts', 'shell', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'parser.ts', 'read.ts', 'sha256.ts', 'shell', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {

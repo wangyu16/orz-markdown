@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
+exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = exports.looksHtml = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -11,6 +11,7 @@ var header_js_1 = require("./header.js");
 Object.defineProperty(exports, "readHeader", { enumerable: true, get: function () { return header_js_1.readHeader; } });
 Object.defineProperty(exports, "withoutHeader", { enumerable: true, get: function () { return header_js_1.withoutHeader; } });
 Object.defineProperty(exports, "editHeader", { enumerable: true, get: function () { return header_js_1.editHeader; } });
+Object.defineProperty(exports, "normalizeHeader", { enumerable: true, get: function () { return header_js_1.normalizeHeader; } });
 Object.defineProperty(exports, "setHeaderValue", { enumerable: true, get: function () { return header_js_1.setHeaderValue; } });
 Object.defineProperty(exports, "removeHeaderKey", { enumerable: true, get: function () { return header_js_1.removeHeaderKey; } });
 Object.defineProperty(exports, "lintHeader", { enumerable: true, get: function () { return header_js_1.lintHeader; } });
@@ -42,4 +43,23 @@ Object.defineProperty(exports, "KIND_PACKAGE", { enumerable: true, get: function
 Object.defineProperty(exports, "SOURCE_ISLAND_ID", { enumerable: true, get: function () { return envelope_js_1.SOURCE_ISLAND_ID; } });
 Object.defineProperty(exports, "SHELL_ISLAND_ID", { enumerable: true, get: function () { return envelope_js_1.SHELL_ISLAND_ID; } });
 Object.defineProperty(exports, "INCLUDES_ISLAND_ID", { enumerable: true, get: function () { return envelope_js_1.INCLUDES_ISLAND_ID; } });
+// 2.3.0: what orz-mdhtml and orz-paged copied (REBUILD §3b KIT GAP) — the synchronous SHA-256, the
+// legacy 0.x island reader and the kind-independent core of `inspect`
+var sha256_js_1 = require("./sha256.js");
+Object.defineProperty(exports, "sha256", { enumerable: true, get: function () { return sha256_js_1.sha256; } });
+var legacy_js_1 = require("./legacy.js");
+Object.defineProperty(exports, "rawElements", { enumerable: true, get: function () { return legacy_js_1.rawElements; } });
+Object.defineProperty(exports, "rawAttr", { enumerable: true, get: function () { return legacy_js_1.rawAttr; } });
+Object.defineProperty(exports, "hasRawAttr", { enumerable: true, get: function () { return legacy_js_1.hasRawAttr; } });
+Object.defineProperty(exports, "decodeEntities", { enumerable: true, get: function () { return legacy_js_1.decodeEntities; } });
+Object.defineProperty(exports, "generatorOf", { enumerable: true, get: function () { return legacy_js_1.generatorOf; } });
+Object.defineProperty(exports, "readLegacyIsland", { enumerable: true, get: function () { return legacy_js_1.readLegacyIsland; } });
+var inspect_js_1 = require("./inspect.js");
+Object.defineProperty(exports, "looksHtml", { enumerable: true, get: function () { return inspect_js_1.looksHtml; } });
+Object.defineProperty(exports, "shellWord", { enumerable: true, get: function () { return inspect_js_1.shellWord; } });
+Object.defineProperty(exports, "scriptElement", { enumerable: true, get: function () { return inspect_js_1.scriptElement; } });
+Object.defineProperty(exports, "assembledStructure", { enumerable: true, get: function () { return inspect_js_1.assembledStructure; } });
+Object.defineProperty(exports, "storedText", { enumerable: true, get: function () { return inspect_js_1.storedText; } });
+Object.defineProperty(exports, "heldText", { enumerable: true, get: function () { return inspect_js_1.heldText; } });
+Object.defineProperty(exports, "twinCheck", { enumerable: true, get: function () { return inspect_js_1.twinCheck; } });
 //# sourceMappingURL=index.js.map

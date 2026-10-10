@@ -290,6 +290,8 @@ function mountHandle(doc, o) {
         m.setAttribute('role', 'menu');
         m.setAttribute('aria-label', e.label);
         for (const [i, it] of e.items().entries()) {
+            if (it.separator && i > 0)
+                m.append(separator());
             const role = it.checked === undefined ? 'menuitem' : 'menuitemradio';
             let b;
             if (it.href) {

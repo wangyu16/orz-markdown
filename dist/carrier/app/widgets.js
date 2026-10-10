@@ -4,6 +4,9 @@ exports.WIDGET_CSS = void 0;
 exports.installCss = installCss;
 exports.button = button;
 exports.menuButton = menuButton;
+exports.settingChoices = settingChoices;
+exports.settingOffered = settingOffered;
+exports.settingChanges = settingChanges;
 exports.settingPicker = settingPicker;
 exports.attachSettings = attachSettings;
 exports.reviewProposal = reviewProposal;
@@ -47,6 +50,10 @@ exports.WIDGET_CSS = `
 .orz-menu__check { width: 16px; display: inline-flex; color: var(--orz-chrome-accent); }
 .orz-menu__swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--orz-chrome-border); flex: none; }
 .orz-menu__sep { height: 1px; margin: var(--orz-chrome-space-2) 0; background: var(--orz-chrome-border); }
+.orz-menu__label-text { flex: 1; min-width: 0; }
+.orz-menu__chevron { color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); }
+.orz-menu__item[aria-expanded="true"] { background: var(--orz-chrome-hover); }
+.orz-menu--sub { position: fixed; top: auto; right: auto; max-height: calc(100vh - 16px); }
 .orz-review {
   position: fixed; z-index: var(--orz-chrome-z); right: var(--orz-chrome-space-5); bottom: var(--orz-chrome-space-6);
   width: min(520px, calc(100vw - 32px)); padding: var(--orz-chrome-space-4);
@@ -126,7 +133,12 @@ function menuButton(doc, o) {
     btn.setAttribute('aria-expanded', 'false');
     wrap.append(btn);
     let menu = null;
+    /** The open submenu (2.3.0): its parent item and its popover (fixed, beside the parent; a sibling of the menu, so the menu's scroll does not clip it). */
+    let sub = null;
+    let subTimer = null;
     const win = doc.defaultView;
+    const clearSubTimer = () => { if (subTimer !== null)
+        win?.clearTimeout(subTimer); subTimer = null; };
     const onOutside = (e) => {
         if (!menu)
             return;
@@ -134,82 +146,130 @@ function menuButton(doc, o) {
         if (!path.includes(wrap))
             close();
     };
+    function closeSub() {
+        clearSubTimer();
+        if (!sub)
+            return;
+        sub.parent.setAttribute('aria-expanded', 'false');
+        sub.menu.remove();
+        sub = null;
+    }
     function close() {
         if (!menu)
             return;
+        closeSub();
         menu.remove();
         menu = null;
         btn.setAttribute('aria-expanded', 'false');
         win?.removeEventListener('pointerdown', onOutside, true);
     }
-    const itemsNow = () => (menu ? Array.from(menu.querySelectorAll('.orz-menu__item')).filter((b) => !b.disabled) : []);
-    function open() {
-        if (menu)
-            return;
-        const m = doc.createElement('div');
-        menu = m;
-        m.className = 'orz-menu';
-        m.setAttribute('role', 'menu');
-        m.setAttribute('aria-label', o.label);
-        if (o.align === 'left')
-            m.setAttribute('data-align', 'left');
-        if (o.heading) {
-            const h = doc.createElement('div');
-            h.className = 'orz-menu__label';
-            h.textContent = o.heading;
-            m.append(h);
+    const enabledIn = (m) => (m ? Array.from(m.querySelectorAll('.orz-menu__item')).filter((b) => !b.disabled) : []);
+    const itemsNow = () => enabledIn(menu);
+    const activeIn = (m) => (m.getRootNode?.() ?? doc).activeElement;
+    /** After a choice: the keyboard keeps its place on the button; a pointer's leaves the focus to the page (2.2.0). */
+    const settle = (e) => { if ((e.detail ?? 0) > 0)
+        btn.blur?.();
+    else
+        btn.focus(); };
+    /** One item's button (a choice, an action, or a submenu's parent). */
+    function itemButton(it, inSub) {
+        const b = doc.createElement('button');
+        b.setAttribute('type', 'button');
+        b.className = 'orz-menu__item';
+        b.setAttribute('role', it.checked === undefined ? 'menuitem' : 'menuitemradio');
+        if (it.checked !== undefined) {
+            b.setAttribute('aria-checked', String(it.checked));
+            const c = doc.createElement('span');
+            c.className = 'orz-menu__check';
+            if (it.checked)
+                c.append((0, chrome_js_1.iconElement)(doc, 'check'));
+            b.append(c);
         }
-        for (const it of o.items()) {
+        if (it.disabled)
+            b.disabled = true;
+        if (it.swatch) {
+            const sw = doc.createElement('span');
+            sw.className = 'orz-menu__swatch';
+            sw.style.setProperty('background', it.swatch);
+            b.append(sw);
+        }
+        const l = doc.createElement('span');
+        l.className = 'orz-menu__label-text';
+        l.textContent = it.label;
+        b.append(l);
+        const items = !inSub && typeof it.items === 'function' ? it.items.bind(it) : null;
+        if (items) {
+            b.setAttribute('aria-haspopup', 'menu');
+            b.setAttribute('aria-expanded', 'false');
+            const ch = doc.createElement('span');
+            ch.className = 'orz-menu__chevron';
+            ch.setAttribute('aria-hidden', 'true');
+            ch.textContent = '›';
+            b.append(ch);
+            b.addEventListener('click', (e) => {
+                if (sub?.parent === b) {
+                    if ((e.detail ?? 0) > 0)
+                        return;
+                    closeSub();
+                    b.focus();
+                    return;
+                }
+                openSub(b, it.label, items, true);
+            });
+            b.addEventListener('pointerenter', (e) => {
+                if (e.pointerType && e.pointerType !== 'mouse')
+                    return;
+                if (sub?.parent === b) {
+                    clearSubTimer();
+                    return;
+                }
+                clearSubTimer();
+                subTimer = win ? win.setTimeout(() => { subTimer = null; if (menu)
+                    openSub(b, it.label, items, false); }, 120) : null;
+            });
+            return b;
+        }
+        if (!inSub) {
+            b.addEventListener('pointerenter', (e) => {
+                if (e.pointerType && e.pointerType !== 'mouse')
+                    return;
+                if (sub) {
+                    clearSubTimer();
+                    subTimer = win ? win.setTimeout(() => { subTimer = null; closeSub(); }, 240) : null;
+                }
+            });
+        }
+        b.addEventListener('click', (e) => {
+            close();
+            settle(e);
+            it.run();
+        });
+        return b;
+    }
+    /** Fill a menu popover with items (separators before those that ask for one). */
+    function fill(m, list, inSub) {
+        for (const it of list) {
             if (it.separator) {
                 const sep = doc.createElement('div');
                 sep.className = 'orz-menu__sep';
                 sep.setAttribute('role', 'separator');
                 m.append(sep);
             }
-            const b = doc.createElement('button');
-            b.setAttribute('type', 'button');
-            b.className = 'orz-menu__item';
-            b.setAttribute('role', it.checked === undefined ? 'menuitem' : 'menuitemradio');
-            if (it.checked !== undefined) {
-                b.setAttribute('aria-checked', String(it.checked));
-                const c = doc.createElement('span');
-                c.className = 'orz-menu__check';
-                if (it.checked)
-                    c.append((0, chrome_js_1.iconElement)(doc, 'check'));
-                b.append(c);
-            }
-            if (it.disabled)
-                b.disabled = true;
-            if (it.swatch) {
-                const s = doc.createElement('span');
-                s.className = 'orz-menu__swatch';
-                s.style.setProperty('background', it.swatch);
-                b.append(s);
-            }
-            const l = doc.createElement('span');
-            l.textContent = it.label;
-            b.append(l);
-            b.addEventListener('click', (e) => {
-                close();
-                // the keyboard keeps its place on the button; a pointer's choice leaves the focus to the page
-                // (2.2.0: a read view's keys — slides' Space and arrows — work again at once)
-                if ((e.detail ?? 0) > 0)
-                    btn.blur?.();
-                else
-                    btn.focus();
-                it.run();
-            });
-            m.append(b);
+            m.append(itemButton(it, inSub));
         }
+    }
+    /** The arrow keys, Home and End over a popover's items; Escape and Tab as `onEscape` / close say. */
+    function keys(m, onEscape, extra) {
         m.addEventListener('keydown', (e) => {
-            const list = itemsNow();
-            const root = (m.getRootNode?.() ?? doc);
-            const at = list.indexOf(root.activeElement);
+            const list = enabledIn(m);
+            const a = activeIn(m);
+            if (extra?.(e, a))
+                return;
+            const at = list.indexOf(a);
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation?.();
-                close();
-                btn.focus();
+                onEscape();
             }
             else if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -230,6 +290,81 @@ function menuButton(doc, o) {
             else if (e.key === 'Tab')
                 close();
         });
+    }
+    function openSub(parent, label, items, focus) {
+        clearSubTimer();
+        if (sub?.parent === parent) {
+            if (focus)
+                focusFirst(sub.menu);
+            return;
+        }
+        closeSub();
+        const m = doc.createElement('div');
+        m.className = 'orz-menu orz-menu--sub';
+        m.setAttribute('role', 'menu');
+        m.setAttribute('aria-label', label);
+        fill(m, items(), true);
+        keys(m, () => { const p = parent; closeSub(); p.focus(); }, (e) => {
+            if (e.key !== 'ArrowLeft')
+                return false;
+            e.preventDefault();
+            const p = parent;
+            closeSub();
+            p.focus();
+            return true;
+        });
+        m.addEventListener('pointerenter', () => clearSubTimer());
+        wrap.append(m);
+        sub = { parent, menu: m };
+        parent.setAttribute('aria-expanded', 'true');
+        place(parent, m);
+        if (focus)
+            focusFirst(m);
+    }
+    const focusFirst = (m) => {
+        const list = enabledIn(m);
+        (list.find((b) => b.getAttribute('aria-checked') === 'true') ?? list[0])?.focus();
+    };
+    /** Beside the parent item (right, else left), its top on the item's, kept on screen. */
+    function place(parent, m) {
+        const r = parent.getBoundingClientRect?.();
+        const vh = win?.innerHeight;
+        const vw = win?.innerWidth;
+        if (!r || typeof vh !== 'number' || typeof vw !== 'number' || (r.width === 0 && r.height === 0))
+            return;
+        const box = m.getBoundingClientRect?.();
+        const h = Math.min(box?.height ?? 0, vh - 16);
+        const w = box?.width ?? 0;
+        const top = Math.max(8, Math.min(r.top - 4, vh - 8 - h));
+        const left = r.right + 4 + w <= vw - 8 ? r.right + 4 : Math.max(8, r.left - 4 - w);
+        m.style.setProperty('top', `${Math.round(top)}px`);
+        m.style.setProperty('left', `${Math.round(left)}px`);
+    }
+    function open() {
+        if (menu)
+            return;
+        const m = doc.createElement('div');
+        menu = m;
+        m.className = 'orz-menu';
+        m.setAttribute('role', 'menu');
+        m.setAttribute('aria-label', o.label);
+        if (o.align === 'left')
+            m.setAttribute('data-align', 'left');
+        if (o.heading) {
+            const h = doc.createElement('div');
+            h.className = 'orz-menu__label';
+            h.textContent = o.heading;
+            m.append(h);
+        }
+        fill(m, o.items(), false);
+        keys(m, () => { close(); btn.focus(); }, (e, a) => {
+            // ArrowRight opens a submenu on its first (or checked) item
+            if (e.key !== 'ArrowRight' || !a || a.getAttribute('aria-haspopup') !== 'menu')
+                return false;
+            e.preventDefault();
+            a.click?.();
+            return true;
+        });
         wrap.append(m);
         btn.setAttribute('aria-expanded', 'true');
         win?.addEventListener('pointerdown', onOutside, true);
@@ -245,23 +380,64 @@ function menuButton(doc, o) {
     });
     return { element: wrap, button: btn, open, close, isOpen: () => menu !== null, destroy() { close(); wrap.remove(); } };
 }
-/** A picker for one header setting: choosing calls `apply(key, value)` (the caller writes the header). */
+/** The choices a setting offers for a text (2.3.0: `choicesFor(text)` when it has one, else `choices`). */
+function settingChoices(control, text) {
+    if (typeof control.choicesFor === 'function') {
+        try {
+            return control.choicesFor(text) ?? [];
+        }
+        catch {
+            return [];
+        }
+    }
+    return control.choices;
+}
+/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden). */
+function settingOffered(control, text) {
+    if (typeof control.hidden !== 'function')
+        return true;
+    try {
+        return !control.hidden(text);
+    }
+    catch {
+        return false;
+    }
+}
+/** The header changes of choosing `value` (2.3.0: the setting's `apply(text, value)`, else `{ [key]: value }`). */
+function settingChanges(control, text, value) {
+    return typeof control.apply === 'function' ? control.apply(text, value) : { [control.key]: value };
+}
+/** The radio items of a setting for a text: checked by the choice's own `checked`, else by `current(text)`. */
+function settingItems(control, getText, choose) {
+    const text = getText();
+    let now = null;
+    const current = () => (now ?? (now = control.current(text)));
+    return settingChoices(control, text).map((c) => {
+        const toggle = typeof c.checked === 'boolean';
+        return {
+            label: c.label,
+            checked: toggle ? c.checked : c.value === current(),
+            ...(c.swatch ? { swatch: c.swatch } : {}),
+            ...(c.separator ? { separator: true } : {}),
+            // a toggle is applied either way (its apply turns it off); a radio choice writes only a change
+            run: () => { if (toggle || c.value !== control.current(getText()))
+                choose(c.value); },
+        };
+    });
+}
+/**
+ * A picker for one header setting: choosing calls `apply(key, value)` (the
+ * caller writes the header; with the setting's own `apply` (2.3.0) it writes
+ * `settingChanges(control, text, value)` — `attachSettings` does). Its items
+ * are `choicesFor(text)` when the setting has it (read at each opening).
+ */
 function settingPicker(doc, control, getText, apply, o = {}) {
     return menuButton(doc, {
         label: control.label,
         ...(control.icon ? { icon: control.icon } : {}),
         iconOnly: o.iconOnly ?? false,
         heading: control.label,
-        items: () => {
-            const now = control.current(getText());
-            return control.choices.map((c) => ({
-                label: c.label,
-                checked: c.value === now,
-                ...(c.swatch ? { swatch: c.swatch } : {}),
-                run: () => { if (c.value !== control.current(getText()))
-                    apply(control.key, c.value); },
-            }));
-        },
+        items: () => settingItems(control, getText, (value) => apply(control.key, value)),
     });
 }
 /** The toolbar slot of an editor shell (null with `chrome: 'none'`). */
@@ -276,24 +452,62 @@ const rootOf = (shell) => shell.root;
 function attachSettings(shell, settings, o = {}) {
     const toolbar = toolbarOf(shell);
     const pickers = [];
+    let off = null;
+    let timer = null;
+    const win = toolbar?.ownerDocument?.defaultView ?? null;
     if (toolbar) {
         const root = rootOf(shell);
         installCss(root, exports.WIDGET_CSS);
+        const conditional = [];
         for (const control of settings) {
-            const p = settingPicker(toolbar.ownerDocument, control, () => shell.getText(), (key, value) => {
+            // the picker writes the setting's changes (2.3.0: its own `apply`, a block value included) as one undoable edit
+            const picker = settingPicker(toolbar.ownerDocument, control, () => shell.getText(), (_key, value) => {
                 try {
-                    shell.setHeader({ [key]: value });
+                    shell.setHeader({ ...settingChanges(control, shell.getText(), value) });
                 }
                 catch (e) {
                     (0, chrome_js_1.showToast)(shell.root, `Could not change the header: ${e instanceof Error ? e.message : String(e)}`, { tone: 'error' });
                 }
             }, o);
-            pickers.push(p);
-            toolbar.append(p.element);
+            pickers.push(picker);
+            toolbar.append(picker.element);
+            if (typeof control.hidden === 'function')
+                conditional.push([control, picker]);
+        }
+        // 2.3.0: a setting with `hidden(text)` follows the text (after a pause in typing)
+        if (conditional.length > 0) {
+            const sync = () => {
+                timer = null;
+                const text = shell.getText();
+                for (const [control, picker] of conditional) {
+                    const show = settingOffered(control, text);
+                    if (!show)
+                        picker.close();
+                    picker.element.hidden = !show;
+                }
+            };
+            sync();
+            off = shell.on('change', () => {
+                if (timer !== null)
+                    win?.clearTimeout(timer);
+                timer = win ? win.setTimeout(sync, 250) : null;
+                if (!win)
+                    sync();
+            });
         }
     }
-    return { pickers, destroy() { for (const p of pickers.splice(0))
-            p.destroy(); } };
+    return {
+        pickers,
+        destroy() {
+            off?.();
+            off = null;
+            if (timer !== null)
+                win?.clearTimeout(timer);
+            timer = null;
+            for (const p of pickers.splice(0))
+                p.destroy();
+        },
+    };
 }
 /**
  * The review panel of an AI proposal (host-protocols §4: the document is

@@ -118,6 +118,37 @@ const DEFAULT_SERVICES = {
     skipVersion: (kind, version) => (0, update_js_1.skipVersion)(kind, version),
 };
 const errorText = (e) => (e instanceof Error ? e.message : String(e));
+/** A reader choice control's preference name (2.3.0): stored as `reader.<key>`. */
+const READER_KEY = /^[a-z][A-Za-z0-9_-]{0,31}$/;
+/** The kind's well-formed reader choice controls (2.3.0): a malformed one is not offered. */
+function readerChoiceControls(list) {
+    const out = [];
+    const seen = new Set();
+    if (!Array.isArray(list))
+        return out;
+    for (const c of list) {
+        if (!c || typeof c !== 'object' || typeof c.key !== 'string' || !READER_KEY.test(c.key) || seen.has(c.key))
+            continue;
+        if (typeof c.label !== 'string' || typeof c.apply !== 'function' || !Array.isArray(c.choices))
+            continue;
+        const ids = c.choices.map((x) => (x && typeof x === 'object' ? x.id : undefined));
+        if (ids.length < 1 || ids.length > 24 || new Set(ids).size !== ids.length)
+            continue;
+        if (c.choices.some((x) => typeof x.id !== 'string' || x.id === '' || x.id.length > 64 || typeof x.label !== 'string'))
+            continue;
+        seen.add(c.key);
+        out.push(c);
+    }
+    return out;
+}
+/** A suggested name for a new document (2.3.0): path and control characters removed, the kind's extension added when missing. */
+function newFileName(name, ext) {
+    let n = typeof name === 'string' ? name.replace(/[\u0000-\u001f\u007f/\\:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    n = n.replace(/^[.\s]+/, '').slice(0, 120).trim();
+    if (!n)
+        return `Untitled${ext}`;
+    return n.toLowerCase().endsWith(ext.toLowerCase()) ? n : `${n}${ext}`;
+}
 /** The update found the file changed on disk (S.14): nothing was written (2.2.0, round 2 of the carrier-app loop). */
 exports.UPDATE_CONFLICT_MESSAGE = 'The file changed on disk since you opened it (another program or an agent edited it), so the update wrote nothing. Reload the page to open its version, then update.';
 /** Update now while the file's save-conflict question is open (S.14): refused, the question focused (round 5 of the carrier-app loop, B4). */
@@ -351,14 +382,55 @@ function bootCarrierApp(k, options = {}) {
     brand.tabIndex = -1;
     const doneBtn = (0, widgets_js_1.button)(doc, { label: 'Done', icon: 'preview', title: 'Back to the read view' });
     bar.append(title, brand);
-    const actions = k.actions ?? [];
+    // a kind's actions: run, or (2.3.0) a submenu of entries; offered unless `hidden(text)` says so
+    const actions = (k.actions ?? []).filter((a) => !!a && (typeof a.run === 'function' || typeof a.items === 'function'));
+    const offered = (a, t) => {
+        if (typeof a.hidden !== 'function')
+            return true;
+        try {
+            return !a.hidden(t);
+        }
+        catch {
+            return false;
+        }
+    };
     const runAction = (id) => {
         const a = actions.find((x) => x.id === id);
-        if (!a)
+        if (!a || typeof a.run !== 'function')
             return;
         Promise.resolve().then(() => a.run(api)).catch((e) => toast(`${a.label}: ${errorText(e)}`, 'error'));
     };
+    /** A submenu's entries, as the kind gives them now (a throwing `items` offers none). */
+    const actionItems = (a) => {
+        try {
+            const list = a.items?.(api) ?? [];
+            return Array.from(list).filter((it) => !!it && typeof it.label === 'string' && typeof it.run === 'function');
+        }
+        catch (e) {
+            toast(`${a.label}: ${errorText(e)}`, 'error');
+            return [];
+        }
+    };
+    const runItem = (a, it) => {
+        Promise.resolve().then(() => it.run(api)).catch((e) => toast(`${a.label} — ${it.label}: ${errorText(e)}`, 'error'));
+    };
+    const menuItemsOf = (a) => actionItems(a).map((it) => ({
+        label: it.label,
+        ...(it.checked !== undefined ? { checked: !!it.checked } : {}),
+        ...(it.disabled ? { disabled: true } : {}),
+        ...(it.separator ? { separator: true } : {}),
+        run: () => runItem(a, it),
+    }));
+    /** Edit mode's bar actions, with their element (a button, or a menu button for one with items): they follow `hidden(text)`. */
+    const barActions = [];
     for (const a of actions.filter((x) => x.placement === 'bar' && x.inEdit)) {
+        if (typeof a.items === 'function') {
+            const mb = (0, widgets_js_1.menuButton)(doc, { label: a.label, ...(a.icon ? { icon: a.icon } : {}), heading: a.label, items: () => menuItemsOf(a) });
+            mb.element.setAttribute('data-orz-action', a.id);
+            bar.append(mb.element);
+            barActions.push({ action: a, element: mb.element, menu: mb });
+            continue;
+        }
         const b = (0, widgets_js_1.button)(doc, { label: a.label, ...(a.icon ? { icon: a.icon } : {}) });
         b.setAttribute('data-orz-action', a.id);
         b.addEventListener('click', () => {
@@ -368,17 +440,36 @@ function bootCarrierApp(k, options = {}) {
                 b.blur?.();
         });
         bar.append(b);
+        barActions.push({ action: a, element: b });
     }
+    /** The bar's conditional actions follow the text (2.3.0). */
+    const syncBarActions = () => {
+        const t = currentText();
+        for (const x of barActions) {
+            if (typeof x.action.hidden !== 'function')
+                continue;
+            const show = offered(x.action, t);
+            if (!show)
+                x.menu?.close();
+            x.element.hidden = !show;
+        }
+    };
+    syncBarActions();
     const more = (0, widgets_js_1.menuButton)(doc, {
         label: 'More',
         icon: 'more',
         iconOnly: true,
-        items: () => [
-            { label: 'Download a copy', run: () => { void download(); } },
-            { label: 'New document', separator: true, run: () => { void newDocument(); } },
-            { label: 'Save as new copy', run: () => { void saveAsCopy(); } },
-            ...actions.filter((a) => a.placement !== 'bar' && a.inEdit).map((a, i) => ({ label: a.label, ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) })),
-        ],
+        items: () => {
+            const t = currentText();
+            return [
+                { label: 'Download a copy', run: () => { void download(); } },
+                { label: 'New document', separator: true, run: () => { void newDocument(); } },
+                { label: 'Save as new copy', run: () => { void saveAsCopy(); } },
+                ...actions.filter((a) => a.placement !== 'bar' && a.inEdit && offered(a, t)).map((a, i) => (typeof a.items === 'function'
+                    ? { label: a.label, ...(i === 0 ? { separator: true } : {}), items: () => menuItemsOf(a), run: () => undefined }
+                    : { label: a.label, ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) })),
+            ];
+        },
     });
     bar.append(doneBtn, more.element);
     // the family's brand, quiet at the far end: the orz seal → the orz-markdown website, the GitHub mark → the kind's repository
@@ -449,36 +540,121 @@ function bootCarrierApp(k, options = {}) {
             { text: 'A+', label: 'Larger text', disabled: now >= c.max, run: () => { setFontScale(now + c.step); } },
         ];
     };
+    // ── reader controls with named choices (2.3.0): reader preferences `reader.<key>`, validated against the ids ──
+    const choiceControls = readerChoiceControls(k.readerControls?.choices);
+    const choiceDefault = (c) => (c.choices.some((x) => x.id === c.default) ? c.default : c.choices[0].id);
+    const choiceStore = choiceControls.length > 0
+        ? (0, preferences_js_1.createPreferenceStore)(file.uid, storage, Object.fromEntries(choiceControls.map((c) => {
+            const ids = c.choices.map((x) => x.id);
+            return [`reader.${c.key}`, { default: choiceDefault(c), valid: (v) => typeof v === 'string' && ids.includes(v) }];
+        })))
+        : null;
+    const choiceNow = new Map();
+    const applyChoice = (c, id) => {
+        try {
+            c.apply(view, id);
+        }
+        catch (e) {
+            try {
+                console.error(`orz carrier: the reader control ${c.key} could not apply ${id}`, e);
+            }
+            catch { /* no console */ }
+        }
+    };
+    for (const c of choiceControls) {
+        const id = String(choiceStore.get(`reader.${c.key}`));
+        choiceNow.set(c.key, id);
+        applyChoice(c, id);
+    }
+    function setReaderChoice(key, id) {
+        const c = choiceControls.find((x) => x.key === key);
+        if (!c)
+            return null;
+        const v = typeof id === 'string' && c.choices.some((x) => x.id === id) ? id : choiceDefault(c);
+        choiceNow.set(key, v);
+        if (v === choiceDefault(c))
+            choiceStore.remove(`reader.${key}`);
+        else
+            choiceStore.set(`reader.${key}`, v);
+        applyChoice(c, v);
+        return v;
+    }
     // ── the quiet update's offer (set when a check offers one) ──
     let offer = null;
     let indicator = null;
+    /** A setting's radio choices in the handle (2.3.0: `choicesFor`, per-choice `checked`, separators, the setting's own `apply`). */
+    const settingSubItems = (control) => {
+        const t = currentText();
+        let now = null;
+        const current = () => (now ?? (now = control.current(t)));
+        return (0, widgets_js_1.settingChoices)(control, t).map((c) => {
+            const toggle = typeof c.checked === 'boolean';
+            return {
+                label: c.label,
+                checked: toggle ? c.checked : c.value === current(),
+                ...(c.swatch ? { swatch: c.swatch } : {}),
+                ...(c.separator ? { separator: true } : {}),
+                run: () => {
+                    const text = currentText();
+                    if (!toggle && c.value === control.current(text))
+                        return;
+                    let changes;
+                    try {
+                        changes = (0, widgets_js_1.settingChanges)(control, text, c.value);
+                    }
+                    catch (err) {
+                        toast(`Could not change the header: ${errorText(err)}`, 'error');
+                        return;
+                    }
+                    setSetting({ ...changes });
+                },
+            };
+        });
+    };
     // ── the read view's one control: the handle and its list ──
     const listEntries = () => {
+        const t = currentText();
         const e = [{ type: 'item', id: 'edit', label: 'Edit', icon: 'edit', hint: `${modKey}E`, run: () => { edit(); } }];
-        for (const a of actions.filter((x) => x.placement === 'bar'))
-            e.push({ type: 'item', id: `action:${a.id}`, label: a.label, ...(a.icon ? { icon: a.icon } : {}), run: () => runAction(a.id) });
+        /** A kind's action as an entry: an item, or (2.3.0) a submenu of its entries (disabled when it has none). */
+        const actionEntry = (a, separator) => {
+            const base = { id: `action:${a.id}`, label: a.label, ...(a.icon ? { icon: a.icon } : {}), ...(separator ? { separator: true } : {}) };
+            if (typeof a.items !== 'function')
+                return { type: 'item', ...base, run: () => runAction(a.id) };
+            const items = () => actionItems(a).map((it) => ({
+                label: it.label,
+                ...(it.checked !== undefined ? { checked: !!it.checked } : {}),
+                ...(it.disabled ? { disabled: true } : {}),
+                ...(it.separator ? { separator: true } : {}),
+                run: () => runItem(a, it),
+            }));
+            return { type: 'submenu', ...base, ...(actionItems(a).length === 0 ? { disabled: true } : {}), items };
+        };
+        for (const a of actions.filter((x) => x.placement === 'bar' && offered(x, t)))
+            e.push(actionEntry(a, false));
         e.push({ type: 'item', id: 'save', label: 'Save', icon: 'save', hint: `${modKey}S`, dot: isDirty(), run: () => { void save(); } }, { type: 'item', id: 'download', label: 'Download a copy', icon: 'download', run: () => { void download(); } }, { type: 'item', id: 'new', label: 'New document', icon: 'new', separator: true, run: () => { void newDocument(); } }, { type: 'item', id: 'copy', label: 'Save as new copy', icon: 'copy', run: () => { void saveAsCopy(); } });
-        (k.settings ?? []).forEach((control, i) => e.push({
+        (k.settings ?? []).filter((control) => (0, widgets_js_1.settingOffered)(control, t)).forEach((control, i) => e.push({
             type: 'submenu',
             id: `setting:${control.key}`,
             label: control.label,
             ...(control.icon ? { icon: control.icon } : {}),
             ...(i === 0 ? { separator: true } : {}),
             disabled: updating,
+            items: () => settingSubItems(control),
+        }));
+        actions.filter((a) => a.placement !== 'bar' && offered(a, t)).forEach((a, i) => e.push(actionEntry(a, i === 0)));
+        choiceControls.forEach((c, i) => e.push({
+            type: 'submenu',
+            id: `reader:${c.key}`,
+            label: c.label,
+            ...(c.icon ? { icon: c.icon } : {}),
+            ...(i === 0 ? { separator: true } : {}),
             items: () => {
-                const now = control.current(currentText());
-                return control.choices.map((c) => ({
-                    label: c.label,
-                    checked: c.value === now,
-                    ...(c.swatch ? { swatch: c.swatch } : {}),
-                    run: () => { if (c.value !== control.current(currentText()))
-                        setSetting({ [control.key]: c.value }); },
-                }));
+                const now = choiceNow.get(c.key);
+                return c.choices.map((x) => ({ label: x.label, checked: x.id === now, run: () => { setReaderChoice(c.key, x.id); } }));
             },
         }));
-        actions.filter((a) => a.placement !== 'bar').forEach((a, i) => e.push({ type: 'item', id: `action:${a.id}`, label: a.label, ...(a.icon ? { icon: a.icon } : {}), ...(i === 0 ? { separator: true } : {}), run: () => runAction(a.id) }));
         if (fontCfg)
-            e.push({ type: 'row', id: 'font-scale', label: 'Text size', separator: true, buttons: fontButtons });
+            e.push({ type: 'row', id: 'font-scale', label: 'Text size', separator: choiceControls.length === 0, buttons: fontButtons });
         const o = offer;
         if (o) {
             e.push({
@@ -764,16 +940,24 @@ function bootCarrierApp(k, options = {}) {
             toast(`Could not save the file: ${'error' in r && r.error ? r.error : 'unknown error'}`, 'error');
         return r;
     }
-    async function newDocument() {
+    async function newDocument(o) {
         let t;
         try {
-            t = String(await k.newDocument());
+            if (o && typeof o.text === 'string') {
+                // a kind's text (paged: a template's): a new document always has a uid of its own, never this file's
+                t = o.text;
+                const uid = headerFacts(t).uid;
+                if (!uid || uid === file.uid)
+                    t = (0, header_js_1.editHeader)(t, { uid: (0, uid_js_1.mintUid)() });
+            }
+            else
+                t = String(await k.newDocument());
         }
         catch (e) {
             toast(`Could not create the document: ${errorText(e)}`, 'error');
             return { via: 'download', ok: false, error: errorText(e), confirmed: false };
         }
-        return saveNewFile(t, `Untitled${ext}`, 'new');
+        return saveNewFile(t, newFileName(o?.name, ext), 'new');
     }
     function saveAsCopy() {
         let t;
@@ -813,8 +997,10 @@ function bootCarrierApp(k, options = {}) {
     const headerFollow = () => {
         if (headerTimer !== null)
             win.clearTimeout(headerTimer);
-        headerTimer = win.setTimeout(() => { headerTimer = null; present(); if (editor)
-            showTitle(); }, 200);
+        headerTimer = win.setTimeout(() => { headerTimer = null; present(); if (editor) {
+            showTitle();
+            syncBarActions();
+        } }, 200);
     };
     function edit() {
         if (editor)
@@ -834,6 +1020,7 @@ function bootCarrierApp(k, options = {}) {
         lockForUpdate(ed);
         editor = ed;
         showTitle();
+        syncBarActions();
         offEditor = [
             ed.on('save', (e) => { saved = e.text; dirtyChanged(); }),
             ed.on('dirty', () => dirtyChanged()),
@@ -1123,6 +1310,8 @@ function bootCarrierApp(k, options = {}) {
         },
         fontScale: () => fontPct,
         setFontScale,
+        readerChoice: (key) => choiceNow.get(key) ?? null,
+        setReaderChoice,
         setChromeVisible(visible) {
             if (visible)
                 chromeHost.removeAttribute('data-hidden');
@@ -1165,6 +1354,8 @@ function bootCarrierApp(k, options = {}) {
             if (fontPct !== null)
                 scaleTarget().style.setProperty('--orz-font-scale', '');
             more.destroy();
+            for (const x of barActions)
+                x.menu?.destroy();
             try {
                 view.destroy?.();
             }

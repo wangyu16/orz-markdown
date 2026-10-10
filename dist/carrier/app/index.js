@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.copyName = exports.openedFileName = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.UPDATE_QUESTION_OPEN = exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = exports.bootCarrierApp = void 0;
+exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingChanges = exports.settingOffered = exports.settingChoices = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.copyName = exports.openedFileName = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.UPDATE_QUESTION_OPEN = exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = exports.bootCarrierApp = void 0;
 /**
  * `orz-markdown/carrier/app` — the standalone assembled file's runtime
  * (spec/carrier-app.md): kind-independent, used by every carrier's browser
@@ -38,6 +38,9 @@ Object.defineProperty(exports, "installCss", { enumerable: true, get: function (
 Object.defineProperty(exports, "button", { enumerable: true, get: function () { return widgets_js_1.button; } });
 Object.defineProperty(exports, "menuButton", { enumerable: true, get: function () { return widgets_js_1.menuButton; } });
 Object.defineProperty(exports, "settingPicker", { enumerable: true, get: function () { return widgets_js_1.settingPicker; } });
+Object.defineProperty(exports, "settingChoices", { enumerable: true, get: function () { return widgets_js_1.settingChoices; } });
+Object.defineProperty(exports, "settingOffered", { enumerable: true, get: function () { return widgets_js_1.settingOffered; } });
+Object.defineProperty(exports, "settingChanges", { enumerable: true, get: function () { return widgets_js_1.settingChanges; } });
 Object.defineProperty(exports, "attachSettings", { enumerable: true, get: function () { return widgets_js_1.attachSettings; } });
 Object.defineProperty(exports, "reviewProposal", { enumerable: true, get: function () { return widgets_js_1.reviewProposal; } });
 Object.defineProperty(exports, "attachAiMenu", { enumerable: true, get: function () { return widgets_js_1.attachAiMenu; } });

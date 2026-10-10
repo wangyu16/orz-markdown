@@ -162,8 +162,10 @@ function pagedTitle(blocks: NymlBlock[], header: Header | null): string | null {
  * level-1 heading (plain text; for slides only after the first slide marker),
  * else — for `paged` — the `title` (or `text`) of the first title element
  * (the first nyml block whose kind ends in `-title`), else `Untitled`.
+ * `opts.themes` (2.3.0): the kind's theme ids, passed to the lint
+ * (`lintHeader`'s `themes`: a header `theme` not among them is `unknown-theme`).
  */
-export function readDocument(text: string, opts?: { kind?: Kind; filename?: string }): DocumentInfo {
+export function readDocument(text: string, opts?: { kind?: Kind; filename?: string; themes?: readonly string[] }): DocumentInfo {
   const named = opts?.kind ?? (opts?.filename ? kindFromFilename(opts.filename) : null);
   const peek = named ? null : readHeader(text);
   const carrier = peek && Object.prototype.hasOwnProperty.call(peek.fields, 'carrier') ? peek.fields['carrier'] : undefined;
@@ -173,7 +175,7 @@ export function readDocument(text: string, opts?: { kind?: Kind; filename?: stri
   const parse = (): Tok[] => (tokens ??= kitParser().parse(text, {}) as unknown as Tok[]);
   let blocks: NymlBlock[] | null = null;
   const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse() as never));
-  const { header, lint } = readHeaderAndLint(text, kind, scan);
+  const { header, lint } = readHeaderAndLint(text, kind, scan, opts?.themes);
   const fields: Record<string, string> = header ? header.fields : {};
   const get = (k: string): string | undefined => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
   const fmt = get('format');

@@ -184,8 +184,9 @@ async function enhanceDocument(root, options = {}) {
         if (has('pre code'))
             ensure(scheme === 'dark' ? exports.PREVIEW_CDN.hljsDarkCss : exports.PREVIEW_CDN.hljsLightCss, 'orz-hljs');
     }
-    // the runtime: once per window
-    if (options.runtime !== false) {
+    // the runtime: once per window (a static enhancement skips it unless asked)
+    const isStatic = options.static === true;
+    if (isStatic ? options.runtime === true : options.runtime !== false) {
         if (!win.OrzMarkdownRuntime) {
             const s = doc.createElement('script');
             if (nonce)
@@ -200,10 +201,15 @@ async function enhanceDocument(root, options = {}) {
     }
     // charts of content no longer in root (a re-render replaced it) are destroyed first (M.26)
     releaseDetached(root);
-    const pass = async () => { await enhanceRoot(root, win); };
+    const pass = async () => { await enhanceRoot(root, win, isStatic); };
+    const finish = () => {
+        if (isStatic)
+            result.frozen = freezeCanvases(root);
+        return result;
+    };
     await pass();
     if (!assets)
-        return result;
+        return finish();
     let loads = pageLoads.get(win);
     if (!loads) {
         loads = new Map();
@@ -262,7 +268,64 @@ async function enhanceDocument(root, options = {}) {
             await pass(); }));
     }
     await Promise.all(pending);
-    return result;
+    return finish();
+}
+/**
+ * A static enhancement's last step (2.3.0): every canvas drawn in `root` (a
+ * chart, a SMILES drawing) becomes an image of what it shows. Returns how
+ * many did.
+ */
+function freezeCanvases(root) {
+    let n = 0;
+    const all = (sel) => { try {
+        return Array.from(root.querySelectorAll(sel));
+    }
+    catch {
+        return [];
+    } };
+    const charts = drawnCharts.get(root) ?? [];
+    for (const v of all('canvas.orz-chart[data-chart], canvas[data-smiles]')) {
+        if (!v.__d)
+            continue; // nothing drew it
+        const tracked = charts.find((x) => x.canvas === v);
+        try {
+            tracked?.chart?.stop?.();
+            const src = String(v.toDataURL('image/png'));
+            if (!src.startsWith('data:image/png'))
+                continue;
+            const img = v.ownerDocument.createElement('img');
+            img.setAttribute('src', src);
+            const cls = v.getAttribute('class');
+            if (cls)
+                img.setAttribute('class', cls);
+            img.setAttribute('data-orz-frozen', v.hasAttribute('data-smiles') ? 'smiles' : 'chart');
+            const md = v.getAttribute('data-md');
+            if (md !== null)
+                img.setAttribute('data-md', md); // the copy-as-Markdown breadcrumb
+            const name = v.getAttribute('aria-label');
+            img.setAttribute('alt', name ?? '');
+            const r = typeof v.getBoundingClientRect === 'function' ? v.getBoundingClientRect() : null;
+            const width = v.style?.width || (r && r.width > 0 ? `${Math.round(r.width)}px` : '') || (v.__ow ? `${v.__ow}px` : '');
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            if (width)
+                img.style.width = width;
+            v.replaceWith(img);
+            n++;
+        }
+        catch {
+            continue; // a tainted or unreadable canvas stays
+        }
+        if (tracked) {
+            destroyChart(tracked.chart);
+            const i = charts.indexOf(tracked);
+            if (i >= 0)
+                charts.splice(i, 1);
+        }
+    }
+    if (drawnCharts.has(root) && charts.length === 0)
+        drawnCharts.delete(root);
+    return n;
 }
 /** Chart.js instances drawn per enhanced root, with their canvas (M.26). */
 const drawnCharts = new WeakMap();
@@ -363,7 +426,7 @@ function swapStylesheet(doc, id, href, options = {}) {
     return l;
 }
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
-async function enhanceRoot(root, w) {
+async function enhanceRoot(root, w, isStatic = false) {
     const all = (sel) => { try {
         return Array.from(root.querySelectorAll(sel));
     }
@@ -419,6 +482,12 @@ async function enhanceRoot(root, w) {
                 try {
                     const g = JSON.parse(v.getAttribute('data-chart') || '{}');
                     g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
+                    // a static (print) drawing: sharp at print resolution, never animated (2.3.0)
+                    if (isStatic) {
+                        g.options.animation = false;
+                        if (g.options.devicePixelRatio === undefined)
+                            g.options.devicePixelRatio = Math.max(2, Number(w.devicePixelRatio) || 1);
+                    }
                     if (!((g.data && g.data.datasets) || []).some((d) => d && d.label))
                         g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
                     track(root, new w.Chart(v, g), v);

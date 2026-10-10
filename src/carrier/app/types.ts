@@ -274,9 +274,46 @@ export interface SettingControl {
   /** Accessible name of the picker ("Theme"). */
   label: string;
   icon?: IconName;
-  choices: ReadonlyArray<{ value: string; label: string; swatch?: string }>;
+  choices: ReadonlyArray<SettingChoice>;
   /** The value a text has now (its default when the header has none). */
   current(text: string): string;
+  /**
+   * (2.3.0) The choices a text offers, read at each opening instead of
+   * `choices` (paged's Version: the dynamic choices the document defines).
+   */
+  choicesFor?(text: string): ReadonlyArray<SettingChoice>;
+  /**
+   * (2.3.0) The header changes choosing `value` makes in `text` (default
+   * `{ [key]: value }`): any keys, single-line values, `null` (remove) or
+   * `{ multiline }` block values (FC-18 §9) — written as ONE undoable edit
+   * (`setHeader` / `editHeader`), so a setting can write a block value such as
+   * paged's `dynamic_choices` map. Only the header changes; what `editHeader`
+   * refuses is a toast and changes nothing.
+   */
+  apply?(text: string, value: string): Readonly<Record<string, HeaderChange>>;
+  /**
+   * (2.3.0) Not offered for this text (re-evaluated when the text changes:
+   * at each opening of the handle's list, and in an editor's toolbar after a
+   * pause in typing). paged's Version is offered only while the document
+   * defines choices.
+   */
+  hidden?(text: string): boolean;
+}
+
+/** One choice of a {@link SettingControl}. */
+export interface SettingChoice {
+  value: string;
+  label: string;
+  swatch?: string;
+  /**
+   * (2.3.0) Whether this choice is on now — overrides `value === current(text)`
+   * (a per-choice toggle: several choices of one setting may be on; choosing
+   * one that is on applies it too, so `apply` can turn it off). Set it from
+   * `choicesFor(text)`.
+   */
+  checked?: boolean;
+  /** (2.3.0) A separator before this choice (groups of a `choicesFor` list). */
+  separator?: boolean;
 }
 
 /**
@@ -288,7 +325,7 @@ export interface SettingControl {
 export interface CarrierAction {
   /** Stable id (`present`, `print`). */
   id: string;
-  /** Label and accessible name. */
+  /** Label and accessible name (an action with `items` names its submenu). */
   label: string;
   /**
    * A kit icon (`ICONS`: `present`, `print`, `pageSize`, …) or the kind's own
@@ -300,7 +337,65 @@ export interface CarrierAction {
   placement?: 'bar' | 'menu';
   /** Offered in edit mode too (default: read view only). */
   inEdit?: boolean;
+  /**
+   * Run it (the chrome's item or button). Optional since 2.3.0: an action with
+   * `items` is a submenu and its `run` is not called by the chrome (an action
+   * with neither is not offered).
+   */
+  run?(app: CarrierApp): void | Promise<void>;
+  /**
+   * (2.3.0) A submenu: the action's entries, read at each opening — in the
+   * handle's list a submenu (keyboard and touch as the settings' submenus:
+   * ArrowRight / Enter / a tap opens it, ArrowLeft / Escape closes it), in
+   * edit mode a submenu of More (`inEdit`; a `bar` action with items is a
+   * menu button of the bar). Each entry runs with the app; a failing one is a
+   * toast. An empty list offers the action disabled.
+   */
+  items?(app: CarrierApp): ReadonlyArray<CarrierActionItem>;
+  /**
+   * (2.3.0) Not offered for this text (re-evaluated when the text changes: at
+   * each opening of the handle's list and of More, and for an edit-mode bar
+   * button after a pause in typing). paged's Version… is offered only while
+   * the document defines choices.
+   */
+  hidden?(text: string): boolean;
+}
+
+/** One entry of a {@link CarrierAction}'s submenu (2.3.0). */
+export interface CarrierActionItem {
+  /** Stable id (`data-orz-item`; default its position). */
+  id?: string;
+  label: string;
+  /** A choice: whether it is the current one (`menuitemradio`). */
+  checked?: boolean;
+  disabled?: boolean;
+  /** A separator before this entry. */
+  separator?: boolean;
   run(app: CarrierApp): void | Promise<void>;
+}
+
+/**
+ * A reader control with named choices (2.3.0, spec/carrier-app.md §4.10):
+ * paged's Page zoom (Automatic / Fit width / 100% / 125%). A submenu of radio
+ * choices in the handle's list; the choice is a reader preference — stored
+ * per browser by the document's `uid` under the preference key
+ * `reader.<key>` (validated: only one of `choices`' ids is ever stored or
+ * read back), never in the text, never marking it unsaved — and applied to
+ * the read view by the kind's `apply(view, id)`: at boot (the stored choice,
+ * else `default`) and on each choice.
+ */
+export interface ReaderChoiceControl {
+  /** The preference's name: `[a-z][A-Za-z0-9_-]{0,31}`, unique among the kind's controls. */
+  key: string;
+  /** The submenu's label and accessible name ("Page zoom"). */
+  label: string;
+  icon?: IconName | KindIcon;
+  /** 1–24 choices with unique non-empty ids. */
+  choices: ReadonlyArray<{ id: string; label: string }>;
+  /** The choice without a stored one (one of the ids; else the first). */
+  default: string;
+  /** Apply a choice to the read view (the kind's own view: zoom its pages, …). Errors are the kind's own. */
+  apply(view: CarrierReadView, id: string): void;
 }
 
 /**
@@ -319,6 +414,12 @@ export interface ReaderControls {
    * `fontScale` preference.
    */
   fontScale?: { min: number; max: number; step: number };
+  /**
+   * (2.3.0) Reader controls with named choices ({@link ReaderChoiceControl}):
+   * each a submenu of the handle's list, before the text size row. A
+   * malformed control (key, choices) is not offered.
+   */
+  choices?: ReadonlyArray<ReaderChoiceControl>;
 }
 
 /** A carrier as the standalone runtime sees it — everything kind-specific is behind this interface. */
@@ -388,6 +489,14 @@ export interface CarrierAppOptions {
   services?: Partial<AppServices>;
 }
 
+/** Options of {@link CarrierApp.newDocument} (2.3.0). */
+export interface NewDocumentOptions {
+  /** The new document's text (default: the kind's `newDocument()`). */
+  text?: string;
+  /** The suggested file name (default `Untitled` + the kind's extension). */
+  name?: string;
+}
+
 /** How a save from the page went (the editor's `SaveOutcome` while editing, else the saver's result). */
 export type AppSaveOutcome = { ok: boolean; via?: string; error?: string; cancelled?: boolean; conflict?: boolean };
 
@@ -413,8 +522,17 @@ export interface CarrierApp {
   save(): Promise<AppSaveOutcome>;
   /** Download a copy of the current text's file. */
   download(): Promise<SaveResult>;
-  /** Save a new document (the kind's creation tool) as a new file through the picker. */
-  newDocument(): Promise<SaveResult>;
+  /**
+   * Save a new document as a new file through the picker (never over this
+   * file, never to the host: a host or a served page gets a download). The
+   * text is the kind's `newDocument()` unless `options.text` gives it (2.3.0:
+   * a kind's action — paged's "New document from template…" — passes the
+   * template's text); a given text without a well-formed `uid`, or with this
+   * file's, gets a new one (a new document is never this one). `options.name`
+   * (2.3.0) is the suggested file name (path characters removed; the kind's
+   * extension added when missing; default `Untitled` + the extension).
+   */
+  newDocument(options?: NewDocumentOptions): Promise<SaveResult>;
   /** Save the current text with a new uid as a new file through the picker. */
   saveAsCopy(): Promise<SaveResult>;
   /** The context the file gives an editor mounted on it. */
@@ -437,6 +555,15 @@ export interface CarrierApp {
   readonly menu: { open(): void; close(): void; isOpen(): boolean };
   /** The read view's text size in percent (null when the kind offers no `readerControls.fontScale`). */
   fontScale(): number | null;
+  /** (2.3.0) The current choice of the kind's reader control `key` (`readerControls.choices`), or null when it offers none by that key. */
+  readerChoice(key: string): string | null;
+  /**
+   * (2.3.0) Choose `id` for the reader control `key` (null or an unknown id:
+   * its default), stored per uid and applied to the read view; the document
+   * is untouched. Returns the choice applied (null when there is no such
+   * control).
+   */
+  setReaderChoice(key: string, id: string | null): string | null;
   /**
    * Set the read view's text size (clamped to the kind's range and snapped to
    * its step; null: 100 %), stored per uid; the document is untouched (not

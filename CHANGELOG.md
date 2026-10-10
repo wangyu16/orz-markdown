@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Planned as **2.3.0**: the carrier-kit gaps the orz-paged 1.0 rebuild found
+(family plan REBUILD §3b, the `KIT GAP` notes in orz-paged's sources). All
+additive for `^2.2.0` consumers (orz-mdhtml 1.0.0's test suite passes
+unchanged against it); the parser's `md.render` output is unchanged.
+
+### Added
+
+**`orz-markdown/carrier/app`** ([spec/carrier-app.md](spec/carrier-app.md) §3.4,
+§4.5, §4.10; claims A.23–A.28):
+
+- **Action submenus** — `CarrierAction.items?(app) → CarrierActionItem[]`
+  (`{ id?, label, checked?, disabled?, separator?, run(app) }`): a submenu in
+  the handle's list (hover, tap, ArrowRight/Enter open it on its checked
+  entry; ArrowLeft/Escape close it) and, with `inEdit`, in edit mode (a
+  submenu of More, or a menu button of the bar for a `bar` action). Entries
+  run with the app; a failing one is a toast; no entries: disabled.
+  `CarrierAction.run` is now optional (an action with neither `run` nor
+  `items` is not offered). `menuButton` items accept `items()` (one level).
+- **Conditional actions** — `CarrierAction.hidden?(text)`: offered only while
+  it returns false, re-evaluated as the text changes (each opening of the
+  handle's list and More; an edit-mode bar button after a pause in typing).
+- **Settings that write block values** — `SettingControl.apply?(text, value)
+  → Record<string, HeaderChange>` (any keys, `{ multiline }` values,
+  removals; one undoable edit), `choicesFor?(text)` (choices read at each
+  opening), per-choice `checked` toggles and `separator`, and `hidden?(text)`
+  (also followed by `attachSettings` in an editor's toolbar). Helpers
+  `settingChoices`, `settingOffered`, `settingChanges`.
+- **Reader controls with named choices** — `readerControls.choices:
+  ReaderChoiceControl[]` (`{ key, label, icon?, choices: { id, label }[],
+  default, apply(view, id) }`): a submenu in the handle's list, stored per
+  uid as the reader preference `reader.<key>` (validated against the ids),
+  applied at boot and on each choice, never in the document;
+  `CarrierApp.readerChoice(key)` / `setReaderChoice(key, id)`.
+- **New document with a text** — `CarrierApp.newDocument({ text?, name? })`
+  saves a kind's text (a template) as a new file; a text without a uid (or
+  with this file's) gets a new one; `name` is the suggested file name.
+
+**`orz-markdown/carrier`** (claims K.23–K.27):
+
+- `normalizeHeader(text)` — FC-18 §5's legacy merge (`kind: meta` +
+  `kind: document` pair → one header; lone `kind: meta` → `kind: document`)
+  without an edit.
+- `lintHeader(text, { kind?, themes? })` and `readDocument(text, { kind,
+  themes })`: `unknown-theme` against the kind's own theme list, for any kind
+  (`lintHeader(text, kind)` still works; md without `themes` as before).
+- What orz-mdhtml and orz-paged copied: `sha256(text)` (synchronous,
+  isomorphic); the legacy 0.x island reader `readLegacyIsland(html, {
+  generator, config })` with `rawElements`, `rawAttr`, `hasRawAttr`,
+  `decodeEntities`, `generatorOf`; the kind-independent core of `inspect` —
+  `looksHtml`, `shellWord`, `scriptElement`, `assembledStructure`,
+  `storedText`, `heldText`, `twinCheck`.
+
+**`orz-markdown/preview-frame`** (claim M.28): `enhanceDocument(root, {
+static: true })` for print and pagination — draws everything, then turns every
+drawn chart and SMILES canvas into an image (`data-orz-frozen`, class,
+`data-md` breadcrumb, accessible name and width kept; charts stopped,
+destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
+`runtime: true`; the result counts the images (`frozen`).
+
+### Changed
+
+- The app's own modules grew to 60.1 KB minified (bound 58 → 66 KB; added to
+  an editor bundle: 74.5 KB, bound 74 → 82 KB; claim A.2).
+- The conformance stub carrier (test scaffolding) exercises the new kit
+  features: a "New document from sample…" submenu, a conditional Word count
+  action, a block-valued Notes setting and a Line spacing reader choice.
+
 ## [2.2.0] - 2026-10-08
 
 The carrier app and the kit gaps the orz-mdhtml 1.0 rebuild found (family

@@ -17,7 +17,7 @@ import { readDocument, readHeader } from '../../src/carrier';
 import { createEditorShell, renderMarkdownPreview, renderMarkdownPreviewWithIncludes, type EditorShell, type EditorShellOptions } from '../../src/carrier/editor';
 import {
   attachAiMenu, attachSettings, captureEngineSource, followPresentation, startCarrier,
-  type AppAssembleOptions, type AppDocument, type AppElement, type CarrierReadView, type KindEditorOptions, type SettingControl, type StandaloneContext, type StandaloneKind,
+  type AppAssembleOptions, type AppDocument, type AppElement, type CarrierAction, type CarrierReadView, type KindEditorOptions, type ReaderChoiceControl, type SettingControl, type StandaloneContext, type StandaloneKind,
 } from '../../src/carrier/app';
 import { THEMES, themeInfo, type ThemeInfo } from '../../src/themes';
 import { VERSION as ORZ_MARKDOWN_VERSION } from '../../src/version';
@@ -49,13 +49,61 @@ const themeOf = (text: string): ThemeInfo => themeInfo(readHeader(text)?.fields[
 const themeHref = (id: string): string => `https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/${id}.css`;
 const themeLink = (text: string): string => `<link rel="stylesheet" href="${themeHref(themeOf(text).id)}">`;
 
+/** The stub's block-valued setting (2.3.0 kit gap 3, exercised in real Chrome): per-choice toggles of a `x_stub_notes: |` list, offered only while the text holds `<!-- notes -->`. */
+const NOTE_IDS = ['alpha', 'beta'] as const;
+const notesOf = (text: string): string[] => (readHeader(text)?.fields['x_stub_notes'] ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+const NOTES: SettingControl = {
+  key: 'x_stub_notes',
+  label: 'Notes',
+  choices: [],
+  current: () => '',
+  choicesFor: (text) => NOTE_IDS.map((id, i) => ({ value: id, label: `Note ${id}`, checked: notesOf(text).includes(id), ...(i === 1 ? { separator: true } : {}) })),
+  apply: (text, value) => {
+    const now = notesOf(text);
+    const next = now.includes(value) ? now.filter((x) => x !== value) : [...now, value];
+    return { x_stub_notes: next.length ? { multiline: next.join('\n') } : null };
+  },
+  hidden: (text) => !/<!--\s*notes\s*-->/.test(text),
+};
+
 const SETTINGS: readonly SettingControl[] = [{
   key: 'theme',
   label: 'Theme',
   icon: 'theme',
   choices: THEMES.map((t) => ({ value: t.id, label: t.name })),
   current: (text) => themeOf(text).id,
-}];
+}, NOTES];
+
+/**
+ * The stub's extra actions (2.3.0 kit gaps 1, 2 and 5): a submenu that saves a new document from a
+ * sample text through `app.newDocument({ text, name })`, and an action offered only while the text
+ * holds `<!-- count -->`.
+ */
+const SAMPLES = [{ id: 'letter', label: 'Letter', title: 'A letter' }, { id: 'memo', label: 'Memo', title: 'A memo' }] as const;
+const ACTIONS: readonly CarrierAction[] = [
+  {
+    id: 'new-from-sample',
+    label: 'New document from sample…',
+    icon: 'new',
+    inEdit: true,
+    items: () => SAMPLES.map((x) => ({ id: x.id, label: x.label, run: (app) => app.newDocument({ text: createStubText(x.title), name: x.title }).then(() => undefined) })),
+  },
+  {
+    id: 'word-count',
+    label: 'Word count',
+    hidden: (text) => !/<!--\s*count\s*-->/.test(text),
+    run: (app) => { app.toast(`${app.getText().split(/\s+/).filter(Boolean).length} words`); },
+  },
+];
+
+/** The stub's reader choice (2.3.0 kit gap 4): the article's line spacing, a reader preference. */
+const SPACING: ReaderChoiceControl = {
+  key: 'spacing',
+  label: 'Line spacing',
+  choices: [{ id: 'normal', label: 'Normal' }, { id: 'relaxed', label: 'Relaxed' }],
+  default: 'normal',
+  apply: (view, id) => { view.element?.querySelector('#orz-doc')?.style.setProperty('line-height', id === 'relaxed' ? '2.4' : ''); },
+};
 
 // ── the read view: the document in the page ──────────────────────────────
 
@@ -149,12 +197,13 @@ const STUB_KIND: StandaloneKind = {
   formats: bugs.formats,
   brand: 'orz stub',
   repo: 'https://github.com/wangyu16/orz-markdown',
-  readerControls: { fontScale: { min: 80, max: 160, step: 10 } },
+  readerControls: { fontScale: { min: 80, max: 160, step: 10 }, choices: [SPACING] },
   assemble,
   newDocument: () => createStubText(),
   mountEditor,
   createReadView,
   settings: SETTINGS,
+  actions: ACTIONS,
   extract: (html) => bugs.extract(html),
   readDocument: (text) => readDocument(text, { kind: 'md' }),
   renderPreview: (text) => Promise.resolve(renderMarkdownPreview(text)),

@@ -192,8 +192,10 @@ function valueImports(entry: string): Set<string> {
 
 // 32,933 B on 2026-10-08 (round 1 of the carrier-app loop); bound ~10 % above.
 // 2026-10-09 (2.2.0, the handle and the brand of edit mode): own 52,682 B, delta 66,877 B, both 1,089,611 B; bounds ~10 % above.
-const APP_OWN_LIMIT = 58_000;
-const APP_DELTA_LIMIT = 74_000;
+// 2026-10-09 (2.3.0, the kit gaps of orz-paged 1.0: action submenus, conditional actions and settings, block-valued
+// settings, reader choices, menuButton submenus): own 60,146 B, delta 74,515 B, both 1,098,908 B; bounds ~10 % above.
+const APP_OWN_LIMIT = 66_000;
+const APP_DELTA_LIMIT = 82_000;
 const EDITOR_AND_APP_LIMIT = 1_150_000;
 
 describe('module boundaries, load-time safety and size', () => {
@@ -209,7 +211,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 58 KB and adds under 74 KB to a carrier bundle that already holds the editor (the whole under 1.15 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.15 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });
@@ -933,6 +935,281 @@ describe('the handle, reader controls and the brand', () => {
       expect([...o.root.querySelectorAll('.orz-app__brand-links a')].map((a) => a.getAttribute('aria-label')), repo).toEqual(['orz-markdown website']);
       o.app.dispose();
     }
+  });
+});
+
+// ── A.23–A.27 the kit gaps orz-paged 1.0 found (2.3.0) ────────────────────
+
+describe('2.3.0: action submenus, conditional actions and settings, block-valued settings, reader choices, new documents with a text', () => {
+  const kd = (b: ReturnType<typeof boot>, el: Element, key: string) => { const e = new b.win.KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }); el.dispatchEvent(e as unknown as Event); return e; };
+  const item = (b: ReturnType<typeof boot>, id: string) => b.root.querySelector(`[data-orz-item="${id}"]`) as HTMLButtonElement;
+  const subLabels = (root: ParentNode, sel: string) => [...root.querySelectorAll(`${sel} [role^="menuitem"]`)].map((x) => x.textContent);
+
+  it('[A.23] a kind\'s action with items() is a submenu: in the handle\'s list (ArrowRight opens it on its checked entry, ArrowLeft closes it, separators drawn, a keyboard choice runs the entry with the app and returns the focus to the pencil; a failing entry is a toast; no entries: disabled; an action with neither run nor items is not offered) and in edit mode (a submenu of More, a menu button of the bar, keyboard operable)', async () => {
+    const ran: string[] = [];
+    const kind: Partial<StandaloneKind> = {
+      actions: [
+        { id: 'bar-menu', label: 'Zoom', placement: 'bar', inEdit: true, items: () => [{ label: 'Fit', run: () => { ran.push('fit'); } }] },
+        { id: 'tpl', label: 'From template…', icon: 'new', inEdit: true, items: (app) => [
+          { id: 'a', label: 'Alpha', run: (x) => { ran.push(`alpha:${x === app}`); } },
+          { label: 'Beta', separator: true, checked: true, run: () => { throw new Error('nope'); } },
+        ] },
+        { id: 'empty', label: 'Nothing here', items: () => [] },
+        { id: 'neither', label: 'Neither' },
+      ],
+    };
+    const b = boot(undefined, { kind });
+    await b.app.ready;
+    expect(b.items()).toEqual(['Edit', 'Zoom', 'Save', 'Download a copy', 'New document', 'Save as new copy', 'Theme', 'From template…', 'Nothing here']);
+    expect([item(b, 'action:tpl').getAttribute('aria-haspopup'), item(b, 'action:bar-menu').getAttribute('aria-haspopup'), item(b, 'action:empty').disabled]).toEqual(['menu', 'menu', true]);
+    // the keyboard: ArrowRight opens the submenu on its checked entry; ArrowLeft closes it
+    item(b, 'action:tpl').focus();
+    kd(b, item(b, 'action:tpl'), 'ArrowRight');
+    expect(subLabels(b.root, '.orz-handle__sub')).toEqual(['Alpha', 'Beta']);
+    expect(b.root.querySelectorAll('.orz-handle__sub .orz-handle__sep')).toHaveLength(1);
+    expect((b.root.activeElement as HTMLElement).textContent).toBe('Beta');
+    kd(b, b.root.activeElement as Element, 'ArrowLeft');
+    expect([b.root.querySelector('.orz-handle__sub'), (b.root.activeElement as HTMLElement).getAttribute('data-orz-item')]).toEqual([null, 'action:tpl']);
+    kd(b, item(b, 'action:tpl'), 'ArrowRight');
+    kd(b, b.root.activeElement as Element, 'ArrowUp');
+    (b.root.activeElement as HTMLButtonElement).dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 0 }) as unknown as Event);
+    await tick();
+    expect(ran).toEqual(['alpha:true']);
+    expect([b.app.menu.isOpen(), b.root.activeElement === b.root.querySelector('.orz-handle__pencil')]).toEqual([false, true]);
+    // a failing entry: a toast naming the action and the entry
+    b.app.menu.open();
+    item(b, 'action:tpl').click();
+    ([...b.root.querySelectorAll('.orz-handle__sub [role^="menuitem"]')].find((x) => x.textContent === 'Beta') as HTMLButtonElement).click();
+    await tick();
+    expect(b.toasts().join(' ')).toContain('From template… — Beta: nope');
+    // edit mode: the bar's menu button and a submenu of More
+    b.app.edit();
+    const barMenu = b.root.querySelector('.orz-app__bar [data-orz-action="bar-menu"] > button') as HTMLButtonElement;
+    barMenu.click();
+    expect(subLabels(b.root, '.orz-app__bar [data-orz-action="bar-menu"] .orz-menu')).toEqual(['Fit']);
+    (b.root.querySelector('.orz-app__bar [data-orz-action="bar-menu"] .orz-menu__item') as HTMLButtonElement).click();
+    await tick();
+    expect(ran).toEqual(['alpha:true', 'fit']);
+    const moreBtn = [...b.root.querySelectorAll('.orz-app__bar button')].find((x) => x.getAttribute('aria-label') === 'More') as HTMLButtonElement;
+    moreBtn.click();
+    const parent = [...b.root.querySelectorAll('.orz-app__bar .orz-menu__item')].find((x) => x.textContent?.startsWith('From template…')) as HTMLButtonElement;
+    expect([parent.getAttribute('aria-haspopup'), parent.getAttribute('aria-expanded')]).toEqual(['menu', 'false']);
+    expect([...b.root.querySelectorAll('.orz-app__bar .orz-menu:not(.orz-menu--sub) .orz-menu__item')].map((x) => x.textContent)).not.toContain('Nothing here'); // not inEdit
+    parent.focus();
+    kd(b, parent, 'ArrowRight');
+    expect([parent.getAttribute('aria-expanded'), subLabels(b.root, '.orz-menu--sub'), (b.root.activeElement as HTMLElement).textContent]).toEqual(['true', ['Alpha', 'Beta'], 'Beta']);
+    expect(b.root.querySelector('.orz-menu--sub')!.getAttribute('role')).toBe('menu');
+    kd(b, b.root.activeElement as Element, 'ArrowLeft');
+    expect([b.root.querySelector('.orz-menu--sub'), b.root.activeElement]).toEqual([null, parent]);
+    kd(b, parent, 'Enter'); // a keyboard click opens it too
+    parent.dispatchEvent(new b.win.MouseEvent('click', { bubbles: true, detail: 0 }) as unknown as Event);
+    kd(b, b.root.activeElement as Element, 'Escape');
+    expect([b.root.querySelector('.orz-menu--sub'), b.root.activeElement]).toEqual([null, parent]);
+    parent.click();
+    ([...b.root.querySelectorAll('.orz-menu--sub .orz-menu__item')].find((x) => x.textContent === 'Alpha') as HTMLButtonElement).click();
+    await tick();
+    expect(ran).toEqual(['alpha:true', 'fit', 'alpha:true']);
+    expect(b.root.querySelector('.orz-app__bar .orz-menu')).toBeNull(); // More closed with its submenu
+    b.app.dispose();
+  });
+
+  it('[A.24] a kind\'s action or setting with hidden(text) is offered only while it says so, re-evaluated as the text changes: the handle\'s list (at each opening), edit mode\'s More menu, an edit-mode bar button (after a pause in typing) and an editor toolbar\'s setting picker (attachSettings, after a pause in typing)', async () => {
+    const offered = (t: string) => t.includes('x_choices');
+    const VER: SettingControl = { key: 'x_ver', label: 'Version', choices: [{ value: 'a', label: 'A' }], current: () => '', hidden: (t) => !offered(t) };
+    const kind: Partial<StandaloneKind> = {
+      settings: [THEME, VER],
+      actions: [
+        { id: 'ver', label: 'Version…', inEdit: true, hidden: (t) => !offered(t), run: () => undefined },
+        { id: 'pv', label: 'Proof', placement: 'bar', inEdit: true, hidden: (t) => !offered(t), run: () => undefined },
+        { id: 'boom', label: 'Throws', hidden: () => { throw new Error('x'); }, run: () => undefined },
+      ],
+    };
+    const b = boot(undefined, { kind });
+    await b.app.ready;
+    expect(b.items()).toEqual(['Edit', 'Save', 'Download a copy', 'New document', 'Save as new copy', 'Theme']);
+    b.app.menu.close();
+    b.app.setSetting({ x_choices: 'on' });
+    expect(b.items()).toEqual(['Edit', 'Proof', 'Save', 'Download a copy', 'New document', 'Save as new copy', 'Theme', 'Version', 'Version…']);
+    b.app.menu.close();
+    // edit mode: the bar button and More follow the text
+    const ed = b.app.edit();
+    const proof = b.root.querySelector('.orz-app__bar [data-orz-action="pv"]') as HTMLButtonElement;
+    expect(proof.hidden).toBe(false);
+    ed.setText(TEXT);
+    await tick(260);
+    expect(proof.hidden).toBe(true);
+    const more = [...b.root.querySelectorAll('.orz-app__bar button')].find((x) => x.getAttribute('aria-label') === 'More') as HTMLButtonElement;
+    more.click();
+    expect([...b.root.querySelectorAll('.orz-app__bar .orz-menu__item')].map((x) => x.textContent)).toEqual(['Download a copy', 'New document', 'Save as new copy']);
+    more.click();
+    ed.setHeader({ x_choices: 'yes' });
+    await tick(260);
+    expect(proof.hidden).toBe(false);
+    more.click();
+    expect([...b.root.querySelectorAll('.orz-app__bar .orz-menu__item')].map((x) => x.textContent)).toEqual(['Download a copy', 'New document', 'Save as new copy', 'Version…']);
+    b.app.dispose();
+    // an editor's toolbar: the picker shows and hides with the text
+    const { doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
+    const el = doc.createElement('div');
+    doc.body.append(el);
+    const shell = createEditorShell(el as never, { text: TEXT, render: () => '', adapter: textareaAdapter(), preview: { assets: false } });
+    const s = attachSettings(shell, [THEME, VER]);
+    expect(s.pickers.map((p) => (p.element as unknown as HTMLElement).hidden)).toEqual([false, true]);
+    shell.setHeader({ x_choices: 'on' });
+    await tick(300);
+    expect(s.pickers.map((p) => (p.element as unknown as HTMLElement).hidden)).toEqual([false, false]);
+    shell.undo();
+    await tick(300);
+    expect((s.pickers[1].element as unknown as HTMLElement).hidden).toBe(true);
+    s.destroy();
+    shell.destroy();
+  });
+
+  it('[A.25] a setting may write a block value: choicesFor(text) gives its choices at each opening (separators, per-choice checked toggles), apply(text, value) gives the header changes ({ multiline } values, removals, several keys) — one undoable step in the read view (Cmd/Ctrl+Z undoes it) and one undoable setHeader in an editor\'s toolbar; a radio choice still writes only a change; a refused change is a toast and changes nothing', async () => {
+    const lines = (t: string) => (readHeader(t)?.fields['dynamic_choices'] ?? '').split('\n').filter(Boolean);
+    const VERSION: SettingControl = {
+      key: 'dynamic_choices', label: 'Version', choices: [], current: () => '',
+      choicesFor: (t) => ['answers: show', 'answers: hide', 'level: easy'].map((v, i) => ({ value: v, label: v, checked: lines(t).includes(v), ...(i === 2 ? { separator: true } : {}) })),
+      apply: (t, v) => {
+        const key = v.slice(0, v.indexOf(':'));
+        const on = lines(t).includes(v);
+        const next = [...lines(t).filter((l) => !l.startsWith(`${key}:`)), ...(on ? [] : [v])];
+        return { dynamic_choices: next.length ? { multiline: next.join('\n') } : null };
+      },
+    };
+    const BAD: SettingControl = { key: 'x_bad', label: 'Bad', choices: [{ value: 'x', label: 'X' }], current: () => '', apply: () => ({ x_bad: 'a}}b' }) };
+    const b = boot(undefined, { kind: { settings: [THEME, VERSION, BAD] } });
+    await b.app.ready;
+    const choose = (label: string) => {
+      if (!b.app.menu.isOpen()) b.app.menu.open();
+      item(b, 'setting:dynamic_choices').click();
+      ([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].find((x) => x.textContent === label) as HTMLButtonElement).click();
+    };
+    b.app.menu.open();
+    item(b, 'setting:dynamic_choices').click();
+    expect(subLabels(b.root, '.orz-handle__sub')).toEqual(['answers: show', 'answers: hide', 'level: easy']);
+    expect(b.root.querySelectorAll('.orz-handle__sub .orz-handle__sep')).toHaveLength(1);
+    expect([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].map((x) => x.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false']);
+    b.app.menu.close();
+    choose('answers: show');
+    expect(b.app.getText() === editHeader(TEXT, { dynamic_choices: { multiline: 'answers: show' } })).toBe(true);
+    choose('level: easy');
+    expect(lines(b.app.getText())).toEqual(['answers: show', 'level: easy']);
+    choose('answers: hide');
+    expect(lines(b.app.getText())).toEqual(['level: easy', 'answers: hide']);
+    b.app.menu.open();
+    item(b, 'setting:dynamic_choices').click();
+    expect([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].map((x) => x.getAttribute('aria-checked'))).toEqual(['false', 'true', 'true']);
+    b.app.menu.close();
+    choose('answers: hide'); // a checked toggle applies too: off
+    expect(lines(b.app.getText())).toEqual(['level: easy']);
+    choose('level: easy');
+    expect(b.app.getText() === TEXT).toBe(true); // the key goes with its last line
+    expect(b.app.isDirty()).toBe(false);
+    expect(b.app.undo()).toBe(true); // each choice was one step
+    expect(lines(b.app.getText())).toEqual(['level: easy']);
+    expect(b.key('z', { meta: true }).defaultPrevented).toBe(true);
+    expect(lines(b.app.getText())).toEqual(['level: easy', 'answers: hide']);
+    // a refused change: a toast, nothing changes
+    const before = b.app.getText();
+    b.app.menu.open();
+    item(b, 'setting:x_bad').click();
+    ([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].find((x) => x.textContent === 'X') as HTMLButtonElement).click();
+    expect(b.app.getText() === before).toBe(true);
+    expect(b.toasts().join(' ')).toContain('Could not change the header');
+    // a radio choice (no checked) still writes only a change
+    b.app.menu.open();
+    item(b, 'setting:theme').click();
+    ([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].find((x) => x.getAttribute('aria-checked') === 'true') as HTMLButtonElement).click();
+    expect(b.app.getText() === before).toBe(true);
+    b.app.dispose();
+    // an editor's toolbar: one undoable setHeader writing the block
+    const { doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
+    const el = doc.createElement('div');
+    doc.body.append(el);
+    const shell = createEditorShell(el as never, { text: TEXT, render: () => '', adapter: textareaAdapter(), preview: { assets: false } });
+    const s = attachSettings(shell, [VERSION]);
+    const sroot = shell.root as unknown as ShadowRoot;
+    (s.pickers[0].button as unknown as HTMLButtonElement).click();
+    expect(sroot.querySelectorAll('.orz-menu .orz-menu__sep')).toHaveLength(1);
+    ([...sroot.querySelectorAll('[role="menuitemradio"]')].find((i) => i.textContent === 'level: easy') as HTMLButtonElement).click();
+    (s.pickers[0].button as unknown as HTMLButtonElement).click();
+    ([...sroot.querySelectorAll('[role="menuitemradio"]')].find((i) => i.textContent === 'answers: show') as HTMLButtonElement).click();
+    expect(shell.getText() === editHeader(TEXT, { dynamic_choices: { multiline: 'level: easy\nanswers: show' } })).toBe(true);
+    shell.undo();
+    expect(shell.getText() === editHeader(TEXT, { dynamic_choices: { multiline: 'level: easy' } })).toBe(true);
+    s.destroy();
+    shell.destroy();
+  });
+
+  it('[A.26] reader controls with named choices: each well-formed readerControls.choices control is a submenu of radio choices in the handle\'s list (before the text size); the choice is applied to the read view by the kind\'s apply(view, id) at boot and on each choice, stored per uid as the reader preference reader.<key> (the default removes it; only one of its ids is ever read back), restored at boot, never marks the document unsaved nor enters a saved file; readerChoice / setReaderChoice read and set it; a malformed control is not offered', async () => {
+    const applied: Array<[string, string]> = [];
+    const ZOOM = {
+      key: 'pageZoom', label: 'Page zoom', choices: [{ id: 'auto', label: 'Automatic' }, { id: 'fit', label: 'Fit width' }, { id: '125', label: '125%' }], default: 'auto',
+      apply: (view: CarrierReadView, id: string) => { applied.push(['pageZoom', id]); view.element!.setAttribute('data-zoom', id); },
+    };
+    const kind: Partial<StandaloneKind> = {
+      readerControls: {
+        fontScale: { min: 80, max: 160, step: 10 },
+        choices: [ZOOM, { ...ZOOM, label: 'Duplicate key' }, { ...ZOOM, key: 'Bad key' }, { ...ZOOM, key: 'twins', choices: [{ id: 'a', label: 'A' }, { id: 'a', label: 'A again' }] }, { ...ZOOM, key: 'none', choices: [] }],
+      },
+    };
+    const b = boot(undefined, { kind });
+    await b.app.ready;
+    expect(applied).toEqual([['pageZoom', 'auto']]); // at boot: the default
+    expect(b.items().slice(-2)).toEqual(['Page zoom', 'Text sizeA−100%A+']);
+    expect(b.root.querySelectorAll('[data-orz-item^="reader:"]')).toHaveLength(1);
+    item(b, 'reader:pageZoom').focus();
+    kd(b, item(b, 'reader:pageZoom'), 'ArrowRight');
+    expect([subLabels(b.root, '.orz-handle__sub'), (b.root.activeElement as HTMLElement).textContent]).toEqual([['Automatic', 'Fit width', '125%'], 'Automatic']);
+    ([...b.root.querySelectorAll('.orz-handle__sub [role="menuitemradio"]')].find((x) => x.textContent === 'Fit width') as HTMLButtonElement).click();
+    expect([b.app.readerChoice('pageZoom'), b.doc.getElementById('orz-app')!.getAttribute('data-zoom'), applied.at(-1)]).toEqual(['fit', 'fit', ['pageZoom', 'fit']]);
+    expect(b.win.localStorage.getItem(`orz-pref:${UID}:reader.pageZoom`)).toBe('"fit"');
+    expect(b.app.isDirty()).toBe(false);
+    expect(b.app.setReaderChoice('pageZoom', 'nope')).toBe('auto'); // an unknown id: the default (removed)
+    expect(b.win.localStorage.getItem(`orz-pref:${UID}:reader.pageZoom`)).toBeNull();
+    expect([b.app.setReaderChoice('pageZoom', '125'), b.app.setReaderChoice('other', 'x'), b.app.readerChoice('other')]).toEqual(['125', null, null]);
+    await b.app.save();
+    expect(b.rec.saves.at(-1)!.html).not.toMatch(/pageZoom|data-zoom|reader\./);
+    b.app.dispose();
+    // restored at boot; a stored value that is not one of the ids reads as the default
+    applied.length = 0;
+    const again = boot(undefined, { kind, beforeBoot: (w) => { w.localStorage.setItem(`orz-pref:${UID}:reader.pageZoom`, '"125"'); } });
+    expect([again.app.readerChoice('pageZoom'), applied]).toEqual(['125', [['pageZoom', '125']]]);
+    again.app.dispose();
+    const forged = boot(undefined, { kind, beforeBoot: (w) => { w.localStorage.setItem(`orz-pref:${UID}:reader.pageZoom`, '"<img src=x>"'); } });
+    expect(forged.app.readerChoice('pageZoom')).toBe('auto');
+    forged.app.dispose();
+    // a kind without choices: no entry
+    const none = boot();
+    expect([none.items().some((x) => x === 'Page zoom'), none.app.readerChoice('pageZoom'), none.app.setReaderChoice('pageZoom', 'fit')]).toEqual([false, null, null]);
+    none.app.dispose();
+  });
+
+  it('[A.27] app.newDocument({ text, name }) saves the given text as a new file through a saver of its own (never the file\'s, never the host): a text without a well-formed uid, or with this file\'s, gets a new uid, another uid is kept; the name loses path and control characters and gets the kind\'s extension (default Untitled); without options it is the kind\'s newDocument() as before', async () => {
+    const b = boot();
+    await b.app.ready;
+    const sample = editHeader('# From a template\n', { carrier: 'md', title: 'Template' });
+    await b.app.newDocument({ text: sample, name: 'Lab report/2026: draft' });
+    let s = b.rec.saves.at(-1)!;
+    expect(s.suggestedName).toBe('Lab report 2026 draft.md.html');
+    expect(UID_PATTERN.test(readHeader(s.text)!.fields['uid'])).toBe(true);
+    expect(s.text === editHeader(sample, { uid: readHeader(s.text)!.fields['uid'] })).toBe(true);
+    expect(s.uid).toBe(readHeader(s.text)!.fields['uid']);
+    expect(b.rec.savers.at(-1)!.host).toBeUndefined();
+    expect(b.rec.savers.at(-1)!.openedHtml).toBeUndefined();
+    await b.app.newDocument({ text: editHeader(sample, { uid: UID }) }); // this file's uid: a new one
+    s = b.rec.saves.at(-1)!;
+    expect([s.suggestedName, readHeader(s.text)!.fields['uid'] !== UID]).toEqual(['Untitled.md.html', true]);
+    const own = 'doc-owntemplate000001';
+    await b.app.newDocument({ text: editHeader(sample, { uid: own }), name: 'Kept.md.html' });
+    s = b.rec.saves.at(-1)!;
+    expect([s.suggestedName, readHeader(s.text)!.fields['uid']]).toEqual(['Kept.md.html', own]);
+    await b.app.newDocument({ name: '...' });
+    s = b.rec.saves.at(-1)!;
+    expect([s.suggestedName, s.text.includes('# New')]).toEqual(['Untitled.md.html', true]);
+    expect(b.app.getText() === TEXT).toBe(true); // the document is untouched
+    b.app.dispose();
   });
 });
 
@@ -2269,6 +2546,90 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect((await pageRecords(app, 'picker')).map((x) => (x.data as { suggestedName: string }).suggestedName)).toEqual(['mine.md.html']);
     await ctx.close();
   }, 120_000);
+
+  it('[A.28] [A.23] [A.24] [A.25] [A.26] [A.27] in Chrome (the stub carrier, 2.3.0): an action\'s submenu in the handle\'s list (pointer and keyboard) saves a new document from a sample through app.newDocument({ text, name }) — a new file with its own uid, named after the sample, that opens — and in edit mode\'s More; an action and a setting offered only while the text says so appear after an edit; the block-valued Notes setting toggles lines of an x_stub_notes: | value (one undo step each, Cmd/Ctrl+Z); the Line spacing reader choice restyles the article, survives a reload, leaves the document clean and stays out of the saved file', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ntitle: Gaps\nuid: doc-gapsgapsgaps00a28\n}}\n\n# Gaps\n\nA paragraph of body text.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(write('gaps.md.html', html));
+    await bootDone(page);
+    await writeOpfs(page, { name: 'gaps.md.html' }, html);
+    const pencil = page.getByRole('button', { name: 'Edit and more', exact: true });
+    const list = page.getByRole('menu', { name: 'Edit and more' });
+    const pickers = async (n: number) => { await page.waitForFunction((k) => (window as unknown as { __orzConformanceLog: Array<{ type: string }> }).__orzConformanceLog.filter((r) => r.type === 'picker').length === k, n); return (await pageRecords(page, 'picker')).map((r) => (r.data as { suggestedName: string }).suggestedName); };
+    const madeFile = async (name: string) => { let made: string | null = null; for (let i = 0; i < 50 && !made; i++) { made = await readOpfs(page, { name }); if (!made) await page.waitForTimeout(100); } return made!; };
+    // the conditional action and setting are not offered yet
+    await pencil.hover();
+    await list.waitFor();
+    expect(await page.getByRole('menuitem', { name: 'Word count', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('menuitem', { name: 'Notes', exact: true }).count()).toBe(0);
+    // a submenu with the pointer: hover opens it, a click on an entry saves a new document from that sample
+    await page.getByRole('menuitem', { name: 'New document from sample…', exact: true }).hover();
+    await page.getByRole('menu', { name: 'New document from sample…' }).waitFor();
+    await page.getByRole('menuitem', { name: 'Letter', exact: true }).click();
+    expect(await pickers(1)).toEqual(['A letter.md.html']);
+    const letter = extract(await madeFile('A letter.md.html'))!;
+    expect([readHeader(letter.text)!.fields['title'], lintHeader(letter.text, 'md').filter((l) => l.level === 'error')]).toEqual(['A letter', []]);
+    expect(readHeader(letter.text)!.fields['uid']).not.toBe('doc-gapsgapsgaps00a28');
+    expect(await readOpfs(page, { name: 'gaps.md.html' }) === html).toBe(true); // the opened file is untouched
+    // the keyboard: the submenu opens with ArrowRight, Enter chooses
+    await page.mouse.move(900, 300);
+    await page.waitForTimeout(500);
+    await pencil.focus();
+    await page.keyboard.press('ArrowDown');
+    await page.getByRole('menuitem', { name: 'New document from sample…', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('menu', { name: 'New document from sample…' }).waitFor();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    expect(await pickers(2)).toEqual(['A letter.md.html', 'A memo.md.html']);
+    expect(readHeader(extract(await madeFile('A memo.md.html'))!.text)!.fields['title']).toBe('A memo');
+    // an edit that adds the markers: the action and the setting appear
+    await page.evaluate(`${APP}.edit()`);
+    await page.evaluate(`${APP}.editor().setText(${APP}.getText() + '\\n<!-- count --> <!-- notes -->\\n')`);
+    // edit mode's More: the sample submenu
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'New document from sample…' }).click();
+    await page.getByRole('menu', { name: 'New document from sample…' }).getByRole('menuitem', { name: 'Letter', exact: true }).click();
+    expect((await pickers(3)).at(-1)).toBe('A letter.md.html');
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.waitForFunction(`!${APP}.editor()`);
+    await chooseInHandle(page, 'Word count');
+    await page.locator('#orz-chrome').getByText(/^\d+ words$/).waitFor();
+    // Notes: per-choice toggles writing a block value, one undo step each
+    await chooseInHandle(page, 'Notes');
+    await page.getByRole('menuitemradio', { name: 'Note alpha', exact: true }).click();
+    await chooseInHandle(page, 'Notes');
+    expect(await page.getByRole('menuitemradio', { name: 'Note alpha', exact: true }).getAttribute('aria-checked')).toBe('true');
+    await page.getByRole('menuitemradio', { name: 'Note beta', exact: true }).click();
+    const notes = () => page.evaluate(`${APP}.getText()`).then((t) => readHeader(t as string)!.fields['x_stub_notes'] ?? null);
+    expect(await notes()).toBe('alpha\nbeta');
+    expect(await page.evaluate(`${APP}.getText()`)).toContain('x_stub_notes: |\n  alpha\n  beta\n');
+    await page.mouse.move(900, 300);
+    await page.waitForTimeout(500);
+    await page.locator('#orz-doc').click();
+    await page.keyboard.press(`${MOD}+z`);
+    expect(await notes()).toBe('alpha');
+    // Line spacing: a reader choice, applied to the article, kept across a reload, never in the file
+    const lineHeight = () => page.locator('#orz-doc').evaluate((a) => parseFloat(getComputedStyle(a).lineHeight) / parseFloat(getComputedStyle(a).fontSize));
+    const before = await lineHeight();
+    await chooseInHandle(page, 'Line spacing');
+    await page.getByRole('menuitemradio', { name: 'Relaxed', exact: true }).click();
+    expect(await lineHeight()).toBeCloseTo(2.4, 1);
+    expect(before).toBeLessThan(2.2);
+    expect(await page.evaluate(`${APP}.readerChoice('spacing')`)).toBe('relaxed');
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    const saved = (await readOpfs(page, { name: 'gaps.md.html' }))!;
+    expect(saved.replace(/<script id="orz-engine">[\s\S]*?<\/script>/, '')).not.toMatch(/relaxed|spacing|line-height: 2\.4/);
+    await page.reload();
+    await bootDone(page);
+    expect([await page.evaluate(`${APP}.readerChoice('spacing')`), await lineHeight(), await page.evaluate(`${APP}.isDirty()`)]).toEqual(['relaxed', expect.closeTo(2.4, 1), false]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 180_000);
 
   it('[A.20] [A.21] [A.22] in Chrome: the read view at rest shows exactly one visible control (the pencil, bottom-left); hovering opens its list and moving into it keeps it open, leaving closes it; a click on the pencil edits; the keyboard reaches the pencil first (Tab), Enter edits, ArrowUp opens the list and Escape closes it with the focus back; a tap opens it on a touch screen; the text size zooms the article, survives a reload (per uid), leaves the document clean and stays out of the saved file; edit mode shows the seal (https://markdown.orz.how) and the GitHub link (the kind\'s repo), both in a new tab, and the read view neither', async () => {
     const ctx = await context();

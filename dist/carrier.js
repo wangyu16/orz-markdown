@@ -29,6 +29,10 @@ exports.VERSION = exports.maskInertMarkdown = exports.unescapeScriptText = expor
  * - document: `readDocument`, `kindFromFilename`, `twinName`, `mintUid`
  * - links: `twinHref` and the `env.orzTwinLinks` render rule
  * - envelope: `assembleEnvelope`, `extract`, `readIslandFromDom`
+ * - (2.3.0) `normalizeHeader`; `sha256` (synchronous, isomorphic); the legacy
+ *   0.x island reader (`readLegacyIsland`, `rawElements`, …) and the
+ *   kind-independent core of a carrier's `inspect` (`assembledStructure`,
+ *   `twinCheck`, `storedText`, …)
  *
  * Browser-safe (no Node built-ins). Since the carrier kit reads headers with
  * the token-based scanner, importing this entry also loads the parser; the kit

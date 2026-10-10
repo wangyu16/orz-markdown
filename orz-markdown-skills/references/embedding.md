@@ -50,7 +50,9 @@ There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown.
 > call it again after every render (each call destroys the Chart.js charts of
 > the content it replaced; `disposeEnhancement(article)` releases the rest when
 > the view goes). `nonce` stamps what it adds (CSP); `assets: false` fetches
-> nothing. To switch a theme stylesheet without a flash use
+> nothing; `static: true` (≥ 2.3.0, for print or a paginator that re-parses the
+> HTML) draws everything, then turns the drawn charts and SMILES canvases into
+> images and skips the interactive runtime. To switch a theme stylesheet without a flash use
 > `swapStylesheet(document, 'orz-theme', href)` (the old sheet stays until the
 > new one has loaded). The theme list for a picker is `THEMES`
 > (`orz-markdown/themes`: ids, names, light/dark).

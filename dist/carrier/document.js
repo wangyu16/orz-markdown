@@ -178,6 +178,8 @@ function pagedTitle(blocks, header) {
  * level-1 heading (plain text; for slides only after the first slide marker),
  * else — for `paged` — the `title` (or `text`) of the first title element
  * (the first nyml block whose kind ends in `-title`), else `Untitled`.
+ * `opts.themes` (2.3.0): the kind's theme ids, passed to the lint
+ * (`lintHeader`'s `themes`: a header `theme` not among them is `unknown-theme`).
  */
 function readDocument(text, opts) {
     const named = opts?.kind ?? (opts?.filename ? kindFromFilename(opts.filename) : null);
@@ -189,7 +191,7 @@ function readDocument(text, opts) {
     const parse = () => (tokens ?? (tokens = (0, parser_js_1.kitParser)().parse(text, {})));
     let blocks = null;
     const scan = () => (blocks ?? (blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text, parse())));
-    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan);
+    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan, opts?.themes);
     const fields = header ? header.fields : {};
     const get = (k) => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
     const fmt = get('format');

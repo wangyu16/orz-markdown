@@ -82,13 +82,30 @@ export interface EnhanceOptions {
     assets?: boolean;
     /** A CSP nonce stamped on every `<script>` and `<link>` this adds. */
     nonce?: string;
-    /** Install the orz browser runtime (copy-as-Markdown, QR expansion, tab bars) once per window and run it on `root`. Default `true`. */
+    /** Install the orz browser runtime (copy-as-Markdown, QR expansion, tab bars) once per window and run it on `root`. Default `true` (`false` with `static`). */
     runtime?: boolean;
+    /**
+     * Static enhancement (2.3.0), for print and pagination (orz-paged lays the
+     * content out with Paged.js, which re-parses its HTML): everything is drawn
+     * as usual — the result resolves only after the libraries loaded (or
+     * failed) and the last pass ran — then every canvas drawn here becomes an
+     * image of itself (`<img data-orz-frozen="chart" | "smiles">`, its class,
+     * `data-md` breadcrumb, accessible name and drawn width kept): a chart is
+     * stopped, drawn at least at 2× the CSS pixel ratio (unless its own options
+     * set `devicePixelRatio`) and destroyed, so nothing animates, resizes or
+     * listens afterwards. The interactive runtime (copy-as-Markdown, QR
+     * expansion, tab bars) is not installed unless `runtime: true` is given. A
+     * canvas nothing drew (its library failed to load, offline) or that cannot
+     * be read (tainted) stays a canvas.
+     */
+    static?: boolean;
 }
 /** What {@link enhanceDocument} did: the library URLs it loaded now (or found loading) and those that failed. */
 export interface EnhanceResult {
     loaded: string[];
     failed: string[];
+    /** With `static` (2.3.0): how many drawn canvases became images. */
+    frozen?: number;
 }
 /** A rendered region (an `.markdown-body` article) in a page, structurally. */
 export interface EnhanceRoot {

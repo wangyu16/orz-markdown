@@ -1,12 +1,13 @@
 # Carrier app — the standalone file's runtime (`orz-markdown/carrier/app`)
 
-**Status:** implementation spec (orz-markdown 2.2.0), additive. It implements
+**Status:** implementation spec (orz-markdown 2.2.0; 2.3.0 additions marked —
+the kit gaps the orz-paged 1.0 rebuild found, REBUILD §3b), additive. It implements
 the standalone host of [FC-19](FC-19-editor-component.md) §4 and §8.5 on top
 of the [shell runtime](shell-runtime.md) and the file side of the
 [host protocols](host-protocols.md), for every carrier kind. Family plan:
 REBUILD §3a, owner decision 2 — the standalone file's startup code, written
 in orz-mdhtml 1.0 behind a seam, is lifted here before orz-paged. Claims
-A.1–A.22 in `notes/CLAIMS.md`; tests in `tests/carrier-app.test.ts` (and the
+A.1–A.28 in `notes/CLAIMS.md`; tests in `tests/carrier-app.test.ts` (and the
 conformance stub, H.2, which is built on it).
 
 ## 1. What it is
@@ -70,13 +71,13 @@ Everything kind-specific is behind this interface; the app names no kind
 | `kind`, `version`, `formats` | `md` / `slides` / `paged`; the shell version (= the package version, FC-19 §7); the text formats it reads and writes |
 | `brand?` | the tool's name in the chrome's labels (edit mode's "<brand> on GitHub"; default: the repo's name, else `orz`) |
 | `repo?` | (2.2.0) the kind's repository, an `https://github.com/<owner>/<repo>` URL: edit mode links to it with the GitHub mark (§4.2); anything else shows no link |
-| `readerControls?` | (2.2.0) reader-side controls (§4.10): `{ fontScale?: { min, max, step } }` in percent |
+| `readerControls?` | (2.2.0) reader-side controls (§4.10): `{ fontScale?: { min, max, step } }` in percent; (2.3.0) `choices?: ReaderChoiceControl[]`, reader controls with named choices |
 | `assemble(text, { delivery?, engineSource?, includes? })` | the isomorphic assemble (FC-19 §2); string or promise |
-| `newDocument()` | the creation tool's new text (header with `carrier` and a fresh `uid`) |
+| `newDocument()` | the creation tool's new text (header with `carrier` and a fresh `uid`); a kind's own creation choices (paged's templates) call `app.newDocument({ text, name })` (§4.5, 2.3.0) |
 | `mountEditor(element, options, ctx?)` | FC-19 `mountEditor`: the kit's editor shell with the kind's renderer, preview and tools; `ctx` when mounted on the file (§3.2) |
 | `createReadView(document)` | the page's read view (§3.3) |
-| `settings?` | the header settings the chrome offers (`SettingControl[]`, §5) |
-| `actions?` | extra chrome actions (`CarrierAction[]`: slides' Present, paged's Print): items of the handle's list; with `inEdit`, also in edit mode |
+| `settings?` | the header settings the chrome offers (`SettingControl[]`, §3.4) |
+| `actions?` | extra chrome actions (`CarrierAction[]`: slides' Present, paged's Print): items of the handle's list; with `inEdit`, also in edit mode; (2.3.0) submenus (`items`) and conditional (`hidden`) |
 | `readDocument(text)` | FC-19 `readDocument` (typically the kit's with the kind) |
 | `extract?(html)`, `renderPreview?(text, options?)` | FC-19 `extract` (default: the kit's parser-free one) and `renderPreview` |
 
@@ -139,11 +140,47 @@ has loaded, so a theme change does not flash unstyled.
 current(text) }` — a header key the chrome offers (FC-18 §5.1 user choices
 are document data, owner decision 4): in the read view a submenu of the
 handle's list (radio choices), in edit mode a picker of the editor's
-toolbar (`attachSettings`). `CarrierAction { id, label, icon?,
-placement?: 'bar' | 'menu', inEdit?, run(app) }` — an item of the handle's
-list (`bar`: right after Edit; `menu`, the default: after the settings);
-with `inEdit` also in edit mode (`bar`: a button of its bar; `menu`: an
-item of More); run with the app handle
+toolbar (`attachSettings`). 2.3.0 adds, all optional:
+
+- `choicesFor(text)` — the choices a text offers, read at each opening
+  instead of `choices` (paged's Version: the dynamic choices the document
+  defines). A choice may carry `separator` (groups) and `checked` (a
+  per-choice toggle: it overrides `value === current(text)`, several may be
+  on, and choosing one that is on applies it too, so `apply` can turn it
+  off; a choice without `checked` is a radio choice and writes only a
+  change, as in 2.2.0).
+- `apply(text, value) → Record<string, HeaderChange>` — the header changes
+  the choice makes (default `{ [key]: value }`): any keys, single-line
+  values, `null` (remove) or `{ multiline }` block values (FC-18 §9), written
+  as ONE undoable edit (`editHeader` in the read view, `setHeader` in an
+  editor). So a setting can write a block value such as paged's
+  `dynamic_choices` map. Only the header changes; a refused change is a
+  toast and changes nothing.
+- `hidden(text)` — not offered for this text (a throwing one is hidden):
+  re-evaluated at each opening of the handle's list, and by `attachSettings`
+  after a pause in typing (the picker is hidden).
+
+The helpers `settingChoices(control, text)`, `settingOffered(control,
+text)` and `settingChanges(control, text, value)` are exported for a
+carrier's own pickers.
+
+`CarrierAction { id, label, icon?, placement?: 'bar' | 'menu', inEdit?,
+run?(app), items?(app), hidden?(text) }` — an item of the handle's list
+(`bar`: right after Edit; `menu`, the default: after the settings); with
+`inEdit` also in edit mode (`bar`: a button of its bar; `menu`: an item of
+More); run with the app handle. 2.3.0: **submenus** — an action with
+`items(app) → CarrierActionItem[]` (`{ id?, label, checked?, disabled?,
+separator?, run(app) }`) is a submenu: in the handle's list a submenu like a
+setting's (a hover opens it; ArrowRight, Enter or a tap opens it on its
+checked entry, else the first; ArrowLeft and Escape close it), in edit mode
+a submenu of More (`menu`) or a menu button of the bar (`bar`); its entries
+are read at each opening and run with the app (a failing one is a toast
+naming the action and the entry); with no entries it is offered disabled;
+one level. `run` is optional (an action with neither `run` nor `items` is
+not offered). **Conditional actions** — `hidden(text)`: not offered for
+this text, re-evaluated at each opening of the handle's list and of More,
+and for an edit-mode bar button after a pause in typing (paged's Version…
+shows only while the document defines choices). An action
 (a presenter hides the chrome: `app.setChromeVisible(false)` hides the
 handle, the bar and the editor but not the toast stack, so a save's or an action's message
 and the conflict question still show while presenting — round 2 of the
@@ -200,8 +237,11 @@ operation:
    Present), **Save** (⌘/Ctrl+S; a dot while unsaved), **Download a copy**;
 2. **New document**, **Save as new copy**;
 3. the kind's settings, each a submenu of radio choices (md: Theme,
-   Width), disabled while an update runs; the kind's `menu` actions;
-4. the kind's reader controls (§4.10: md's "Text size A− 100% A+");
+   Width), disabled while an update runs; the kind's `menu` actions (2.3.0:
+   a submenu for an action with `items`; settings and actions whose
+   `hidden(text)` says so are left out);
+4. the kind's reader controls (§4.10: 2.3.0 its named-choice controls, each
+   a submenu — paged's Page zoom — then md's "Text size A− 100% A+");
 5. when an update is offered, **Update to x.y.z** (§4.9).
 
 - **Pointer.** A click on the pencil edits. Hovering it opens the list
@@ -314,7 +354,13 @@ read view's keys — slides' Space — then work at once).
   3.4).
 - **Download a copy:** the current text's file through `saver.download`.
 - **New document:** `kind.newDocument()` saved as a new file
-  (`Untitled<ext>`), **Save as new copy:** the current text with a new
+  (`Untitled<ext>`). 2.3.0: `app.newDocument({ text?, name? })` saves a
+  given text instead (a kind's action — paged's "New document from
+  template…" — passes the template's text): a text without a well-formed
+  `uid`, or with this file's, gets a new one (a new document is never this
+  one), another uid is kept; `name` is the suggested name (path and control
+  characters removed, the kind's extension added when missing; default
+  `Untitled<ext>`). **Save as new copy:** the current text with a new
   `uid` (`<name> copy<ext>`, the file's includes) — each through a saver
   of its own (no remembered handle, no opened bytes, never the file's
   handle, never the host: a served page or a host gets a download).
@@ -412,13 +458,33 @@ editor has its own font-size preference). paged and slides decide later.
 `CarrierApp.fontScale()` / `setFontScale(percent | null)` read and set it
 (null when the kind offers none).
 
+**Reader controls with named choices** (2.3.0; paged's Page zoom:
+Automatic / Fit width / 100% / 125%). `readerControls.choices` is a list of
+`ReaderChoiceControl { key, label, icon?, choices: { id, label }[], default,
+apply(view, id) }`. A control is offered only when well-formed — `key`
+matches `[a-z][A-Za-z0-9_-]{0,31}` and is unique among the kind's controls,
+1–24 choices with unique non-empty ids (≤ 64 characters), `apply` a
+function; `default` not among the ids means the first. Each is a submenu of
+radio choices in the handle's list (before the text size row). The choice
+is a reader preference (shell-runtime §2): stored per uid under
+`reader.<key>` in the preference store, whose schema the app builds from
+the controls — `set` and `get` accept only one of the control's ids, so a
+forged or stale stored value reads as the default; choosing the default
+removes it. The app calls the kind's `apply(view, id)` at boot (the stored
+choice, else the default — before the first render, so the view keeps it
+for every render) and on each choice; it never marks the document unsaved,
+never reaches the host and never enters a saved file. `CarrierApp.
+readerChoice(key)` / `setReaderChoice(key, id | null)` read and set it (an
+unknown id or null: the default; no such control: null).
+
 ### 4.11 The handle (`CarrierApp`, `OrzCarrier.standalone`)
 
 `kind`, `file`, `getText()`, `isDirty()`, `edit()`, `leave()`, `editor()`,
 `setSetting(changes)`, `undo()`, `redo()`, `save()`, `download()`,
-`newDocument()`, `saveAsCopy()`, `editorContext()`, `attach(editor) → detach`,
+`newDocument(options?)` (2.3.0: `{ text?, name? }`, §4.5), `saveAsCopy()`, `editorContext()`, `attach(editor) → detach`,
 `toast(message, tone?)`, `menu` (2.2.0: `open()`, `close()`, `isOpen()` — the
 handle's list), `fontScale()`, `setFontScale(percent | null)` (2.2.0, §4.10),
+`readerChoice(key)`, `setReaderChoice(key, id | null)` (2.3.0, §4.10),
 `setChromeVisible(visible)`, `view`, `root`,
 `host`, `updating`, `ready`, `dispose()`. The conformance target's editor
 driver uses `standalone.edit()` (the pencil's path); its update driver opens
@@ -438,8 +504,13 @@ conformance stub's broken builds (H.5). Production passes none.
 read view's pencil and its list (§4.2) — entries are items, submenus
 (radio choices, actions, links) and rows of buttons that keep it open.
 `button`, `menuButton` (a non-modal `role="menu"` popover: arrows, Home/End,
-Enter/Space, Esc returns focus, outside pointer-down and Tab close),
-`settingPicker`, `attachSettings(shell, settings)`, `reviewProposal(root,
+Enter/Space, Esc returns focus, outside pointer-down and Tab close; 2.3.0: an
+item with `items()` is a submenu — `aria-haspopup`, a fixed popover beside
+it, opened by ArrowRight, Enter, Space, a click or a hover on its checked or
+first item, closed by ArrowLeft and Escape with the focus back on its item;
+one level), `settingPicker`, `attachSettings(shell, settings)` (2.3.0: each
+picker writes `settingChanges`, and a setting with `hidden` follows the
+text), `settingChoices`, `settingOffered`, `settingChanges` (2.3.0, §3.4), `reviewProposal(root,
 proposal, { title })` (non-modal `role="dialog"`, the proposal editable,
 Apply / Cancel, Esc cancels), `attachAiMenu(shell, { operations })`,
 `followPresentation(shell, present)`, `installCss`, `WIDGET_CSS`. Text is
@@ -473,9 +544,18 @@ Designed now so that neither needs a breaking change later:
   asynchronous; a newer render cancels an older one by generation, as the md
   view does); `present` sets the page size and template classes and the
   theme stylesheet and returns the scheme. Settings: theme, page size,
-  template, margins (header keys, FC-18 §5.1). Action: **Print**
-  (`placement: 'bar'`, `run: () => window.print()`; the chrome prints hidden,
-  CHROME_CSS `@media print`). Editor: the kit's shell with
+  template, margins (header keys, FC-18 §5.1); 2.3.0: **Version** — a
+  setting with `choicesFor` (the dynamic choices the document defines, one
+  group per key with per-choice `checked`), `apply` (the `dynamic_choices`
+  map as a `{ multiline }` value) and `hidden` (no choices). Action:
+  **Print** (`placement: 'bar'`, `run: () => window.print()`; the chrome
+  prints hidden, CHROME_CSS `@media print`); 2.3.0: **New document from
+  template…** — an action with `items` whose entries call
+  `app.newDocument({ text: template, name })`. Reader control (2.3.0):
+  **Page zoom** — `readerControls.choices` (`apply(view, id)` zooms the
+  pages). Its pagination enhances with `enhanceDocument(root, { static: true
+  })` (2.3.0, `orz-markdown/preview-frame`): drawn canvases become images
+  Paged.js can re-parse, the interactive runtime is skipped. Editor: the kit's shell with
   `preview.frameDocument` building a Paged.js frame (FC-19 §8.4 pluggable
   preview), `preview.diff: false` (Paged.js reflows the whole document) and
   `__orzPreviewApply` running the layout; `followPresentation` returns the
@@ -499,9 +579,10 @@ and the core modules the editor already loads; `carrier`, `carrier/read`,
 `carrier/shell`, `carrier/editor`, `carrier/conformance` and the parser
 entry never import it (A.1). No browser global is touched at module load
 (A.2). What ships — the CommonJS `dist/carrier/app/` bundled — holds the
-app's own modules under 58 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
+app's own modules under 66 KB (29.9 KB measured on 2026-10-07; 32.9 KB on
 2026-10-08 after round 1 of the carrier-app loop; 35.5 KB after round 5;
-52.7 KB on 2026-10-09 with the handle and edit mode's brand) and adds under
-74 KB to a bundle that already holds the editor (66.9 KB measured: the app
-and the update, indicator, brand and file side of the shell, which the
-editor alone does not load).
+52.7 KB on 2026-10-09 with the handle and edit mode's brand; 60.1 KB with
+2.3.0's submenus, conditional actions and settings, block-valued settings
+and reader choices) and adds under 82 KB to a bundle that already holds the
+editor (74.5 KB measured in 2.3.0: the app and the update, indicator, brand
+and file side of the shell, which the editor alone does not load).

@@ -153,7 +153,7 @@ theme: light-neat-3
 | `license`, `license_name`, `license_url` | all | DocMeta licence (SPDX id or name/url) | — |
 | `uid` | all | stable document id `doc-[0-9a-z]{10,32}`; creation tools mint 16 random base36 characters (D3) | — |
 | `lang` | all | BCP 47 language of the content (`<html lang>`) | `en` |
-| `theme` | all | theme id for the kind (md: an id of orz-markdown's `THEMES`; another value is the lint warning `unknown-theme`, 2.2.0, and shows the default theme) | kind default |
+| `theme` | all | theme id for the kind (md: an id of orz-markdown's `THEMES`; another value is the lint warning `unknown-theme`, 2.2.0, and shows the default theme; slides and paged lint their own lists through `lintHeader(text, { kind, themes })` / `readDocument(text, { kind, themes })`, 2.3.0) | kind default |
 | `measure` | `md` | `normal` / `wide` / `full` line length (orz-markdown 2.0.0 classes) | `normal` |
 | `ratio`, `footer`, `transition` | `slides` | deck shape, footer text, default transition | `16:9`, none, none |
 | `template`, `page_size`, `margin_top`, `margin_bottom`, `margin_left`, `margin_right`, `page_background`, `font_preset`, `font_family`, `font_heading_preset`, `font_margin_box_preset`, `font_size`, `line_height`, `decoration_color`, `page_number_position`, `page_number_style`, `page_number_start_page`, `first_page_skip_number`, `header_left`, `header_center`, `header_right`, `header_rule`, `header_rule_color`, `header_font_size`, `footer_left`, `footer_center`, `footer_right`, `footer_rule`, `footer_rule_color`, `footer_font_size`, `first_page_hide_header`, `first_page_hide_footer`, `front_matter` (alias `front_matter_clean`), `limit_image_to_page`, `keep_image_together`, `repeat_table_header`, `avoid_table_row_breaks`, `custom_css`, `dynamic_choices` | `paged` | page settings (today's paged keys, unchanged names; listed explicitly so lint catches misspellings) | paged defaults |
@@ -348,7 +348,12 @@ Edit rules in detail:
   matter; lint warns `front-matter`. The inserted header is:
   `{{nyml`, `kind: document`, `key: value`, `}}`, a blank line, in the text's
   line ending.
-- **Legacy headers** are upgraded first (§5).
+- **Legacy headers** are upgraded first (§5). The upgrade alone, with no
+  value changed, is `normalizeHeader(text)` (orz-markdown 2.3.0): a legacy
+  pair merged into one `kind: document` block, a lone `kind: meta` header
+  turned into `kind: document`, every other byte kept; any other text is
+  returned as is (a tool that moves a 0.x settings block to the top — orz-
+  paged's `upgrade` — calls it instead of an edit and its undo).
 
 ## 10. Identity (D3)
 

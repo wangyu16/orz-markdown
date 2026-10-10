@@ -131,6 +131,18 @@ export declare function withoutHeader(text: string): {
  */
 export declare function editHeader(text: string, changes: Readonly<Record<string, HeaderChange>>): string;
 /**
+ * Merge a legacy header into the format-1 form without changing any value
+ * (FC-18 §5, §9; 2.3.0): a leading `kind: meta` + `kind: document` pair
+ * becomes one `kind: document` block (the document block's lines first, then
+ * the meta-only keys' lines; the document block wins a clash), a lone
+ * `kind: meta` header has its kind line's value changed to `document`. This is
+ * the upgrade every header edit performs first, available without an edit
+ * (`editHeader` with no effective change returns the text as is). A text
+ * without a legacy header — no header, or a format-1 one — is returned as is;
+ * everything outside the header is unchanged.
+ */
+export declare function normalizeHeader(text: string): string;
+/**
  * Set one header value (FC-18 §9): `editHeader(text, { [key]: value })` — the
  * value's line is edited in place, or `key: value` is inserted before the
  * closing `}}` line, or a header is created; a legacy header is upgraded
@@ -162,20 +174,35 @@ export declare function removeHeaderKey(text: string, key: string): string;
  * (warning), `bad-uid` (error), `bad-format` (error), `newer-format` (error),
  * `bad-carrier` (error), `carrier-mismatch` (warning), `bad-lang`, `bad-measure`,
  * `bad-ratio` (warnings: value shapes), `unknown-theme` (warning, kind md: a
- * `theme` not in `THEMES`, 2.2.0). Text codes, with or without a header:
+ * `theme` not in `THEMES`, 2.2.0; any kind: a `theme` not in `options.themes`,
+ * 2.3.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
  * `kind: document` block that is not the header; it renders nothing).
  */
-export declare function lintHeader(text: string, kind?: KindName): Lint[];
+export declare function lintHeader(text: string, kind?: KindName | LintOptions): Lint[];
+/**
+ * Options of {@link lintHeader} (2.3.0; a kind name alone is still accepted).
+ */
+export interface LintOptions {
+    /** The key registry's kind (default: the header's `carrier`, else every kind's keys). */
+    kind?: KindName;
+    /**
+     * The kind's theme ids (2.3.0): a header `theme` not among them is the
+     * warning `unknown-theme`, for any kind. Without it only kind `md` is
+     * checked, against orz-markdown's `THEMES`; slides and paged keep their own
+     * lists and pass them here.
+     */
+    themes?: readonly string[];
+}
 /**
  * The header and its lint in one scan (for `readDocument`). `blocks`, when
  * given, returns `scanNymlBlocks(text)` (so a caller that parses the text
  * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-export declare function readHeaderAndLint(text: string, kind: KindName, blocks?: () => NymlBlock[]): {
+export declare function readHeaderAndLint(text: string, kind: KindName, blocks?: () => NymlBlock[], themes?: readonly string[]): {
     header: Header | null;
     lint: Lint[];
 };

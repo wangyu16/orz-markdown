@@ -735,9 +735,9 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     bundle = out.outputFiles[0].text;
   });
 
-  async function enhancePage(o: { offline?: string[] } = {}) {
+  async function enhancePage(o: { offline?: string[]; libs?: (pa: ReturnType<typeof getPreviewFrameAssets>) => Record<string, string> } = {}) {
     const pa = getPreviewFrameAssets();
-    const libs = FAKE_LIBS(pa);
+    const libs = { ...FAKE_LIBS(pa), ...(o.libs ? o.libs(pa) : {}) };
     const context = await own!.newContext();
     const requests: string[] = [];
     await context.route('**/*', async (route) => {
@@ -830,6 +830,64 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     await p.evaluate(() => (window as unknown as { E: { disposeEnhancement(r: Element): void } }).E.disposeEnhancement(document.getElementById('doc')!));
     expect(await p.evaluate(() => (window as unknown as { __live: number }).__live)).toBe(0);
     await context.close();
+  }, 60_000);
+
+  it('[M.28] enhanceDocument(root, { static: true }) (2.3.0) draws everything first — it resolves after the libraries loaded and the last pass ran — then turns every canvas it drew into an image of itself (data-orz-frozen chart / smiles; class, data-md breadcrumb, accessible name and drawn width kept): each chart is stopped and destroyed, drawn at least at 2× the pixel ratio unless the chart sets devicePixelRatio, never animated; the interactive runtime is not installed unless runtime: true; a canvas nothing drew (its library offline) stays a canvas; a static call after an interactive one freezes what is there', async () => {
+    const drawing = (pa: ReturnType<typeof getPreviewFrameAssets>): Record<string, string> => ({
+      [pa.cdn.chartJs]: "window.__live=0;window.__opts=[];window.__stops=0;window.Chart=function(c,g){window.__live++;window.__opts.push(g.options);var x=c.getContext('2d');c.width=320;c.height=160;c.style.width='320px';x.fillStyle='#c00';x.fillRect(10,10,100,100);var gone=false;this.stop=function(){window.__stops++};this.destroy=function(){if(!gone){gone=true;window.__live--}}};",
+      [pa.cdn.smilesJs]: "window.SmilesDrawer={Drawer:function(o){this.draw=function(t,c){var x=c.getContext('2d');x.fillStyle='#00c';x.fillRect(0,0,20,20)}},parse:function(s,cb){cb({})}};",
+    });
+    const { p, context, pa } = await enhancePage({ libs: drawing });
+    await render(p, '{{chart\ndata: 1, 2, 3\n}}\n\n{{chart\ntype: bar\ndata: 4, 5\n}}\n\n{{smiles CCO}}\n\n```js\nlet x;\n```\n');
+    await p.evaluate(() => {
+      const [c, d] = Array.from(document.querySelectorAll('canvas.orz-chart'));
+      c.setAttribute('aria-label', 'Sales chart');
+      const g = JSON.parse(d.getAttribute('data-chart')!);
+      d.setAttribute('data-chart', JSON.stringify({ ...g, options: { devicePixelRatio: 1 } })); // the chart's own ratio
+    });
+    const r = await p.evaluate(() => (window as unknown as { E: { enhanceDocument(r: Element, o: unknown): Promise<unknown> } }).E.enhanceDocument(document.getElementById('doc')!, { static: true }));
+    expect(r).toMatchObject({ failed: [], frozen: 3 });
+    const state = await p.evaluate(() => ({
+      canvases: document.querySelectorAll('#doc canvas').length,
+      imgs: Array.from(document.querySelectorAll<HTMLImageElement>('#doc img[data-orz-frozen]')).map((i) => ({
+        kind: i.getAttribute('data-orz-frozen'), cls: i.getAttribute('class'), md: i.getAttribute('data-md'), alt: i.getAttribute('alt'),
+        png: i.getAttribute('src')!.startsWith('data:image/png;base64,'), width: i.style.width, loaded: i.complete && i.naturalWidth > 0,
+      })),
+      smilesMd: document.querySelector('#doc .smiles-render')!.getAttribute('data-md'),
+      live: (window as unknown as { __live: number }).__live,
+      stops: (window as unknown as { __stops: number }).__stops,
+      dpr: (window as unknown as { __opts: Array<{ devicePixelRatio?: number; animation?: unknown }> }).__opts.map((o) => [o.devicePixelRatio, o.animation]),
+      runtime: typeof (window as unknown as { OrzMarkdownRuntime?: unknown }).OrzMarkdownRuntime,
+      hljs: document.querySelectorAll('#doc code.hljs').length,
+    }));
+    await p.waitForFunction(() => Array.from(document.querySelectorAll<HTMLImageElement>('#doc img[data-orz-frozen]')).every((i) => i.complete && i.naturalWidth > 0));
+    expect(state.canvases).toBe(0);
+    expect(state.imgs.map((i) => [i.kind, i.cls, i.alt, i.png, i.width])).toEqual([
+      ['chart', 'orz-chart', 'Sales chart', true, '320px'],
+      ['chart', 'orz-chart', '', true, '320px'],
+      ['smiles', null, '', true, expect.stringMatching(/px$/)],
+    ]);
+    expect(state.imgs[0].md).toContain('{{chart');
+    expect(state.smilesMd).toContain('smiles');
+    expect([state.live, state.stops]).toEqual([0, 2]); // stopped, then destroyed
+    expect(state.dpr).toEqual([[Math.max(2, await p.evaluate(() => devicePixelRatio)), false], [1, false]]);
+    expect([state.runtime, state.hljs]).toEqual(['undefined', 1]);
+    // idempotent: nothing left to draw or freeze
+    expect(await p.evaluate(() => (window as unknown as { E: { enhanceDocument(r: Element, o: unknown): Promise<unknown> } }).E.enhanceDocument(document.getElementById('doc')!, { static: true }))).toMatchObject({ frozen: 0 });
+    // runtime: true installs it; an interactive enhancement first, then a static one freezes what is there
+    await render(p, '{{chart\ndata: 7, 8\n}}\n');
+    await enhance(p, {});
+    expect(await p.evaluate(() => [document.querySelectorAll('#doc canvas').length, (window as unknown as { __live: number }).__live])).toEqual([1, 1]);
+    expect(await p.evaluate(() => (window as unknown as { E: { enhanceDocument(r: Element, o: unknown): Promise<unknown> } }).E.enhanceDocument(document.getElementById('doc')!, { static: true, runtime: true }))).toMatchObject({ frozen: 1 });
+    expect(await p.evaluate(() => [document.querySelectorAll('#doc canvas').length, (window as unknown as { __live: number }).__live, typeof (window as unknown as { OrzMarkdownRuntime?: unknown }).OrzMarkdownRuntime])).toEqual([0, 0, 'object']);
+    await context.close();
+    // offline: the chart library cannot load, its canvas stays a canvas
+    const off = await enhancePage({ libs: drawing, offline: [pa.cdn.chartJs] });
+    await render(off.p, '{{chart\ndata: 1, 2\n}}\n');
+    const r2 = await off.p.evaluate(() => (window as unknown as { E: { enhanceDocument(r: Element, o: unknown): Promise<unknown> } }).E.enhanceDocument(document.getElementById('doc')!, { static: true }));
+    expect(r2).toMatchObject({ loaded: [], failed: [pa.cdn.chartJs], frozen: 0 });
+    expect(await off.p.evaluate(() => document.querySelectorAll('#doc canvas.orz-chart').length)).toBe(1);
+    await off.context.close();
   }, 60_000);
 
   it('[M.27] swapStylesheet (and enhanceDocument\'s scheme change) keeps the old stylesheet until the new one has loaded — never a moment without one — then the new link carries the id (and the old nonce); a newer swap supersedes a pending one', async () => {
