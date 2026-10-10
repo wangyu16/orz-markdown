@@ -65,6 +65,7 @@ const CLAIM_MS = 1500;
 const TOUCH_MS = 300;
 /** How long a render waits for the frame's acknowledgement: a bridge known to acknowledge, one not known yet (ms). */
 const ACK_WAIT_MS = 10000;
+/** How long a render waits for a bridge not known yet to acknowledge (`preview.firstAckWaitMs`, default). */
 const FIRST_ACK_WAIT_MS = 1500;
 /** While edits continue, a render runs at least this often: max(this, 4 × the last render and frame time) (ms). */
 const MAX_WAIT_MS = 1000;
@@ -113,6 +114,7 @@ function createEditorShell(element, options) {
     const previewOptions = { ...(nonce ? { nonce } : {}), ...(options.preview ?? {}) };
     const debounceMs = previewOptions.debounceMs ?? 150;
     const maxWaitMs = typeof previewOptions.maxWaitMs === 'number' && previewOptions.maxWaitMs >= 0 ? previewOptions.maxWaitMs : MAX_WAIT_MS;
+    const firstAckWaitMs = typeof previewOptions.firstAckWaitMs === 'number' && previewOptions.firstAckWaitMs >= 0 ? Math.min(previewOptions.firstAckWaitMs, ACK_WAIT_MS) : FIRST_ACK_WAIT_MS;
     const navigateMode = previewOptions.mode === 'navigate';
     const uid = options.uid ?? header?.fields['uid']?.trim();
     const prefs = options.preferences ?? (0, preferences_js_1.createPreferenceStore)(uid, options.storage);
@@ -422,16 +424,29 @@ function createEditorShell(element, options) {
         cache: new Map(),
         ...(options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { includes: Object.freeze({ ...options.includes }) } : {}),
     };
-    /** Wait for the frame to acknowledge a render (B#3), at most ACK_WAIT_MS; not at all for a frame that never does. */
-    const waitAck = (acked) => {
-        const cap = preview.acknowledges ? ACK_WAIT_MS : ackless ? 0 : FIRST_ACK_WAIT_MS;
-        if (cap <= 0)
+    /**
+     * Wait for the frame to acknowledge a render (B#3), at most ACK_WAIT_MS (`firstAckWaitMs` while the frame has
+     * not acknowledged one yet); not at all for a frame that never does. An acknowledgement after the wait (a long
+     * first layout) still records the render's time (`t0` its start; E.34): the next pause counts it.
+     */
+    const waitAck = (acked, t0) => {
+        const cap = preview.acknowledges ? ACK_WAIT_MS : ackless ? 0 : firstAckWaitMs;
+        let late = false;
+        void acked.then((ok) => {
+            if (!ok)
+                return;
+            ackless = false;
+            if (late && !destroyed)
+                lastRenderMs = Math.max(lastRenderMs, clock() - t0);
+        });
+        if (cap <= 0) {
+            late = true;
             return Promise.resolve(false);
+        }
         return new Promise((resolve) => {
-            const timer = later(() => { if (!preview.acknowledges)
+            const timer = later(() => { late = true; if (!preview.acknowledges)
                 ackless = true; resolve(false); }, cap);
-            void acked.then((ok) => { cancel(timer); if (ok)
-                ackless = false; resolve(ok); });
+            void acked.then((ok) => { cancel(timer); resolve(ok); });
         });
     };
     const runRender = async () => {
@@ -462,7 +477,7 @@ function createEditorShell(element, options) {
         lastRendered = text;
         previewStale = getText() !== text;
         // the render runs until the frame says it has shown it; the pause then counts both
-        const acked = await waitAck(preview.render(html));
+        const acked = await waitAck(preview.render(html), t0);
         if (acked)
             lastRenderMs = clock() - t0;
     };
@@ -732,6 +747,22 @@ function createEditorShell(element, options) {
             focusChrome();
             return true;
         }
+        if (key === 'p') {
+            // (2.3.0, E.33) a listener decides (a carrier's Print action); else the frame's key prints the host page
+            // (the frame prevented its own print) and the shell's own key is the browser's
+            if (has('print')) {
+                e?.preventDefault();
+                emit('print', { source: e ? 'editor' : 'preview' });
+                return true;
+            }
+            if (e)
+                return false;
+            try {
+                win?.print?.call(win);
+            }
+            catch { /* no print here */ }
+            return true;
+        }
         return false;
     }
     listen(container, 'keydown', (e) => {
@@ -744,6 +775,8 @@ function createEditorShell(element, options) {
             onShortcut('\\', e);
         else if (k === 'Escape' && editorPane.contains?.(e.target))
             onShortcut('Escape', e);
+        else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (k === 'p' || k === 'P'))
+            onShortcut('p', e);
     });
     // a file pasted or dropped into the editor goes to hooks.uploadAsset (capture: before the engine reads it as text)
     const takeFiles = (e, files) => {

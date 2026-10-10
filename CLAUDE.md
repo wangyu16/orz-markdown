@@ -183,6 +183,11 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `choicesFor` / `apply` (block values) / `hidden`, reader controls with
   named choices (`readerControls.choices`, preference `reader.<key>`),
   `app.newDocument({ text, name })`; the stub carrier exercises them.
+  Round 2 of the paged loop: Cmd/Ctrl+P anywhere (read view, edit mode, the
+  editor's preview frame via the editor's `print` event) runs the kind's
+  action with id `print`, leaving edit mode first for a read-view action
+  (A.30; E.33 is the bridge/port side: `orz-preview-key { key: 'p' }`);
+  icon-less items keep the labels' column in the handle's list (A.31).
 - `src/carrier/conformance/` — `orz-markdown/carrier/conformance`, the
   Node-side conformance harness each carrier runs against itself
   (spec/conformance.md): `runConformance` / `registerConformance` over the

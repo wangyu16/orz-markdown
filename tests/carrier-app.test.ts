@@ -1109,6 +1109,90 @@ describe('2.3.0: action submenus, conditional actions and settings, block-valued
     shell.destroy();
   });
 
+  it('[A.30] Cmd/Ctrl+P (2.3.0, round 2 of the paged loop) runs the kind\'s Print action (id print): in the read view (default prevented), from edit mode\'s chrome, from the editor and from its preview frame (the editor\'s print event, a key reported through the frame\'s port) — a read-view action (not inEdit) after leaving edit mode, the text kept unsaved; an inEdit one in edit mode; a hidden one or none: the browser\'s print of the page (from the frame: window.print) and the read view\'s key is left to the browser', async () => {
+    const printed: string[] = [];
+    const where = (app: CarrierApp) => (app.editor() ? 'edit' : 'read');
+    const kindWith = (print: Partial<import('../src/carrier/app').CarrierAction> | null): Partial<StandaloneKind> => ({
+      actions: print ? [{ id: 'print', label: 'Print', placement: 'bar', run: (app) => { printed.push(`action:${where(app)}`); }, ...print }] : [],
+    });
+    const prepare = (b: ReturnType<typeof boot>) => { (b.win as unknown as { print(): void }).print = () => { printed.push(`window:${where(b.app)}`); }; };
+    /** The edit-mode editor's preview frame, its handshake done with a fake MessageChannel: `bridge(msg)` reports through the port. */
+    const frameReport = (b: ReturnType<typeof boot>, ed: EditorShell) => {
+      let shellSide: { onmessage: ((e: { data: unknown }) => void) | null } | null = null;
+      (b.win as unknown as Record<string, unknown>).MessageChannel = class { port1 = { onmessage: null, postMessage() { /* to the frame */ }, close() { /* closed */ } }; port2 = {}; constructor() { shellSide = this.port1; } };
+      const iframe = (ed.root as unknown as ShadowRoot).querySelector('iframe') as HTMLIFrameElement;
+      const cw = iframe.contentWindow as unknown as { postMessage: unknown };
+      cw.postMessage = () => { /* the frame */ };
+      const secret = /data-orz-preview-secret="([^"]*)"/.exec(String(iframe.srcdoc))?.[1] ?? '';
+      b.win.dispatchEvent(new b.win.MessageEvent('message', { data: { type: 'orz-preview-ready', channel: 'c1', secret }, source: cw as never }) as unknown as Event);
+      expect(shellSide).not.toBeNull();
+      return {
+        bridge: (data: unknown) => (shellSide as unknown as { onmessage(e: { data: unknown }): void }).onmessage({ data }),
+        forged: (data: unknown) => b.win.dispatchEvent(new b.win.MessageEvent('message', { data, source: cw as never }) as unknown as Event),
+      };
+    };
+
+    // a read-view Print action (paged's)
+    {
+      const b = boot(undefined, { kind: kindWith({}) });
+      prepare(b);
+      await tick(10);
+      expect(b.key('p', { meta: true }).defaultPrevented).toBe(true);
+      await tick(10);
+      expect(printed.splice(0)).toEqual(['action:read']);
+      expect(b.key('p', { meta: true, shift: true }).defaultPrevented).toBe(false); // Shift: not print
+      // from the editor (its textarea): leave edit mode, the text unsaved, then the action
+      const ed = b.app.edit();
+      ed.setText(`${TEXT}typed\r\n`);
+      const ta = (ed.root as unknown as ShadowRoot).querySelector('textarea')!;
+      expect(b.key('p', { meta: true }, ta).defaultPrevented).toBe(true);
+      await tick(50);
+      expect(printed.splice(0)).toEqual(['action:read']);
+      expect(b.app.editor()).toBeNull();
+      expect([b.app.getText(), b.app.isDirty()]).toEqual([`${TEXT}typed\r\n`, true]);
+      // from edit mode's chrome (Done focused)
+      b.app.edit();
+      expect(b.key('p', { meta: true }, b.root.querySelector('.orz-app__bar') as Element).defaultPrevented).toBe(true);
+      await tick(50);
+      expect(printed.splice(0)).toEqual(['action:read']);
+      // from the preview frame: a report through the port acts; the same message on the window does nothing
+      const ed2 = b.app.edit();
+      const f = frameReport(b, ed2);
+      f.forged({ type: 'orz-preview-key', key: 'p' });
+      await tick(50);
+      expect([printed.length, !!b.app.editor()]).toEqual([0, true]);
+      f.bridge({ type: 'orz-preview-key', key: 'p' });
+      await tick(50);
+      expect(printed.splice(0)).toEqual(['action:read']);
+      expect(b.app.editor()).toBeNull();
+      b.app.dispose();
+    }
+    // an inEdit Print action runs in edit mode
+    {
+      const b = boot(undefined, { kind: kindWith({ inEdit: true }) });
+      prepare(b);
+      const ed = b.app.edit();
+      frameReport(b, ed).bridge({ type: 'orz-preview-key', key: 'p' });
+      await tick(50);
+      expect(printed.splice(0)).toEqual(['action:edit']);
+      b.app.dispose();
+    }
+    // a hidden Print action, or none: the read view's key is the browser's; from edit mode the page prints
+    for (const kind of [kindWith({ hidden: () => true }), kindWith(null)]) {
+      const b = boot(undefined, { kind });
+      prepare(b);
+      await tick(10);
+      expect(b.key('p', { meta: true }).defaultPrevented).toBe(false);
+      await tick(10);
+      expect(printed).toEqual([]);
+      const ed = b.app.edit();
+      frameReport(b, ed).bridge({ type: 'orz-preview-key', key: 'p' });
+      await tick(50);
+      expect(printed.splice(0)).toEqual(['window:edit']);
+      b.app.dispose();
+    }
+  });
+
   it('[A.25]a setting may write a block value: choicesFor(text) gives its choices at each opening (separators, per-choice checked toggles), apply(text, value) gives the header changes ({ multiline } values, removals, several keys) — one undoable step in the read view (Cmd/Ctrl+Z undoes it) and one undoable setHeader in an editor\'s toolbar; a radio choice still writes only a change; a refused change is a toast and changes nothing', async () => {
     const lines = (t: string) => (readHeader(t)?.fields['dynamic_choices'] ?? '').split('\n').filter(Boolean);
     const VERSION: SettingControl = {
@@ -2590,6 +2674,46 @@ chrome('the stub carrier\'s files on carrier/app (real Chrome)', () => {
     expect((await pageRecords(app, 'picker')).map((x) => (x.data as { suggestedName: string }).suggestedName)).toEqual(['mine.md.html']);
     await ctx.close();
   }, 120_000);
+
+  it('[A.31] [A.30] [E.33] in Chrome (the stub carrier, round 2 of the paged loop): the handle\'s list keeps every label in one column — items without an icon (a kind\'s action, setting and reader control) line up with those with one; in edit mode the reader\'s Cmd/Ctrl+P with the focus in the preview frame reaches the app (the stub has no Print action: the page prints once, edit mode stays)', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ntitle: Columns\nuid: doc-colscolscols00a31\n}}\n\n# Columns\n\n<!-- count -->\n<!-- notes -->\n\nA paragraph of body text.\n';
+    const html = await assembleStub(text);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(write('columns.md.html', html));
+    await bootDone(page);
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).hover();
+    await page.getByRole('menu', { name: 'Edit and more' }).waitFor();
+    const labels = await page.evaluate(`(function () {
+      var root = ${APP}.root;
+      return [].map.call(root.querySelectorAll('.orz-handle__list > .orz-handle__item'), function (b) {
+        var l = b.querySelector('.orz-handle__label');
+        return [l.textContent, !!b.querySelector(':scope > .orz-icon'), Math.round(l.getBoundingClientRect().left)];
+      });
+    })()`) as Array<[string, boolean, number]>;
+    const names = labels.map((l) => l[0]);
+    for (const n of ['Edit', 'Theme', 'Notes', 'Word count', 'Line spacing']) expect(names).toContain(n);
+    expect(labels.filter((l) => !l[1]).map((l) => l[0])).toEqual(expect.arrayContaining(['Notes', 'Word count', 'Line spacing']));
+    expect(new Set(labels.map((l) => l[2])).size).toBe(1); // one column, icon or not
+    // edit mode: the reader's Cmd/Ctrl+P in the preview frame
+    await page.mouse.move(900, 300);
+    await page.evaluate('window.__printed = 0; window.print = function () { window.__printed++; };');
+    await page.evaluate(`${APP}.edit()`);
+    const frame = page.locator('iframe.orz-editor__frame');
+    await frame.waitFor();
+    await page.waitForFunction(`!!${APP}.editor() && ${APP}.editor().root.querySelector('iframe').contentWindow`);
+    await page.waitForTimeout(800);
+    await frame.click({ position: { x: 200, y: 20 } });
+    await page.waitForTimeout(300);
+    await page.keyboard.press(`${MOD}+p`);
+    await page.waitForFunction('window.__printed === 1');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(`[window.__printed, !!${APP}.editor()]`)).toEqual([1, true]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
 
   it('[A.28] [A.23] [A.24] [A.25] [A.26] [A.27] in Chrome (the stub carrier, 2.3.0): an action\'s submenu in the handle\'s list (pointer and keyboard) saves a new document from a sample through app.newDocument({ text, name }) — a new file with its own uid, named after the sample, that opens — and in edit mode\'s More; an action and a setting offered only while the text says so appear after an edit; the block-valued Notes setting toggles lines of an x_stub_notes: | value (one undo step each, Cmd/Ctrl+Z); the Line spacing reader choice restyles the article, survives a reload, leaves the document clean and stays out of the saved file', async () => {
     const ctx = await context();

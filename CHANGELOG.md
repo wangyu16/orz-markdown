@@ -50,6 +50,14 @@ one added attribute (`data-url` on a `{{youtube}}` embed, for print).
 - **New document with a text** — `CarrierApp.newDocument({ text?, name? })`
   saves a kind's text (a template) as a new file; a text without a uid (or
   with this file's) gets a new one; `name` is the suggested file name.
+- **Cmd/Ctrl+P runs the kind's Print action** (round 2 of the paged loop;
+  §4.8, claim A.30) — the action with id `print` (offered for the text) runs
+  from the read view, edit mode's chrome, the editor and its preview frame;
+  a read-view action (not `inEdit`) runs after leaving edit mode (the text
+  kept, unsaved if it was), so it prints the read view, never the blank
+  editor page. Without one the read view's key is the browser's and edit
+  mode prints the page (`window.print()`). A carrier needs no key listener
+  of its own for it (orz-paged's edit-mode Cmd/Ctrl+P listener can go).
 
 **`orz-markdown/carrier`** (claims K.23–K.27):
 
@@ -94,6 +102,28 @@ imports it, so no browser bundle holds it (N.1). The strongest CLI tests of
 both carriers (T.7, T.9, T.11, T.12, T.14, T.16–T.21 — "following every
 `next` verbatim never loses a text") run against it through a reference CLI.
 
+**`orz-markdown/carrier/editor`** (round 2 of the paged loop, claims E.33,
+E.34):
+
+- **The `print` event** — `shell.on('print', ({ source }) => …)`, `source`
+  `'preview' | 'editor'`: the reader's Cmd/Ctrl+P (not with Shift or Alt).
+  The default bridge now reports Cmd/Ctrl+P from the preview frame through
+  its authenticated port as a trusted key (`orz-preview-key { key: 'p' }`,
+  FC-19 §8.4) and prevents the frame's own print — before, with the focus
+  in the preview the key went to the frame and the host never saw it
+  (orz-paged then printed its editor page: a blank sheet). With a listener
+  the shell prevents the browser's print and the listener decides; without
+  one a key from the frame prints the host page (`window.print()`) and a key
+  in the editor stays the browser's (unchanged). Window messages still never
+  act. The bridge changed, so **`PREVIEW_BRIDGE_HASH` changed** (a
+  hash-based CSP must use the exported constant or `previewScriptHashes()`).
+- **`preview.firstAckWaitMs`** (default 1500 ms, at most 10 s) — how long a
+  render waits for a frame that has not acknowledged one yet. And an
+  acknowledgement that arrives after that wait now records the render's
+  time: a long first layout (orz-paged's preview) used to count as
+  unacknowledged, so the next render was paced by the parent's render time
+  only.
+
 **`orz-markdown/carrier/editor`** (claim E.32): **`preview.maxWaitMs`** — while
 edits continue a render is forced at least every `max(maxWaitMs, 4 × the
 last render)` (default 1000, as before); `Infinity` never forces one while
@@ -116,6 +146,11 @@ destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
 
 ### Fixed
 
+- **Labels of the handle's items without an icon** (round 2 of the paged
+  loop; claim A.31): an action, setting or reader control without an icon
+  (orz-paged has several; the stub's Notes, Word count, Line spacing) drew
+  its label at the icons' edge, 24 px left of the other labels; it now
+  lines up with them.
 - **Mermaid (and every content library) blocked by an element id** (all
   carriers; claim M.29): a heading "Mermaid" gets `id="mermaid"`, so
   `window.mermaid` was the element and `enhanceDocument` never loaded the
@@ -139,6 +174,11 @@ destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
 
 - The app's own modules grew to 60.1 KB minified (bound 58 → 66 KB; added to
   an editor bundle: 74.5 KB, bound 74 → 82 KB; claim A.2).
+- Spec wording (round 2 of the paged loop): carrier-app.md §7 — paged's
+  Print waits for `view.idle()` before `window.print()`, and the two-column
+  hybrid (a carrier limit, not the kit's); FC-18 §5.1 — a carrier may add
+  value lints of its own (orz-paged's `invalid-value` for enumerated paged
+  keys), warnings that never reuse a kit code.
 - The conformance stub carrier (test scaffolding) exercises the new kit
   features: a "New document from sample…" submenu, a conditional Word count
   action, a block-valued Notes setting and a Line spacing reader choice.

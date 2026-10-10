@@ -59,7 +59,7 @@ message protocol, asset rewriting, CSP
 nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.32, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.34, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).
@@ -87,7 +87,7 @@ and the boot), `file.ts` (`readOpenedFile`, `openedFileName`, `copyName`),
 `StandaloneContext`, `CarrierReadView`, `SettingControl`, `CarrierAction`,
 `CarrierApp`, structural DOM types) — exported as `orz-markdown/carrier/app`
 (it may import `carrier/shell`, `carrier/editor` and `carrier/read`; none of
-them imports it; Node-safe at load). Claims A.1–A.19, tests in
+them imports it; Node-safe at load). Claims A.1–A.31, tests in
 `tests/carrier-app.test.ts` (happy-dom against a fake kind; real Chrome
 against the stub carrier, which is built on it). In-page enhancement for a
 read view is `enhanceDocument` in `orz-markdown/preview-frame` (M.24;

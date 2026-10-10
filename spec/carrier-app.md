@@ -250,6 +250,10 @@ operation:
    a submenu — paged's Page zoom — then md's "Text size A− 100% A+");
 5. when an update is offered, **Update to x.y.z** (§4.9).
 
+Labels form one column: an item without an icon (a kind's action, setting
+or reader control may have none — paged has several) keeps its label where
+the icons' labels start (2.3.0, A.31).
+
 - **Pointer.** A click on the pencil edits. Hovering it opens the list
   after a short delay (140 ms); leaving the pencil and the list closes it
   after a grace period (360 ms), so moving into the list — and into a
@@ -405,7 +409,24 @@ other keys go to the read view's `onKey` — not while typing in a field, not
 while an editor is the document, and from the chrome only on a button and
 never that button's own keys (Space, Enter, Tab, Escape; a menu's keys are
 the menu's; the pencil's ArrowUp/ArrowDown open its list), so slides' arrows and Page Up/Down keep working after the
-reader used a chrome button. A setting chosen with the pointer leaves the
+reader used a chrome button.
+
+**Cmd/Ctrl+P** (2.3.0, round 2 of the orz-paged loop; A.30; not with Shift
+or Alt) runs the kind's **Print action** — the action with id `print` and a
+`run`, offered for the current text (`hidden`) — wherever the reader is: the
+read view (default prevented), edit mode's chrome, the editor, and the
+editor's preview frame. The frame's key reaches the app as the editor's
+`print` event (FC-19 §4): the default bridge reports Cmd/Ctrl+P through its
+authenticated port as a trusted key (`orz-preview-key { key: 'p' }`) and
+prevents the frame's own print, so a reader in the preview never prints a
+blank editor page; a forged report on the window does nothing. A Print
+action that is the read view's (not `inEdit`) runs after the app leaves edit
+mode (as Done does: the text stays as it is, unsaved if it was), so it
+prints the read view; an `inEdit` one runs in edit mode. Without a Print
+action (or with it hidden) the read view's key is the browser's, and from
+edit mode (the chrome, the editor or its frame) the app calls
+`window.print()` — the browser's print of the page. An editor mounted by an
+app host (`attach`) is the host's: the kit's editor prints the host page. A setting chosen with the pointer leaves the
 focus to the page (with the keyboard it returns to the pencil).
 
 ### 4.9 The quiet update
@@ -557,15 +578,28 @@ Designed now so that neither needs a breaking change later:
   setting with `choicesFor` (the dynamic choices the document defines, one
   group per key with per-choice `checked`), `apply` (the `dynamic_choices`
   map as a `{ multiline }` value) and `hidden` (no choices). Action:
-  **Print** (`placement: 'bar'`, `run: () => window.print()`; the chrome
-  prints hidden, CHROME_CSS `@media print`); 2.3.0: **New document from
+  **Print** (id `print`, `placement: 'bar'`; its `run` waits for the read
+  view's layout to settle — `await view.idle()`, the paged view's own
+  method: pending re-flows after late fonts or libraries — then calls
+  `window.print()`, so the pages print as finally laid out; the chrome
+  prints hidden, CHROME_CSS `@media print`; 2.3.0: Cmd/Ctrl+P runs it from
+  anywhere, also from edit mode and its preview frame — §4.8 — so the
+  carrier needs no key listener of its own); 2.3.0: **New document from
   template…** — an action with `items` whose entries call
   `app.newDocument({ text: template, name })` with the template's text and
   a file name of its own (e.g. the template's name; the kit adds the
   extension): a fresh file, the open document untouched (FC-18 §7.3: the
   header's `template:` only selects layout defaults). Reader control (2.3.0):
   **Page zoom** — `readerControls.choices` (`apply(view, id)` zooms the
-  pages). Its pagination enhances with `enhanceDocument(root, { static: true
+  pages). Two columns across a page break (owner, 2026-10-09: the
+  **hybrid**, family REBUILD §3b decision 1): a Paged.js handler of the
+  carrier's own moves a short `.cols` block whole to the next page and
+  splits a long one column by column at each page bottom (column 1
+  continues in column 1); its limits are the carrier's, documented there (a
+  lone long column stays narrow; only paragraphs, list items, blockquotes
+  and plain divs split; one-line widows; over-tall blocks clip) — a
+  registered print-first limit, not a kit concern (the kit knows nothing
+  of columns). Its pagination enhances with `enhanceDocument(root, { static: true
   })` (2.3.0, `orz-markdown/preview-frame`): drawn canvases become images
   Paged.js can re-parse, the interactive runtime is skipped unless asked
   for — `{ static: true, runtime: true }` is allowed (the read view keeps
@@ -576,7 +610,9 @@ Designed now so that neither needs a breaking change later:
   `__orzPreviewApply` running the layout, and (2.3.0, E.32)
   `preview.maxWaitMs: Infinity` — a Paged.js reflow runs in the page's own
   process (the `srcdoc` frame), so the preview renders only after a pause
-  in typing, never forced while keys keep arriving; `followPresentation`
+  in typing, never forced while keys keep arriving, and (2.3.0, E.34)
+  `preview.firstAckWaitMs` raised to its first layout's time (a late first
+  acknowledgement is recorded either way); `followPresentation`
   returns the page-size head.
 - **orz-slides.** `createReadView` renders the deck; `onKey` navigates (←/→,
   Page Up/Down, Space, Home/End — the app gives it every key it does not

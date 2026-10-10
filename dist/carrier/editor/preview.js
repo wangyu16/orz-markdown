@@ -79,7 +79,8 @@ exports.PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * changed top-level nodes (compared without their `data-src-line`, whose new
  * values are copied onto the kept nodes, so a line inserted above does not
  * redraw everything below), enhances, reports anchors with the render's id;
- * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc), link
+ * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc; 2.3.0:
+ * Cmd/Ctrl+P, default prevented in the frame — the shell's `print`), link
  * clicks and the reader's input (pointer, wheel, touch, keys).
  *
  * Authenticated channel (option B, 2026-10-06). The shell writes a per-frame
@@ -169,6 +170,7 @@ exports.PREVIEW_BRIDGE = [
     'window.addEventListener("scroll",function(e){if(!e.isTrusted||Date.now()<mute||Date.now()-lastIn>1500||queued)return;queued=1;requestAnimationFrame(function(){queued=0;send({type:"orz-preview-scrolled",top:se().scrollTop,max:max()})})},{passive:true});',
     'document.addEventListener("keydown",function(e){if(!e.isTrusted)return;var k=e.key;active("key");',
     'if((e.metaKey||e.ctrlKey)&&!e.altKey&&(k==="s"||k==="S"||k==="\\\\")){e.preventDefault();send({type:"orz-preview-key",key:k==="\\\\"?"\\\\":"s"})}',
+    'else if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey&&(k==="p"||k==="P")){e.preventDefault();send({type:"orz-preview-key",key:"p"})}',
     'else if(k==="Escape")send({type:"orz-preview-key",key:"Escape"})});',
     'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a||e.defaultPrevented)return;var h=a.getAttribute("href")||"";e.preventDefault();',
     'if(h.charAt(0)==="#"){var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=document.getElementById(id);if(t)t.scrollIntoView();return}',
@@ -185,7 +187,7 @@ exports.PREVIEW_BRIDGE = [
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-exports.PREVIEW_BRIDGE_HASH = 'sha256-H1iuz4liwX/FMMxx0fL3854mJcMGhThLP+BrQREttCw=';
+exports.PREVIEW_BRIDGE_HASH = 'sha256-kEN9UwotdxNpKe7G72LLIuLL1fOPkcd/UceWQPmo94I=';
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';
 const BASE_STYLE = 'html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}';
@@ -471,7 +473,7 @@ function createPreview(doc, parent, options, events) {
                     events.onScrolled?.(d.top, max);
                 break;
             case 'orz-preview-key':
-                if (d.key === 's' || d.key === '\\' || d.key === 'Escape')
+                if (d.key === 's' || d.key === '\\' || d.key === 'Escape' || d.key === 'p')
                     events.onKey?.(d.key);
                 break;
             case 'orz-preview-link':

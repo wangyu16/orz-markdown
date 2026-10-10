@@ -136,12 +136,21 @@ interface EditorEvents {
   selection: { from: number; to: number };   // offsets in the exact text (BOM, CR LF counted)
   save:      { text: string; via: SaveVia };
   error:     { source: "save" | "render" | "adapter" | "format" | "hook"; message: string; error: unknown };
+  print:     { source: "preview" | "editor" };     // 2.3.0: the reader's Cmd/Ctrl+P (§8.2)
 }
 ```
 
 `error` sources `format` (the text's header `format` is newer than the
 editor's, FC-18 §8.4: shown read-only, never saved) and `hook` (an upload, AI
-or uid hook failed) were added on 2026-10-06 (additive).
+or uid hook failed) were added on 2026-10-06 (additive). The `print` event
+(2.3.0, additive; round 2 of the orz-paged loop) is the reader's Cmd/Ctrl+P
+in the editor (`editor`) or in its preview frame (`preview`, reported
+through the authenticated port, §8.4): with a listener the editor prevents
+the browser's print and the listener decides (a standalone file: the kind's
+Print action, carrier-app §4.8); without one, a key from the frame prints
+the host page (`window.print()` — the frame's own print is prevented, so a
+reader in the preview never prints the frame alone) and a key in the editor
+is the browser's own.
 
 **The review flow** (2.2.0, additive). host-protocols §4 says an AI result
 is a proposal the reader applies; `requestAi` applies at once (kept,
@@ -314,7 +323,7 @@ const shell = createEditorShell(element, {
   openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text), once, at idle
   standalone?,                       // the assembled file's own boot passes true (§8.4 sandbox)
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
-  preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, maxWaitMs?, readyTimeoutMs?, nonce?,
+  preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, maxWaitMs?, firstAckWaitMs?, readyTimeoutMs?, nonce?,
               frameDocument?, bridge?, diff?, mode?, mapLine?, mapPosition? },
   nonce?,                            // FC-19 §3 (2.2.0): preview.nonce when that is not given, and the default adapter's
   onLink?, label?, narrowWidth?,
@@ -343,8 +352,10 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   shows: `split` shows the editor, Cmd/Ctrl+\ flips editor ↔ preview, the
   Split button hides. `getView()` is what shows.
 - Cmd/Ctrl+S saves; Esc in the editor moves focus to the toolbar (so Tab
-  indentation never traps focus). The preview frame forwards the same keys
-  (§8.4 says when the shell acts on them).
+  indentation never traps focus). Cmd/Ctrl+P (2.3.0, not with Shift or Alt)
+  is the `print` event when the editor has a listener (default prevented),
+  else the browser's. The preview frame forwards the same keys — Cmd/Ctrl+P
+  too, its own print prevented (§8.4 says when the shell acts on them).
 - The separator (`role="separator"`) drags with pointer capture and moves by
   5 % with the arrow keys, Home/End to 10 % / 90 %; the ratio (editor share,
   0.1–0.9) is a reader preference.
@@ -479,8 +490,12 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   render blocks the page (a Paged.js reflow in the same-process `srcdoc`
   frame) passes `maxWaitMs: Infinity`: no render is forced while keys keep
   arriving — it runs after the pause only, and the frame-acknowledged pacing
-  above still holds (E.32). A failing `render` keeps the last preview
-  (`error`).
+  above still holds (E.32). While the frame has not acknowledged a render
+  yet, a render waits at most `preview.firstAckWaitMs` (2.3.0, default
+  1500 ms, at most 10 s) for it; an acknowledgement that arrives after that
+  wait (a long first layout — a paginated preview) still records the
+  render's time, so the next pause counts it (E.34). A failing `render`
+  keeps the last preview (`error`).
 - **Pluggable preview** (orz-slides, orz-paged): `preview.frameDocument(parts)`
   writes the whole frame document from `parts = { head, bridge, scripts,
   scheme, articleClass, nonce? }` (the bridge and library `<script>`s and the
@@ -536,7 +551,7 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   types; (frame → shell, through the port only): `orz-preview-rendered { id,
   anchors: [line, top][], max }` (on the window too for a bridge without the
   port), `orz-preview-scrolled { top, max }` or `{ line }`, `orz-preview-key
-  { key: 's' | '\\' | 'Escape' }`, `orz-preview-link { href }`,
+  { key: 's' | '\\' | 'Escape' | 'p' }` (`p`: Cmd/Ctrl+P, 2.3.0), `orz-preview-link { href }`,
   `orz-preview-active { input? }`, and a carrier's own types.
 - Scroll sync (a reader preference): positions map through the anchors (line
   ↔ top, linear between anchors), proportionally when there are none. Anchor
@@ -546,8 +561,8 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   pointer, touch, keys) while the editor has no focus and was not touched in
   the host page (pointer, wheel — also on an unfocused editor —, keys) in the
   last 300 ms.
-- **What the frame reports.** Through the port, a key (save, view, Escape)
-  or a link is the reader's own input in the frame and acts. The same
+- **What the frame reports.** Through the port, a key (save, view, Escape,
+  print) or a link is the reader's own input in the frame and acts. The same
   messages on the window — a document script's, or a carrier's own bridge
   without the port — never act, whatever the focus or user activation. So a
   document script that floods them moves nothing, saves nothing and opens

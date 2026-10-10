@@ -2451,6 +2451,79 @@ describe('the authenticated preview channel (option B: the frame secret)', () =>
   });
 });
 
+describe('Cmd/Ctrl+P and the first acknowledgement (2.3.0, round 2 of the paged loop)', () => {
+  it('[E.33] Cmd/Ctrl+P from the preview frame is a key report through the authenticated port: with a print listener the shell emits print { source: "preview" } and never prints; without one it prints the host page once; the same report on the window does nothing; in the shell Cmd/Ctrl+P emits print { source: "editor" } (default prevented) only with a listener, else it is the browser\'s', () => {
+    const m = mount();
+    const f = authFrameOf(m);
+    const printed: string[] = [];
+    (m.win as unknown as { print(): void }).print = () => { printed.push('host'); };
+    // no listener: a key from the frame prints the host page (the frame prevented its own print)
+    f.bridge({ type: 'orz-preview-key', key: 'p' });
+    expect(printed).toEqual(['host']);
+    // the same on the window (a document script's) does nothing
+    f.say({ type: 'orz-preview-key', key: 'p' });
+    expect(printed).toEqual(['host']);
+    // in the shell without a listener: the browser's own print (not prevented, not called)
+    const plain = key(m, m.ta(), 'p', { meta: true });
+    expect(plain.defaultPrevented).toBe(false);
+    expect(printed).toEqual(['host']);
+    // with a listener: the listener decides
+    const events: string[] = [];
+    const off = m.shell.on('print', (e) => { events.push(e.source); });
+    f.bridge({ type: 'orz-preview-key', key: 'p' });
+    f.say({ type: 'orz-preview-key', key: 'p' });
+    const taken = key(m, m.ta(), 'P', { ctrl: true });
+    expect(taken.defaultPrevented).toBe(true);
+    expect(key(m, m.ta(), 'p', { meta: true, shift: true }).defaultPrevented).toBe(false); // Shift+P is not print
+    expect(events).toEqual(['preview', 'editor']);
+    expect(printed).toEqual(['host']);
+    off();
+    // the bridge reports the key (default prevented in the frame) only for a trusted event
+    expect(PREVIEW_BRIDGE).toContain('(k==="p"||k==="P")){e.preventDefault();send({type:"orz-preview-key",key:"p"})}');
+    expect(PREVIEW_BRIDGE).toMatch(/addEventListener\("keydown",function\(e\)\{if\(!e\.isTrusted\)return;/);
+    m.shell.destroy();
+  });
+
+  it('[E.34] a first acknowledgement later than the first wait still records the render\'s time (a frame taking 2 s: the next pause is about 4 s, not debounceMs); preview.firstAckWaitMs lets a kind wait that long for the first one (no second render sent into the frame before the acknowledgement)', async () => {
+    const run = async (preview: Record<string, unknown>): Promise<{ sentAt: number[]; t0: number; m: Mounted; f: ReturnType<typeof frameOf> }> => {
+      const m = mount({ render: (t) => `<p>${t.length}</p>`, preview: { assets: false, debounceMs: 10, ...preview } });
+      const f = frameOf(m);
+      const sentAt: number[] = [];
+      const t0 = Date.now();
+      const cw = m.root.querySelector('iframe')!.contentWindow as unknown as { postMessage(x: Record<string, unknown>): void };
+      cw.postMessage = (msg: Record<string, unknown>) => {
+        if (msg.type !== 'orz-preview-render') return;
+        sentAt.push(Date.now() - t0);
+        setTimeout(() => f.say({ type: 'orz-preview-rendered', id: msg.id, anchors: [], max: 0 }), 2000);
+      };
+      return { sentAt, t0, m, f };
+    };
+    // the first acknowledgement arrives after the 1.5 s wait: its time is recorded
+    {
+      const { sentAt, m, f } = await run({});
+      f.say({ type: 'orz-preview-ready' });
+      await tick(2300); // the first render: waited 1.5 s, acknowledged at 2 s
+      expect(sentAt.length).toBe(1);
+      type(m, 'a');
+      await tick(1500);
+      expect(sentAt.length).toBe(1); // the pause counts the 2 s render (without it: rendered after 10 ms)
+      await tick(3000);
+      expect(sentAt.length).toBe(2);
+      m.shell.destroy();
+    }
+    // firstAckWaitMs: a key while the first render is in the frame sends nothing until it is acknowledged (default: after 1.5 s)
+    for (const [preview, more] of [[{ firstAckWaitMs: 5000 }, 0], [{}, 1]] as const) {
+      const { sentAt, m, f } = await run(preview);
+      f.say({ type: 'orz-preview-ready' });
+      await tick(100);
+      type(m, 'a');
+      await tick(1750); // past the default 1.5 s wait, before the 2 s acknowledgement
+      expect(sentAt.length - 1).toBe(more);
+      m.shell.destroy();
+    }
+  }, 20_000);
+});
+
 describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14)', () => {
   it('[E.20] standalone needs a top-level window and no host: a connected or framed file: page keeps the opaque frame; the standalone option wins over the inference but allow-same-origin still needs file:, top level and no host', () => {
     expect(previewSandbox({ host: 'standalone', protocol: 'file:', topLevel: false })).toBe('allow-scripts');
@@ -2709,6 +2782,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
         onLink: o.links ? function (h) { window.__links.push(h); } : undefined,
       });
       window['shell_' + id] = s;
+      if (o.print) s.on('print', function (e) { (window.__prints = window.__prints || []).push(id + ':' + e.source); });
       window['errors_' + id] = [];
       s.on('error', function (e) { window['errors_' + id].push(e.source + ': ' + e.message); });
       return s.ready.then(function (r) { return { engine: r.engine, error: r.error ? String(r.error) : null }; });
@@ -3015,6 +3089,43 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await q.evaluate('window.__saved.a.length')).toBe(1);
     expect(q.context().pages()).toHaveLength(1);
     await q.close();
+  });
+
+  const PRINT_FLOOD = `<img src="x" onerror="setInterval(function(){parent.postMessage({type:'orz-preview-key',key:'p'},'*')},40)">`;
+  const TEXT_PRINT = `{{nyml\nkind: document\nuid: ${UID_A}\n}}\n\n# Print\n\n${PRINT_FLOOD}\n\n${Array.from({ length: 10 }, (_, i) => `Line ${i}.\n`).join('\n')}`;
+
+  it('[E.13] [E.33] [E.14] Cmd/Ctrl+P with the focus in the preview frame reaches the host through the port (2.3.0, round 2 of the paged loop): with a print listener the shell emits print { source: "preview" } once and the host page does not print; the frame\'s own print is prevented; a document script flooding forged print keys changes nothing; Cmd/Ctrl+P in the editor emits print { source: "editor" }; without a listener the reader\'s Cmd/Ctrl+P in the frame prints the host page once (window.print)', async () => {
+    const p = await open();
+    await p.evaluate('window.__prints = []; window.__printed = 0; window.print = function () { window.__printed++; };');
+    expect(await p.evaluate(`mountOpts('a', ${JSON.stringify(TEXT_PRINT)}, ${JSON.stringify(`${A}/cm6.js`)}, { print: true })`)).toEqual({ engine: 'codemirror6', error: null });
+    const fa = await frameOf(p, 'Line 9.');
+    // after the bridge's listener (document, bubbling): what the frame's own print would see
+    await fa.evaluate("window.addEventListener('keydown', function (e) { if (e.key === 'p' || e.key === 'P') window.__pd = String(e.defaultPrevented); })");
+    await p.locator('#a iframe').click({ position: { x: 300, y: 20 } });
+    await p.waitForTimeout(500);
+    expect(await p.evaluate('[window.__prints.length, window.__printed]')).toEqual([0, 0]); // the forged flood does nothing
+    await p.keyboard.press('ControlOrMeta+p');
+    await p.waitForFunction('window.__prints.length === 1');
+    await p.waitForTimeout(500);
+    expect(await p.evaluate('[window.__prints.join(), window.__printed]')).toEqual(['a:preview', 0]);
+    await expect.poll(() => fa.evaluate('window.__pd'), { timeout: 10_000 }).toBe('true'); // the bridge prevented the frame's own print
+    await p.locator('#a .cm-content').click();
+    await p.keyboard.press('ControlOrMeta+p');
+    await p.waitForFunction('window.__prints.length === 2');
+    expect(await p.evaluate('[window.__prints.join(), window.__printed]')).toEqual(['a:preview,a:editor', 0]);
+    // no listener: the reader's key in the frame prints the host page once (the flood still nothing)
+    expect(await p.evaluate(`mountOpts('b', ${JSON.stringify(TEXT_PRINT.replace(UID_A, UID_B))}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    await p.waitForFunction('document.querySelector("#b") && shell_b.root.querySelector("iframe")');
+    await p.waitForTimeout(800);
+    await p.locator('#b iframe').click({ position: { x: 300, y: 20 } });
+    await p.waitForTimeout(300);
+    expect(await p.evaluate('window.__printed')).toBe(0);
+    await p.keyboard.press('ControlOrMeta+p');
+    await p.waitForFunction('window.__printed === 1');
+    await p.waitForTimeout(500);
+    expect(await p.evaluate('[window.__prints.length, window.__printed]')).toEqual([2, 1]);
+    expect(p.context().pages()).toHaveLength(1);
+    await p.close();
   });
 
   it('[E.13] [E.15] the incremental preview survives a line inserted above: nodes below are kept (their data-src-line updated), a drawn diagram is not redrawn; with diff: false every render replaces the content and keeps the scroll position', async () => {

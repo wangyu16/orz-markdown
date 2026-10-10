@@ -109,7 +109,8 @@ export declare const PREVIEW_SECRET_ATTRIBUTE = "data-orz-preview-secret";
  * changed top-level nodes (compared without their `data-src-line`, whose new
  * values are copied onto the kept nodes, so a line inserted above does not
  * redraw everything below), enhances, reports anchors with the render's id;
- * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc), link
+ * forwards scroll, the shell's shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+\, Esc; 2.3.0:
+ * Cmd/Ctrl+P, default prevented in the frame — the shell's `print`), link
  * clicks and the reader's input (pointer, wheel, touch, keys).
  *
  * Authenticated channel (option B, 2026-10-06). The shell writes a per-frame
@@ -154,7 +155,7 @@ export declare const PREVIEW_BRIDGE: string;
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-export declare const PREVIEW_BRIDGE_HASH = "sha256-H1iuz4liwX/FMMxx0fL3854mJcMGhThLP+BrQREttCw=";
+export declare const PREVIEW_BRIDGE_HASH = "sha256-kEN9UwotdxNpKe7G72LLIuLL1fOPkcd/UceWQPmo94I=";
 /** The pieces of the frame document for these options. */
 export declare function previewFrameParts(options?: PreviewFrameOptions): PreviewFrameParts;
 /** The preview frame's `srcdoc`. */
@@ -187,7 +188,7 @@ export interface PreviewEvents {
     onRendered?(anchors: Array<[number, number]>, max: number): void;
     /** The frame scrolled: its top and scrollable height, or (a navigating bridge) the source line it shows. */
     onScrolled?(top: number, max: number, line?: number): void;
-    /** `s`, `\`, `Escape` pressed inside the frame (the bridge's report through its port: a trusted key event, the reader's own). */
+    /** `s`, `\`, `Escape`, (2.3.0) `p` (Cmd/Ctrl+P) pressed inside the frame (the bridge's report through its port: a trusted key event, the reader's own). */
     onKey?(key: string): void;
     /** A link the reader clicked in the frame (through the port: a trusted click). */
     onLink?(href: string): void;

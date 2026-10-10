@@ -162,6 +162,19 @@ theme: light-neat-3
 `custom_css` are `|` blocks. A future key is added to this table in a minor
 contract revision; removing or changing a key's meaning needs a new format.
 
+**Lint codes.** The kit's `lintHeader` reports the header's shape and the
+registry above (unknown and misspelled keys, duplicates, `mixed-eol`,
+`front-matter`, `unknown-theme`, …). A carrier may add **value lints** for
+its own keys on top of the kit's (2.3.0, round 2 of the paged loop):
+warnings with codes of its own, never errors that refuse a text a kit
+reader accepts, and never changing the text. orz-paged's `invalid-value`
+names an enumerated paged key (`page_size`, `template`,
+`page_number_position`, the font presets, …) whose value its renderer would
+not recognise, with the values it takes; it is added to the kit's lints by
+the carrier's `readDocument`, so `inspect`, `assemble` and the editor report
+it. The kit's codes keep their meaning; a carrier's code
+never reuses one of them.
+
 ## 6. What is and is not document data
 
 | In the text (document) | Not in the text |

@@ -129,6 +129,8 @@ export const HANDLE_CSS = `
 .orz-handle__item:disabled { opacity: .5; cursor: default; background: transparent; }
 .orz-handle__item > .orz-icon { color: var(--orz-chrome-muted); }
 .orz-handle__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* an item without an icon (a kind's action, setting or reader control) keeps its label in the labels' column (A.31) */
+.orz-handle__list > .orz-handle__item > .orz-handle__label:first-child { margin-left: calc(16px + var(--orz-chrome-space-3)); }
 .orz-handle__hint { color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-xs); letter-spacing: .02em; }
 .orz-handle__chevron { color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); }
 .orz-handle__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orz-chrome-accent); flex: none; }

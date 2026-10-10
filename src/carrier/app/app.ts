@@ -379,6 +379,23 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       return [];
     }
   };
+  /** The kind's Print action (id `print`, with a `run`), when it is offered for the current text. */
+  const printAction = (): CarrierAction | null => {
+    const a = actions.find((x) => x.id === 'print' && typeof x.run === 'function');
+    return a && offered(a, currentText()) ? a : null;
+  };
+  /**
+   * Cmd/Ctrl+P (2.3.0, A.30) — in the read view, in edit mode's chrome, in the editor or in its preview frame
+   * (the editor's `print` event): the kind's Print action; one that is the read view's (not `inEdit`) leaves
+   * edit mode first (the text stays as it is, unsaved if it was), so it prints the read view, never the editor.
+   * Without one: the browser's print of the page.
+   */
+  const printKey = async (): Promise<void> => {
+    const a = printAction();
+    if (!a) { try { (win as unknown as { print?(): void }).print?.(); } catch { /* no print here */ } return; }
+    if (editor && !a.inEdit) { try { await leave(); } catch { /* print what the view has */ } }
+    runAction(a.id);
+  };
   const runItem = (a: CarrierAction, it: CarrierActionItem): void => {
     Promise.resolve().then(() => it.run(api)).catch((e) => toast(`${a.label} — ${it.label}: ${errorText(e)}`, 'error'));
   };
@@ -929,6 +946,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       ed.on('save', (e) => { saved = e.text; dirtyChanged(); }),
       ed.on('dirty', () => dirtyChanged()),
       ed.on('change', () => headerFollow()),
+      ed.on('print', () => { void printKey(); }),
       withAiMenu(ed),
     ];
     dirtyChanged();
@@ -1010,6 +1028,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       const key = String(e.key ?? '').toLowerCase();
       if (key === 's') { e.preventDefault(); void editor.save(); }
       else if (key === 'e') { e.preventDefault(); void leave(); }
+      else if (key === 'p' && !e.shiftKey) { e.preventDefault(); void printKey(); }
       return;
     }
     const path = e.composedPath?.() ?? [];
@@ -1021,6 +1040,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       if (key === 's') { e.preventDefault(); void (other ? other.save() : save()); return; }
       if (other) return;
       if (key === 'e' && !typing) { e.preventDefault(); edit(); return; }
+      if (key === 'p' && !e.shiftKey && printAction()) { e.preventDefault(); void printKey(); return; }
       if (key === 'z' && !typing) { if (e.shiftKey ? redo() : undo()) e.preventDefault(); return; }
       return;
     }

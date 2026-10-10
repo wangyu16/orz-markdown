@@ -41,7 +41,7 @@ import { type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import type { ColorScheme } from '../../preview-frame.js';
 import type { EdElement, EdFile, ShadowRootLike } from './types.js';
 export type EditorMode = 'split' | 'editor' | 'preview';
-export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error';
+export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error' | 'print';
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
 /** How the save went. `save()` never rejects. */
 export type SaveOutcome = {
@@ -76,6 +76,17 @@ export interface EditorEvents {
         source: 'save' | 'render' | 'adapter' | 'format' | 'hook';
         message: string;
         error: unknown;
+    };
+    /**
+     * (2.3.0) The reader pressed Cmd/Ctrl+P — in the preview frame (`preview`:
+     * the bridge's report through its authenticated port, a trusted key event;
+     * the frame prevented its own print) or in the shell (`editor`). With a
+     * listener the shell prevents the browser's print and the listener decides
+     * (a carrier: its Print action); without one, a key from the frame prints
+     * the host page (`window.print()`) and a key in the shell is the browser's.
+     */
+    print: {
+        source: 'preview' | 'editor';
     };
 }
 /** A range of the exact text (BOM and CR LF counted). */
@@ -159,6 +170,14 @@ export interface EditorPreviewOptions extends PreviewFrameOptions {
      * a forced render (2.3.0, E.32).
      */
     maxWaitMs?: number;
+    /**
+     * (2.3.0) How long a render waits for the frame's acknowledgement while the
+     * frame has not acknowledged one yet (ms, default 1500, at most 10 000). A
+     * kind whose first layout is long (a paginated preview) raises it so that
+     * render is paced like the others. Either way an acknowledgement that
+     * arrives after the wait still records the render's time (E.34).
+     */
+    firstAckWaitMs?: number;
     /** How long the frame may take to start before the shell reports it (`error` `render`) and shows a notice. Default 8000. */
     readyTimeoutMs?: number;
     /**
