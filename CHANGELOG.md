@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Planned as **2.3.0**: the carrier-kit gaps the orz-paged 1.0 rebuild found
 (family plan REBUILD §3b, the `KIT GAP` notes in orz-paged's sources). All
 additive for `^2.2.0` consumers (orz-mdhtml 1.0.0's test suite passes
-unchanged against it); the parser's `md.render` output is unchanged.
+unchanged against it); the parser's `md.render` output is unchanged except
+one added attribute (`data-url` on a `{{youtube}}` embed, for print).
 
 ### Added
 
@@ -34,6 +35,12 @@ unchanged against it); the parser's `md.render` output is unchanged.
   opening), per-choice `checked` toggles and `separator`, and `hidden?(text)`
   (also followed by `attachSettings` in an editor's toolbar). Helpers
   `settingChoices`, `settingOffered`, `settingChanges`.
+- **`hidden(text)` asked once per text** (round 1 of the paged loop; claim
+  A.29) — `hiddenFor(owner, text)`: a setting's or action's `hidden` may be
+  costly (paged's Version parses the document), so the kit keeps the answer
+  for the last text asked per owner; reopening menus on the same text asks
+  nothing, and it is never asked synchronously per keystroke (after the
+  typing pause only).
 - **Reader controls with named choices** — `readerControls.choices:
   ReaderChoiceControl[]` (`{ key, label, icon?, choices: { id, label }[],
   default, apply(view, id) }`): a submenu in the handle's list, stored per
@@ -87,6 +94,19 @@ imports it, so no browser bundle holds it (N.1). The strongest CLI tests of
 both carriers (T.7, T.9, T.11, T.12, T.14, T.16–T.21 — "following every
 `next` verbatim never loses a text") run against it through a reference CLI.
 
+**`orz-markdown/carrier/editor`** (claim E.32): **`preview.maxWaitMs`** — while
+edits continue a render is forced at least every `max(maxWaitMs, 4 × the
+last render)` (default 1000, as before); `Infinity` never forces one while
+keys keep arriving, so a kind whose render blocks the page (orz-paged's
+Paged.js reflow in the same-process frame) renders only after a typing
+pause and typing never freezes. Frame-acknowledged pacing is unchanged.
+
+**Print layer of `themes/common.css`** (claim M.30): each tab pane prints
+after its label as a small heading (an unnamed one as "Tab N"), and a
+`{{youtube}}` embed prints its address (`YouTube video: https://youtu.be/<id>`,
+from the new `data-url` attribute) instead of a blank 16:9 frame. The screen
+is unchanged.
+
 **`orz-markdown/preview-frame`** (claim M.28): `enhanceDocument(root, {
 static: true })` for print and pagination — draws everything, then turns every
 drawn chart and SMILES canvas into an image (`data-orz-frozen`, class,
@@ -96,6 +116,19 @@ destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
 
 ### Fixed
 
+- **Mermaid (and every content library) blocked by an element id** (all
+  carriers; claim M.29): a heading "Mermaid" gets `id="mermaid"`, so
+  `window.mermaid` was the element and `enhanceDocument` never loaded the
+  library (the frame's `__orzEnhance` threw and skipped it). Each library is
+  now probed by its API (`mermaid.run`, `hljs.highlightElement`,
+  `SmilesDrawer.parse`/`Drawer`, `Chart` a function,
+  `OrzMarkdownRuntime.init`), never by its global's name.
+- **`carrier/node` test gaps** (claim N.10; mutants of round 1 of the paged
+  loop): the kit's own tests now catch a trimmed compare, a CR LF-blind
+  compare, a `--replaces` token compared on a prefix, the raw (not stored)
+  text compared against git, the last-writer gate dropped, and a written
+  file's mode narrowed by the umask — each was caught only by orz-paged's
+  suite before.
 - Conformance harness: `C.save.conflict` waited a fixed 10 s for the
   "Download a copy instead" download and for "Replace it"'s write; a
   carrier's ~2 MB inline file under the load of a full run missed it once

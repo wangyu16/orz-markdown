@@ -19,7 +19,7 @@ export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, openedFileN
 export { captureEngineSource } from './engine-source.js';
 export type { EngineSource, CaptureOptions } from './engine-source.js';
 export {
-  WIDGET_CSS, installCss, button, menuButton, settingPicker, settingChoices, settingOffered, settingChanges, attachSettings, reviewProposal, attachAiMenu, followPresentation,
+  WIDGET_CSS, installCss, button, menuButton, settingPicker, settingChoices, settingOffered, hiddenFor, settingChanges, attachSettings, reviewProposal, attachAiMenu, followPresentation,
 } from './widgets.js';
 export type { ButtonOptions, MenuItem, MenuButton, AiOp, AiMenu, PreviewPresentation } from './widgets.js';
 export type {

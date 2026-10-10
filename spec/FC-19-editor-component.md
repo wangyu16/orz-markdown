@@ -314,7 +314,7 @@ const shell = createEditorShell(element, {
   openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text), once, at idle
   standalone?,                       // the assembled file's own boot passes true (§8.4 sandbox)
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
-  preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, readyTimeoutMs?, nonce?,
+  preview?: { head?, scheme?, articleClass?, assets?, debounceMs?, maxWaitMs?, readyTimeoutMs?, nonce?,
               frameDocument?, bridge?, diff?, mode?, mapLine?, mapPosition? },
   nonce?,                            // FC-19 §3 (2.2.0): preview.nonce when that is not given, and the default adapter's
   onLink?, label?, narrowWidth?,
@@ -474,8 +474,13 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   after a pause in typing of `max(debounceMs, 2 × the last render and frame
   time)` (`debounceMs` 150), never while one runs (another is coalesced into
   one more render of the latest text), not while only the editor shows; while
-  edits continue it runs at least every `max(1000 ms, 4 × the last render and
-  frame time)`. A failing `render` keeps the last preview (`error`).
+  edits continue it runs at least every `max(maxWaitMs, 4 × the last render
+  and frame time)` (`preview.maxWaitMs`, 2.3.0, default 1000). A kind whose
+  render blocks the page (a Paged.js reflow in the same-process `srcdoc`
+  frame) passes `maxWaitMs: Infinity`: no render is forced while keys keep
+  arriving — it runs after the pause only, and the frame-acknowledged pacing
+  above still holds (E.32). A failing `render` keeps the last preview
+  (`error`).
 - **Pluggable preview** (orz-slides, orz-paged): `preview.frameDocument(parts)`
   writes the whole frame document from `parts = { head, bridge, scripts,
   scheme, articleClass, nonce? }` (the bridge and library `<script>`s and the

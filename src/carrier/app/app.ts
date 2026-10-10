@@ -60,7 +60,7 @@ import type { UpdateIndicator } from '../shell/indicator.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import { copyName, readOpenedFile } from './file.js';
-import { attachAiMenu, button, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
+import { attachAiMenu, button, hiddenFor, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
 import { HANDLE_CSS, mountHandle, type HandleEntry, type HandleRowButton, type HandleSubItem } from './handle.js';
 import type {
   AppElement, AppEvent, AppSaveOutcome, AppServices, AppShadowRoot, AppWindow, CarrierAction, CarrierActionItem, CarrierApp, CarrierAppOptions, NewDocumentOptions, OpenedFile,
@@ -363,10 +363,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
 
   // a kind's actions: run, or (2.3.0) a submenu of entries; offered unless `hidden(text)` says so
   const actions: readonly CarrierAction[] = (k.actions ?? []).filter((a) => !!a && (typeof a.run === 'function' || typeof a.items === 'function'));
-  const offered = (a: CarrierAction, t: string): boolean => {
-    if (typeof a.hidden !== 'function') return true;
-    try { return !a.hidden(t); } catch { return false; }
-  };
+  const offered = (a: CarrierAction, t: string): boolean => !hiddenFor(a, t); // asked once per text (A.29)
   const runAction = (id: string): void => {
     const a = actions.find((x) => x.id === id);
     if (!a || typeof a.run !== 'function') return;

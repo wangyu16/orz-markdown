@@ -5,6 +5,7 @@ exports.installCss = installCss;
 exports.button = button;
 exports.menuButton = menuButton;
 exports.settingChoices = settingChoices;
+exports.hiddenFor = hiddenFor;
 exports.settingOffered = settingOffered;
 exports.settingChanges = settingChanges;
 exports.settingPicker = settingPicker;
@@ -392,16 +393,35 @@ function settingChoices(control, text) {
     }
     return control.choices;
 }
-/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden). */
-function settingOffered(control, text) {
-    if (typeof control.hidden !== 'function')
-        return true;
+/** The last text each `hidden(text)` was asked about, and its answer (2.3.0, A.29). */
+const hiddenMemo = new WeakMap();
+/**
+ * `owner.hidden(text)`, asked at most once per text (2.3.0, A.29): the answer
+ * for the last text asked is kept per owner (a setting or an action), so a
+ * menu opened again, a sync after a pause and the bar's follower do not run a
+ * costly `hidden` again on the same text. A throwing one is hidden. `hidden`
+ * is a function of the text (FC-19 §8: `hidden(text)`).
+ */
+function hiddenFor(owner, text) {
+    const fn = owner.hidden;
+    if (typeof fn !== 'function')
+        return false;
+    const m = hiddenMemo.get(owner);
+    if (m && m.fn === fn && m.text === text)
+        return m.hidden;
+    let hidden;
     try {
-        return !control.hidden(text);
+        hidden = !!fn.call(owner, text);
     }
     catch {
-        return false;
+        hidden = true;
     }
+    hiddenMemo.set(owner, { fn, text, hidden });
+    return hidden;
+}
+/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden; asked once per text, A.29). */
+function settingOffered(control, text) {
+    return !hiddenFor(control, text);
 }
 /** The header changes of choosing `value` (2.3.0: the setting's `apply(text, value)`, else `{ [key]: value }`). */
 function settingChanges(control, text, value) {

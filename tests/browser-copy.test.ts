@@ -964,4 +964,62 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     expect(hl()).toBe(3);
     await b.context.close();
   }, 60_000);
+
+  it('[M.29] a library is probed by its API, never by its global name: headings named after every library global (Mermaid → id="mermaid", hljs, Chart, SmilesDrawer, katex, OrzMarkdownRuntime, by attrs where the slug lowers the case) do not stop enhanceDocument loading and drawing each library or installing the runtime; the frame\'s __orzEnhance probes the same way', async () => {
+    const { p, context, pa } = await enhancePage();
+    const named = '# Mermaid\n\n# hljs\n\n# katex\n\n# C {{attrs[#Chart]}}\n\n# S {{attrs[#SmilesDrawer]}}\n\n# R {{attrs[#OrzMarkdownRuntime]}}\n\n';
+    const body = '```js\nlet x = 1;\n```\n\n$x$\n\n{{mermaid\ngraph LR; A-->B\n}}\n\n{{smiles CCO}}\n\n{{chart\ndata: 1, 2\n}}\n\n:::: tabs\n::: tab A\na\n:::\n::: tab B\nb\n:::\n::::\n';
+    await render(p, named + body);
+    // the elements are there and shadow the names before anything loads
+    expect(await p.evaluate(() => ['mermaid', 'hljs', 'katex', 'Chart', 'SmilesDrawer', 'OrzMarkdownRuntime'].map((k) => (window as unknown as Record<string, unknown>)[k] instanceof HTMLElement))).toEqual([true, true, true, true, true, true]);
+    const r = await enhance(p);
+    expect(r.failed).toEqual([]);
+    expect([...r.loaded].sort()).toEqual([pa.cdn.hljsJs, pa.cdn.mermaidJs, pa.cdn.smilesJs, pa.cdn.chartJs].sort());
+    const s = await state(p);
+    expect(s.calls).toEqual({ hljs: 1, mermaid: 1, smiles: 1, chart: 1 });
+    expect(s.runtime).toBe('object');
+    expect(await p.evaluate(() => document.querySelectorAll('#doc .tabs-bar').length)).toBe(1);
+    await context.close();
+    // the frame: __orzEnhance with the same element-named globals and no libraries runs to its end (the runtime still draws the tabs)
+    const frame = await own!.newPage();
+    const pa2 = getPreviewFrameAssets();
+    const scripts = pa2.bodyScripts().replace(/<script src="[^"]*"><\/script>/g, '');
+    await frame.setContent(`<!doctype html><html><body><article class="markdown-body">${md.render(named + ':::: tabs\n::: tab A\na\n:::\n::: tab B\nb\n:::\n::::\n')}</article>${scripts}</body></html>`);
+    const out = await frame.evaluate(() => { try { (window as unknown as { __orzEnhance(): void }).__orzEnhance(); return document.querySelectorAll('.tabs-bar').length; } catch (e) { return String(e); } });
+    expect(out).toBe(1);
+    await frame.close();
+  }, 60_000);
+
+  it('[M.30] the print layer of common.css: every tab pane prints after its label (an unnamed one as "Tab N") and a YouTube embed prints its address (data-url) instead of a blank frame; the screen is unchanged (no label before a pane, the frame shown)', async () => {
+    const pg = await own!.newPage();
+    const html = md.render(':::: tabs\n::: tab Python\npy\n:::\n::: tab\nanon\n:::\n::::\n\n{{youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=90}}\n');
+    expect(html).toContain('data-url="https://youtu.be/dQw4w9WgXcQ?t=90"');
+    await pg.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${COMMON_CSS}</style></head><body><article class="markdown-body">${html}</article></body></html>`);
+    const look = () => pg.evaluate(() => {
+      const before = (el: Element) => getComputedStyle(el, '::before').content;
+      const tabs = Array.from(document.querySelectorAll('.tab'));
+      const yt = document.querySelector('.youtube-embed')!;
+      return {
+        labels: tabs.map(before),
+        shown: tabs.map((t) => getComputedStyle(t).display),
+        yt: before(yt),
+        ytDisplay: getComputedStyle(yt).display,
+        frame: getComputedStyle(yt.querySelector('iframe')!).display,
+        ytHeight: Math.round(yt.getBoundingClientRect().height),
+      };
+    });
+    const screen = await look();
+    expect(screen.labels).toEqual(['none', 'none']);
+    expect(screen.yt).toBe('none');
+    expect(screen.frame).toBe('block');
+    await pg.emulateMedia({ media: 'print' });
+    const print = await look();
+    expect(print.labels).toEqual(['"Python"', '"Tab " counter(orz-tab)']); // the runtime's own name for an unnamed tab
+    expect(print.shown).toEqual(['block', 'block']);
+    expect(print.yt).toBe('"YouTube video: https://youtu.be/dQw4w9WgXcQ?t=90"');
+    expect(print.ytDisplay).toBe('block');
+    expect(print.frame).toBe('none');
+    expect(print.ytHeight).toBeLessThan(60); // a line of text, not a 16:9 blank
+    await pg.close();
+  }, 60_000);
 });

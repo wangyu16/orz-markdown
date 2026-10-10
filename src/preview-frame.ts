@@ -70,11 +70,13 @@ function guard(js: string): string {
  * (`data: …` shorthand) hides its legend instead of showing "undefined". */
 const ENHANCE_BODY =
   "var R='.markdown-body ';" +
-  "try{if(window.hljs)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}" +
-  "try{if(window.mermaid)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
-  "try{if(window.SmilesDrawer)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
-  "try{if(window.Chart)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
-  "try{if(window.OrzMarkdownRuntime)window.OrzMarkdownRuntime.init(document)}catch(e){}";
+  "var L=function(f){try{return f()}catch(e){return false}};" +
+  "var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});" +
+  "try{if(H)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}" +
+  "try{if(M)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
+  "try{if(S)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
+  "try{if(C)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
+  "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}";
 
 export interface PreviewFrameAssets {
   /** Pinned CDN URLs. */
@@ -182,12 +184,28 @@ type AnyEl = {
 };
 type EnhanceWin = AnyEl;
 
-/** The libraries in-page enhancement may load: each with the selector of the content that needs it and the global it sets. */
-const PAGE_LIBS: ReadonlyArray<{ url: string; needs: string; global: string; setup?(w: EnhanceWin): void }> = [
-  { url: PREVIEW_CDN.hljsJs, needs: 'pre code', global: 'hljs' },
-  { url: PREVIEW_CDN.mermaidJs, needs: '.mermaid', global: 'mermaid', setup: (w) => { w.mermaid?.initialize?.({ startOnLoad: false }); } },
-  { url: PREVIEW_CDN.smilesJs, needs: 'canvas[data-smiles]', global: 'SmilesDrawer' },
-  { url: PREVIEW_CDN.chartJs, needs: 'canvas.orz-chart', global: 'Chart' },
+/**
+ * Whether a library's API is on the window — probed by what it offers, never
+ * by its name alone: a document element whose id is the library's global
+ * (a heading "Mermaid" → `id="mermaid"`, named access on `window`) is not the
+ * library (2.3.0, M.29). A probe that throws (a cross-origin frame of that
+ * name) says no. `__orzEnhance` probes the same way.
+ */
+const probe = (f: () => boolean): boolean => { try { return f() === true; } catch { return false; } };
+const LIB = {
+  hljs: (w: EnhanceWin): boolean => probe(() => typeof w.hljs.highlightElement === 'function'),
+  mermaid: (w: EnhanceWin): boolean => probe(() => typeof w.mermaid.run === 'function'),
+  smiles: (w: EnhanceWin): boolean => probe(() => typeof w.SmilesDrawer.parse === 'function' && typeof w.SmilesDrawer.Drawer === 'function'),
+  chart: (w: EnhanceWin): boolean => probe(() => typeof w.Chart === 'function'),
+  runtime: (w: EnhanceWin): boolean => probe(() => typeof w.OrzMarkdownRuntime.init === 'function'),
+};
+
+/** The libraries in-page enhancement may load: each with the selector of the content that needs it and the probe of its API (M.29). */
+const PAGE_LIBS: ReadonlyArray<{ url: string; needs: string; ready(w: EnhanceWin): boolean; setup?(w: EnhanceWin): void }> = [
+  { url: PREVIEW_CDN.hljsJs, needs: 'pre code', ready: LIB.hljs },
+  { url: PREVIEW_CDN.mermaidJs, needs: '.mermaid', ready: LIB.mermaid, setup: (w) => { w.mermaid?.initialize?.({ startOnLoad: false }); } },
+  { url: PREVIEW_CDN.smilesJs, needs: 'canvas[data-smiles]', ready: LIB.smiles },
+  { url: PREVIEW_CDN.chartJs, needs: 'canvas.orz-chart', ready: LIB.chart },
 ];
 
 /** Library loads per window (a page loads each library once). */
@@ -254,13 +272,13 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
   // the runtime: once per window (a static enhancement skips it unless asked)
   const isStatic = options.static === true;
   if (isStatic ? options.runtime === true : options.runtime !== false) {
-    if (!win.OrzMarkdownRuntime) {
+    if (!LIB.runtime(win)) {
       const s = doc.createElement('script') as AnyEl;
       if (nonce) s.setAttribute('nonce', nonce);
       s.textContent = getBrowserRuntimeScript({ autoInit: false });
       head.appendChild(s);
     }
-    try { win.OrzMarkdownRuntime?.init?.(root); } catch { /* the runtime's own error */ }
+    try { if (LIB.runtime(win)) win.OrzMarkdownRuntime.init(root); } catch { /* the runtime's own error */ }
   }
 
   // charts of content no longer in root (a re-render replaced it) are destroyed first (M.26)
@@ -280,7 +298,7 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
   const now = (): number => { try { const t = Number(win.Date?.now?.()); return Number.isFinite(t) ? t : Date.now(); } catch { return Date.now(); } };
   const pending: Array<Promise<void>> = [];
   for (const lib of PAGE_LIBS) {
-    if (!has(lib.needs) || win[lib.global]) continue;
+    if (!has(lib.needs) || lib.ready(win)) continue;
     let p = loads.get(lib.url);
     const failed = failures.get(lib.url);
     if (!p && failed && (failed.attempts >= ENHANCE_MAX_ATTEMPTS || now() - failed.at < ENHANCE_RETRY_MS * 2 ** (failed.attempts - 1))) {
@@ -446,14 +464,14 @@ export function swapStylesheet(doc: unknown, id: string, href: string, options: 
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
 async function enhanceRoot(root: EnhanceRoot, w: EnhanceWin, isStatic = false): Promise<void> {
   const all = (sel: string): AnyEl[] => { try { return Array.from(root.querySelectorAll(sel) as ArrayLike<AnyEl>); } catch { return []; } };
-  try { if (w.hljs) for (const b of all('pre code:not(.hljs)')) w.hljs.highlightElement(b); } catch { /* highlight.js's own error */ }
+  try { if (LIB.hljs(w)) for (const b of all('pre code:not(.hljs)')) w.hljs.highlightElement(b); } catch { /* highlight.js's own error */ }
   let drawn: unknown = null;
   try {
     const nodes = all('.mermaid:not([data-processed])');
-    if (w.mermaid && nodes.length) drawn = w.mermaid.run({ nodes });
+    if (LIB.mermaid(w) && nodes.length) drawn = w.mermaid.run({ nodes });
   } catch { /* Mermaid's own error */ }
   try {
-    if (w.SmilesDrawer) {
+    if (LIB.smiles(w)) {
       for (const v of all('canvas[data-smiles]')) {
         if (v.__d) continue;
         v.__d = 1;
@@ -466,7 +484,7 @@ async function enhanceRoot(root: EnhanceRoot, w: EnhanceWin, isStatic = false): 
     }
   } catch { /* SmilesDrawer's own error */ }
   try {
-    if (w.Chart) {
+    if (LIB.chart(w)) {
       for (const v of all('canvas.orz-chart[data-chart]')) {
         if (v.__d) continue;
         v.__d = 1;

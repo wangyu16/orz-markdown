@@ -356,6 +356,17 @@
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -373,16 +384,43 @@
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -1496,6 +1534,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -1513,16 +1562,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -3090,6 +3166,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -3107,16 +3194,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -4673,6 +4787,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -4690,16 +4815,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -6188,6 +6340,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -6205,16 +6368,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -7300,6 +7490,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -7317,16 +7518,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -8376,6 +8604,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -8393,16 +8632,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -9438,6 +9704,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -9455,16 +9732,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -10452,6 +10756,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -10469,16 +10784,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -11467,6 +11809,17 @@ body {
   .markdown-body .cols { grid-template-columns: 1fr !important; }
 }
 
+/* ---- an include that resolved to nothing (carrier previews and read views) -- */
+
+/* A quiet note in place of the included text: the reader sees that something
+   is missing; copy-as-Markdown gives back the directive (data-md). */
+.markdown-body .orz-include-missing {
+  margin: 0.75em 0;
+  padding: 0.25em 0.75em;
+  border-left: 2px dashed;
+  opacity: 0.65;
+}
+
 /* ---- print ----------------------------------------------------------------- */
 
 @media print {
@@ -11484,16 +11837,43 @@ body {
   .markdown-body thead { display: table-header-group; }
   .markdown-body tfoot { display: table-footer-group; }
 
-  /* Paper cannot switch tabs: print every panel. */
+  /* Paper cannot switch tabs: print every panel, each after its label
+     (the runtime's "Tab N" for an unnamed one; 2.3.0, M.30). */
   .markdown-body .tabs-bar { display: none !important; }
-  .markdown-body .tab { display: block !important; }
+  .markdown-body .tabs { counter-reset: orz-tab; }
+  .markdown-body .tab { display: block !important; counter-increment: orz-tab; }
+  .markdown-body .tab::before {
+    content: attr(data-label);
+    display: block;
+    margin: 0.6em 0 0.3em;
+    font-size: 0.85em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .markdown-body .tab:is([data-label=""], :not([data-label]))::before { content: "Tab " counter(orz-tab); }
+
+  /* Paper cannot play a video: print its address instead of a blank frame
+     (2.3.0, M.30; markup without data-url, from before 2.3.0, prints nothing). */
+  .markdown-body .youtube-embed[data-url] {
+    aspect-ratio: auto;
+    overflow: visible;
+    break-inside: avoid;
+  }
+  .markdown-body .youtube-embed[data-url] iframe { display: none !important; }
+  .markdown-body .youtube-embed[data-url]::before {
+    content: "YouTube video: " attr(data-url);
+    display: block;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
 
   .markdown-body :is(tr, img, svg, canvas, iframe, video, pre, blockquote, .smiles-render, .qrcode, .mermaid, .katex-display) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .markdown-body .youtube-embed,
+  .markdown-body .youtube-embed:not([data-url]),
+  .markdown-body .orz-include-missing,
   .markdown-body .qrcode__icon { display: none !important; }
 }
 
@@ -12560,14 +12940,14 @@ the info string (e.g. <code>::: tab Python</code>).</p>
 <h3 id="space-%E2%80%94-inline-horizontal-whitespace" tabindex="-1">space — Inline horizontal whitespace</h3>
 <p>Column A:<span style="display:inline-block;width:2rem"></span>Column B:<span style="display:inline-block;width:4rem"></span>Column C.</p>
 <h3 id="youtube-%E2%80%94-embedded-video" tabindex="-1">youtube — Embedded video</h3>
-<div class="youtube-embed" data-md="{{youtube dQw4w9WgXcQ}}">
+<div class="youtube-embed" data-md="{{youtube dQw4w9WgXcQ}}" data-url="https://youtu.be/dQw4w9WgXcQ">
   <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     referrerpolicy="strict-origin-when-cross-origin"
     allowfullscreen></iframe>
 </div>
 <p>Alias <code>yt</code>:</p>
-<div class="youtube-embed" data-md="{{youtube 9bZkp7q19f0}}">
+<div class="youtube-embed" data-md="{{youtube 9bZkp7q19f0}}" data-url="https://youtu.be/9bZkp7q19f0">
   <iframe src="https://www.youtube.com/embed/9bZkp7q19f0"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     referrerpolicy="strict-origin-when-cross-origin"

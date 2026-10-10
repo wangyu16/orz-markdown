@@ -158,7 +158,13 @@ toolbar (`attachSettings`). 2.3.0 adds, all optional:
   toast and changes nothing.
 - `hidden(text)` — not offered for this text (a throwing one is hidden):
   re-evaluated at each opening of the handle's list, and by `attachSettings`
-  after a pause in typing (the picker is hidden).
+  after a pause in typing (the picker is hidden). `hidden` is a function of
+  the text and may be costly (it may parse the document): the kit asks it at
+  most once per text — the answer for the last text asked is kept per
+  setting or action (`hiddenFor(owner, text)`, 2.3.0, A.29), so menus opened
+  again on the same text ask nothing — and never synchronously per
+  keystroke (only after the typing pause). The same holds for an action's
+  `hidden`.
 
 The helpers `settingChoices(control, text)`, `settingOffered(control,
 text)` and `settingChanges(control, text, value)` are exported for a
@@ -510,7 +516,7 @@ it, opened by ArrowRight, Enter, Space, a click or a hover on its checked or
 first item, closed by ArrowLeft and Escape with the focus back on its item;
 one level), `settingPicker`, `attachSettings(shell, settings)` (2.3.0: each
 picker writes `settingChanges`, and a setting with `hidden` follows the
-text), `settingChoices`, `settingOffered`, `settingChanges` (2.3.0, §3.4), `reviewProposal(root,
+text), `settingChoices`, `settingOffered`, `settingChanges` (2.3.0, §3.4), `hiddenFor(owner, text)` (2.3.0: `hidden(text)` asked once per text, §3.4), `reviewProposal(root,
 proposal, { title })` (non-modal `role="dialog"`, the proposal editable,
 Apply / Cancel, Esc cancels), `attachAiMenu(shell, { operations })`,
 `followPresentation(shell, present)`, `installCss`, `WIDGET_CSS`. Text is
@@ -543,23 +549,35 @@ Designed now so that neither needs a breaking change later:
   page (`render` resolves when the pages are laid out — Paged.js is
   asynchronous; a newer render cancels an older one by generation, as the md
   view does); `present` sets the page size and template classes and the
-  theme stylesheet and returns the scheme. Settings: theme, page size,
-  template, margins (header keys, FC-18 §5.1); 2.3.0: **Version** — a
+  theme stylesheet and returns the scheme. Settings (owner decision 2,
+  2026-10-09): **Theme, Page size, Template, Page numbers** (Page numbers
+  may be two pickers: position and number style; header keys,
+  FC-18 §5.1); margins, fonts, custom CSS and every other page key stay
+  text-only (edited in the header, no setting); 2.3.0: **Version** — a
   setting with `choicesFor` (the dynamic choices the document defines, one
   group per key with per-choice `checked`), `apply` (the `dynamic_choices`
   map as a `{ multiline }` value) and `hidden` (no choices). Action:
   **Print** (`placement: 'bar'`, `run: () => window.print()`; the chrome
   prints hidden, CHROME_CSS `@media print`); 2.3.0: **New document from
   template…** — an action with `items` whose entries call
-  `app.newDocument({ text: template, name })`. Reader control (2.3.0):
+  `app.newDocument({ text: template, name })` with the template's text and
+  a file name of its own (e.g. the template's name; the kit adds the
+  extension): a fresh file, the open document untouched (FC-18 §7.3: the
+  header's `template:` only selects layout defaults). Reader control (2.3.0):
   **Page zoom** — `readerControls.choices` (`apply(view, id)` zooms the
   pages). Its pagination enhances with `enhanceDocument(root, { static: true
   })` (2.3.0, `orz-markdown/preview-frame`): drawn canvases become images
-  Paged.js can re-parse, the interactive runtime is skipped. Editor: the kit's shell with
+  Paged.js can re-parse, the interactive runtime is skipped unless asked
+  for — `{ static: true, runtime: true }` is allowed (the read view keeps
+  copy-as-Markdown; tabs and QR expansion are inert on paper anyway).
+  Editor: the kit's shell with
   `preview.frameDocument` building a Paged.js frame (FC-19 §8.4 pluggable
   preview), `preview.diff: false` (Paged.js reflows the whole document) and
-  `__orzPreviewApply` running the layout; `followPresentation` returns the
-  page-size head.
+  `__orzPreviewApply` running the layout, and (2.3.0, E.32)
+  `preview.maxWaitMs: Infinity` — a Paged.js reflow runs in the page's own
+  process (the `srcdoc` frame), so the preview renders only after a pause
+  in typing, never forced while keys keep arriving; `followPresentation`
+  returns the page-size head.
 - **orz-slides.** `createReadView` renders the deck; `onKey` navigates (←/→,
   Page Up/Down, Space, Home/End — the app gives it every key it does not
   take, never while typing or from the chrome); `present` applies the theme

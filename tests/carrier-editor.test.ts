@@ -2103,6 +2103,65 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     m.shell.destroy();
   });
 
+  it('[E.32] preview.maxWaitMs: Infinity (2.3.0, a kind whose render blocks the page): 2.4 s of keystrokes every 60 ms render nothing while they arrive, then exactly one render of the latest text after the pause; default and finite values still force renders', async () => {
+    const run = async (maxWaitMs?: number): Promise<{ during: number; after: number; last: string }> => {
+      const render = vi.fn((t: string) => `<p>${t.length}</p>`);
+      const m = mount({ render, preview: { assets: false, debounceMs: 150, ...(maxWaitMs !== undefined ? { maxWaitMs } : {}) } });
+      frameOf(m).say({ type: 'orz-preview-ready' });
+      await tick(250);
+      const before = render.mock.calls.length;
+      for (let i = 0; i < 40; i++) { type(m, 'k'); await tick(60); }
+      const during = render.mock.calls.length - before;
+      await tick(400);
+      const after = render.mock.calls.length - before - during;
+      const last = String(render.mock.calls.at(-1)?.[0]);
+      const text = m.shell.getText();
+      m.shell.destroy();
+      expect(last).toBe(text);
+      return { during, after, last };
+    };
+    const never = await run(Infinity);
+    expect(never.during).toBe(0);
+    expect(never.after).toBe(1);
+    expect((await run()).during).toBeGreaterThanOrEqual(2); // default unchanged (E.16)
+    expect((await run(500)).during).toBeGreaterThanOrEqual(3); // a finite value forces renders that often
+  });
+
+  it('[E.32] [E.16] with maxWaitMs: Infinity the frame-acknowledged pacing holds: a frame that takes 200 ms grows the pause to 400 ms, so keystrokes every 300 ms render nothing (default: renders forced about once a second), never two renders in the frame at once, and the pause renders once', async () => {
+    const run = async (maxWaitMs?: number): Promise<{ during: number; after: number; most: number; keys: number }> => {
+      const m = mount({ render: (t) => `<p>${t.length}</p>`, preview: { assets: false, debounceMs: 10, ...(maxWaitMs !== undefined ? { maxWaitMs } : {}) } });
+      const f = frameOf(m);
+      let inFrame = 0;
+      let most = 0;
+      let renders = 0;
+      const cw = m.root.querySelector('iframe')!.contentWindow as unknown as { postMessage(x: Record<string, unknown>): void };
+      cw.postMessage = (msg: Record<string, unknown>) => {
+        if (msg.type !== 'orz-preview-render') return;
+        renders++;
+        inFrame++;
+        most = Math.max(most, inFrame);
+        setTimeout(() => { inFrame--; f.say({ type: 'orz-preview-rendered', id: msg.id, anchors: [], max: 0 }); }, 200);
+      };
+      f.say({ type: 'orz-preview-ready' });
+      await tick(400); // the first render: the frame's 200 ms is now the last render's time
+      const before = renders;
+      const keys = 12;
+      for (let i = 0; i < keys; i++) { type(m, 'x'); await tick(300); }
+      const during = renders - before;
+      await tick(900);
+      const after = renders - before - during;
+      m.shell.destroy();
+      return { during, after, most, keys };
+    };
+    const paced = await run(Infinity);
+    expect(paced.during / paced.keys).toBe(0);
+    expect(paced.after).toBe(1);
+    expect(paced.most).toBe(1);
+    const forced = await run();
+    expect(forced.during).toBeGreaterThanOrEqual(2);
+    expect(forced.most).toBe(1);
+  });
+
   it('[E.15] in navigate mode a view change that shows the preview posts the caret\'s line (again once the preview has rendered)', async () => {
     const m = mount({ text: 'a\nb\nc\nd\ne\nf\n', mode: 'editor', preview: { assets: false, debounceMs: 5, mode: 'navigate' } });
     const f = frameOf(m);

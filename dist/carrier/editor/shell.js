@@ -112,6 +112,7 @@ function createEditorShell(element, options) {
     const nonce = typeof options.nonce === 'string' && options.nonce ? options.nonce : undefined;
     const previewOptions = { ...(nonce ? { nonce } : {}), ...(options.preview ?? {}) };
     const debounceMs = previewOptions.debounceMs ?? 150;
+    const maxWaitMs = typeof previewOptions.maxWaitMs === 'number' && previewOptions.maxWaitMs >= 0 ? previewOptions.maxWaitMs : MAX_WAIT_MS;
     const navigateMode = previewOptions.mode === 'navigate';
     const uid = options.uid ?? header?.fields['uid']?.trim();
     const prefs = options.preferences ?? (0, preferences_js_1.createPreferenceStore)(uid, options.storage);
@@ -411,8 +412,8 @@ function createEditorShell(element, options) {
     let ackless = false;
     /** The pause before a render: at least `debounceMs`, and twice the last render's time (a slow renderer is not run per keystroke). */
     const renderDelay = () => Math.max(debounceMs, 2 * lastRenderMs);
-    /** While edits continue, a render runs at least this often (LOW6). */
-    const maxWait = () => Math.max(MAX_WAIT_MS, 4 * lastRenderMs);
+    /** While edits continue, a render runs at least this often (LOW6); `preview.maxWaitMs: Infinity` never forces one (E.32). */
+    const maxWait = () => Math.max(maxWaitMs, 4 * lastRenderMs);
     const renderCtx = {
         ...(hooks.fetchInclude ? { fetchInclude: (t) => hooks.fetchInclude(t) } : {}),
         ...(hooks.resolveAsset ? { resolveAsset: (p) => hooks.resolveAsset(p) } : {}),
@@ -494,7 +495,7 @@ function createEditorShell(element, options) {
         cancel(renderTimer);
         let delay = ms ?? renderDelay();
         // continued typing does not hold the preview back for ever (LOW6)
-        if (ms === undefined && staleSince !== null)
+        if (ms === undefined && staleSince !== null && maxWait() !== Infinity)
             delay = Math.min(delay, Math.max(0, staleSince + maxWait() - clock()));
         renderTimer = later(() => { void renderNow(); }, delay);
     }

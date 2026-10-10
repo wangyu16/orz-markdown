@@ -150,6 +150,15 @@ export interface PreviewMapContext {
 export interface EditorPreviewOptions extends PreviewFrameOptions {
     /** The least pause after an edit before the preview renders (ms, default 150); it grows to twice the last render's time. */
     debounceMs?: number;
+    /**
+     * While edits continue, a render runs at least this often (ms, default 1000;
+     * it grows to 4 × the last render and frame time). `Infinity`: never render
+     * while keys keep arriving — only after a typing pause (`debounceMs`, grown
+     * to twice the last render). For a kind whose render blocks the page (a
+     * pagination reflow in the same-process frame), so typing never freezes on
+     * a forced render (2.3.0, E.32).
+     */
+    maxWaitMs?: number;
     /** How long the frame may take to start before the shell reports it (`error` `render`) and shows a notice. Default 8000. */
     readyTimeoutMs?: number;
     /**

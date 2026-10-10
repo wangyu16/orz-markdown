@@ -28,10 +28,12 @@ register({
     if (!video) return `<p class="youtube-embed-invalid" data-md="${directive}">${escapeHtml(`{{youtube ${id}}}`)}</p>\n`;
     const start = startSeconds(fromUrl ? id.slice(id.indexOf('?') + 1) : bare?.[2] ?? '');
     const query = start ? `?start=${start}` : '';
+    // The video's address, which paper prints in place of the frame (common.css's print layer; 2.3.0, M.30).
+    const url = `https://youtu.be/${encodeURIComponent(video)}${start ? `?t=${start}` : ''}`;
     // The id lands in a URL path: encode it so a stray quote or slash cannot
     // break out of the attribute or point the embed somewhere else.
     return (
-      `<div class="youtube-embed" data-md="${directive}">\n` +
+      `<div class="youtube-embed" data-md="${directive}" data-url="${escapeAttr(url)}">\n` +
       `  <iframe src="https://www.youtube.com/embed/${escapeAttr(encodeURIComponent(video))}${query}"\n` +
       `    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"\n` +
       `    referrerpolicy="strict-origin-when-cross-origin"\n` +

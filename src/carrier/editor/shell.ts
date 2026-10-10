@@ -139,6 +139,15 @@ export interface PreviewMapContext {
 export interface EditorPreviewOptions extends PreviewFrameOptions {
   /** The least pause after an edit before the preview renders (ms, default 150); it grows to twice the last render's time. */
   debounceMs?: number;
+  /**
+   * While edits continue, a render runs at least this often (ms, default 1000;
+   * it grows to 4 × the last render and frame time). `Infinity`: never render
+   * while keys keep arriving — only after a typing pause (`debounceMs`, grown
+   * to twice the last render). For a kind whose render blocks the page (a
+   * pagination reflow in the same-process frame), so typing never freezes on
+   * a forced render (2.3.0, E.32).
+   */
+  maxWaitMs?: number;
   /** How long the frame may take to start before the shell reports it (`error` `render`) and shows a notice. Default 8000. */
   readyTimeoutMs?: number;
   /**
@@ -417,6 +426,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   const nonce = typeof options.nonce === 'string' && options.nonce ? options.nonce : undefined;
   const previewOptions: EditorPreviewOptions = { ...(nonce ? { nonce } : {}), ...(options.preview ?? {}) };
   const debounceMs = previewOptions.debounceMs ?? 150;
+  const maxWaitMs = typeof previewOptions.maxWaitMs === 'number' && previewOptions.maxWaitMs >= 0 ? previewOptions.maxWaitMs : MAX_WAIT_MS;
   const navigateMode = previewOptions.mode === 'navigate';
   const uid = options.uid ?? header?.fields['uid']?.trim();
   const prefs: PreferenceStore = options.preferences ?? createPreferenceStore(uid, options.storage);
@@ -677,8 +687,8 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   let ackless = false;
   /** The pause before a render: at least `debounceMs`, and twice the last render's time (a slow renderer is not run per keystroke). */
   const renderDelay = (): number => Math.max(debounceMs, 2 * lastRenderMs);
-  /** While edits continue, a render runs at least this often (LOW6). */
-  const maxWait = (): number => Math.max(MAX_WAIT_MS, 4 * lastRenderMs);
+  /** While edits continue, a render runs at least this often (LOW6); `preview.maxWaitMs: Infinity` never forces one (E.32). */
+  const maxWait = (): number => Math.max(maxWaitMs, 4 * lastRenderMs);
   const renderCtx: RenderContext = {
     ...(hooks.fetchInclude ? { fetchInclude: (t: string) => hooks.fetchInclude!(t) } : {}),
     ...(hooks.resolveAsset ? { resolveAsset: (p: string) => hooks.resolveAsset!(p) } : {}),
@@ -737,7 +747,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     cancel(renderTimer);
     let delay = ms ?? renderDelay();
     // continued typing does not hold the preview back for ever (LOW6)
-    if (ms === undefined && staleSince !== null) delay = Math.min(delay, Math.max(0, staleSince + maxWait() - clock()));
+    if (ms === undefined && staleSince !== null && maxWait() !== Infinity) delay = Math.min(delay, Math.max(0, staleSince + maxWait() - clock()));
     renderTimer = later(() => { void renderNow(); }, delay);
   }
 

@@ -83,7 +83,17 @@ export declare function menuButton(doc: AppDocument, o: ButtonOptions & {
 }): MenuButton;
 /** The choices a setting offers for a text (2.3.0: `choicesFor(text)` when it has one, else `choices`). */
 export declare function settingChoices(control: SettingControl, text: string): ReadonlyArray<SettingChoice>;
-/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden). */
+/**
+ * `owner.hidden(text)`, asked at most once per text (2.3.0, A.29): the answer
+ * for the last text asked is kept per owner (a setting or an action), so a
+ * menu opened again, a sync after a pause and the bar's follower do not run a
+ * costly `hidden` again on the same text. A throwing one is hidden. `hidden`
+ * is a function of the text (FC-19 §8: `hidden(text)`).
+ */
+export declare function hiddenFor(owner: {
+    hidden?(text: string): boolean;
+}, text: string): boolean;
+/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden; asked once per text, A.29). */
 export declare function settingOffered(control: SettingControl, text: string): boolean;
 /** The header changes of choosing `value` (2.3.0: the setting's `apply(text, value)`, else `{ [key]: value }`). */
 export declare function settingChanges(control: SettingControl, text: string, value: string): Readonly<Record<string, HeaderChange>>;

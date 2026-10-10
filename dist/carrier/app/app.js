@@ -384,16 +384,7 @@ function bootCarrierApp(k, options = {}) {
     bar.append(title, brand);
     // a kind's actions: run, or (2.3.0) a submenu of entries; offered unless `hidden(text)` says so
     const actions = (k.actions ?? []).filter((a) => !!a && (typeof a.run === 'function' || typeof a.items === 'function'));
-    const offered = (a, t) => {
-        if (typeof a.hidden !== 'function')
-            return true;
-        try {
-            return !a.hidden(t);
-        }
-        catch {
-            return false;
-        }
-    };
+    const offered = (a, t) => !(0, widgets_js_1.hiddenFor)(a, t); // asked once per text (A.29)
     const runAction = (id) => {
         const a = actions.find((x) => x.id === id);
         if (!a || typeof a.run !== 'function')

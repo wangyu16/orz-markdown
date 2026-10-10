@@ -1065,7 +1065,51 @@ describe('2.3.0: action submenus, conditional actions and settings, block-valued
     shell.destroy();
   });
 
-  it('[A.25] a setting may write a block value: choicesFor(text) gives its choices at each opening (separators, per-choice checked toggles), apply(text, value) gives the header changes ({ multiline } values, removals, several keys) — one undoable step in the read view (Cmd/Ctrl+Z undoes it) and one undoable setHeader in an editor\'s toolbar; a radio choice still writes only a change; a refused change is a toast and changes nothing', async () => {
+  it('[A.29] hidden(text) is asked at most once per text (memoised by text) and never synchronously per keystroke: an editor toolbar\'s picker asks after the typing pause only, the handle\'s list opened again on the same text asks nobody again, a changed text asks once more', async () => {
+    const offered = (t: string) => t.includes('x_choices');
+    const settingHidden = vi.fn((t: string) => !offered(t));
+    const actionHidden = vi.fn((t: string) => !offered(t));
+    const VER: SettingControl = { key: 'x_ver', label: 'Version', choices: [{ value: 'a', label: 'A' }], current: () => '', hidden: settingHidden };
+    const b = boot(undefined, { kind: { settings: [THEME, VER], actions: [{ id: 'ver', label: 'Version…', hidden: actionHidden, run: () => undefined }] } });
+    await b.app.ready;
+    settingHidden.mockClear();
+    actionHidden.mockClear();
+    for (let i = 0; i < 4; i++) { b.app.menu.open(); b.items(); b.app.menu.close(); }
+    expect([settingHidden.mock.calls.length, actionHidden.mock.calls.length]).toEqual([1, 1]); // four openings, one text
+    b.app.setSetting({ x_choices: 'on' });
+    b.app.menu.open();
+    b.app.menu.close();
+    b.app.menu.open();
+    expect([settingHidden.mock.calls.length, actionHidden.mock.calls.length]).toEqual([2, 2]); // a new text: once more
+    b.app.dispose();
+    // an editor's toolbar: 30 keystrokes ask nothing until the pause, then once
+    const { doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
+    const el = doc.createElement('div');
+    doc.body.append(el);
+    const shell = createEditorShell(el as never, { text: TEXT, render: () => '', adapter: textareaAdapter(), preview: { assets: false } });
+    const hid = vi.fn((t: string) => !offered(t));
+    const s = attachSettings(shell, [THEME, { ...VER, hidden: hid }]);
+    expect(hid).toHaveBeenCalledTimes(1);
+    let typed = shell.getText();
+    for (let i = 0; i < 30; i++) {
+      typed += 'k';
+      shell.setText(typed);
+      expect(hid).toHaveBeenCalledTimes(1); // nothing synchronous per keystroke
+      await tick(20);
+    }
+    expect(hid).toHaveBeenCalledTimes(1); // still typing (20 ms apart, under the pause)
+    await tick(300);
+    expect(hid).toHaveBeenCalledTimes(2);
+    expect(hid.mock.calls.at(-1)![0]).toBe(typed);
+    shell.setText(typed + 'x');
+    shell.setText(typed); // back to the same text before the pause: nothing to ask
+    await tick(300);
+    expect(hid).toHaveBeenCalledTimes(2);
+    s.destroy();
+    shell.destroy();
+  });
+
+  it('[A.25]a setting may write a block value: choicesFor(text) gives its choices at each opening (separators, per-choice checked toggles), apply(text, value) gives the header changes ({ multiline } values, removals, several keys) — one undoable step in the read view (Cmd/Ctrl+Z undoes it) and one undoable setHeader in an editor\'s toolbar; a radio choice still writes only a change; a refused change is a toast and changes nothing', async () => {
     const lines = (t: string) => (readHeader(t)?.fields['dynamic_choices'] ?? '').split('\n').filter(Boolean);
     const VERSION: SettingControl = {
       key: 'dynamic_choices', label: 'Version', choices: [], current: () => '',

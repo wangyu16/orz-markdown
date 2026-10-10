@@ -579,3 +579,87 @@ describe('carrier/node: following next', () => {
     }
   }, 600_000);
 });
+
+// ── N.10 exact comparisons (ported from orz-paged T.7 / T.12 / T.20, round 1 of the paged loop) ──
+
+describe('carrier/node: the comparisons are exact', () => {
+  const fresh = (d: string, tag: string): Record<string, string> => ({ XDG_CACHE_HOME: join(d, `.none-${tag}`) }); // no record
+
+  it('[N.10] [N.5] assemble: an output differing only by trailing white space is not "the same text" (no trimming before the compare); --replaces is compared in full (a token sharing the first 16 digits is replaces-mismatch, for assemble and extract)', () => {
+    const d = folder();
+    const X = doc('X', 'doc-n1000000001');
+    write(join(d, 'x.md.html'), assemble(X));
+    for (const [i, t] of [`${X}\n`, `${X}\n\n  \n`, `\n${X}`, `${X.slice(0, -1)}  \n`].entries()) {
+      write(join(d, 'x.md'), t);
+      const r = json(cli(['assemble', 'x.md', '--json'], d, fresh(d, `a${i}`)));
+      expect(r, JSON.stringify(t)).toMatchObject({ ok: false, reason: 'twin-differs' });
+      expect(extract(text(join(d, 'x.md.html')))!.text).toBe(X);
+    }
+    // the token: full length, every digit
+    write(join(d, 'x.md'), `${X}agent\n`);
+    const held = sha256(X);
+    for (const at of [8, 16, 63]) {
+      const near = held.slice(0, at) + (held[at] === '0' ? '1' : '0') + held.slice(at + 1);
+      expect(json(cli(['assemble', 'x.md', '--replaces', near, '--json'], d, fresh(d, `t${at}`))), `digit ${at}`).toMatchObject({ ok: false, reason: 'replaces-mismatch' });
+      expect(extract(text(join(d, 'x.md.html')))!.text).toBe(X);
+    }
+    const twin = sha256(`${X}agent\n`);
+    write(join(d, 'x.md.html'), assemble(`${X}browser\n`));
+    const near = twin.slice(0, 16) + (twin[16] === '0' ? '1' : '0') + twin.slice(17);
+    expect(json(cli(['extract', 'x.md.html', '--replaces', near, '--json'], d, fresh(d, 'e')))).toMatchObject({ ok: false, reason: 'replaces-mismatch' });
+    expect(text(join(d, 'x.md'))).toBe(`${X}agent\n`);
+    expect(json(cli(['assemble', 'x.md', '--replaces', sha256(`${X}browser\n`), '--json'], d, fresh(d, 'ok')))).toMatchObject({ ok: true, replaced: 'token' });
+  });
+
+  it('[N.10] [N.6] extract: a twin that differs only by CR LF (or trailing white space) is a difference, never "the same text" (no line-ending normalisation before the compare)', () => {
+    const d = folder();
+    const C = doc('C', 'doc-n1000000002');
+    write(join(d, 'c.md.html'), assemble(`${C}body\n`));
+    for (const [i, t] of [`${C}body\n`.replace(/\n/g, '\r\n'), `${C}body\r\n`, `${C}body\n\n`].entries()) {
+      write(join(d, 'c.md'), t);
+      expect(json(cli(['extract', 'c.md.html', '--json'], d, fresh(d, `c${i}`))), JSON.stringify(t)).toMatchObject({ ok: false, reason: 'twin-differs' });
+      expect(text(join(d, 'c.md'))).toBe(t);
+    }
+    write(join(d, 'c.md'), `${C}body\n`);
+    expect(json(cli(['extract', 'c.md.html', '--json'], d, fresh(d, 'same')))).toMatchObject({ ok: true, backup: null });
+  });
+
+  it('[N.10] [N.4] git: a file assembled from a committed text with mixed line endings holds that text as stored and is a known state (git-head) — the stored form is compared, not the raw text; a pair whose file another input last wrote is never a known state through git (the last-writer gate)', () => {
+    const g = folder();
+    const git = gitIn(g);
+    if (!git) return;
+    const H = '{{nyml\nkind: document\nuid: doc-n1000000003\n}}\n\n';
+    const committed = `${H}a\r\nb\nc\n`; // mixed: the file stores it in one style
+    write(join(g, 'g.md'), committed);
+    git('add', 'g.md'); git('commit', '-q', '-m', 'g');
+    expect(cli(['assemble', 'g.md'], g, fresh(g, 'w')).code).toBe(0);
+    const held = extract(text(join(g, 'g.md.html')))!.text;
+    expect(held).not.toBe(committed); // stored ≠ raw
+    write(join(g, 'g.md'), `${committed}edited\n`);
+    expect(json(cli(['assemble', 'g.md', '--json'], g, fresh(g, 'r')))).toMatchObject({ ok: true, replaced: 'git-head' });
+    // the last-writer gate: x.md is committed and unchanged, but y.md (the same document, another text) last wrote x.md.html
+    const X = doc('X', 'doc-n1000000004');
+    const Y = `${X}from y\n`;
+    write(join(g, 'x.md'), X);
+    write(join(g, 'y.md'), Y);
+    git('add', 'x.md', 'y.md'); git('commit', '-q', '-m', 'xy');
+    const env = fresh(g, 'gate');
+    expect(cli(['assemble', 'x.md'], g, env).code).toBe(0);
+    expect(json(cli(['assemble', 'y.md', '-o', 'x.md.html', '--replaces', sha256(X), '--json'], g, env))).toMatchObject({ ok: true, replaced: 'token' });
+    const r = json(cli(['extract', 'x.md.html', '--json'], g, env));
+    expect(r).toMatchObject({ ok: false, reason: 'twin-differs' });
+    expect(text(join(g, 'x.md'))).toBe(X);
+  }, 120_000);
+
+  it('[N.10] [N.2] writeOut keeps the replaced file\'s mode whatever the umask (chmod after the write)', () => {
+    const d = folder();
+    const f = join(d, 'm.md');
+    write(f, 'old');
+    chmodSync(f, 0o664);
+    const was = process.umask(0o077);
+    try { writeOut(f, 'new'); } finally { process.umask(was); }
+    expect(text(f)).toBe('new');
+    expect(statSync(f).mode & 0o777).toBe(0o664);
+    noTemp(d);
+  });
+});

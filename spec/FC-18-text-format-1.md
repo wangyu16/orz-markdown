@@ -202,8 +202,24 @@ FC-01 unchanged.
   kinds in today's renderer) are found with orz-markdown's token-based scanner
   (never a raw string search).
 - Settings move from `{{nyml kind: document}}` into the header (§5.1).
-- Templates are **text skeletons** (header + body); applying a template is a
-  text edit, never hidden state.
+- Templates (owner, 2026-10-09; amended in orz-markdown 2.3.0) are two
+  things, both visible in the text:
+  - **Creating from a template is a text operation.** A template is a text
+    skeleton (header + body); "New document from template…" saves a new
+    file whose text is that skeleton (with a uid of its own). It never
+    replaces, comments out or otherwise edits the open document; copying
+    content across is the reader's own text edit.
+  - **`template:` in the header selects layout defaults.** A paged
+    document's settings resolve in three layers, later winning: the
+    carrier's built-in defaults → the defaults of the template the header
+    names → the header's own keys (§5.1). A key written in the header always
+    wins over the template; removing `template:` (or naming one the carrier
+    does not have) removes only that middle layer. The layer holds layout
+    settings only (page, typography and page-furniture keys of §5.1) — never
+    body content — and its values are the carrier's documented defaults for
+    that name, not state kept anywhere outside the text: the same text
+    renders the same with the same carrier. Choosing a template in the
+    chrome is one header edit (`template: <name>`), undoable like any other.
 
 ## 8. The assembled file
 

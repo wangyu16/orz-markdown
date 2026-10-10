@@ -371,10 +371,30 @@ export function settingChoices(control: SettingControl, text: string): ReadonlyA
   return control.choices;
 }
 
-/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden). */
+/** The last text each `hidden(text)` was asked about, and its answer (2.3.0, A.29). */
+const hiddenMemo = new WeakMap<object, { fn: (text: string) => boolean; text: string; hidden: boolean }>();
+
+/**
+ * `owner.hidden(text)`, asked at most once per text (2.3.0, A.29): the answer
+ * for the last text asked is kept per owner (a setting or an action), so a
+ * menu opened again, a sync after a pause and the bar's follower do not run a
+ * costly `hidden` again on the same text. A throwing one is hidden. `hidden`
+ * is a function of the text (FC-19 §8: `hidden(text)`).
+ */
+export function hiddenFor(owner: { hidden?(text: string): boolean }, text: string): boolean {
+  const fn = owner.hidden;
+  if (typeof fn !== 'function') return false;
+  const m = hiddenMemo.get(owner);
+  if (m && m.fn === fn && m.text === text) return m.hidden;
+  let hidden: boolean;
+  try { hidden = !!fn.call(owner, text); } catch { hidden = true; }
+  hiddenMemo.set(owner, { fn, text, hidden });
+  return hidden;
+}
+
+/** Whether a setting is offered for a text (2.3.0: not when its `hidden(text)` says so; a throwing one is hidden; asked once per text, A.29). */
 export function settingOffered(control: SettingControl, text: string): boolean {
-  if (typeof control.hidden !== 'function') return true;
-  try { return !control.hidden(text); } catch { return false; }
+  return !hiddenFor(control, text);
 }
 
 /** The header changes of choosing `value` (2.3.0: the setting's `apply(text, value)`, else `{ [key]: value }`). */

@@ -52,6 +52,8 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   nonce })` (2.2.0): the same enhancement for content rendered in a page (a
   carrier's read view), loading only the libraries the content needs; keep
   its pass (`enhanceRoot`) and `ENHANCE_BODY` doing the same thing (M.8, M.24).
+  Libraries are probed by their API, never by the global's name (an element
+  id such as a heading "Mermaid" shadows `window.mermaid`; M.29).
   `{ static: true }` (2.3.0, M.28) is a page-only last step (drawn canvases
   → images, no runtime) for print/pagination; the frame has no static mode.
 - `src/themes.ts` — `THEMES` (ids, picker names, colour schemes), `DEFAULT_THEME`,
@@ -78,7 +80,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   Node-only CLI core (git/known states, pair records, backups, atomic writes,
   file includes, the overwrite guards, reason codes and `next`) is its own
   entry, `src/carrier/node/` = `orz-markdown/carrier/node` (2.3.0,
-  spec/carrier-node.md, N.1–N.9): Node built-ins only via
+  spec/carrier-node.md, N.1–N.10): Node built-ins only via
   `process.getBuiltinModule`, and NO other entry may import it (N.1 bundles
   the browser entries with esbuild to prove it). Its tests drive a reference
   CLI built only from the API (`tests/helpers/node-cli.ts`, in process).
@@ -176,7 +178,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   (`services`); the conformance stub's broken builds use that seam.
   `widgets.ts` holds the menu button (2.3.0: one level of submenus), setting
   picker, `attachSettings`, `reviewProposal`, `attachAiMenu`,
-  `followPresentation`. 2.3.0 (orz-paged's kit gaps, A.23–A.28): action
+  `followPresentation`. 2.3.0 (orz-paged's kit gaps, A.23–A.29; `hidden(text)` asked once per text via `hiddenFor`, A.29): action
   submenus (`items`) and conditional actions (`hidden`), settings with
   `choicesFor` / `apply` (block values) / `hidden`, reader controls with
   named choices (`readerControls.choices`, preference `reader.<key>`),

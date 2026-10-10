@@ -7,7 +7,7 @@ other work, and the vocabulary they refuse in. Lifted from orz-mdhtml 1.0's
 KIT GAP). Each carrier keeps its commands, their wording and extras (help
 texts, templates, its 0.x forms); the rules below are the same in every
 carrier. Implementation note, binding for the carriers that adopt it; claims
-N.1–N.9, tests `tests/carrier-node.test.ts` (through a reference CLI built
+N.1–N.10, tests `tests/carrier-node.test.ts` (through a reference CLI built
 only from this API, `tests/helpers/node-cli.ts`).
 
 ## 1. Boundary
@@ -65,7 +65,11 @@ A text that would be replaced counts as a KNOWN STATE — replaced without
 
 Comparisons are exact: a file's text against the twin as a file stores it
 (`storedText`: mixed line endings in one style); a twin's text raw (a
-line-ending change is a change).
+line-ending change is a change). Nothing is trimmed or normalised before a
+compare (white space is a difference), a token is compared in full (all 64
+digits), git's versions are compared in their stored form against a file's
+text, and git counts for a twin only while no other input last wrote its file
+(N.10).
 
 **The uid-identity gate.** Neither git nor the record proves that a file holds
 the SAME DOCUMENT as the twin — another document's file may have been copied
@@ -78,7 +82,8 @@ sides is `output-differs` with no `next`.
 
 - `readText(path)` — exact UTF-8 (BOM kept), refusing invalid UTF-8.
 - `writeOut(path, data)` — a temporary file beside the target, then a rename;
-  an existing file keeps its mode, a symbolic link stays a link (its target
+  an existing file keeps its mode (set after the write, so the umask does not
+  narrow it; N.10), a symbolic link stays a link (its target
   is replaced), missing parent folders are created; failure: `write-failed`,
   nothing replaced.
 - `backup(path, io)` — before a `--force` replacement: `<file>~`, else the
