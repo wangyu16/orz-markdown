@@ -273,7 +273,8 @@ export interface SettingControl {
   key: string;
   /** Accessible name of the picker ("Theme"). */
   label: string;
-  icon?: IconName;
+  /** A kit icon name, or a kind's own `KindIcon` (drawn the same way as for actions). */
+  icon?: IconName | KindIcon;
   choices: ReadonlyArray<SettingChoice>;
   /** The value a text has now (its default when the header has none). */
   current(text: string): string;
