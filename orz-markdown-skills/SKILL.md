@@ -183,13 +183,17 @@ header tools, `readDocument`, `assembleEnvelope` / `extract`),
 `orz-markdown/carrier/read` (parser-free reading), `orz-markdown/carrier/shell`
 (save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
 (the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
-≥ 2.2.0), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
+≥ 2.2.0; ≥ 2.3.0 the reader's Cmd/Ctrl+P as a `print` event and
+`printDocument(html)` to print the document rather than the app's page — see
+`references/embedding.md` §4), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
 `startCarrier(kind)`; a file's read view shows one pencil at the bottom-left
 whose list holds every operation — ≥ 2.3.0 also a kind's submenus such as
 paged's "New document from template…", options that appear only when the
 document offers them such as paged's Version, and reader choices such as a
-page zoom, which stay in the browser and never change the text) and
-`orz-markdown/carrier/conformance` (test harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
+page zoom, which stay in the browser and never change the text; Cmd/Ctrl+P
+runs the kind's Print action), `orz-markdown/carrier/node` (≥ 2.3.0, Node
+only: the CLI core carriers share — overwrite guards, backups, atomic writes,
+includes) and `orz-markdown/carrier/conformance` (test harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
 bundled themes: `THEMES` (id, name, light/dark), `DEFAULT_THEME`, `isThemeId`,
 `themeInfo`. They are for carrier and host builders; their binding specs are in
 the repository's [`spec/`](https://github.com/wangyu16/orz-markdown/tree/main/spec) folder.
@@ -246,7 +250,7 @@ Each plugin is **block** or **inline**, not both. Block (`youtube`, `mermaid`, `
 | **emoji** | `em` | `{{emoji wave}}` · `{{em tada}}` |
 | **space** | — | `{{space 4}}` → 4rem-wide inline-block spacer |
 | **qrcode** | `qr` | `{{qr https://example.com}}` (click-to-expand SVG) |
-| **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe) |
+| **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe; prints as its address ≥ 2.3.0) |
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
 | **smiles** | `sm` | `{{smiles C1=CC=CC=C1}}` (chemical structure) |
 | **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (any Chart.js type; default bar) |

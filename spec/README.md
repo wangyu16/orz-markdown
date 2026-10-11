@@ -20,10 +20,13 @@ Implementation: `src/carrier/` — `header.ts` (`readHeader`, `editHeader`,
 `uid.ts`), `links.ts` (`twinHref` and the `env.orzTwinLinks` render rule),
 `envelope.ts` (`assembleEnvelope`), `read.ts` (`extract`, `readIslandFromDom`,
 `decodeText`; parser-free), `text.ts` (line-ending, surrogate and decoding
-helpers), `parser.ts` (the kit's private parser), `index.ts`. Exported as
+helpers), `sha256.ts` (2.3.0: synchronous `sha256`), `legacy.ts` (2.3.0: the
+0.x island reader `readLegacyIsland`), `inspect.ts` (2.3.0: the
+kind-independent core of a carrier's `inspect`), `parser.ts` (the kit's
+private parser), `index.ts`. Exported as
 `orz-markdown/carrier` (`src/carrier.ts`) and, for readers that need no parser,
 `orz-markdown/carrier/read`; never imported by the parser entry. Shared reader:
-`src/nyml-body.ts`. Claims K.1–K.22 (and M.22, M.23) in `notes/CLAIMS.md`,
+`src/nyml-body.ts`. Claims K.1–K.27 (and M.22, M.23) in `notes/CLAIMS.md`,
 tests in `tests/carrier-kit.test.ts`.
 
 The shell runtime is `src/carrier/shell/` — `save.ts` (`createSaver`, the
@@ -56,10 +59,11 @@ owner decision B-2, FC-19 §8.4 — its bridge, the authenticated channel (a per
 the bridge reads first; keys, links and scrolls act only through the port — a document's
 scripts taking the keyboard focus in the preview is an accepted limit, FC-19 §5) and the
 message protocol, asset rewriting, CSP
-nonce and hashes, scroll-sync maths), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
+nonce and hashes, scroll-sync maths), `print.ts` (2.3.0: `printDocument`, a
+whole document printed from a sandboxed hidden frame), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.34, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.37, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).
@@ -93,3 +97,14 @@ against the stub carrier, which is built on it). In-page enhancement for a
 read view is `enhanceDocument` in `orz-markdown/preview-frame` (M.24;
 `disposeEnhancement` M.26, `swapStylesheet` M.27); the
 theme list is `THEMES` (main entry and `orz-markdown/themes`, M.25).
+
+The carrier CLI core is `src/carrier/node/` (2.3.0) — `tool.ts`
+(`carrierNode`: binds the core to one tool's name, kind and cache),
+`known-states.ts` (git and the CLI's pair / last-writer records), `files.ts`
+(`readText`, atomic `writeOut`, `backup`), `includes.ts` (file includes from
+the twin's folder, `includePlan`), `cli.ts` (reasons, `CliError`, `next`
+commands, exit codes, output), `builtins.ts` (Node built-ins through
+`process.getBuiltinModule`) — exported as `orz-markdown/carrier/node` (Node
+only; no other entry imports it). Claims N.1–N.10, tests in
+`tests/carrier-node.test.ts` (through a reference CLI in
+`tests/helpers/node-cli.ts`).

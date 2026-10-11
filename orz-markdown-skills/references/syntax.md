@@ -189,7 +189,7 @@ print("Hello")
 ::::
 ````
 
-Outer fence uses four colons `::::`. Inner tab panes use three `:::`. The text after `::: tab` is the button label (set as `data-label` attribute). JavaScript initializes the tab bar — without JS all panels fall back to block display.
+Outer fence uses four colons `::::`. Inner tab panes use three `:::`. The text after `::: tab` is the button label (set as `data-label` attribute). JavaScript initializes the tab bar — without JS all panels fall back to block display. Print shows every pane, each after its label as a small heading (≥ 2.3.0; an unlabeled pane prints as "Tab N").
 
 ### Columns
 
@@ -361,7 +361,7 @@ Renders an SVG QR code inside `<span class="qrcode">`. A code inside a sentence 
 {{yt https://youtu.be/dQw4w9WgXcQ}}
 ```
 
-Accepts a bare video ID (optionally `ID?t=42`) or a full YouTube URL; a `t=`/`start=` time (`90`, `1m30s`) becomes the embed's start. A body that is not a video id (a playlist URL) renders as its directive text. Renders a `<div class="youtube-embed">` around the iframe; common.css makes it a responsive 16:9 box. Embeds are hidden in print.
+Accepts a bare video ID (optionally `ID?t=42`) or a full YouTube URL; a `t=`/`start=` time (`90`, `1m30s`) becomes the embed's start. A body that is not a video id (a playlist URL) renders as its directive text. Renders a `<div class="youtube-embed" data-url="https://youtu.be/<id>">` around the iframe; common.css makes it a responsive 16:9 box. In print (≥ 2.3.0) the embed prints its address as a line of text — `YouTube video: https://youtu.be/<id>` (with `?t=` when a start is set) — instead of a blank frame.
 
 ---
 

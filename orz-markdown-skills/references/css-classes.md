@@ -114,7 +114,7 @@ common.css trims the first child's top margin and the last child's bottom margin
 | `.tabs-bar` | `<div>` | Tab button bar injected by JS. |
 | `.tabs-bar-btn` | `<button>` | Individual tab button. |
 | `.tabs-bar-btn.active` | `<button>` | Currently selected tab button. |
-| `.tab` | `<div data-label="…">` | Individual tab panel. common.css hides it unless `.active`. |
+| `.tab` | `<div data-label="…">` | Individual tab panel. common.css hides it unless `.active`; print shows every panel after its label (`::before`, "Tab N" when unlabeled; ≥ 2.3.0). |
 | `.tab.active` | `<div>` | Currently visible panel (shown by common.css). |
 | `.tabs:not([data-js]) > .tab` | `<div>` | No-JS fallback: common.css shows every panel. A theme may add a separator between them. |
 
@@ -143,7 +143,7 @@ common.css trims the first child's top margin and the last child's bottom margin
 
 | Class | Element | Description |
 |---|---|---|
-| `.youtube-embed` | `<div>` | 16:9 wrapper: common.css sizes it (`aspect-ratio`) and fills it with the iframe. Theme decorates only (background, border, radius). |
+| `.youtube-embed` | `<div data-url="…">` | 16:9 wrapper: common.css sizes it (`aspect-ratio`) and fills it with the iframe; in print (≥ 2.3.0) it prints `YouTube video: <data-url>` instead of the frame. Theme decorates only (background, border, radius). |
 | `.youtube-embed-invalid` | `<p>` | A `{{youtube}}` body that is no video id (a playlist URL): its directive as text, with `data-md`. Unstyled by default. |
 
 ### Mermaid diagram

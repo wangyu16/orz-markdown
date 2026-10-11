@@ -7,246 +7,160 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned as **2.3.0**: the carrier-kit gaps the orz-paged 1.0 rebuild found
-(family plan REBUILD §3b, the `KIT GAP` notes in orz-paged's sources). All
-additive for `^2.2.0` consumers (orz-mdhtml 1.0.0's test suite passes
-unchanged against it); the parser's `md.render` output is unchanged except
-one added attribute (`data-url` on a `{{youtube}}` embed, for print).
+## [2.3.0] - 2026-10-11
+
+The carrier-kit gaps the orz-paged 1.0 rebuild found (family plan REBUILD
+§3b), a new Node-only entry for the carriers' shared CLI core, a print
+helper, print rules for tabs and YouTube embeds, and a security fix in the
+editor's preview bridge. **Additive for `^2.2.0` consumers**: no export was
+removed or changed incompatibly, and orz-mdhtml 1.0.0's suite passes
+unchanged against it. The parser's `md.render` output changes in one place:
+a `{{youtube}}` embed gains a `data-url` attribute (used by print). The
+pinned CodeMirror bundle `vendor/codemirror6.js` has the same bytes as in
+2.2.0 (only its URL moves to `orz-markdown@2.3.0/vendor/codemirror6.js`).
+
+**Carriers must rebuild against 2.3.0 to get the preview-bridge security fix**
+(orz-mdhtml 1.0.0 → 1.0.1). `PREVIEW_BRIDGE_HASH` changed: a hash-based CSP
+must use the exported constant or `previewScriptHashes()`, never a copied
+value.
 
 ### Added
 
-**`orz-markdown/carrier/app`** ([spec/carrier-app.md](spec/carrier-app.md) §3.4,
-§4.5, §4.10; claims A.23–A.28):
-
-- **Action submenus** — `CarrierAction.items?(app) → CarrierActionItem[]`
-  (`{ id?, label, checked?, disabled?, separator?, run(app) }`): a submenu in
-  the handle's list (hover, tap, ArrowRight/Enter open it on its checked
-  entry; ArrowLeft/Escape close it) and, with `inEdit`, in edit mode (a
-  submenu of More, or a menu button of the bar for a `bar` action). Entries
-  run with the app; a failing one is a toast; no entries: disabled.
-  `CarrierAction.run` is now optional (an action with neither `run` nor
-  `items` is not offered). `menuButton` items accept `items()` (one level).
-- **Conditional actions** — `CarrierAction.hidden?(text)`: offered only while
-  it returns false, re-evaluated as the text changes (each opening of the
-  handle's list and More; an edit-mode bar button after a pause in typing).
-- **Settings that write block values** — `SettingControl.apply?(text, value)
-  → Record<string, HeaderChange>` (any keys, `{ multiline }` values,
-  removals; one undoable edit), `choicesFor?(text)` (choices read at each
-  opening), per-choice `checked` toggles and `separator`, and `hidden?(text)`
-  (also followed by `attachSettings` in an editor's toolbar). Helpers
-  `settingChoices`, `settingOffered`, `settingChanges`.
-- **`hidden(text)` asked once per text** (round 1 of the paged loop; claim
-  A.29) — `hiddenFor(owner, text)`: a setting's or action's `hidden` may be
-  costly (paged's Version parses the document), so the kit keeps the answer
-  for the last text asked per owner; reopening menus on the same text asks
-  nothing, and it is never asked synchronously per keystroke (after the
-  typing pause only).
-- **Reader controls with named choices** — `readerControls.choices:
-  ReaderChoiceControl[]` (`{ key, label, icon?, choices: { id, label }[],
-  default, apply(view, id) }`): a submenu in the handle's list, stored per
-  uid as the reader preference `reader.<key>` (validated against the ids),
-  applied at boot and on each choice, never in the document;
-  `CarrierApp.readerChoice(key)` / `setReaderChoice(key, id)`.
-- **New document with a text** — `CarrierApp.newDocument({ text?, name? })`
-  saves a kind's text (a template) as a new file; a text without a uid (or
-  with this file's) gets a new one; `name` is the suggested file name.
-- **Cmd/Ctrl+P runs the kind's Print action** (round 2 of the paged loop;
-  §4.8, claim A.30) — the action with id `print` (offered for the text) runs
-  from the read view, edit mode's chrome, the editor and its preview frame;
-  a read-view action (not `inEdit`) runs after leaving edit mode (the text
-  kept, unsaved if it was), so it prints the read view, never the blank
-  editor page. Without one the read view's key is the browser's and edit
-  mode prints the page (`window.print()`). A carrier needs no key listener
-  of its own for it (orz-paged's edit-mode Cmd/Ctrl+P listener can go).
-
-**`orz-markdown/carrier`** (claims K.23–K.27):
-
-- `normalizeHeader(text)` — FC-18 §5's legacy merge (`kind: meta` +
-  `kind: document` pair → one header; lone `kind: meta` → `kind: document`)
-  without an edit.
-- `lintHeader(text, { kind?, themes? })` and `readDocument(text, { kind,
-  themes })`: `unknown-theme` against the kind's own theme list, for any kind
-  (`lintHeader(text, kind)` still works; md without `themes` as before).
-- What orz-mdhtml and orz-paged copied: `sha256(text)` (synchronous,
-  isomorphic); the legacy 0.x island reader `readLegacyIsland(html, {
-  generator, config })` with `rawElements`, `rawAttr`, `hasRawAttr`,
-  `decodeEntities`, `generatorOf`; the kind-independent core of `inspect` —
-  `looksHtml`, `shellWord`, `scriptElement`, `assembledStructure`,
-  `storedText`, `heldText`, `twinCheck`.
-
 **`orz-markdown/carrier/node`** (new entry, Node only;
-[spec/carrier-node.md](spec/carrier-node.md); claims N.1–N.9) — the CLI core
-orz-mdhtml 1.0 and orz-paged copied (`src/{known-states,includes,cli}.ts`),
-bound to one tool by `carrierNode({ name, kind, cacheName?, textSuffix?,
-readLegacy?, storedText? })`:
+[spec/carrier-node.md](spec/carrier-node.md)) — the CLI core orz-mdhtml 1.0
+and orz-paged had copied, bound to one tool by `carrierNode({ name, kind,
+cacheName?, textSuffix?, readLegacy?, storedText? })`:
 
-- the overwrite guards `assembledOutputCheck` and `textOutputCheck`, `guard`,
-  the uid-identity gate (`sameDocument`, `uidOf`), `otherName`, `shown`,
-  `commandLine`, `libReason`, `changedAfter`, `earlierSource`;
-- known earlier states: git (HEAD, index, 20 recent commits, 8 s budget) and
-  the CLI's pair and last-writer records under `$XDG_CACHE_HOME/<cache>` or
-  `~/.cache/<cache>` (an unwritable cache is not read; an unrecorded pair
-  warns with the `--replaces` token) — `rememberPair`, `earlierStateOf`,
-  `twinStateOf`, `lastWriter`, `cleanInGit`;
-- files: `readText`, `writeOut` (atomic; mode and symbolic link kept;
-  folders created), `backup` (`~`, `~1`…; never through a link; identical
-  bytes reused);
-- includes: `includeTargets`, `resolveFileIncludes` (the twin's folder only),
-  `keepReferenced`, `unresolvedIncludes`, `includePlan` (assemble's
-  keep / `--resolve-includes` / stale / unresolved decision with its warnings);
-- the vocabulary: `Reason` / `REASONS`, `CliError`, `Next`, `EXIT_*`,
-  `cliIo`, `emit`, `reportFailure`, `sh`, `assembleArgs`, `replacesToken`.
+- the overwrite guards (`assembledOutputCheck`, `textOutputCheck`, `guard`)
+  with the uid-identity gate and `--replaces` tokens;
+- known earlier states: git (HEAD, index, recent commits) and the CLI's pair
+  and last-writer records under `$XDG_CACHE_HOME/<cache>` or
+  `~/.cache/<cache>`;
+- files: `readText`, atomic `writeOut` (mode and symbolic link kept),
+  `backup` (`~`, `~1`, …);
+- includes from the twin's folder (`resolveFileIncludes`, `includePlan`, …);
+- the shared vocabulary: `REASONS`, `CliError`, `Next`, `EXIT_*`, `emit`,
+  `reportFailure`, `sh`, `assembleArgs`, `replacesToken`.
 
-Node built-ins only through `process.getBuiltinModule`; no other entry
-imports it, so no browser bundle holds it (N.1). The strongest CLI tests of
-both carriers (T.7, T.9, T.11, T.12, T.14, T.16–T.21 — "following every
-`next` verbatim never loses a text") run against it through a reference CLI.
+It reaches Node built-ins only through `process.getBuiltinModule` and no
+other entry imports it, so no browser bundle holds it.
 
-**`orz-markdown/carrier/editor`** (round 2 of the paged loop, claims E.33,
-E.34):
+**`orz-markdown/carrier/app`** ([spec/carrier-app.md](spec/carrier-app.md)):
 
-- **The `print` event** — `shell.on('print', ({ source }) => …)`, `source`
-  `'preview' | 'editor'`: the reader's Cmd/Ctrl+P (not with Shift or Alt).
-  The default bridge now reports Cmd/Ctrl+P from the preview frame through
-  its authenticated port as a trusted key (`orz-preview-key { key: 'p' }`,
-  FC-19 §8.4) and prevents the frame's own print — before, with the focus
-  in the preview the key went to the frame and the host never saw it
-  (orz-paged then printed its editor page: a blank sheet). With a listener
-  the shell prevents the browser's print and the listener decides; without
-  one a key from the frame prints the host page (`window.print()`) and a key
-  in the editor stays the browser's (unchanged). Window messages still never
-  act. The bridge changed, so **`PREVIEW_BRIDGE_HASH` changed** (a
-  hash-based CSP must use the exported constant or `previewScriptHashes()`).
-- **`preview.firstAckWaitMs`** (default 1500 ms, at most 10 s) — how long a
-  render waits for a frame that has not acknowledged one yet. And an
-  acknowledgement that arrives after that wait now records the render's
-  time: a long first layout (orz-paged's preview) used to count as
-  unacknowledged, so the next render was paced by the parent's render time
-  only.
+- **Action submenus** — `CarrierAction.items?(app)` returns entries
+  (`{ id?, label, checked?, disabled?, separator?, run(app) }`) shown as a
+  submenu in the read view's list and in edit mode; `CarrierAction.run` is
+  now optional. `menuButton` items accept `items()` (one level).
+- **Conditional actions and settings** — `hidden?(text)` on an action or a
+  setting; re-evaluated as the text changes, asked at most once per text
+  (`hiddenFor(owner, text)`), never per keystroke.
+- **Settings that write block values** — `SettingControl.apply?(text, value)`
+  (any keys, multi-line values, removals; one undoable edit),
+  `choicesFor?(text)`, per-choice `checked` and `separator`; helpers
+  `settingChoices`, `settingOffered`, `settingChanges`. `SettingControl.icon`
+  accepts a `KindIcon`.
+- **Reader controls with named choices** — `readerControls.choices` (e.g. a
+  page zoom): stored per document as a reader preference, never in the text;
+  `CarrierApp.readerChoice(key)` / `setReaderChoice(key, id)`.
+- **`CarrierApp.newDocument({ text?, name? })`** — save a kind's text (a
+  template) as a new file with a uid of its own.
+- **Cmd/Ctrl+P runs the kind's Print action** (the action with id `print`)
+  from the read view, edit mode, the editor and its preview; a read-view
+  action runs after leaving edit mode, so it prints the document, not the
+  blank editor page. Without one, the browser's print is unchanged in the
+  read view and edit mode prints the page.
 
-**`orz-markdown/carrier/editor`** (round 3 of the paged loop, claim E.37):
-**`printDocument(html, { nonce?, readyTimeoutMs?, document?, title? })`**,
-`PRINT_SANDBOX`, `PRINT_READY_TIMEOUT_MS` — print a whole document (an
-assembled file, a carrier's print document) from an app's page without
-printing the page: a hidden `srcdoc` frame sandboxed `allow-scripts
-allow-modals` (opaque origin, never `allow-same-origin`) waits for the load,
-the fonts and the document's `window.__orzPrintReady` (a carrier's paginator
-resolves it), calls its own `print()` and goes away; resolves `true` after the
-print, `false` when the frame never speaks (a CSP that blocks its script —
-pass `nonce`). An app listens to the editor's `print` event and calls it
-(FC-19 §8.4 "Printing the document", embedding reference §4); without a
-listener the editor still prints the host page.
+**`orz-markdown/carrier/editor`**
+([FC-19 §8](spec/FC-19-editor-component.md)):
 
-**`orz-markdown/carrier/editor`** (claim E.32): **`preview.maxWaitMs`** — while
-edits continue a render is forced at least every `max(maxWaitMs, 4 × the
-last render)` (default 1000, as before); `Infinity` never forces one while
-keys keep arriving, so a kind whose render blocks the page (orz-paged's
-Paged.js reflow in the same-process frame) renders only after a typing
-pause and typing never freezes. Frame-acknowledged pacing is unchanged.
+- **`printDocument(html, { nonce?, readyTimeoutMs?, document?, title? })`**,
+  `PRINT_SANDBOX`, `PRINT_READY_TIMEOUT_MS` — print a whole document (an
+  assembled file, a carrier's print document) from an app's page: a hidden
+  `srcdoc` frame sandboxed `allow-scripts allow-modals` (opaque origin) waits
+  for the fonts and the document's `window.__orzPrintReady`, prints and goes
+  away; resolves `false` when the frame never answers (pass `nonce` under a
+  CSP).
+- **The `print` event** — `shell.on('print', ({ source }) => …)` for the
+  reader's Cmd/Ctrl+P in the editor or the preview (the preview bridge now
+  reports it through its authenticated port). With a listener the browser's
+  print is prevented and the listener decides; without one a key from the
+  preview prints the host page and a key in the editor stays the browser's.
+- **`preview.maxWaitMs`** (default 1000, as before; `Infinity` renders only
+  after a typing pause) and **`preview.firstAckWaitMs`** (default 1500 ms,
+  at most 10 s) for kinds whose render is slow (orz-paged's pagination).
 
-**Print layer of `themes/common.css`** (claim M.30): each tab pane prints
-after its label as a small heading (an unnamed one as "Tab N"), and a
-`{{youtube}}` embed prints its address (`YouTube video: https://youtu.be/<id>`,
-from the new `data-url` attribute) instead of a blank 16:9 frame. The screen
-is unchanged.
+**`orz-markdown/carrier`** ([FC-18](spec/FC-18-text-format-1.md)):
 
-**`orz-markdown/preview-frame`** (claim M.28): `enhanceDocument(root, {
-static: true })` for print and pagination — draws everything, then turns every
-drawn chart and SMILES canvas into an image (`data-orz-frozen`, class,
-`data-md` breadcrumb, accessible name and width kept; charts stopped,
-destroyed, drawn at ≥ 2× pixel ratio), skips the interactive runtime unless
-`runtime: true`; the result counts the images (`frozen`).
+- `normalizeHeader(text)` — the legacy `kind: meta` merge without an edit.
+- `lintHeader(text, { kind?, themes? })` and `readDocument(text, { kind,
+  themes })` lint `unknown-theme` against any kind's own theme list
+  (`lintHeader(text, kind)` still works).
+- The helpers carriers had copied: a synchronous, isomorphic `sha256(text)`;
+  the legacy 0.x island reader `readLegacyIsland(html, { generator, config })`
+  (with `rawElements`, `rawAttr`, `hasRawAttr`, `decodeEntities`,
+  `generatorOf`); the kind-independent core of `inspect` (`looksHtml`,
+  `shellWord`, `scriptElement`, `assembledStructure`, `storedText`,
+  `heldText`, `twinCheck`).
 
-### Fixed
+**`orz-markdown/preview-frame`**: `enhanceDocument(root, { static: true })`
+for print and pagination — draws everything, then turns drawn charts and
+SMILES canvases into images (accessible name, width and `data-md` kept) and
+skips the interactive runtime unless `runtime: true`; the result counts the
+images (`frozen`).
 
-- **Preview port theft through overridden built-ins** (security; round 3 of
-  the paged loop; claim E.35, FC-19 §8.4). A document script in the preview
-  could replace a built-in the bridge called after it — the
-  `MessageEvent.prototype.data` getter, an `Event` getter,
-  `addEventListener`, a `MessagePort` method, `Function.prototype.call`,
-  `Reflect.apply`, … — or walk `fn.caller` / `fn.arguments` from a page hook
-  or any DOM method the bridge called, and so get the event carrying the
-  private port; it could then post forged keys (an unsolicited save, a print,
-  a view change) and a link (a phishing href to `resolveLink`) as the
-  reader's own. Overridden key getters, `Element.prototype.closest` and
-  `Date.now` could also turn the reader's plain key into a save, a plain
-  click into a link, or keep the scroll window open. The default bridge now
-  captures every native it uses at its first statement (before any document
-  content) and calls them through the captured `Reflect.apply`, listens on
-  the port with the captured `addEventListener`, runs in strict mode,
-  freezes what it exposes and ignores window messages once it holds the
-  port. Real-Chrome attack tests override each of those built-ins; the
-  round-2 bridge leaks to four of them, the new one to none. The accepted
-  limit stays (a document script may take the focus). **`PREVIEW_BRIDGE_HASH`
-  changed.** Carriers pick the new bridge up when they rebuild against
-  2.3.0 (orz-mdhtml 1.0.0 needs a 1.0.1 for it).
-- **Preview port theft through `window.event`** (security; round 4 of the
-  paged loop; claim E.35, FC-19 §8.4). The round-3 bridge handled the
-  shell's message inside the port's listener, where `window.event` is the
-  port's message event (its `target` is the port) — also for the
-  microtasks queued during it. Any document code that ran during the render
-  (a MutationObserver, an overridden `String` or `String.prototype.replace`,
-  an `Object.prototype` getter, a custom element's `connectedCallback`, the
-  `scrollingElement` getter, an `innerHTML` / template `content` override, a
-  page hook) could read `window.event.target` and forge saves, prints, view
-  changes and links. The bridge now reads the data, drops the event and
-  handles the message in a captured `setTimeout`, so no document code runs
-  inside its listeners (window messages and in-page `#` links the same way);
-  `__orzPreview` and `__orzLibsReady` are now non-writable, non-configurable
-  window properties. New tests: the eight `window.event` vectors and
-  script-dispatched (untrusted) input in Chrome, the round-3 bridge as the
-  control (it leaks to all eight), and a vm test of the deferral, the
-  `isTrusted` checks, `navigated` outside the reader's input window and the
-  pinned API. **`PREVIEW_BRIDGE_HASH` changed again**
-  (`sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=`); carriers pick it
-  up when they rebuild.
-- **`printDocument` limits written down** (round 4 of the paged loop; claim
-  E.37, FC-19 §8.4). `allow-modals` stays (Chrome ignores a sandboxed
-  frame's `print()` without it; it also allows the document's own
-  `alert`/`confirm`/`prompt`); the done token sits in the frame's DOM, so
-  the printed document — the reader's own — can end or withhold its own
-  call. A test now proves that messages without the call's token do not
-  end it.
-- **The editor toolbar overflowed a narrow column** (round 3 of the paged
-  loop; claim E.36): the carrier's slot (a settings group, the AI menu) did
-  not wrap, so in a ~500 px column its last controls ran past the bar and
-  were clipped. It wraps now.
-- **Labels of the handle's items without an icon** (round 2 of the paged
-  loop; claim A.31): an action, setting or reader control without an icon
-  (orz-paged has several; the stub's Notes, Word count, Line spacing) drew
-  its label at the icons' edge, 24 px left of the other labels; it now
-  lines up with them.
-- **Mermaid (and every content library) blocked by an element id** (all
-  carriers; claim M.29): a heading "Mermaid" gets `id="mermaid"`, so
-  `window.mermaid` was the element and `enhanceDocument` never loaded the
-  library (the frame's `__orzEnhance` threw and skipped it). Each library is
-  now probed by its API (`mermaid.run`, `hljs.highlightElement`,
-  `SmilesDrawer.parse`/`Drawer`, `Chart` a function,
-  `OrzMarkdownRuntime.init`), never by its global's name.
-- **`carrier/node` test gaps** (claim N.10; mutants of round 1 of the paged
-  loop): the kit's own tests now catch a trimmed compare, a CR LF-blind
-  compare, a `--replaces` token compared on a prefix, the raw (not stored)
-  text compared against git, the last-writer gate dropped, and a written
-  file's mode narrowed by the umask — each was caught only by orz-paged's
-  suite before.
-- Conformance harness: `C.save.conflict` waited a fixed 10 s for the
-  "Download a copy instead" download and for "Replace it"'s write; a
-  carrier's ~2 MB inline file under the load of a full run missed it once
-  (orz-paged). The waits now scale with the file's size (10 s + 10 s per
-  started MB, at most 2 min).
+**Themes (`themes/common.css`, print only)**: each tab pane prints after its
+label as a small heading (an unlabeled one as "Tab N"), and a `{{youtube}}`
+embed prints its address (`YouTube video: https://youtu.be/<id>`) instead of
+a blank frame. The screen is unchanged.
 
 ### Changed
 
-- The app's own modules grew to 60.1 KB minified (bound 58 → 66 KB; added to
-  an editor bundle: 74.5 KB, bound 74 → 82 KB; claim A.2).
-- Spec wording (round 2 of the paged loop): carrier-app.md §7 — paged's
-  Print waits for `view.idle()` before `window.print()`, and the two-column
-  hybrid (a carrier limit, not the kit's); FC-18 §5.1 — a carrier may add
-  value lints of its own (orz-paged's `invalid-value` for enumerated paged
-  keys), warnings that never reuse a kit code.
-- The conformance stub carrier (test scaffolding) exercises the new kit
-  features: a "New document from sample…" submenu, a conditional Word count
-  action, a block-valued Notes setting and a Line spacing reader choice.
+- **Parser output**: a `{{youtube}}` embed now carries
+  `data-url="https://youtu.be/<id>"` (with `?t=` when a start is set), which
+  the print rules above read. Nothing else in `md.render` output changed.
+  HTML rendered before 2.3.0 (no `data-url`) still hides the embed in print.
+- `orz-markdown/carrier/app`'s own modules grew to about 60 KB minified.
+- Specs: carrier-app.md §7 notes for paged (Print waits for `view.idle()`;
+  the two-column handling is a carrier limit); FC-18 §5.1 lets a carrier add
+  value lints of its own (warnings with codes that never reuse a kit code);
+  FC-18 §7.3 describes templates as both a text operation (New document from
+  template) and a header layer (`template:` selects layout defaults).
+- Conformance harness: `C.save.conflict` scales its waits with the file's
+  size (10 s + 10 s per started MB, at most 2 min), so a ~2 MB inline file
+  no longer times out under load.
+
+### Fixed
+
+- **Content libraries skipped when an element id shadowed their global**
+  (all carriers): a heading "Mermaid" gets `id="mermaid"`, so
+  `window.mermaid` was the element and `enhanceDocument` never loaded
+  Mermaid. Each library (Mermaid, highlight.js, SMILES Drawer, Chart.js, the
+  runtime) is now detected by its API, not by its global's name.
+- **Editor toolbar overflow**: the carrier's slot in the toolbar wraps in a
+  narrow column instead of clipping its last controls.
+- **Read-view list alignment**: an action, setting or reader control without
+  an icon lines up with the other labels.
+
+### Security
+
+- **Preview port theft** (FC-19 §8.4). A script in the previewed document
+  could obtain the bridge's private port — by overriding a built-in the
+  bridge called (event and `MessageEvent` getters, `addEventListener`,
+  `MessagePort` methods, `Function.prototype.call`, `Reflect.apply`, …), by
+  walking `fn.caller`, or by reading `window.event` while the bridge handled
+  a message — and then forge the reader's keys (an unsolicited save, a
+  print, a view change) and links. The bridge now captures every native it
+  uses before any document content runs, runs in strict mode, handles
+  messages outside its listeners (no document code runs while `window.event`
+  is the port's event), ignores window messages once it holds the port, and
+  exposes `__orzPreview` / `__orzLibsReady` as frozen, non-writable window
+  properties. Real-Chrome attack tests cover each vector. The accepted limit
+  stays: a document script may take the keyboard focus. **`PREVIEW_BRIDGE_HASH`
+  is now `sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=`**; the fix
+  reaches readers only when a carrier rebuilds against 2.3.0.
+- `printDocument`'s limits are documented: `allow-modals` is required for a
+  sandboxed frame's `print()` in Chrome, and the printed document (the
+  reader's own) can end or withhold its own print.
 
 ## [2.2.0] - 2026-10-08
 
