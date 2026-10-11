@@ -592,3 +592,20 @@ FC-19 owner first, then all carriers).
 Accepted limits unchanged: a document script may take the keyboard focus;
 the bridge protects the channel, not the document — the nonce CSP stays
 the recommendation for untrusted content.
+
+### Round 5 — orz-paged 1.0 + kit 2.3.0 (confirming; closing) — 2026-10-11
+
+One adversary on orz-paged `@cf0fa79` + kit `@d43aecc`. **No ISOLATION**:
+13 attack families in the real paged preview (getters during the port's
+postMessage, Object.prototype getters, 38 event types with window.event /
+composedPath, replaced schedulers and natives, hooks and observers incl.
+Error.prepareStackTrace, forged reader input, document.open / reload) — no
+port, no save/print/link/view/scroll. One HIGH ORZ, a single uncommon
+construct: a table row taller than the page with header repetition lost
+the rest of the document (orz-paged's table-head handler); MED: periodic
+text in plain fences, code inside columns; LOW: incremental restart near a
+fence, rare table-header cases, carrier-side probe gaps. Owner's rule
+(rare/single-construct findings → final fix pass, no further rounds):
+all fixed in orz-paged's closing pass (`orz-paged@a8344a5`), 373 tests,
+column matrix 420/420. **Loop closed 2026-10-11** after 5 rounds; open
+by choice: the structural bridge alternative (Round 4 note).
