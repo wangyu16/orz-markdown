@@ -231,11 +231,10 @@ body {
 }
 
 /* ---- Ruling -------------------------------------------------------------
-   Running text (top-level paragraphs and lists) carries its own ruling, so the
-   lines always sit under the words wherever the block lands on the page.
-   Gaps are padding (one blank ruled line), so consecutive blocks join into
-   one continuous ruled sheet; headings, code, tables, quotes and notes
-   interrupt it like things written or pasted into a real exercise book. */
+   Running text (top-level paragraphs and lists) moves in whole rules: one
+   line box per rule, a blank ruled line after each block. The ruling itself
+   is the paper: on screen it is the article's background (the notebook model
+   at the end of this file); on paper the carrier draws it (orz-paged). */
 .markdown-body > p,
 .markdown-body > ul:not(.toc-list),
 .markdown-body > ol {
@@ -243,27 +242,6 @@ body {
   margin-top: 0;
   margin-bottom: 0;
   padding-bottom: var(--rule);
-}
-.markdown-body > p::before,
-.markdown-body > ul:not(.toc-list)::before,
-.markdown-body > ol::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 0 calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
-  background:
-    linear-gradient(to bottom,
-      transparent calc(var(--rule) - var(--rule-drop) - 1px),
-      var(--rule-ink) calc(var(--rule) - var(--rule-drop) - 1px),
-      var(--rule-ink) calc(var(--rule) - var(--rule-drop)),
-      transparent calc(var(--rule) - var(--rule-drop)))
-    0 0 / 100% var(--rule) repeat-y;
-  pointer-events: none;
-}
-.markdown-body > p:has(> img:only-child)::before,
-.markdown-body > p.katex-block::before,
-.markdown-body > p:has(.katex-display)::before {
-  display: none;
 }
 /* inline pieces must not stretch a ruled line */
 .markdown-body > p :is(code, kbd, samp, mark, sup, sub, .katex),
@@ -634,13 +612,294 @@ body {
   }
 }
 
+/* ---- On screen: a ruled notebook page ------------------------------------
+   (owner 2026-10-12: the same model as orz-paged's print version.) Every
+   element is either written on the lines or on a sheet attached on top of
+   the ruled paper.
+   - The ruling is the paper: the article's background, out to its edges, at
+     the body line height (--orz-grid, an absolute length), from the content
+     box top, at the height where a body line's baseline falls
+     (--orz-rule-at). Nothing written on it hides it.
+   - On the lines (no background): paragraphs, lists and the TOC (one line box
+     per rule, a blank ruled line after), headings (straight, a whole number
+     of lines: the two largest span two), rules, footnotes, display formulas
+     (their baseline on a rule, rounded up to whole lines). Inline pieces
+     (formulas, code, marks, QR codes) never grow a line box.
+   - Attached on top (opaque sheets, a hard shadow): tables, code, callouts,
+     quotes (a slip clipped on, slightly tilted), pictures and figures,
+     diagrams, charts, molecules, QR blocks, videos, columns (each column a
+     sheet), tabs and spoilers. A sheet starts on a rule one blank line under
+     the text above and ends on a rule.
+   The orz-markdown enhancement (enhanceDocument in a page, __orzEnhance in
+   the preview frame) opts in through --orz-grid: it measures --orz-rule-at
+   and the headings' shifts (--orz-sh-<k>, --orz-mb-<k>), places each block
+   and grows each sheet (src/baseline-grid.ts). Without it the ruling and the
+   whole-line text still hold; headings, formulas and sheets sit where they
+   fall. Print (and orz-paged, which drops every @media block) is unaffected. */
+@media screen {
+  .markdown-body {
+    --orz-grid: var(--rule);
+    --orz-rule: var(--orz-rule-at, calc(var(--rule) - var(--rule-drop)));
+    --orz-sheet: var(--paper-slip);
+    --orz-sheet-shadow: 1.5px 2.5px 0 rgba(80, 60, 30, 0.12);
+    background-image:
+      linear-gradient(to right,
+        transparent calc(var(--pad-l) - 1.1rem),
+        var(--margin-ink) calc(var(--pad-l) - 1.1rem),
+        var(--margin-ink) calc(var(--pad-l) - 1.1rem + 1.5px),
+        transparent calc(var(--pad-l) - 1.1rem + 1.5px)),
+      linear-gradient(to bottom,
+        transparent calc(var(--orz-rule) - 1px),
+        var(--rule-ink) calc(var(--orz-rule) - 1px),
+        var(--rule-ink) var(--orz-rule),
+        transparent var(--orz-rule));
+    background-size: 100% 100%, 100% var(--orz-grid);
+    background-repeat: no-repeat, repeat;
+    background-origin: padding-box, content-box;
+  }
+
+  /* ---- on the lines ---- */
+
+  /* running text: one line box per rule, a blank ruled line after each block */
+  .markdown-body > :is(p, ul, ol, dl),
+  .markdown-body > :is(.center, .right) > :is(p, ul, ol, dl) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: var(--orz-grid);
+  }
+
+  .markdown-body > :is(.center, .right) {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0;
+  }
+
+  .markdown-body > :is(ul, ol, dl) :is(li, ul, ol, dt, dd, p),
+  .markdown-body > :is(.center, .right) > :is(ul, ol, dl) :is(li, ul, ol, dt, dd, p) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* the contents: written on the lines like a list */
+  .markdown-body > ul.toc-list {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0 1.4rem var(--orz-grid);
+  }
+
+  /* inline pieces never grow a line box: raised marks sit on the baseline
+     (shifted), atomic pieces (a formula's parts, a code, a badge, a box) may
+     overflow their line without moving it */
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) :is(sup, sub, .footnote-backref) {
+    vertical-align: baseline;
+    position: relative;
+    line-height: 0;
+  }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) sup { top: -0.45em; }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) sub { top: 0.25em; }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) :is(.katex .base, span.success, span.info, span.warning, span.danger) {
+    margin-top: -3em;
+    margin-bottom: -3em;
+  }
+  /* (a QR code's baseline is its bottom edge: only its top may overflow) */
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) span.qrcode:not(.qrcode--standalone) {
+    margin-top: -3em;
+  }
+  .markdown-body > :is(p, ul, ol, dl, .center, .right) :is(.task-list-item-checkbox, input[type="checkbox"]) {
+    vertical-align: middle;
+  }
+  /* a display formula keeps its height (the enhancement rounds it to lines) */
+  .markdown-body > :is(p, ul, ol, dl, .center, .right) .katex-display .katex .base {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  /* headings: written on the lines, straight (a tilt would lift one end off
+     its rule); the baseline of every line on a rule (--orz-sh-<k>), the text
+     after on the next line (--orz-mb-<k>); after the two largest, a blank line */
+  .markdown-body > :is(h1, h2, h3, h4, h5, h6) {
+    position: relative;
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border: 0;
+    transform: none;
+  }
+  .markdown-body > h1 { line-height: calc(2 * var(--orz-grid)); top: var(--orz-sh-h1, 0px); margin-bottom: calc(var(--orz-mb-h1, 0px) + var(--orz-grid)); }
+  .markdown-body > h2 { line-height: calc(2 * var(--orz-grid)); top: var(--orz-sh-h2, 0px); margin-bottom: calc(var(--orz-mb-h2, 0px) + var(--orz-grid)); }
+  .markdown-body > h3 { top: var(--orz-sh-h3, 0px); margin-bottom: var(--orz-mb-h3, 0px); }
+  .markdown-body > h4 { top: var(--orz-sh-h4, 0px); margin-bottom: var(--orz-mb-h4, 0px); }
+  .markdown-body > h5 { top: var(--orz-sh-h5, 0px); margin-bottom: var(--orz-mb-h5, 0px); }
+  .markdown-body > h6 { top: var(--orz-sh-h6, 0px); margin-bottom: var(--orz-mb-h6, 0px); }
+
+  /* the second-level heading's dashed rule becomes a dashed underline (a
+     border would add to its height and take it off the grid) */
+  .markdown-body > h2 {
+    text-decoration: underline dashed currentColor;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.18em;
+  }
+
+  /* display formulas: on the lines, transparent; the enhancement moves the
+     baseline onto a rule and rounds the height up to whole lines; then one
+     blank line */
+  .markdown-body > p:is(.katex-block, :has(.katex-display)) {
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: var(--orz-grid);
+  }
+  .markdown-body > p .katex-display {
+    margin: 0;
+  }
+
+  /* a rule is one line: the squiggle drawn along a rule, a blank line after */
+  .markdown-body > hr:not(.footnotes-sep) {
+    box-sizing: content-box;
+    height: var(--orz-grid);
+    margin: 0 0 var(--orz-grid);
+    background-position: left calc(var(--orz-rule) - 6px);
+  }
+
+  /* footnotes: a dashed rule drawn over a rule, then the notes on the lines */
+  .markdown-body > hr.footnotes-sep {
+    box-sizing: content-box;
+    height: var(--orz-grid);
+    margin: 0;
+    border: 0;
+    background: linear-gradient(to right, var(--border-color) 50%, transparent 50%) left calc(var(--orz-rule) - 1.5px) / 10px 2px repeat-x;
+  }
+  .markdown-body > section.footnotes {
+    position: relative;
+    top: var(--orz-sh-fn, 0px);
+    margin: 0 0 var(--orz-mb-fn, 0px);
+    padding: 0 0 var(--orz-grid);
+    line-height: var(--orz-grid);
+  }
+  .markdown-body > section.footnotes :is(ol, li, p) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* the fallback: a written block whose lines still left the grid hides the
+     ruling behind it */
+  .markdown-body > .orz-off-grid {
+    background-color: var(--bg-color);
+  }
+
+  /* ---- attached on top: sheets ---- */
+
+  /* anything not written on the lines is opaque (on top of the paper); the
+     enhancement sets the space around it, so its own top margin goes and a
+     blank line follows it */
+  .markdown-body > :where(:not(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, hr, section.footnotes, .center, .right, .cols, .left)),
+  .markdown-body > :where(p.orz-picture) {
+    background-color: var(--bg-color);
+    margin-top: 0;
+    margin-bottom: var(--orz-grid);
+  }
+
+  .markdown-body > :is(blockquote, pre, table, figure, details, .tabs, .mermaid, .smiles-render, .youtube-embed, canvas.orz-chart, div:has(> canvas.orz-chart), .info, .success, .warning, .danger, .cols, p.orz-picture) {
+    margin-top: 0;
+    margin-bottom: var(--orz-grid);
+  }
+
+  /* sheets cast a hard shadow onto the page */
+  .markdown-body > :is(blockquote, pre, table, figure, details, .tabs, .mermaid, .smiles-render, .youtube-embed, canvas.orz-chart, div:has(> canvas.orz-chart), p.orz-picture, .info, .success, .warning, .danger),
+  .markdown-body > .cols > .col {
+    box-shadow: var(--orz-sheet-shadow);
+  }
+
+  /* a quote: a slip of paper clipped onto the page, slightly tilted (the tilt
+     moves only what is painted) */
+  .markdown-body > blockquote {
+    margin-left: 0.4rem;
+    margin-right: 0.4rem;
+    background-color: var(--orz-sheet);
+  }
+  /* the clip holds the slip: over its top edge near the left corner, its
+     lower loop on the paper, clear of the first letter */
+  .markdown-body > blockquote::before {
+    left: 0.2rem;
+  }
+
+  /* a picture, a QR code or a figure: pasted in, on a white-ish border, taped at the top */
+  .markdown-body > :is(p.orz-picture, figure) {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0.5em 0.5em 0.6em;
+    background-color: var(--orz-sheet);
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+  }
+  .markdown-body > p.orz-picture {
+    line-height: 0;
+  }
+  .markdown-body > figure {
+    line-height: 1.4;
+  }
+  .markdown-body > figure img {
+    margin: 0;
+  }
+  .markdown-body > figure figcaption {
+    margin-top: 0.45em;
+    font-family: var(--heading-font);
+    font-size: 1.1em;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .markdown-body > :is(p.orz-picture, figure)::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    width: 64px;
+    height: 20px;
+    transform: translateX(-50%) rotate(-3deg);
+    background: rgba(240, 230, 205, 0.78);
+    border-left: 1px dashed rgba(150, 130, 90, 0.25);
+    border-right: 1px dashed rgba(150, 130, 90, 0.25);
+  }
+
+  /* diagrams, charts, molecules and videos: drawn on their own sheet */
+  .markdown-body > :is(.mermaid, div.smiles-render, canvas.orz-chart, div:has(> canvas.orz-chart), .youtube-embed) {
+    background-color: var(--orz-sheet);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.6em;
+  }
+
+  /* the callouts' soft shadow becomes the sheets' hard one (above) */
+  .markdown-body > :is(.info, .success, .warning, .danger) {
+    margin-top: 0;
+  }
+
+  /* the columns are sheets side by side: the ruling shows between them (and
+     between stacked columns on a phone: one line apart) */
+  .markdown-body > .cols {
+    background-color: transparent;
+    row-gap: var(--orz-grid);
+  }
+}
+
 /* ---- Print ----------------------------------------------------------------- */
 @media print {
   body { background: #fff; color: #000; padding: 0; }
   .markdown-body { padding: 0; border: none; box-shadow: none; background: none; }
-  .markdown-body > p::before,
-  .markdown-body > ul::before,
-  .markdown-body > ol::before { content: none; }
   .markdown-body .success,
   .markdown-body .info,
   .markdown-body .warning,

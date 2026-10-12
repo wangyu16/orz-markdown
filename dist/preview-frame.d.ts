@@ -23,6 +23,7 @@
  *   // on theme change, swap the highlight.js stylesheet:
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
+export { BASELINE_GRID_SCRIPT, GRID_ATTRIBUTE, GRID_OFF_CLASS, GRID_PICTURE_CLASS } from './baseline-grid.js';
 export type ColorScheme = 'light' | 'dark';
 /**
  * Exact versions of the view-time content libraries. Pinned (no `@11`-style
@@ -60,7 +61,8 @@ export interface PreviewFrameAssets {
     headLinks(scheme?: ColorScheme): string;
     /** `<script>` tags for the iframe `<body>`: load the libs + the runtime and
      *  define `window.__orzEnhance()`. Call `__orzEnhance()` after each render
-     *  (set `window.__orzSmilesTheme='dark'` first on dark themes). */
+     *  (set `window.__orzSmilesTheme='dark'` first on dark themes). It also
+     *  keeps an article on its theme's baseline grid (2.3.0, M.31). */
     bodyScripts(): string;
 }
 /**
@@ -99,6 +101,16 @@ export interface EnhanceOptions {
      * be read (tainted) stays a canvas.
      */
     static?: boolean;
+    /**
+     * Keep each article (`.markdown-body`: `root` itself, or those inside it)
+     * on its theme's baseline grid (2.3.0, M.31): where the theme sets
+     * `--orz-grid` (light-playful-1 on screen) every block is placed on the
+     * ruled lines or as a sheet from rule to rule, again whenever the
+     * article's size changes; other themes are left as they are. Installs one
+     * inline script per window (`BASELINE_GRID_SCRIPT`, carrying `nonce`).
+     * Default `true` (`false` with `static`: a paginated layout has its own).
+     */
+    grid?: boolean;
 }
 /** What {@link enhanceDocument} did: the library URLs it loaded now (or found loading) and those that failed. */
 export interface EnhanceResult {
@@ -139,7 +151,9 @@ export declare function enhanceDocument(root: EnhanceRoot, options?: EnhanceOpti
 /**
  * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
  * Chart.js instance it drew there is destroyed (its listeners, resize
- * observer and registry entry go) and an expanded QR overlay is closed. Call
+ * observer and registry entry go), an expanded QR overlay is closed, and
+ * the baseline grid (2.3.0, M.31) stops watching its articles and takes back
+ * what it set. Call
  * it before replacing `root`'s content when the root itself goes, or before a
  * re-render; `enhanceDocument` also destroys, on each call, the charts whose
  * canvas left `root`. Idempotent; a root never enhanced is a no-op.

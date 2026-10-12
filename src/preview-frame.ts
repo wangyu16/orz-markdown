@@ -25,7 +25,10 @@
  */
 
 import { getBrowserRuntimeScript } from './runtime.js';
+import { BASELINE_GRID_SCRIPT } from './baseline-grid.js';
 import { KATEX_VERSION } from './version.js';
+
+export { BASELINE_GRID_SCRIPT, GRID_ATTRIBUTE, GRID_OFF_CLASS, GRID_PICTURE_CLASS } from './baseline-grid.js';
 
 export type ColorScheme = 'light' | 'dark';
 
@@ -67,7 +70,9 @@ function guard(js: string): string {
  * skip already-processed nodes, SMILES/chart track a JS flag. SMILES honors
  * window.__orzSmilesTheme ('dark' → light bonds); reset its flag and re-run to
  * redraw after a theme switch. A chart whose datasets are all unnamed
- * (`data: …` shorthand) hides its legend instead of showing "undefined". */
+ * (`data: …` shorthand) hides its legend instead of showing "undefined".
+ * Last, the baseline grid (2.3.0, M.31) watches every article: it acts only
+ * where the theme sets `--orz-grid` (light-playful-1's ruled notebook). */
 const ENHANCE_BODY =
   "var R='.markdown-body ';" +
   "var L=function(f){try{return f()}catch(e){return false}};" +
@@ -76,7 +81,8 @@ const ENHANCE_BODY =
   "try{if(M)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
   "try{if(S)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
   "try{if(C)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
-  "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}";
+  "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}" +
+  "try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}";
 
 export interface PreviewFrameAssets {
   /** Pinned CDN URLs. */
@@ -90,7 +96,8 @@ export interface PreviewFrameAssets {
   headLinks(scheme?: ColorScheme): string;
   /** `<script>` tags for the iframe `<body>`: load the libs + the runtime and
    *  define `window.__orzEnhance()`. Call `__orzEnhance()` after each render
-   *  (set `window.__orzSmilesTheme='dark'` first on dark themes). */
+   *  (set `window.__orzSmilesTheme='dark'` first on dark themes). It also
+   *  keeps an article on its theme's baseline grid (2.3.0, M.31). */
   bodyScripts(): string;
 }
 
@@ -125,6 +132,7 @@ export function getPreviewFrameAssets(): PreviewFrameAssets {
         '<script src="' + cdn.chartJs + '"></script>' +
         '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}</script>' +
         '<script>' + guard(runtimeScript) + '</script>' +
+        '<script>' + guard(BASELINE_GRID_SCRIPT) + '</script>' +
         '<script>window.__orzEnhance=function(){' + ENHANCE_BODY + '\n};</script>'
       );
     },
@@ -162,6 +170,16 @@ export interface EnhanceOptions {
    * be read (tainted) stays a canvas.
    */
   static?: boolean;
+  /**
+   * Keep each article (`.markdown-body`: `root` itself, or those inside it)
+   * on its theme's baseline grid (2.3.0, M.31): where the theme sets
+   * `--orz-grid` (light-playful-1 on screen) every block is placed on the
+   * ruled lines or as a sheet from rule to rule, again whenever the
+   * article's size changes; other themes are left as they are. Installs one
+   * inline script per window (`BASELINE_GRID_SCRIPT`, carrying `nonce`).
+   * Default `true` (`false` with `static`: a paginated layout has its own).
+   */
+  grid?: boolean;
 }
 
 /** What {@link enhanceDocument} did: the library URLs it loaded now (or found loading) and those that failed. */
@@ -289,6 +307,8 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
     return result;
   };
   await pass();
+  // the baseline grid (2.3.0, M.31): after the first pass, so the first paint is already on the lines
+  if (options.grid ?? !isStatic) watchGrid(root, doc, win, head, nonce);
   if (!assets) return finish();
 
   let loads = pageLoads.get(win);
@@ -329,6 +349,26 @@ export async function enhanceDocument(root: EnhanceRoot, options: EnhanceOptions
   }
   await Promise.all(pending);
   return finish();
+}
+
+/** The articles of `root`: itself when it is one, else those inside it. */
+function articlesOf(root: EnhanceRoot): AnyEl[] {
+  const r = root as unknown as AnyEl;
+  try { if (r.classList?.contains?.('markdown-body')) return [r]; } catch { /* not an element */ }
+  try { return Array.from(root.querySelectorAll('.markdown-body') as ArrayLike<AnyEl>); } catch { return []; }
+}
+
+/** Install the baseline grid once per window (an inline script, like the runtime) and watch `root`'s articles. */
+function watchGrid(root: EnhanceRoot, doc: AnyEl, win: EnhanceWin, head: AnyEl, nonce: string | undefined): void {
+  const ready = (): boolean => probe(() => typeof win.OrzBaselineGrid.watch === 'function');
+  if (!ready()) {
+    const s = doc.createElement('script') as AnyEl;
+    if (nonce) s.setAttribute('nonce', nonce);
+    s.textContent = BASELINE_GRID_SCRIPT;
+    head.appendChild(s);
+  }
+  if (!ready()) return; // blocked (a CSP without the nonce): the content stays as the CSS lays it out
+  for (const a of articlesOf(root)) { try { win.OrzBaselineGrid.watch(a); } catch { /* the grid's own error */ } }
 }
 
 /**
@@ -404,7 +444,9 @@ function releaseDetached(root: EnhanceRoot): void {
 /**
  * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
  * Chart.js instance it drew there is destroyed (its listeners, resize
- * observer and registry entry go) and an expanded QR overlay is closed. Call
+ * observer and registry entry go), an expanded QR overlay is closed, and
+ * the baseline grid (2.3.0, M.31) stops watching its articles and takes back
+ * what it set. Call
  * it before replacing `root`'s content when the root itself goes, or before a
  * re-render; `enhanceDocument` also destroys, on each call, the charts whose
  * canvas left `root`. Idempotent; a root never enhanced is a no-op.
@@ -417,6 +459,10 @@ export function disposeEnhancement(root: EnhanceRoot): void {
     const win = ((root.ownerDocument ?? root) as AnyEl)?.defaultView as EnhanceWin | null | undefined;
     win?.OrzMarkdownRuntime?.collapseQr?.();
   } catch { /* no runtime */ }
+  try {
+    const win = ((root.ownerDocument ?? root) as AnyEl)?.defaultView as EnhanceWin | null | undefined;
+    if (win && probe(() => typeof win.OrzBaselineGrid.release === 'function')) for (const a of articlesOf(root)) win.OrzBaselineGrid.release(a);
+  } catch { /* no grid */ }
 }
 
 /**

@@ -15,7 +15,9 @@ helper, print rules for tabs and YouTube embeds, and a security fix in the
 editor's preview bridge. **Additive for `^2.2.0` consumers**: no export was
 removed or changed incompatibly, and orz-mdhtml 1.0.0's suite passes
 unchanged against it. The parser's `md.render` output changes in one place:
-a `{{youtube}}` embed gains a `data-url` attribute (used by print). The
+a `{{youtube}}` embed gains a `data-url` attribute (used by print). On
+screen `light-playful-1` becomes a ruled notebook (with a new, theme-opt-in
+baseline-grid pass in the enhancement). The
 pinned CodeMirror bundle `vendor/codemirror6.js` has the same bytes as in
 2.2.0 (only its URL moves to `orz-markdown@2.3.0/vendor/codemirror6.js`).
 
@@ -112,6 +114,34 @@ images (`frozen`).
 label as a small heading (an unlabeled one as "Tab N"), and a `{{youtube}}`
 embed prints its address (`YouTube video: https://youtu.be/<id>`) instead of
 a blank frame. The screen is unchanged.
+
+**Themes: `light-playful-1` is a ruled notebook on screen** (owner
+2026-10-12; the same model as orz-paged 1.0's print version): every element
+is either written on the lines or on a sheet attached on top of the paper.
+The ruling (and the pink margin line) is the article's background, from its
+content box top at the body line height, and runs on behind everything
+written. On the lines: paragraphs, lists, the TOC, headings of every level
+(straight; the two largest span two lines), rules, display formulas (their
+baseline on a rule, rounded up to whole lines) and footnotes; inline
+formulas, codes, badges and QR codes no longer stretch a line. Attached on
+top (opaque, a hard shadow): tables, code, callouts, quotes (the clipped,
+slightly tilted slip), figures and pictures, diagrams, charts, molecules,
+QR blocks, videos, columns (each a sheet), tabs and spoilers; each starts on
+a rule one blank line under the text above and ends on a rule. All of it is
+in `@media screen` (print, and orz-paged, which rules its own pages, are
+unchanged); the per-paragraph ruling of 2.2.0 is gone.
+
+**`orz-markdown/preview-frame`: the baseline grid** (`BASELINE_GRID_SCRIPT`,
+`window.OrzBaselineGrid`; claim M.31). A theme opts in with `--orz-grid`
+(the line pitch) on the article; `enhanceDocument` (new option `grid`,
+default on, off with `static`) and the frame's `__orzEnhance` then measure
+where the theme's baselines fall (`--orz-rule-at`, `--orz-sh-<k>`,
+`--orz-mb-<k>`), put every block on the grid and grow every sheet to end on
+a rule — one read, one write and one check per run (about 80 ms for a
+350-block document), idempotent, again when the article's size changes or
+webfonts load, taken back while printing and when the theme changes;
+`disposeEnhancement` releases it. Other themes are untouched. Also exported:
+`GRID_ATTRIBUTE`, `GRID_OFF_CLASS`, `GRID_PICTURE_CLASS`.
 
 ### Changed
 

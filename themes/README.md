@@ -31,7 +31,7 @@ import 'orz-markdown/themes/light-academic-1.css';
 | `light-academic-2.css` | Fira Sans headings · Vollkorn text · hairline structure | Light |
 | `beige-decent-1.css` | Libre Caslon Display & Text · trade-book page, oxblood | Light |
 | `beige-decent-2.css` | Josefin Sans headings · Cardo text · bottle green | Light |
-| `light-playful-1.css` | Indie Flower headings · Shantell Sans text · ruled school notebook | Light |
+| `light-playful-1.css` | Indie Flower headings · Shantell Sans text · ruled school notebook: on screen everything is written on the ruled lines or on a sheet attached on top (with the in-page or frame enhancement) | Light |
 | `light-playful-2.css` | Chewy stickers · Patrick Hand text · sketchbook | Light |
 | `dark-elegant-1.css` | Cinzel headings · Source Serif 4 text · navy card | Dark |
 | `dark-elegant-2.css` | Sora headings · Vollkorn text · near-black, orange | Dark |

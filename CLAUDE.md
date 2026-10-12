@@ -56,6 +56,14 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   id such as a heading "Mermaid" shadows `window.mermaid`; M.29).
   `{ static: true }` (2.3.0, M.28) is a page-only last step (drawn canvases
   → images, no runtime) for print/pagination; the frame has no static mode.
+- `src/baseline-grid.ts` — `BASELINE_GRID_SCRIPT` (2.3.0, M.31): the screen
+  baseline grid (`window.OrzBaselineGrid`), ES5 in a `String.raw` like the
+  runtime; ONE source run by both `__orzEnhance` (an inline script of
+  `bodyScripts()`) and `enhanceDocument` (injected once per window). Acts
+  only where a theme sets `--orz-grid` inside `@media screen`
+  (light-playful-1's ruled notebook; same block model as orz-paged's print
+  handler): one read, one write (in 1/64 px, rounding fed back), one check,
+  block-by-block fallback; idempotent (records and restores what it sets).
 - `src/themes.ts` — `THEMES` (ids, picker names, colour schemes), `DEFAULT_THEME`,
   `themeInfo`: the ONE theme list (main entry and `orz-markdown/themes`);
   `tests/themes.test.ts` checks it against `themes/*.css` (M.25). Add a theme

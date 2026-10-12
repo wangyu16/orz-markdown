@@ -53,7 +53,11 @@ There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown
 > the view goes). `nonce` stamps what it adds (CSP); `assets: false` fetches
 > nothing; `static: true` (≥ 2.3.0, for print or a paginator that re-parses the
 > HTML) draws everything, then turns the drawn charts and SMILES canvases into
-> images and skips the interactive runtime. To switch a theme stylesheet without a flash use
+> images and skips the interactive runtime. Both `enhanceDocument` and
+`__orzEnhance` also keep the article on its theme's baseline grid (≥ 2.3.0:
+only where the theme sets `--orz-grid`, i.e. `light-playful-1` on screen —
+the ruled notebook; `grid: false` turns it off, `static` skips it; it re-aligns
+on resize and font loads and steps aside while printing). To switch a theme stylesheet without a flash use
 > `swapStylesheet(document, 'orz-theme', href)` (the old sheet stays until the
 > new one has loaded). The theme list for a picker is `THEMES`
 > (`orz-markdown/themes`: ids, names, light/dark).

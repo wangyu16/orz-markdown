@@ -216,7 +216,7 @@ Twelve bundled themes — each imports `common.css`, the shared **structure** la
 | `beige-decent-2.css` | Josefin Sans headings · Cardo text · bottle green | Light |
 | `light-academic-1.css` | Alegreya throughout · cream paper, rubric red | Light |
 | `light-academic-2.css` | Fira Sans headings · Vollkorn text · hairline structure | Light |
-| `light-playful-1.css` | Indie Flower headings · Shantell Sans text · ruled school notebook | Light |
+| `light-playful-1.css` | Indie Flower headings · Shantell Sans text · ruled school notebook: on screen everything is written on the ruled lines or on a sheet attached on top (with the in-page or frame enhancement) | Light |
 | `light-playful-2.css` | Chewy stickers · Patrick Hand text · sketchbook | Light |
 
 ```javascript

@@ -143,6 +143,32 @@ describe('theme contract', () => {
   });
 });
 
+describe('the screen baseline grid (2.3.0)', () => {
+  // A theme opts into the kit's grid pass (src/baseline-grid.ts) with --orz-grid on the article: the line pitch.
+  // It is a screen feature: declared only inside @media screen, so print — and orz-paged, whose derivation drops
+  // every @media block of a theme and draws its own page ruling — never sees the screen ruling or the pass.
+  it('[M.31] only light-playful-1 opts in, inside @media screen on the article, with its pitch equal to the body line height; its ruling is the article\'s background there (no block draws its own ruling)', () => {
+    const optIn: string[] = [];
+    for (const f of THEME_FILES) {
+      parse(`themes/${f}`).walkDecls('--orz-grid', (d) => {
+        const rule = d.parent as Rule;
+        const media = rule.parent?.type === 'atrule' ? (rule.parent as postcss.AtRule).params : '';
+        optIn.push(`${f} ${media} ${rule.selector} ${d.value}`);
+      });
+    }
+    expect(optIn).toEqual(['light-playful-1.css screen .markdown-body var(--rule)']);
+    const root = parse('themes/light-playful-1.css');
+    let lineHeight = '';
+    root.walkRules('.markdown-body', (rule) => { if (rule.parent?.type === 'root') rule.walkDecls('line-height', (d) => { lineHeight = d.value; }); });
+    expect(lineHeight).toBe('var(--rule)');
+    const ruled: string[] = [];
+    root.walkRules((rule) => {
+      if (/::?before/.test(rule.selector) && /> (p|ul|ol)/.test(rule.selector)) ruled.push(rule.selector);
+    });
+    expect(ruled).toEqual([]);
+  });
+});
+
 describe('common.css stays a structure layer', () => {
   it('carries no decoration outside the functional QR and SMILES rules', () => {
     const DECORATION = /^(color|font|font-family|font-weight|font-style|box-shadow|text-shadow|border-color|background-image|letter-spacing)$/;

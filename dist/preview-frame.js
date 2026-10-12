@@ -25,13 +25,19 @@
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ENHANCE_MAX_ATTEMPTS = exports.ENHANCE_RETRY_MS = exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = void 0;
+exports.ENHANCE_MAX_ATTEMPTS = exports.ENHANCE_RETRY_MS = exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = exports.GRID_PICTURE_CLASS = exports.GRID_OFF_CLASS = exports.GRID_ATTRIBUTE = exports.BASELINE_GRID_SCRIPT = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
 exports.enhanceDocument = enhanceDocument;
 exports.disposeEnhancement = disposeEnhancement;
 exports.swapStylesheet = swapStylesheet;
 const runtime_js_1 = require("./runtime.js");
+const baseline_grid_js_1 = require("./baseline-grid.js");
 const version_js_1 = require("./version.js");
+var baseline_grid_js_2 = require("./baseline-grid.js");
+Object.defineProperty(exports, "BASELINE_GRID_SCRIPT", { enumerable: true, get: function () { return baseline_grid_js_2.BASELINE_GRID_SCRIPT; } });
+Object.defineProperty(exports, "GRID_ATTRIBUTE", { enumerable: true, get: function () { return baseline_grid_js_2.GRID_ATTRIBUTE; } });
+Object.defineProperty(exports, "GRID_OFF_CLASS", { enumerable: true, get: function () { return baseline_grid_js_2.GRID_OFF_CLASS; } });
+Object.defineProperty(exports, "GRID_PICTURE_CLASS", { enumerable: true, get: function () { return baseline_grid_js_2.GRID_PICTURE_CLASS; } });
 /**
  * Exact versions of the view-time content libraries. Pinned (no `@11`-style
  * ranges) so a document renders the same tomorrow as today, and so an upgrade
@@ -66,7 +72,9 @@ function guard(js) {
  * skip already-processed nodes, SMILES/chart track a JS flag. SMILES honors
  * window.__orzSmilesTheme ('dark' → light bonds); reset its flag and re-run to
  * redraw after a theme switch. A chart whose datasets are all unnamed
- * (`data: …` shorthand) hides its legend instead of showing "undefined". */
+ * (`data: …` shorthand) hides its legend instead of showing "undefined".
+ * Last, the baseline grid (2.3.0, M.31) watches every article: it acts only
+ * where the theme sets `--orz-grid` (light-playful-1's ruled notebook). */
 const ENHANCE_BODY = "var R='.markdown-body ';" +
     "var L=function(f){try{return f()}catch(e){return false}};" +
     "var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});" +
@@ -74,7 +82,8 @@ const ENHANCE_BODY = "var R='.markdown-body ';" +
     "try{if(M)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
     "try{if(S)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
     "try{if(C)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
-    "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}";
+    "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}" +
+    "try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}";
 /**
  * Everything a host app needs to wire the orz-markdown preview iframe the way the
  * bundled themes and tested apps do: the copy-as-Markdown runtime, code
@@ -103,6 +112,7 @@ function getPreviewFrameAssets() {
                 '<script src="' + cdn.chartJs + '"></script>' +
                 '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}</script>' +
                 '<script>' + guard(runtimeScript) + '</script>' +
+                '<script>' + guard(baseline_grid_js_1.BASELINE_GRID_SCRIPT) + '</script>' +
                 '<script>window.__orzEnhance=function(){' + ENHANCE_BODY + '\n};</script>');
         },
     };
@@ -231,6 +241,9 @@ async function enhanceDocument(root, options = {}) {
         return result;
     };
     await pass();
+    // the baseline grid (2.3.0, M.31): after the first pass, so the first paint is already on the lines
+    if (options.grid ?? !isStatic)
+        watchGrid(root, doc, win, head, nonce);
     if (!assets)
         return finish();
     let loads = pageLoads.get(win);
@@ -292,6 +305,40 @@ async function enhanceDocument(root, options = {}) {
     }
     await Promise.all(pending);
     return finish();
+}
+/** The articles of `root`: itself when it is one, else those inside it. */
+function articlesOf(root) {
+    const r = root;
+    try {
+        if (r.classList?.contains?.('markdown-body'))
+            return [r];
+    }
+    catch { /* not an element */ }
+    try {
+        return Array.from(root.querySelectorAll('.markdown-body'));
+    }
+    catch {
+        return [];
+    }
+}
+/** Install the baseline grid once per window (an inline script, like the runtime) and watch `root`'s articles. */
+function watchGrid(root, doc, win, head, nonce) {
+    const ready = () => probe(() => typeof win.OrzBaselineGrid.watch === 'function');
+    if (!ready()) {
+        const s = doc.createElement('script');
+        if (nonce)
+            s.setAttribute('nonce', nonce);
+        s.textContent = baseline_grid_js_1.BASELINE_GRID_SCRIPT;
+        head.appendChild(s);
+    }
+    if (!ready())
+        return; // blocked (a CSP without the nonce): the content stays as the CSS lays it out
+    for (const a of articlesOf(root)) {
+        try {
+            win.OrzBaselineGrid.watch(a);
+        }
+        catch { /* the grid's own error */ }
+    }
 }
 /**
  * A static enhancement's last step (2.3.0): every canvas drawn in `root` (a
@@ -386,7 +433,9 @@ function releaseDetached(root) {
 /**
  * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
  * Chart.js instance it drew there is destroyed (its listeners, resize
- * observer and registry entry go) and an expanded QR overlay is closed. Call
+ * observer and registry entry go), an expanded QR overlay is closed, and
+ * the baseline grid (2.3.0, M.31) stops watching its articles and takes back
+ * what it set. Call
  * it before replacing `root`'s content when the root itself goes, or before a
  * re-render; `enhanceDocument` also destroys, on each call, the charts whose
  * canvas left `root`. Idempotent; a root never enhanced is a no-op.
@@ -401,6 +450,13 @@ function disposeEnhancement(root) {
         win?.OrzMarkdownRuntime?.collapseQr?.();
     }
     catch { /* no runtime */ }
+    try {
+        const win = (root.ownerDocument ?? root)?.defaultView;
+        if (win && probe(() => typeof win.OrzBaselineGrid.release === 'function'))
+            for (const a of articlesOf(root))
+                win.OrzBaselineGrid.release(a);
+    }
+    catch { /* no grid */ }
 }
 /**
  * Swap a stylesheet without a flash (2.2.0, M.27): the `<link id>` with
