@@ -66,6 +66,11 @@ on resize and font loads and steps aside while printing). ≥ 2.4.0 both also th
 > `redrawEnhancement(container)` — call that when you show a container
 > (a slide, a tab, a dialog); it also resizes drawn charts and redraws SMILES at
 > their box's size (`window.__orzRedraw(container)` in the preview frame).
+> Mermaid diagrams wait the same way while not laid out (`display: none`, a
+> closed `details`; `visibility: hidden` is laid out and drawn at once), and
+> under a scaling CSS transform (a scaled slide) are drawn with SVG labels
+> (`--mm-labels: svg | html` to choose); font sizes: `--chart-font-size`,
+> `--mm-font-size`.
 > SMILES canvases are drawn at the size of their CSS box (250×180 when nothing
 > constrains them). To switch a theme stylesheet without a flash use
 > `swapStylesheet(document, 'orz-theme', href)` (the old sheet stays until the

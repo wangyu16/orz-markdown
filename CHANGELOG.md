@@ -43,6 +43,21 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   too.
 - **SMILES sized from its box** (M.34): drawn at its CSS box's size, sharp at
   the pixel ratio; 250×180 when unconstrained (the look before).
+- **Mermaid drawn only when laid out** (M.35): a diagram under
+  `display: none` (or in a closed `details`) waits — Mermaid measured no text
+  there and drew a broken layout — and is drawn when it gets a size, on the
+  next pass, or by `redrawEnhancement(el)` / `__orzRedraw(el)`;
+  `visibility: hidden` is laid out and drawn at once; `static: true` draws
+  everything. Mermaid drawings run one at a time per window.
+- **Mermaid SVG labels under a transform** (M.36): a diagram drawn under a CSS
+  transform that scales or rotates it (a scaled slide) gets SVG text labels
+  (`htmlLabels: false`, measured with `getBBox`) — HTML labels are measured
+  on screen there and came out cut ("Initiato"). **`--mm-labels: svg | html`**
+  chooses explicitly; unscaled diagrams keep HTML labels as before.
+- **Font-size tokens** (M.37): **`--chart-font-size`** (Chart.js's font size,
+  CSS px, where the chart sets none) and **`--mm-font-size`** (Mermaid's; its
+  default theme kept when no colour token is set). Unset (every bundled
+  theme): 12 px charts and 16 px diagrams as before.
 - **FC-19 editor API** (`orz-markdown/carrier/editor`; E.38–E.40):
   `applyEdits([{ from, to, insert }], { label })` — several exact-offset
   replacements as ONE undoable edit (the `change` event carries `label`);
@@ -64,6 +79,11 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   its lints after the kit's (spec/carrier-app.md §3.1);
   `readLegacyIsland(html, { …, island: { id, type } })` reads a writer's own
   0.x island (slides: `#orz-deck`, `text/orz-slides`).
+- **`KitToken`** (K.32) carries every markdown-it token field (`nesting`,
+  `attrs`, `markup`, `meta`, `block`, `hidden` added), so
+  `kitParser().parse(text, {})` is a `KitToken[]` without a cast. **`Lint`**
+  has an optional **`next`** (the carrier CLI command that resolves the
+  finding); the kit's `deck-block` carries `next: 'upgrade'` (FC-18 §7.2).
 
 ### Changed
 

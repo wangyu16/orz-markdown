@@ -217,9 +217,9 @@ FC-01 unchanged.
   block (a top-level HTML-comment block whose first word is `deck`) in a
   format-1 slides text renders nothing and is never read as a second config
   source: lint **`deck-block`** (error; the kit's `lintHeader` /
-  `readDocument` for kind `slides`, orz-markdown 2.4.0). A carrier's CLI
-  answers it with `next: upgrade` (a 0.x text: `upgrade` moves its deck keys
-  into the header).
+  `readDocument` for kind `slides`, orz-markdown 2.4.0), carrying
+  `next: 'upgrade'` (`Lint.next`: the carrier CLI command that resolves it;
+  a 0.x text: `upgrade` moves its deck keys into the header).
 - Slide options: `key=value` (`bg t fit class id template v here`, values
   may be quoted: `class="a b"`) and bare flags (`step`). Validated; an
   unknown option is a lint error, not a layout name.

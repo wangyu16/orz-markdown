@@ -117,8 +117,16 @@ chart's or diagram's own colours always win.
 | `--mm-accent` | secondary fills, clusters | the element's `color` |
 | `--mm-note` | note fill | Mermaid's derivation |
 | `--mm-surface`, `--mm-font` | the diagram's background; font | the nearest opaque background; the element's font |
+| `--chart-font-size` | Chart.js's font size, CSS px (`18` or `18px`) | Chart.js's `12` |
+| `--mm-font-size` | Mermaid's font size, CSS px (`18` or `18px`) | Mermaid's `16` |
+| `--mm-labels` | `svg` or `html`: how Mermaid draws node labels | `html`, except under a CSS transform that scales or rotates the diagram (a scaled slide): `svg` |
 
-Without any `--mm-*` token a diagram keeps Mermaid's default theme. Any CSS
+Without any `--mm-*` colour or font token a diagram keeps Mermaid's default
+theme (`--mm-font-size` and `--mm-labels` keep the theme as it is). The
+bundled themes set no font size (charts 12 px, diagrams 16 px as before); a
+projected deck sets larger ones. HTML labels are measured on screen, so under
+a scaling transform they come out cut — hence SVG labels there; set
+`--mm-labels: svg` on a container whose scale the diagram cannot see. Any CSS
 colour works (`oklch()` included). Charts sit in a `div.orz-chart-frame`
 (added by the enhancement): put a panel there, never padding on the canvas
 (Chart.js then mis-sizes it). The dark bundled themes draw charts and

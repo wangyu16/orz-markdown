@@ -98,7 +98,11 @@ readDocument(text, {
 ```
 
 The carrier's lints follow FC-18 §5.1 (codes of its own, never a kit code;
-`invalid-value` for its keys' values). Do not `set()` / `use()` the shared
+`invalid-value` for its keys' values; `next` names the carrier CLI command
+that resolves one, as the kit's `deck-block` carries `next: 'upgrade'`).
+The tokens are `KitToken[]` — markdown-it's token fields (`type`, `tag`,
+`attrs`, `map`, `nesting`, `level`, `children`, `content`, `markup`, `info`,
+`meta`, `block`, `hidden`), so `kitParser().parse(text, {})` needs no cast. Do not `set()` / `use()` the shared
 `kitParser()`. A carrier reading its 0.x files passes its island to
 `readLegacyIsland(html, { generator, config, island: { id, type } })`
 (slides 0.x: `{ id: 'orz-deck', type: 'text/orz-slides' }`).
