@@ -26,7 +26,7 @@ kind-independent core of a carrier's `inspect`), `parser.ts` (the kit's
 private parser), `index.ts`. Exported as
 `orz-markdown/carrier` (`src/carrier.ts`) and, for readers that need no parser,
 `orz-markdown/carrier/read`; never imported by the parser entry. Shared reader:
-`src/nyml-body.ts`. Claims K.1–K.27 (and M.22, M.23) in `notes/CLAIMS.md`,
+`src/nyml-body.ts`. Claims K.1–K.31 (and M.22, M.23) in `notes/CLAIMS.md`,
 tests in `tests/carrier-kit.test.ts`.
 
 The shell runtime is `src/carrier/shell/` — `save.ts` (`createSaver`, the
@@ -63,7 +63,7 @@ nonce and hashes, scroll-sync maths), `print.ts` (2.3.0: `printDocument`, a
 whole document printed from a sandboxed hidden frame), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.37, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.40, tests in `tests/carrier-editor.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).
@@ -78,7 +78,7 @@ the protocol host page), `helpers.ts` (2.2.0: page helpers for a carrier's own t
 through `process.getBuiltinModule`, the corpus loader, lazy `playwright-core`)
 — exported as `orz-markdown/carrier/conformance` (Node only; no other entry
 imports it; `playwright-core` is an optional peer dependency). Claims
-H.1–H.8, tests in `tests/conformance.test.ts` (the harness against the stub
+H.1–H.9, tests in `tests/conformance.test.ts` (the harness against the stub
 carrier of `tests/conformance-stub/`, built at test time, and broken builds
 of it that must fail).
 

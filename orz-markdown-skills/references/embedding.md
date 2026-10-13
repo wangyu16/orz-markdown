@@ -57,7 +57,17 @@ There are **three** things to get right: CSS, JavaScript, and copy-as-Markdown
 `__orzEnhance` also keep the article on its theme's baseline grid (≥ 2.3.0:
 only where the theme sets `--orz-grid`, i.e. `light-playful-1` on screen —
 the ruled notebook; `grid: false` turns it off, `static` skips it; it re-aligns
-on resize and font loads and steps aside while printing). To switch a theme stylesheet without a flash use
+on resize and font loads and steps aside while printing). ≥ 2.4.0 both also theme
+> Chart.js and Mermaid from CSS custom properties (`--chart-*`, `--mm-*`, see
+> `references/themes.md`; a chart's or diagram's own colours win), and draw a
+> chart or SMILES drawing only when it is visible: one in a hidden container
+> (`display: none`, a closed `details`, `visibility: hidden`) waits, and is
+> drawn when it gets a size, on the next `enhanceDocument` call, or by
+> `redrawEnhancement(container)` — call that when you show a container
+> (a slide, a tab, a dialog); it also resizes drawn charts and redraws SMILES at
+> their box's size (`window.__orzRedraw(container)` in the preview frame).
+> SMILES canvases are drawn at the size of their CSS box (250×180 when nothing
+> constrains them). To switch a theme stylesheet without a flash use
 > `swapStylesheet(document, 'orz-theme', href)` (the old sheet stays until the
 > new one has loaded). The theme list for a picker is `THEMES`
 > (`orz-markdown/themes`: ids, names, light/dark).

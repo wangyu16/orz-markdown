@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-13 (prepared; not yet published)
+
+The carrier-kit gaps of the orz-slides 1.0 rebuild (family plan REBUILD
+§3c), all additive: nothing slides-specific enters the kit. **Additive for
+`^2.3.0` consumers**: no export was removed or changed incompatibly; the
+orz-mdhtml 1.0.1 and orz-paged 1.0.0 suites pass against it. The parser's
+`md.render` output is unchanged. What changes on screen: charts and Mermaid
+diagrams take the theme's colours (every bundled theme sets them), and the
+dark themes' charts — slivers in 2.3.0 — draw again. The pinned CodeMirror
+bundle `vendor/codemirror6.js` now also exports `StateField`, `StateEffect`
+and `Decoration` (new bytes, new integrity; the pin is exported as before).
+
+### Added
+
+- **Themed charts and diagrams** (`orz-markdown/preview-frame`; claim M.32):
+  `enhanceDocument` and the frame's `__orzEnhance` read Chart.js's look from
+  `--chart-text`, `--chart-grid`, `--chart-font`, `--chart-1` … `--chart-8`,
+  `--chart-fill-opacity`, `--chart-surface`, `--chart-aspect` (and the chart
+  frame's `--chart-max-width`) and Mermaid's from `--mm-text`, `--mm-line`,
+  `--mm-node`, `--mm-border`, `--mm-accent`, `--mm-note`, `--mm-surface`,
+  `--mm-font` (Mermaid's `base` theme; without any `--mm-*` its default theme
+  as before). Read where the chart or diagram is drawn, so a slide or region
+  can override them; a chart's or diagram's own colours win. One ES5 source,
+  `CONTENT_THEME_SCRIPT` (`window.OrzContentTheme`), injected once per window
+  by `enhanceDocument` (with its nonce) and included in `bodyScripts()`.
+  Every bundled theme sets the tokens (`references/themes.md`, "Chart and
+  diagram tokens").
+- **Visible-only drawing** (M.33): a chart or SMILES drawing in a hidden
+  container waits and is drawn when it gets a size (a ResizeObserver), on the
+  next pass, or by the new **`redrawEnhancement(el)`** (frame:
+  `window.__orzRedraw(el)`), which also resizes drawn charts and redraws
+  SMILES in `el` — for a newly shown slide, tab or dialog.
+  `disposeEnhancement` stops the waiting; `static: true` draws hidden content
+  too.
+- **SMILES sized from its box** (M.34): drawn at its CSS box's size, sharp at
+  the pixel ratio; 250×180 when unconstrained (the look before).
+- **FC-19 editor API** (`orz-markdown/carrier/editor`; E.38–E.40):
+  `applyEdits([{ from, to, insert }], { label })` — several exact-offset
+  replacements as ONE undoable edit (the `change` event carries `label`);
+  `select(from, to, { scroll })`; `setFocusRange(from, to, { mode: 'dim' |
+  'fold' })` / `setFocusRange(null)` — dim or fold the text outside a range.
+  Adapters may implement `applyChanges` and `setFocusRange`;
+  `setSelection(sel, { scroll })` reports the selection. Exports
+  `toEditorOffset` and the types `TextEdit`, `TextChange`, `FocusMode`.
+- **FC-18 §5.1 / §7.2 for slides** (`orz-markdown/carrier`; K.28, K.29): the
+  header keys `slide_numbers`, `progress` (`yes`/`no`, default `yes` in
+  `readDocument().settings`) and `section_numbers` (`plain`/`roman`/`01`/
+  `none`); `ratio` values `16:9` / `4:3`; the lint **`deck-block`** (error)
+  for a top-level `<!-- deck … -->` block in a slides text; the spec states
+  the header-only deck config, the `here=N` outline option, and that
+  duplicate region names and a region filled both by leading text and its own
+  marker are lint errors (the slides parser lives in orz-slides).
+- **For carriers' own parsing** (K.30, K.31): `kitParser()` exported;
+  `readDocument(text, { tokens, lint })` shares a carrier's parse and adds
+  its lints after the kit's (spec/carrier-app.md §3.1);
+  `readLegacyIsland(html, { …, island: { id, type } })` reads a writer's own
+  0.x island (slides: `#orz-deck`, `text/orz-slides`).
+
+### Changed
+
+- **Conformance** (`orz-markdown/carrier/conformance`; H.9, STATUS D-60):
+  `C.law.content-independence` compares `renderPreview` only with `next` (a
+  build of this source); a `previous` release is compared on the text-derived
+  parts (head metadata, island, `#orz-includes`), so a release whose parser
+  output changed no longer fails it — carriers can drop their `KIT GAP`
+  registration of `C.update.from-previous`.
+- The dark themes' chart panel moved from `canvas.orz-chart` (its padding
+  made Chart.js draw slivers) to the chart's frame `.orz-chart-frame`; the
+  chart frame's inline width cap is `var(--chart-max-width, 440px)`.
+- Corpus: `slides/notes-and-fragments.slides.md` uses the kept slides theme
+  `orchard` (was `executive`, dropped for slides 1.0).
+
 ## [2.3.0] - 2026-10-11
 
 The carrier-kit gaps the orz-paged 1.0 rebuild found (family plan REBUILD

@@ -95,6 +95,35 @@ block of a theme and rules its pages itself). Margins, paddings, line-height
 and backgrounds are decoration, so the contract above is unchanged; the
 opt-in is checked by `tests/themes.test.ts` (M.31).
 
+## Chart and diagram tokens (≥ 2.4.0)
+
+Charts (Chart.js) and diagrams (Mermaid) take their look from custom
+properties, read where they are drawn — set them on `:root` (every bundled
+theme does), or on any ancestor (a slide, a region) to override locally. A
+chart's or diagram's own colours always win.
+
+| Token | Used for | Fallback |
+|---|---|---|
+| `--chart-text` | ticks, legend, titles | the canvas's `color` |
+| `--chart-grid` | grid and axis lines | the text colour at 15 % |
+| `--chart-font` | font family | the canvas's `font-family` |
+| `--chart-1` … `--chart-8` | the series palette (per dataset; per slice for pie/doughnut) | Chart.js's seven colours |
+| `--chart-fill-opacity` | bar / area fill opacity, 0–1 | `0.5` |
+| `--chart-surface` | the line between pie slices | the nearest opaque background |
+| `--chart-aspect` | width ÷ height | Chart.js's (2; 1 for round charts) |
+| `--chart-max-width` | the chart frame's width cap (`.orz-chart-frame`) | `440px` |
+| `--mm-text`, `--mm-line` | diagram text; edges and arrows | the element's `color`; `--mm-text` |
+| `--mm-node`, `--mm-border` | node fill and border | the surface tinted by `--mm-accent`; `--mm-accent` |
+| `--mm-accent` | secondary fills, clusters | the element's `color` |
+| `--mm-note` | note fill | Mermaid's derivation |
+| `--mm-surface`, `--mm-font` | the diagram's background; font | the nearest opaque background; the element's font |
+
+Without any `--mm-*` token a diagram keeps Mermaid's default theme. Any CSS
+colour works (`oklch()` included). Charts sit in a `div.orz-chart-frame`
+(added by the enhancement): put a panel there, never padding on the canvas
+(Chart.js then mis-sizes it). The dark bundled themes draw charts and
+diagrams on a light panel, so their tokens are dark ink.
+
 ## Design Token Pattern
 
 All bundled themes use CSS custom properties for maintainability. Define them on `:root`:
@@ -255,7 +284,8 @@ Every theme must have CSS rules for all of the following. See `references/css-cl
 - [ ] `div.youtube-embed` — frame decoration only (common.css makes it 16:9 and responsive)
 - [ ] `div.mermaid` — panel decoration (centering and width cap come from common.css); dark themes usually give it a light panel
 - [ ] `div.smiles-render` `canvas[data-smiles]`
-- [ ] `canvas.orz-chart` — optional panel decoration (Chart.js draws into it; common.css caps its width)
+- [ ] `canvas.orz-chart` — no padding; an optional panel goes on its frame `.orz-chart-frame` (≥ 2.4.0)
+- [ ] the chart and diagram tokens `--chart-*` / `--mm-*` (≥ 2.4.0, "Chart and diagram tokens" above)
 - [ ] `span.qrcode` — **must have `background: #fff`** (the SVG has no quiet zone; common.css's padding (4px around a standalone code, 0.12em inside a sentence) becomes the quiet zone)
 
 ---

@@ -816,12 +816,14 @@ function valueImports(entry: string): Set<string> {
 /** The editor's own modules in the shipped (CommonJS dist) bundle: 51.8 KB before round 2 of closed loop 2, 64.9 KB after. */
 // 68,516 B on 2026-10-08 (round 1 of the carrier-app loop: the syntax highlighter, file includes through
 // fetchInclude, the missing-include note, the save-conflict question); bound ~10 % above.
-const EDITOR_OWN_LIMIT = 75_000;
+// 79,093 B with 2.4.0 (applyEdits, select, setFocusRange, the focus-range field); bound ~10 % above.
+const EDITOR_OWN_LIMIT = 87_000;
 /** The whole shipped editor bundle (parser, one KaTeX, editor; no CodeMirror): 967 KB before round 2, 982 KB after. */
-const EDITOR_BUNDLE_LIMIT = 1_050_000;
+// 1,066,302 B with 2.4.0 (CONTENT_THEME_SCRIPT and the frame's drawing script in bodyScripts); bound ~8 % above.
+const EDITOR_BUNDLE_LIMIT = 1_150_000;
 
 describe('module boundaries', () => {
-  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 75 KB, the whole bundle under 1.05 MB with one KaTeX, and no CodeMirror', async () => {
+  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 87 KB, the whole bundle under 1.15 MB with one KaTeX, and no CodeMirror', async () => {
     for (const entry of ['src/carrier/shell/index.ts', 'src/carrier/read.ts', 'src/carrier.ts', 'src/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/editor')), entry).toEqual([]);
     }

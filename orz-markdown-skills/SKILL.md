@@ -183,7 +183,8 @@ header tools, `readDocument`, `assembleEnvelope` / `extract`),
 `orz-markdown/carrier/read` (parser-free reading), `orz-markdown/carrier/shell`
 (save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
 (the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
-≥ 2.2.0; ≥ 2.3.0 the reader's Cmd/Ctrl+P as a `print` event and
+≥ 2.2.0; ≥ 2.4.0 `applyEdits` (several edits as one undo step), `select`
+and `setFocusRange` (dim or fold the text outside a range); ≥ 2.3.0 the reader's Cmd/Ctrl+P as a `print` event and
 `printDocument(html)` to print the document rather than the app's page — see
 `references/embedding.md` §4), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
 `startCarrier(kind)`; a file's read view shows one pencil at the bottom-left
@@ -253,7 +254,7 @@ Each plugin is **block** or **inline**, not both. Block (`youtube`, `mermaid`, `
 | **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe; prints as its address ≥ 2.3.0) |
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
 | **smiles** | `sm` | `{{smiles C1=CC=CC=C1}}` (chemical structure) |
-| **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (any Chart.js type; default bar) |
+| **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (any Chart.js type; default bar; ≥ 2.4.0 coloured by the theme's `--chart-*` tokens) |
 | **toc** | — | `{{toc}}` or `{{toc 2,3}}` (heading levels) |
 | **attrs** | — | `# Title{{attrs[id="hero"]}}` |
 | **markdown** | `md`, `md-include` | `{{md ./path/to/file.md}}` |
