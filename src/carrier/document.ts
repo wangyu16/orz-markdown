@@ -32,7 +32,8 @@ export interface DocumentInfo {
   lang: string;
   /**
    * The kind's own header keys (FC-18 §5.1) that are set, plus the registry
-   * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) for slides.
+   * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) and
+   * (2.4.0) `slide_numbers` / `progress` (`yes`) for slides.
    */
   settings: Record<string, string>;
   /** Host keys (`x_…`) of the header. */
@@ -46,7 +47,8 @@ export interface DocumentInfo {
 /** Registry defaults that `readDocument` resolves into `settings` (FC-18 §5.1). */
 export const SETTING_DEFAULTS: Readonly<Record<Kind, Readonly<Record<string, string>>>> = {
   md: { measure: 'normal' },
-  slides: { ratio: '16:9' },
+  // slide_numbers, progress: 2.4.0 (FC-18 §5.1; section_numbers has no registry default: the theme's)
+  slides: { ratio: '16:9', slide_numbers: 'yes', progress: 'yes' },
   paged: {},
 };
 
@@ -175,7 +177,7 @@ export function readDocument(text: string, opts?: { kind?: Kind; filename?: stri
   const parse = (): Tok[] => (tokens ??= kitParser().parse(text, {}) as unknown as Tok[]);
   let blocks: NymlBlock[] | null = null;
   const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse() as never));
-  const { header, lint } = readHeaderAndLint(text, kind, scan, opts?.themes);
+  const { header, lint } = readHeaderAndLint(text, kind, scan, opts?.themes, parse);
   const fields: Record<string, string> = header ? header.fields : {};
   const get = (k: string): string | undefined => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
   const fmt = get('format');

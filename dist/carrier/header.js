@@ -36,7 +36,8 @@ exports.COMMON_HEADER_KEYS = [
 /** Kind-specific keys (FC-18 §5.1), listed explicitly so lint catches misspellings. */
 exports.KIND_HEADER_KEYS = {
     md: ['measure'],
-    slides: ['ratio', 'footer', 'transition'],
+    // slide_numbers, progress, section_numbers: 2.4.0 (FC-18 §5.1 minor revision, REBUILD §3c Q3)
+    slides: ['ratio', 'footer', 'transition', 'slide_numbers', 'progress', 'section_numbers'],
     paged: [
         'template', 'page_size', 'margin_top', 'margin_bottom', 'margin_left', 'margin_right',
         'page_background', 'font_preset', 'font_family', 'font_heading_preset', 'font_margin_box_preset',
@@ -80,6 +81,43 @@ function put(obj, key, value) {
 /** The token-based scan of `source` with the kit's private parser. */
 function scan(source) {
     return (0, nyml_blocks_js_1.scanNymlBlocks)(source, (0, parser_js_1.kitParser)().parse(source, {}));
+}
+/** The offset where 0-based line `n` starts (CR LF, CR and LF each end a line); the text's length past the last line. */
+function lineStartOffset(text, n) {
+    let line = 0;
+    for (let i = 0; i < text.length; i++) {
+        if (line === n)
+            return i;
+        const c = text.charCodeAt(i);
+        if (c === 10 || (c === 13 && text.charCodeAt(i + 1) !== 10))
+            line++;
+    }
+    return text.length;
+}
+/** A top-level HTML-comment block whose first word is `deck` (slides 0.x's config preamble; FC-18 §7.2). */
+const DECK_HINT = /<!--\s*deck\b/;
+const DECK_BLOCK = /^[ \t]*<!--\s*deck\b/;
+/**
+ * `deck-block` (2.4.0, FC-18 §7.2): every top-level `<!-- deck … -->` block of
+ * a slides text — format 1 keeps the deck config in the header only. Found
+ * with the kit's tokens (a block shown in code, a list or a quote is not one).
+ */
+function deckBlocks(text, tokens) {
+    if (!DECK_HINT.test(text))
+        return [];
+    const out = [];
+    for (const t of tokens ? tokens() : (0, parser_js_1.kitParser)().parse(text, {})) {
+        if (t.level !== 0 || t.type !== 'html_block' || !t.map || !DECK_BLOCK.test(t.content))
+            continue;
+        let from = lineStartOffset(text, t.map[0]);
+        while (text[from] === ' ' || text[from] === '\t')
+            from++;
+        let to = lineStartOffset(text, t.map[1]);
+        while (to > from && (text[to - 1] === '\n' || text[to - 1] === '\r'))
+            to--;
+        out.push({ from, to });
+    }
+    return out;
 }
 /** 1-based line number of an offset (CR LF, CR and LF each end a line). */
 function lineAt(text, offset) {
@@ -534,6 +572,8 @@ const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * `theme` not in `THEMES`, 2.2.0; any kind: a `theme` not in `options.themes`,
  * 2.3.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
+ * `deck-block` (error, kind `slides`, 2.4.0: a top-level `<!-- deck … -->`
+ * block — format 1 keeps the deck config in the header only, FC-18 §7.2),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
  * `kind: document` block that is not the header; it renders nothing).
@@ -554,11 +594,11 @@ function themeList(themes) {
  * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-function readHeaderAndLint(text, kind, blocks, themes) {
+function readHeaderAndLint(text, kind, blocks, themes, tokens) {
     const loc = locate(text);
-    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind, blocks, themeList(themes)) };
+    return { header: loc ? loc.header : null, lint: lintLocated(text, loc, kind, blocks, themeList(themes), tokens) };
 }
-function lintLocated(text, loc, kind, blocks, themes) {
+function lintLocated(text, loc, kind, blocks, themes, tokens) {
     const out = [];
     const at = (from, to) => ({ line: lineAt(text, from), from, to });
     if (text.includes('\u0000'))
@@ -578,6 +618,12 @@ function lintLocated(text, loc, kind, blocks, themes) {
             if (b.kind === 'document' && !inHeader.has(b.start)) {
                 out.push({ level: 'warning', code: 'stray-document-block', message: 'a kind: document block that is not the header (it does not lead the text); it renders nothing and is not read', ...at(b.start, b.end) });
             }
+        }
+    }
+    const carrierKey = loc && Object.prototype.hasOwnProperty.call(loc.header.fields, 'carrier') ? loc.header.fields['carrier'] : undefined;
+    if ((kind ?? (isKindName(carrierKey) ? carrierKey : undefined)) === 'slides') {
+        for (const d of deckBlocks(text, tokens)) {
+            out.push({ level: 'error', code: 'deck-block', message: 'a <!-- deck … --> block: format 1 keeps the deck config in the header only, so this block renders nothing and is not read (a 0.x text: upgrade it)', ...at(d.from, d.to) });
         }
     }
     if (!loc) {

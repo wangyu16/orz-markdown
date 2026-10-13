@@ -55,7 +55,8 @@ Object.defineProperty(exports, "mintUid", { enumerable: true, get: function () {
 /** Registry defaults that `readDocument` resolves into `settings` (FC-18 §5.1). */
 exports.SETTING_DEFAULTS = {
     md: { measure: 'normal' },
-    slides: { ratio: '16:9' },
+    // slide_numbers, progress: 2.4.0 (FC-18 §5.1; section_numbers has no registry default: the theme's)
+    slides: { ratio: '16:9', slide_numbers: 'yes', progress: 'yes' },
     paged: {},
 };
 function isKind(v) {
@@ -191,7 +192,7 @@ function readDocument(text, opts) {
     const parse = () => (tokens ?? (tokens = (0, parser_js_1.kitParser)().parse(text, {})));
     let blocks = null;
     const scan = () => (blocks ?? (blocks = (0, nyml_blocks_js_1.scanNymlBlocks)(text, parse())));
-    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan, opts?.themes);
+    const { header, lint } = (0, header_js_1.readHeaderAndLint)(text, kind, scan, opts?.themes, parse);
     const fields = header ? header.fields : {};
     const get = (k) => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
     const fmt = get('format');

@@ -18,7 +18,8 @@ export interface DocumentInfo {
     lang: string;
     /**
      * The kind's own header keys (FC-18 §5.1) that are set, plus the registry
-     * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) for slides.
+     * defaults that apply: `measure` (`normal`) for md, `ratio` (`16:9`) and
+     * (2.4.0) `slide_numbers` / `progress` (`yes`) for slides.
      */
     settings: Record<string, string>;
     /** Host keys (`x_…`) of the header. */

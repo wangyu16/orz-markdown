@@ -80,6 +80,12 @@ export declare const KIND_HEADER_KEYS: Readonly<Record<KindName, readonly string
 export declare const WRITER_KEY: RegExp;
 /** A valid `uid` (FC-18 §5.1, §10). */
 export declare const UID_PATTERN: RegExp;
+type BlockToken = {
+    type: string;
+    level: number;
+    content: string;
+    map: [number, number] | null;
+};
 /**
  * Read the document header of a text (FC-18 §5).
  *
@@ -177,6 +183,8 @@ export declare function removeHeaderKey(text: string, key: string): string;
  * `theme` not in `THEMES`, 2.2.0; any kind: a `theme` not in `options.themes`,
  * 2.3.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
+ * `deck-block` (error, kind `slides`, 2.4.0: a top-level `<!-- deck … -->`
+ * block — format 1 keeps the deck config in the header only, FC-18 §7.2),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
  * `kind: document` block that is not the header; it renders nothing).
@@ -202,7 +210,7 @@ export interface LintOptions {
  * anyway shares the parse).
  * @internal Not part of the `orz-markdown/carrier` API.
  */
-export declare function readHeaderAndLint(text: string, kind: KindName, blocks?: () => NymlBlock[], themes?: readonly string[]): {
+export declare function readHeaderAndLint(text: string, kind: KindName, blocks?: () => NymlBlock[], themes?: readonly string[], tokens?: () => BlockToken[]): {
     header: Header | null;
     lint: Lint[];
 };

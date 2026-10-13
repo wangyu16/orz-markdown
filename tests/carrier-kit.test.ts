@@ -956,10 +956,10 @@ describe('round 1: title chain (FC-18 §8.1)', () => {
     expect(readDocument('# Hello {{sp[red] big *bold*}} $x^2$ end\n').title).toBe('Hello big bold x^2 end');
   });
 
-  it('[K.16] readDocument resolves registry defaults into settings (measure normal, ratio 16:9) and ShellParts.delivery defaults to inline', () => {
+  it('[K.16] readDocument resolves registry defaults into settings (measure normal; ratio 16:9, slide_numbers and progress yes) and ShellParts.delivery defaults to inline', () => {
     expect(readDocument('# x\n').settings).toEqual({ measure: 'normal' });
-    expect(readDocument('# x\n', { kind: 'slides' }).settings).toEqual({ ratio: '16:9' });
-    expect(readDocument('{{nyml\nkind: document\nratio: 4:3\n}}\n', { kind: 'slides' }).settings).toEqual({ ratio: '4:3' });
+    expect(readDocument('# x\n', { kind: 'slides' }).settings).toEqual({ ratio: '16:9', slide_numbers: 'yes', progress: 'yes' });
+    expect(readDocument('{{nyml\nkind: document\nratio: 4:3\n}}\n', { kind: 'slides' }).settings).toEqual({ ratio: '4:3', slide_numbers: 'yes', progress: 'yes' });
     expect(readDocument('# x\n', { kind: 'paged' }).settings).toEqual({});
     expect(readDocument('# x\n').theme).toBeUndefined();
     const f = assembleEnvelope('x', { kind: 'md', shellVersion: '1', headHtml: '', bodyHtml: '' });
@@ -1316,5 +1316,57 @@ describe('round 2: document facts and the envelope', () => {
     expect(html).toContain('{"B.md":"2","a.MD":"4","a.md":"1","Ä.md":"3"}');
     const forged = html.replace(/(<script type="application\/json" id="orz-includes">)[^<]*/, '$1{"a":1,"b":"x","c":null,"d":["y"]}');
     expect(extract(forged)!.includes).toEqual({ b: 'x' });
+  });
+});
+
+describe('2.4.0: slides registry and the deck-block lint (FC-18 §5.1, §7.2)', () => {
+  const head = (lines: string): string => `{{nyml\nkind: document\n${lines}}}\n`;
+  it('[K.28] slide_numbers, progress and section_numbers are slides header keys: no unknown-key for kind slides (nor for a header naming carrier: slides), unknown-key for md and paged; readDocument puts them in settings, with slide_numbers and progress defaulting to yes and no default for section_numbers; the kit does not judge their values (carrier lints), and ratio keeps the W:H shape check', () => {
+    const t = head('slide_numbers: no\nprogress: no\nsection_numbers: roman\nratio: 4:3\n');
+    const codes = (k?: Kind): string[] => lintHeader(t, k).map((l) => `${l.code}:${l.key ?? ''}`);
+    expect(codes('slides')).toEqual([]);
+    expect(lintHeader(head('carrier: slides\nslide_numbers: no\n'))).toEqual([]);
+    expect(codes('md').sort()).toEqual(['unknown-key:progress', 'unknown-key:ratio', 'unknown-key:section_numbers', 'unknown-key:slide_numbers']);
+    expect(codes('paged').filter((c) => c.startsWith('unknown-key')).length).toBe(4);
+    expect(readDocument(t, { kind: 'slides' }).settings).toEqual({ slide_numbers: 'no', progress: 'no', section_numbers: 'roman', ratio: '4:3' });
+    expect(readDocument(head('section_numbers: 01\n'), { kind: 'slides' }).settings).toEqual({ ratio: '16:9', slide_numbers: 'yes', progress: 'yes', section_numbers: '01' });
+    expect(readDocument('# x\n', { kind: 'slides' }).settings).not.toHaveProperty('section_numbers');
+    // values are the carrier's business (invalid-value), not the kit's
+    expect(lintHeader(head('slide_numbers: maybe\nsection_numbers: greek\n'), 'slides')).toEqual([]);
+    expect(lintHeader(head('ratio: wide\n'), 'slides').map((l) => l.code)).toEqual(['bad-ratio']);
+  });
+
+  it('[K.29] a top-level <!-- deck … --> block in a slides text is the lint error deck-block (with its line and offsets), from lintHeader and readDocument for kind slides, with or without a header, LF, CR LF or CR; a deck comment inside code, a list, a quote or a container, a comment whose first word is not deck, and any other kind are not reported', () => {
+    const deck = '<!-- deck\ntitle: Old\ntheme: paper\n-->';
+    const body = `${deck}\n\n<!-- slide -->\n# One\n`;
+    for (const eol of ['\n', '\r\n', '\r']) {
+      const t = (head('title: New\n') + '\n' + body).replace(/\n/g, eol);
+      const found = lintHeader(t, 'slides').filter((l) => l.code === 'deck-block');
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatchObject({ level: 'error', line: 6 });
+      expect(t.slice(found[0].from!, found[0].to!)).toBe(deck.replace(/\n/g, eol));
+      expect(readDocument(t, { kind: 'slides' }).lint.filter((l) => l.code === 'deck-block')).toEqual(found);
+    }
+    // a 0.x text (no header) and an indented one
+    expect(lintHeader(body, 'slides').map((l) => [l.code, l.line, l.level])).toEqual([['deck-block', 1, 'error']]);
+    const indented = `<!-- slide -->\n\n  <!--deck: x -->\n`;
+    const d = lintHeader(indented, 'slides');
+    expect(d.map((l) => l.code)).toEqual(['deck-block']);
+    expect(indented.slice(d[0].from!, d[0].to!)).toBe('<!--deck: x -->');
+    expect(readDocument(head('carrier: slides\n') + body, { filename: 'x.slides.md' }).lint.map((l) => l.code)).toContain('deck-block');
+    // not a deck block
+    const quiet = [
+      '```\n<!-- deck x -->\n```\n',
+      '- item\n\n  <!-- deck x -->\n',
+      '> <!-- deck x -->\n',
+      '::: info\n<!-- deck x -->\n:::\n',
+      '<!-- decks are fine -->\n',
+      '<!-- slide deck -->\n',
+      'text <!-- deck x --> inline\n',
+    ];
+    for (const q of quiet) expect(lintHeader(q, 'slides').map((l) => l.code), q).toEqual([]);
+    expect(lintHeader(body, 'md')).toEqual([]);
+    expect(lintHeader(body, 'paged')).toEqual([]);
+    expect(lintHeader(body)).toEqual([]); // no kind, no carrier: not a slides text
   });
 });

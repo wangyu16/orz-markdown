@@ -155,12 +155,25 @@ theme: light-neat-3
 | `lang` | all | BCP 47 language of the content (`<html lang>`) | `en` |
 | `theme` | all | theme id for the kind (md: an id of orz-markdown's `THEMES`; another value is the lint warning `unknown-theme`, 2.2.0, and shows the default theme; slides and paged lint their own lists through `lintHeader(text, { kind, themes })` / `readDocument(text, { kind, themes })`, 2.3.0) | kind default |
 | `measure` | `md` | `normal` / `wide` / `full` line length (orz-markdown 2.0.0 classes) | `normal` |
-| `ratio`, `footer`, `transition` | `slides` | deck shape, footer text, default transition | `16:9`, none, none |
+| `ratio` | `slides` | the deck's shape: `16:9` or `4:3` (orz-markdown 2.4.0; another value is the carrier's value lint `invalid-value`, §5.1 below; the kit's `bad-ratio` keeps checking the `W:H` shape) | `16:9` |
+| `footer`, `transition` | `slides` | footer text, default transition | none, none |
+| `slide_numbers` | `slides` | show the slide number (`yes` / `no`; 2.4.0) — the theme draws it | `yes` |
+| `progress` | `slides` | show the progress indicator (`yes` / `no`; 2.4.0) — the theme draws it | `yes` |
+| `section_numbers` | `slides` | how sections are numbered: `plain` (1, 2, …), `roman` (I, II, …), `01` (01, 02, …) or `none` (2.4.0) | the theme's |
 | `template`, `page_size`, `margin_top`, `margin_bottom`, `margin_left`, `margin_right`, `page_background`, `font_preset`, `font_family`, `font_heading_preset`, `font_margin_box_preset`, `font_size`, `line_height`, `decoration_color`, `page_number_position`, `page_number_style`, `page_number_start_page`, `first_page_skip_number`, `header_left`, `header_center`, `header_right`, `header_rule`, `header_rule_color`, `header_font_size`, `footer_left`, `footer_center`, `footer_right`, `footer_rule`, `footer_rule_color`, `footer_font_size`, `first_page_hide_header`, `first_page_hide_footer`, `front_matter` (alias `front_matter_clean`), `limit_image_to_page`, `keep_image_together`, `repeat_table_header`, `avoid_table_row_breaks`, `custom_css`, `dynamic_choices` | `paged` | page settings (today's paged keys, unchanged names; listed explicitly so lint catches misspellings) | paged defaults |
 
 `keywords` splits on `,` `;` and their full-width forms. `dynamic_choices` and
 `custom_css` are `|` blocks. A future key is added to this table in a minor
 contract revision; removing or changing a key's meaning needs a new format.
+
+**Minor revision 2.4.0** (orz-markdown 2.4.0, for orz-slides 1.0; owner,
+2026-10-13, REBUILD §3c Q3): `slide_numbers`, `progress` and
+`section_numbers` added for `slides`, and `ratio`'s values fixed to `16:9` /
+`4:3`. `readDocument` resolves `slide_numbers` and `progress` to `yes` when
+absent (`SETTING_DEFAULTS`); `section_numbers` has no registry default (the
+theme's style applies). The values are checked by the carrier (`invalid-value`
+warnings, as for paged), not by the kit. A running head and the placement of
+a closing QR code stay theme design, not keys.
 
 **Lint codes.** The kit's `lintHeader` reports the header's shape and the
 registry above (unknown and misspelled keys, duplicates, `mixed-eol`,
@@ -197,16 +210,45 @@ FC-01 unchanged.
   readable in any Markdown viewer. Markers are recognized **only as top-level
   HTML-comment blocks** — never inside code, multi-line directives,
   blockquotes, lists or raw HTML blocks (fixes the survey's fence bugs).
-- The old `<!-- deck … -->` preamble is replaced by the header (§5): deck
-  keys `title theme ratio author footer transition` become header keys.
-- Slide options: `key=value` (`bg t fit class id template v`, values may be
-  quoted: `class="a b"`) and bare flags (`step`). Validated; an unknown option
-  is a lint error, not a layout name.
+- **The header is the deck config, and the only one** (2.4.0 wording). The
+  old `<!-- deck … -->` preamble is replaced by the header (§5): deck keys
+  `title theme ratio author footer transition` (and `slide_numbers`,
+  `progress`, `section_numbers`, §5.1) are header keys. A `<!-- deck … -->`
+  block (a top-level HTML-comment block whose first word is `deck`) in a
+  format-1 slides text renders nothing and is never read as a second config
+  source: lint **`deck-block`** (error; the kit's `lintHeader` /
+  `readDocument` for kind `slides`, orz-markdown 2.4.0). A carrier's CLI
+  answers it with `next: upgrade` (a 0.x text: `upgrade` moves its deck keys
+  into the header).
+- Slide options: `key=value` (`bg t fit class id template v here`, values
+  may be quoted: `class="a b"`) and bare flags (`step`). Validated; an
+  unknown option is a lint error, not a layout name.
+- **`here=N`** (2.4.0, REBUILD §3c Q4) on an `outline` slide: the outline
+  item marked as the current one, counted from 1; `here=0` marks none.
+  Without it the mark is automatic — an outline placed before section *k*
+  (the *k*-th `section` slide) marks item *k*. A value that is not a whole
+  number ≥ 0, or `here` on a slide that is not an outline, is a lint error.
 - Layouts and templates as today (`2col 3col 2row main-side quad`, raw
   `row|col` splits, `template=title|section|outline|closing`, `v=N`), each with a
   documented region list; a region not in the layout is a lint error. Presets
   that take a ratio: `2col`, `3col`, `2row`, `main-side` (track count must
   match); `quad` takes none (lint if given).
+- **Regions are filled once** (2.4.0, owner 2026-10-13, REBUILD §3c
+  decision 6). A region name appears at most once in a slide's layout and
+  at most once as a marker: a duplicate name is a lint **error**. Text
+  between the slide marker and the first region marker (the *leading text*)
+  fills the layout's first region; a slide whose leading text is not blank
+  and that also has a marker for that first region fills it twice — a lint
+  **error** (neither part is dropped silently). `notes`, `footer` and
+  `@float` are not layout regions and are not counted.
+- **Floats** (`<!-- @float … -->`) stay unnamed in format 1: they are told
+  apart by their order in the slide.
+- **Canonical writing** (for tools that rewrite markers, e.g. a layout
+  editor; reading accepts every form above): a marker line whose layout did
+  not change is never rewritten; a layout tree equal to a preset is written
+  as the preset (with its ratio when not the default); switching a slide to
+  another preset renames its regions to that preset's names; a one-box slide
+  whose box is not `body` is written as a one-track split (`col 1 { name }`).
 - Text before the first slide marker is preserved and shown as a lint notice
   (today it silently never renders).
 
