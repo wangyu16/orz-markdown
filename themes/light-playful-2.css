@@ -41,6 +41,22 @@
   --markdown-body-padding: 3rem;
   --markdown-body-border: 4px solid var(--border-color);
   --markdown-body-shadow: 8px 8px 0px rgba(0,0,0,0.1);
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #202020;
+  --chart-grid: rgba(32, 32, 32, 0.15);
+  --chart-1: #ff6b6b;
+  --chart-2: #4ecdc4;
+  --chart-3: #ffd93b;
+  --chart-4: #6cd69f;
+  --chart-5: #1f5fbf;
+  --chart-6: #b8321c;
+  --chart-fill-opacity: 0.75;
+  --mm-text: #202020;
+  --mm-line: #202020;
+  --mm-node: #fffefb;
+  --mm-border: #202020;
+  --mm-accent: #ff6b6b;
+  --mm-note: #ffe66d;
 }
 
 body {

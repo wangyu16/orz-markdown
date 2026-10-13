@@ -23,6 +23,7 @@
  *   // on theme change, swap the highlight.js stylesheet:
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
+export { CONTENT_THEME_SCRIPT } from './content-theme.js';
 export { BASELINE_GRID_SCRIPT, GRID_ATTRIBUTE, GRID_OFF_CLASS, GRID_PICTURE_CLASS } from './baseline-grid.js';
 export type ColorScheme = 'light' | 'dark';
 /**
@@ -169,4 +170,16 @@ export declare function disposeEnhancement(root: EnhanceRoot): void;
 export declare function swapStylesheet(doc: unknown, id: string, href: string, options?: {
     nonce?: string;
 }): unknown;
+/**
+ * Draw again what a newly shown container holds (2.4.0) — a slide coming
+ * into view, a tab, a dialog: inside `el` (itself included), every chart or
+ * SMILES drawing that waited for it to be visible is drawn now, every drawn
+ * chart is resized to its container, and every drawn SMILES is drawn again
+ * at its box's size. Content `enhanceDocument` never saw is left alone. A
+ * ResizeObserver already draws a waiting canvas when it gets a size (from
+ * `display: none`); this covers what it cannot see (`visibility`, a
+ * transform, a box whose size did not change). Synchronous; cheap when
+ * nothing waits.
+ */
+export declare function redrawEnhancement(el: unknown): void;
 //# sourceMappingURL=preview-frame.d.ts.map

@@ -25,14 +25,18 @@
  *   doc.getElementById('orz-hljs').href = pa.hljsCss(scheme);
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ENHANCE_MAX_ATTEMPTS = exports.ENHANCE_RETRY_MS = exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = exports.GRID_PICTURE_CLASS = exports.GRID_OFF_CLASS = exports.GRID_ATTRIBUTE = exports.BASELINE_GRID_SCRIPT = void 0;
+exports.ENHANCE_MAX_ATTEMPTS = exports.ENHANCE_RETRY_MS = exports.PREVIEW_CDN = exports.PREVIEW_LIB_VERSIONS = exports.GRID_PICTURE_CLASS = exports.GRID_OFF_CLASS = exports.GRID_ATTRIBUTE = exports.BASELINE_GRID_SCRIPT = exports.CONTENT_THEME_SCRIPT = void 0;
 exports.getPreviewFrameAssets = getPreviewFrameAssets;
 exports.enhanceDocument = enhanceDocument;
 exports.disposeEnhancement = disposeEnhancement;
 exports.swapStylesheet = swapStylesheet;
+exports.redrawEnhancement = redrawEnhancement;
 const runtime_js_1 = require("./runtime.js");
 const baseline_grid_js_1 = require("./baseline-grid.js");
+const content_theme_js_1 = require("./content-theme.js");
 const version_js_1 = require("./version.js");
+var content_theme_js_2 = require("./content-theme.js");
+Object.defineProperty(exports, "CONTENT_THEME_SCRIPT", { enumerable: true, get: function () { return content_theme_js_2.CONTENT_THEME_SCRIPT; } });
 var baseline_grid_js_2 = require("./baseline-grid.js");
 Object.defineProperty(exports, "BASELINE_GRID_SCRIPT", { enumerable: true, get: function () { return baseline_grid_js_2.BASELINE_GRID_SCRIPT; } });
 Object.defineProperty(exports, "GRID_ATTRIBUTE", { enumerable: true, get: function () { return baseline_grid_js_2.GRID_ATTRIBUTE; } });
@@ -67,6 +71,40 @@ exports.PREVIEW_CDN = {
 function guard(js) {
     return js.replace(/<\/(script)/gi, '<\\/$1');
 }
+/*
+ * The frame's canvas drawing (2.4.0; `enhanceRoot`'s twin, M.8): SMILES and
+ * charts inside `.markdown-body`, each drawn once and only when it is visible
+ * (laid out with a size) — a hidden one waits (a ResizeObserver draws it
+ * when it gets a size, `__orzRedraw(el)` when it is shown otherwise);
+ * SMILES at the size of its box (its 250×180 when the box is not
+ * constrained), charts themed by `OrzContentTheme.chart` (CSS custom
+ * properties) in a frame `.orz-chart-frame` (max width `--chart-max-width`,
+ * 440px). `__orzRedraw(el)` draws what waits in `el`, resizes its charts
+ * and redraws its SMILES at their box's size now. Plain ES5.
+ */
+const FRAME_DRAW_SCRIPT = String.raw `(function(){
+var L=function(f){try{return f()}catch(e){return false}};
+var vis=function(el){var T=window.OrzContentTheme;if(T&&typeof T.visible==='function')return T.visible(el);try{return el.isConnected&&el.getClientRects().length>0}catch(e){return false}};
+var ro=null;
+var pend=function(v,draw){v.__orzPend=draw;if(!ro&&typeof ResizeObserver==='function')ro=new ResizeObserver(function(es){es.forEach(function(e){var t=e.target;if(t.__orzPend&&vis(t)){var d=t.__orzPend;t.__orzPend=null;ro.unobserve(t);d()}})});if(ro)ro.observe(v)};
+var box=function(v){if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;v.style.width='';v.style.height='';var w=v.clientWidth,h=v.clientHeight;if(w>0&&h>0&&(Math.abs(w-v.__ow)>=1||Math.abs(h-v.__oh)>=1))return[w,h];return[v.__ow,v.__oh]};
+var smiles=function(v){var b=box(v);v.__dw=b[0];v.__dh=b[1];var d=new window.SmilesDrawer.Drawer({width:b[0],height:b[1]});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})};
+var chart=function(v){var w=v.ownerDocument.createElement('div');w.className='orz-chart-frame';w.style.cssText='position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}var T=window.OrzContentTheme;if(T&&typeof T.chart==='function')g=T.chart(v,g);v.__orzChart=new window.Chart(v,g)}catch(e){}};
+var S=function(){return L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'})};
+var C=function(){return L(function(){return typeof window.Chart==='function'})};
+window.__orzDrawCanvases=function(root){
+try{if(S())root.querySelectorAll('.markdown-body canvas[data-smiles]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))smiles(v);else pend(v,function(){smiles(v)})})}catch(e){}
+try{if(C())root.querySelectorAll('.markdown-body canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))chart(v);else pend(v,function(){chart(v)})})}catch(e){}
+};
+window.__orzRedraw=function(el){
+el=el||document;var q=function(s){var a=[].slice.call(el.querySelectorAll?el.querySelectorAll(s):[]);if(el.matches&&el.matches(s))a.unshift(el);return a};
+q('canvas[data-smiles],canvas.orz-chart[data-chart]').forEach(function(v){
+if(!vis(v))return;
+if(v.__orzPend){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d();return}
+if(v.__orzChart){try{v.__orzChart.resize()}catch(e){}return}
+if(v.__d&&v.hasAttribute('data-smiles')&&S())smiles(v)
+})};
+})();`;
 /* Body of window.__orzEnhance(). Scoped to .markdown-body so it works whatever
  * id/wrapper the host gives the rendered region. Idempotent: highlight/tabs/QR
  * skip already-processed nodes, SMILES/chart track a JS flag. SMILES honors
@@ -79,9 +117,9 @@ const ENHANCE_BODY = "var R='.markdown-body ';" +
     "var L=function(f){try{return f()}catch(e){return false}};" +
     "var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});" +
     "try{if(H)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}" +
-    "try{if(M)window.mermaid.run({nodes:document.querySelectorAll(R+'.mermaid:not([data-processed])')})}catch(e){}" +
-    "try{if(S)document.querySelectorAll(R+'canvas[data-smiles]').forEach(function(v){if(v.__d)return;v.__d=1;if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;var d=new window.SmilesDrawer.Drawer({width:v.__ow,height:v.__oh});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})})}catch(e){}" +
-    "try{if(C)document.querySelectorAll(R+'canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d)return;v.__d=1;var w=v.ownerDocument.createElement('div');w.style.cssText='position:relative;width:100%;max-width:440px;margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}new window.Chart(v,g)}catch(e){}})}catch(e){}" +
+    "var T=L(function(){return typeof window.OrzContentTheme.chart==='function'})?window.OrzContentTheme:null;" +
+    "try{if(M){var ns=[].slice.call(document.querySelectorAll(R+'.mermaid:not([data-processed])'));if(ns.length){if(T)T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}}}catch(e){}" +
+    "try{if(typeof window.__orzDrawCanvases==='function')window.__orzDrawCanvases(document)}catch(e){}" +
     "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}" +
     "try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}";
 /**
@@ -113,6 +151,8 @@ function getPreviewFrameAssets() {
                 '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}</script>' +
                 '<script>' + guard(runtimeScript) + '</script>' +
                 '<script>' + guard(baseline_grid_js_1.BASELINE_GRID_SCRIPT) + '</script>' +
+                '<script>' + guard(content_theme_js_1.CONTENT_THEME_SCRIPT) + '</script>' +
+                '<script>' + guard(FRAME_DRAW_SCRIPT) + '</script>' +
                 '<script>window.__orzEnhance=function(){' + ENHANCE_BODY + '\n};</script>');
         },
     };
@@ -232,6 +272,9 @@ async function enhanceDocument(root, options = {}) {
         }
         catch { /* the runtime's own error */ }
     }
+    // charts and diagrams themed from CSS custom properties (2.4.0): the theme kit, once per window
+    if (has('.mermaid') || has('canvas.orz-chart'))
+        installThemeKit(doc, win, head, nonce);
     // charts of content no longer in root (a re-render replaced it) are destroyed first (M.26)
     releaseDetached(root);
     const pass = async () => { await enhanceRoot(root, win, isStatic); };
@@ -355,7 +398,7 @@ function freezeCanvases(root) {
     } };
     const charts = drawnCharts.get(root) ?? [];
     for (const v of all('canvas.orz-chart[data-chart], canvas[data-smiles]')) {
-        if (!v.__d)
+        if (!v.__d || v.__orzPend)
             continue; // nothing drew it
         const tracked = charts.find((x) => x.canvas === v);
         try {
@@ -411,6 +454,7 @@ const destroyChart = (c) => { try {
 catch { /* Chart.js's own error */ } };
 /** Destroy the charts of `root` whose canvas is no longer inside it (the content was re-rendered). */
 function releaseDetached(root) {
+    releaseWaiting(root, false);
     const list = drawnCharts.get(root);
     if (!list)
         return;
@@ -430,6 +474,26 @@ function releaseDetached(root) {
     else
         drawnCharts.delete(root);
 }
+/** Stop waiting for the canvases of `root` (all, or those no longer inside it). */
+function releaseWaiting(root, all) {
+    const set = waitingByRoot.get(root);
+    if (!set)
+        return;
+    const r = root;
+    for (const v of [...set]) {
+        let inside = false;
+        try {
+            inside = !all && v.isConnected !== false && (typeof r.contains !== 'function' || r.contains(v));
+        }
+        catch {
+            inside = false;
+        }
+        if (!inside)
+            unwait(v);
+    }
+    if (set.size === 0)
+        waitingByRoot.delete(root);
+}
 /**
  * Release what {@link enhanceDocument} made for `root` (2.2.0, M.26): every
  * Chart.js instance it drew there is destroyed (its listeners, resize
@@ -441,6 +505,7 @@ function releaseDetached(root) {
  * canvas left `root`. Idempotent; a root never enhanced is a no-op.
  */
 function disposeEnhancement(root) {
+    releaseWaiting(root, true);
     const list = drawnCharts.get(root);
     drawnCharts.delete(root);
     for (const x of list ?? [])
@@ -504,6 +569,165 @@ function swapStylesheet(doc, id, href, options = {}) {
     l.addEventListener('error', done);
     return l;
 }
+/** The window's `OrzContentTheme` (2.4.0), when its script ran. */
+const themeKit = (w) => (probe(() => typeof w.OrzContentTheme.chart === 'function' && typeof w.OrzContentTheme.runMermaid === 'function') ? w.OrzContentTheme : null);
+/** Install `CONTENT_THEME_SCRIPT` once per window (an inline script carrying the nonce, like the runtime). */
+function installThemeKit(doc, w, head, nonce) {
+    if (themeKit(w))
+        return;
+    const s = doc.createElement('script');
+    if (nonce)
+        s.setAttribute('nonce', nonce);
+    s.textContent = content_theme_js_1.CONTENT_THEME_SCRIPT;
+    head.appendChild(s); // blocked by a CSP without the nonce: charts and diagrams keep their libraries' own look
+}
+/** Laid out with a size: not `display: none`, not in a closed `details`, not `visibility: hidden` (2.4.0). */
+function isVisible(el, w) {
+    const kit = themeKit(w);
+    if (kit) {
+        try {
+            return kit.visible(el) === true;
+        }
+        catch {
+            return false;
+        }
+    }
+    try {
+        if (!el.isConnected)
+            return false;
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: true }))
+            return false;
+        const r = el.getClientRects();
+        return r.length > 0 && (r[0].width > 0 || r[0].height > 0);
+    }
+    catch {
+        return false;
+    }
+}
+/** Canvases waiting to be shown, per window (one ResizeObserver each) and per enhanced root (released with it). */
+const waiting = new WeakMap();
+const waitingByRoot = new WeakMap();
+/** Draw `v` when it becomes visible: a ResizeObserver catches it getting a size; `redrawEnhancement` catches the rest. */
+function whenVisible(root, v, w, draw) {
+    let st = waiting.get(w);
+    if (!st) {
+        let ro = null;
+        try {
+            if (typeof w.ResizeObserver === 'function') {
+                ro = new w.ResizeObserver((entries) => {
+                    for (const e of entries) {
+                        const t = e.target;
+                        if (t.__orzPend && isVisible(t, w))
+                            run(t);
+                    }
+                });
+            }
+        }
+        catch {
+            ro = null;
+        }
+        waiting.set(w, (st = { ro }));
+    }
+    v.__orzPend = draw;
+    v.__orzPendRoot = root;
+    let set = waitingByRoot.get(root);
+    if (!set)
+        waitingByRoot.set(root, (set = new Set()));
+    set.add(v);
+    try {
+        st.ro?.observe(v);
+    }
+    catch { /* the observer's own error */ }
+}
+/** Draw a waiting canvas now (once). */
+function run(v) {
+    const draw = v.__orzPend;
+    if (!draw)
+        return;
+    unwait(v);
+    try {
+        draw();
+    }
+    catch { /* the library's own error */ }
+}
+function unwait(v) {
+    v.__orzPend = null;
+    const root = v.__orzPendRoot;
+    v.__orzPendRoot = undefined;
+    if (root)
+        waitingByRoot.get(root)?.delete(v);
+    try {
+        const w = v.ownerDocument?.defaultView;
+        waiting.get(w)?.ro?.unobserve(v);
+    }
+    catch { /* gone */ }
+}
+/**
+ * SMILES at the size of its box (2.4.0): the canvas laid out at its own
+ * 250×180 (the attributes it was rendered with); when CSS constrains it to
+ * another box, that box. Returns the CSS size to draw at.
+ */
+function smilesBox(v) {
+    if (v.__ow === undefined) {
+        v.__ow = v.width;
+        v.__oh = v.height;
+    }
+    v.width = v.__ow;
+    v.height = v.__oh;
+    try {
+        v.style.width = '';
+        v.style.height = '';
+    }
+    catch { /* no style */ }
+    const bw = Number(v.clientWidth) || 0;
+    const bh = Number(v.clientHeight) || 0;
+    if (bw > 0 && bh > 0 && (Math.abs(bw - v.__ow) >= 1 || Math.abs(bh - v.__oh) >= 1))
+        return [bw, bh];
+    return [v.__ow, v.__oh];
+}
+function drawSmiles(v, w) {
+    const [bw, bh] = smilesBox(v);
+    v.__dw = bw;
+    v.__dh = bh;
+    const d = new w.SmilesDrawer.Drawer({ width: bw, height: bh });
+    w.SmilesDrawer.parse(v.getAttribute('data-smiles'), (t) => { try {
+        d.draw(t, v, w.__orzSmilesTheme || 'light', false);
+    }
+    catch { /* a bad SMILES */ } });
+}
+function drawChart(root, v, w, isStatic) {
+    const wrap = v.ownerDocument.createElement('div');
+    wrap.className = 'orz-chart-frame';
+    wrap.style.cssText = 'position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';
+    v.parentNode.insertBefore(wrap, v);
+    wrap.appendChild(v);
+    v.removeAttribute('width');
+    v.removeAttribute('height');
+    try {
+        let g = JSON.parse(v.getAttribute('data-chart') || '{}');
+        g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
+        // a static (print) drawing: sharp at print resolution, never animated (2.3.0)
+        if (isStatic) {
+            g.options.animation = false;
+            if (g.options.devicePixelRatio === undefined)
+                g.options.devicePixelRatio = Math.max(2, Number(w.devicePixelRatio) || 1);
+        }
+        if (!((g.data && g.data.datasets) || []).some((d) => d && d.label))
+            g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
+        // themed from CSS custom properties (2.4.0); the chart's own colours win
+        const kit = themeKit(w);
+        if (kit) {
+            try {
+                g = kit.chart(v, g);
+            }
+            catch { /* unthemed */ }
+        }
+        const chart = new w.Chart(v, g);
+        v.__orzChart = chart;
+        track(root, chart, v);
+    }
+    catch { /* a bad chart */ }
+}
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
 async function enhanceRoot(root, w, isStatic = false) {
     const all = (sel) => { try {
@@ -521,27 +745,30 @@ async function enhanceRoot(root, w, isStatic = false) {
     let drawn = null;
     try {
         const nodes = all('.mermaid:not([data-processed])');
-        if (LIB.mermaid(w) && nodes.length)
-            drawn = w.mermaid.run({ nodes });
+        if (LIB.mermaid(w) && nodes.length) {
+            const kit = themeKit(w);
+            // themed from CSS custom properties (2.4.0), one Mermaid configuration per group of diagrams
+            drawn = kit ? kit.runMermaid(w.mermaid, nodes) : w.mermaid.run({ nodes });
+        }
     }
     catch { /* Mermaid's own error */ }
+    // SMILES and charts: drawn once each, and (unless static) only when visible — a hidden one waits (2.4.0)
     try {
         if (LIB.smiles(w)) {
             for (const v of all('canvas[data-smiles]')) {
-                if (v.__d)
+                if (v.__d) {
+                    // waiting for the reader to see it: drawn now when it is visible, or for print
+                    if (v.__orzPend && (isStatic || isVisible(v, w))) {
+                        unwait(v);
+                        drawSmiles(v, w);
+                    }
                     continue;
+                }
                 v.__d = 1;
-                if (v.__ow === undefined) {
-                    v.__ow = v.width;
-                    v.__oh = v.height;
-                }
-                v.width = v.__ow;
-                v.height = v.__oh;
-                const d = new w.SmilesDrawer.Drawer({ width: v.__ow, height: v.__oh });
-                w.SmilesDrawer.parse(v.getAttribute('data-smiles'), (t) => { try {
-                    d.draw(t, v, w.__orzSmilesTheme || 'light', false);
-                }
-                catch { /* a bad SMILES */ } });
+                if (isStatic || isVisible(v, w))
+                    drawSmiles(v, w);
+                else
+                    whenVisible(root, v, w, () => drawSmiles(v, w));
             }
         }
     }
@@ -549,29 +776,18 @@ async function enhanceRoot(root, w, isStatic = false) {
     try {
         if (LIB.chart(w)) {
             for (const v of all('canvas.orz-chart[data-chart]')) {
-                if (v.__d)
-                    continue;
-                v.__d = 1;
-                const wrap = v.ownerDocument.createElement('div');
-                wrap.style.cssText = 'position:relative;width:100%;max-width:440px;margin:.4em auto';
-                v.parentNode.insertBefore(wrap, v);
-                wrap.appendChild(v);
-                v.removeAttribute('width');
-                v.removeAttribute('height');
-                try {
-                    const g = JSON.parse(v.getAttribute('data-chart') || '{}');
-                    g.options = Object.assign({ responsive: true, maintainAspectRatio: true, animation: false }, g.options || {});
-                    // a static (print) drawing: sharp at print resolution, never animated (2.3.0)
-                    if (isStatic) {
-                        g.options.animation = false;
-                        if (g.options.devicePixelRatio === undefined)
-                            g.options.devicePixelRatio = Math.max(2, Number(w.devicePixelRatio) || 1);
+                if (v.__d) {
+                    if (v.__orzPend && (isStatic || isVisible(v, w))) {
+                        unwait(v);
+                        drawChart(root, v, w, isStatic);
                     }
-                    if (!((g.data && g.data.datasets) || []).some((d) => d && d.label))
-                        g.options.plugins = Object.assign({}, g.options.plugins, { legend: { display: false } });
-                    track(root, new w.Chart(v, g), v);
+                    continue;
                 }
-                catch { /* a bad chart */ }
+                v.__d = 1;
+                if (isStatic || isVisible(v, w))
+                    drawChart(root, v, w, isStatic);
+                else
+                    whenVisible(root, v, w, () => drawChart(root, v, w, false));
             }
         }
     }
@@ -581,6 +797,59 @@ async function enhanceRoot(root, w, isStatic = false) {
             await drawn;
         }
         catch { /* Mermaid's own error */ }
+    }
+}
+/**
+ * Draw again what a newly shown container holds (2.4.0) — a slide coming
+ * into view, a tab, a dialog: inside `el` (itself included), every chart or
+ * SMILES drawing that waited for it to be visible is drawn now, every drawn
+ * chart is resized to its container, and every drawn SMILES is drawn again
+ * at its box's size. Content `enhanceDocument` never saw is left alone. A
+ * ResizeObserver already draws a waiting canvas when it gets a size (from
+ * `display: none`); this covers what it cannot see (`visibility`, a
+ * transform, a box whose size did not change). Synchronous; cheap when
+ * nothing waits.
+ */
+function redrawEnhancement(el) {
+    const e = el;
+    if (!e || typeof e.querySelectorAll !== 'function')
+        return;
+    const w = (e.ownerDocument ?? e)?.defaultView;
+    if (!w)
+        return;
+    let list = [];
+    const sel = 'canvas[data-smiles], canvas.orz-chart[data-chart]';
+    try {
+        list = Array.from(e.querySelectorAll(sel));
+    }
+    catch {
+        return;
+    }
+    try {
+        if (typeof e.matches === 'function' && e.matches(sel))
+            list.unshift(e);
+    }
+    catch { /* not an element */ }
+    for (const v of list) {
+        if (!isVisible(v, w))
+            continue;
+        if (v.__orzPend) {
+            run(v);
+            continue;
+        }
+        if (v.__orzChart) {
+            try {
+                v.__orzChart.resize();
+            }
+            catch { /* Chart.js's own error */ }
+            continue;
+        }
+        if (v.__d && v.hasAttribute('data-smiles') && LIB.smiles(w)) {
+            try {
+                drawSmiles(v, w);
+            }
+            catch { /* SmilesDrawer's own error */ }
+        }
     }
 }
 //# sourceMappingURL=preview-frame.js.map

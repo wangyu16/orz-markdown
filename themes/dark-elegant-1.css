@@ -83,6 +83,22 @@
   --markdown-body-border: 1px solid var(--border-subtle);
   --markdown-body-radius: var(--radius-lg);
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  /* drawn on the light panel below, so dark ink */
+  --chart-text: #3a3f4c;
+  --chart-grid: rgba(0, 0, 0, 0.1);
+  --chart-1: #3f5fa8;
+  --chart-2: #1a7f4b;
+  --chart-3: #b7791f;
+  --chart-4: #c0392b;
+  --chart-5: #7b52c7;
+  --chart-6: #1b8aa0;
+  --mm-text: #1c1f2e;
+  --mm-line: #3a3f4c;
+  --mm-node: #e8eeff;
+  --mm-border: #3f5fa8;
+  --mm-accent: #5f8cff;
+  --mm-note: #fff3c4;
 }
 
 /* --------------------------------------------------------------------------
@@ -765,5 +781,6 @@ body {
 /* ---- mermaid & charts: light panel for legibility on the dark background ---- */
 .markdown-body div.mermaid { background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
-.markdown-body canvas.orz-chart { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
+/* the panel is the chart's frame (2.4.0): padding on the canvas itself broke Chart.js's sizing */
+.markdown-body .orz-chart-frame { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }

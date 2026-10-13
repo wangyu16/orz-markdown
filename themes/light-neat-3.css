@@ -125,6 +125,21 @@
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
   --markdown-body-decorations-display: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #52574d;
+  --chart-grid: rgba(27, 29, 26, 0.1);
+  --chart-1: #5f9e44;
+  --chart-2: #c87f17;
+  --chart-3: #3f7fb6;
+  --chart-4: #c4544f;
+  --chart-5: #8a6bb0;
+  --chart-6: #2f8f86;
+  --mm-text: #1b1d1a;
+  --mm-line: #52574d;
+  --mm-node: #f1f7ec;
+  --mm-border: #5f9e44;
+  --mm-accent: #c87f17;
+  --mm-note: #fbf1dc;
 }
 
 body.font-serif, .markdown-body.font-serif { --font-body: 'Cardo', Georgia, 'Noto Serif SC', serif; --lh-copy: 1.8; }

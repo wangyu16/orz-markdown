@@ -1,0 +1,37 @@
+/**
+ * Themed charts and diagrams (2.4.0): Chart.js and Mermaid take their colours
+ * and font from CSS custom properties, so a theme (or a slide, a region, any
+ * ancestor) styles them like the rest of the page.
+ *
+ * Chart.js (read on the chart's canvas):
+ *   --chart-text            labels, ticks, legend, title      (fallback: the canvas's `color`)
+ *   --chart-grid            grid and axis lines                (fallback: the text colour at 15 %)
+ *   --chart-font            font family                        (fallback: the canvas's `font-family`)
+ *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours)
+ *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
+ *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
+ *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
+ *   --chart-max-width       the chart frame's maximum width    (fallback: 440px; read by CSS, not here)
+ * A colour the chart's own config sets (a dataset's colours, an option) is kept.
+ *
+ * Mermaid (read on the `.mermaid` element; Mermaid's `base` theme):
+ *   --mm-text     text                      (fallback: the element's `color`)
+ *   --mm-line     edges and arrows          (fallback: --mm-text)
+ *   --mm-node     node fill                 (fallback: the surface mixed 12 % toward --mm-accent)
+ *   --mm-border   node borders              (fallback: --mm-accent)
+ *   --mm-accent   secondary fills, clusters (fallback: the element's `color`)
+ *   --mm-note     note fill                 (fallback: Mermaid's derivation)
+ *   --mm-surface  the diagram's background  (fallback: the nearest opaque background)
+ *   --mm-font     font family               (fallback: the element's `font-family`)
+ * Without any `--mm-*` property the diagram keeps Mermaid's own default theme
+ * (as before 2.4.0). A diagram's own `%%{init}%%` / front-matter config wins.
+ *
+ * ONE source, run in the preview frame (an inline script of `bodyScripts()`,
+ * used by `__orzEnhance`) and in a page (injected once per window by
+ * `enhanceDocument`, carrying its nonce): `window.OrzContentTheme`. Plain
+ * ES5 in a `String.raw` (like the runtime): no template literals, no
+ * backticks, no `${`. It only computes configurations; drawing stays with
+ * the callers.
+ */
+export declare const CONTENT_THEME_SCRIPT: string;
+//# sourceMappingURL=content-theme.d.ts.map

@@ -55,6 +55,21 @@
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #574a3f;
+  --chart-grid: rgba(69, 56, 46, 0.14);
+  --chart-1: #8c3b31;
+  --chart-2: #1a609e;
+  --chart-3: #21763c;
+  --chart-4: #a96b00;
+  --chart-5: #6b4f7a;
+  --chart-6: #4d6b6b;
+  --mm-text: #45382e;
+  --mm-line: #574a3f;
+  --mm-node: #efe5d4;
+  --mm-border: #8c3b31;
+  --mm-accent: #1a609e;
+  --mm-note: #f7e9cc;
 }
 
 body {

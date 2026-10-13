@@ -16,7 +16,7 @@ const CHROME = ['tests/browser-copy.test.ts', 'tests/carrier-editor.test.ts', 't
 const HEAVY = ['tests/conformance.test.ts'];
 /** The screen notebook (M.31): full-page screenshots and pixel reads; beside the editor's focus-sensitive
  * Chrome tests (E.13/E.14 keys and clicks in the preview) it made them flake, so it runs on its own. */
-const SCREEN = ['tests/notebook-screen.test.ts'];
+const SCREEN = ['tests/notebook-screen.test.ts', 'tests/content-theme.test.ts'];
 /** The CLI core's matrix (N.8: hundreds of in-process CLI runs, git and file I/O): its own group, never beside a timing claim. */
 const CLI = ['tests/carrier-node.test.ts'];
 
