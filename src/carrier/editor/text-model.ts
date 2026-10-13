@@ -55,6 +55,20 @@ export function toEditorText(text: string): string {
 }
 
 /**
+ * An offset in an exact text → the offset in its editor form (2.4.0): the
+ * BOM and the CR of every CR LF before it do not count. An offset between
+ * the CR and the LF of a pair maps to the pair's line break.
+ */
+export function toEditorOffset(exact: string, offset: number): number {
+  const at = Math.max(0, Math.min(offset, exact.length));
+  let n = at;
+  if (exact.startsWith(BOM)) n -= at > 0 ? 1 : 0;
+  // the CR of a CR LF does not count; an offset between the two maps to the line break (before it)
+  for (let i = exact.indexOf('\r'); i >= 0 && i < at; i = exact.indexOf('\r', i + 1)) if (exact.charCodeAt(i + 1) === 10) n--;
+  return n;
+}
+
+/**
  * A copy of a string that shares no storage with the string it was cut
  * from. V8 keeps a slice of 13 or more characters as a view on its parent,
  * so a short patch cut from a 1 MB text would keep the whole text alive;

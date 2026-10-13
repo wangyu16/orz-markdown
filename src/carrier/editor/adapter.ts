@@ -19,6 +19,16 @@ export interface Selection {
   to: number;
 }
 
+/** One replacement in an adapter's text (offsets in that text, before any change of the same batch). */
+export interface TextChange {
+  from: number;
+  to: number;
+  insert: string;
+}
+
+/** How the text outside a focus range is shown (2.4.0, `setFocusRange`). */
+export type FocusMode = 'dim' | 'fold';
+
 export interface ScrollPosition {
   /** The (fractional, 0-based) line at the top of the viewport. */
   line: number;
@@ -55,8 +65,25 @@ export interface TextEditorAdapter {
   getSelection?(): Selection;
   /** Switch read-only at run time (the shell's `setReadOnly`). Without it the engine keeps its mount-time state. */
   setReadOnly?(readOnly: boolean): void;
-  /** Select a range (offsets in the adapter's text); the shell uses it to put the caret after an inserted asset link. */
-  setSelection?(selection: Selection): void;
+  /**
+   * Select a range (offsets in the adapter's text) and report it through
+   * `onSelection`; the shell uses it to put the caret after an inserted asset
+   * link and for `select` (2.4.0). `scroll` (default true) brings the
+   * selection into view.
+   */
+  setSelection?(selection: Selection, options?: { scroll?: boolean }): void;
+  /**
+   * Apply several replacements as ONE undoable step (2.4.0, the shell's
+   * `applyEdits`): offsets in the current text, sorted, not overlapping; the
+   * selection maps through them. Without it the shell uses `setDoc`.
+   */
+  applyChanges?(changes: readonly TextChange[]): void;
+  /**
+   * Show the text outside `range` dimmed, or folded away (2.4.0, the shell's
+   * `setFocusRange`); `null` shows everything again. The range follows
+   * later edits. An engine without it shows everything.
+   */
+  setFocusRange?(range: Selection | null, options?: { mode?: FocusMode }): void;
   hasFocus?(): boolean;
   undo?(): boolean;
   redo?(): boolean;
@@ -249,12 +276,48 @@ export function textareaAdapter(): TextEditorAdapter {
       if (opts) opts = { ...opts, readOnly: flag };
       if (ta) ta.readOnly = flag;
     },
-    setSelection(s) {
+    setSelection(s, o) {
       if (!ta) return;
       const clamp = (n: number): number => Math.max(0, Math.min(last.length, n));
+      const before = lastSel;
       try { ta.setSelectionRange?.(clamp(s.from), clamp(s.to)); } catch { /* detached */ }
       lastSel = readSel();
       lastInputAt = -Infinity;
+      if (o?.scroll !== false) {
+        // a textarea has no line geometry: put the selection's line about a third down the view (proportionally)
+        const lines = countLines(last);
+        const line = countLines(last.slice(0, lastSel.from)) - 1;
+        const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
+        const per = lines > 0 ? (ta.scrollHeight ?? 0) / lines : 0;
+        if (max > 0 && per > 0) ta.scrollTop = Math.max(0, Math.min(max, line * per - (ta.clientHeight ?? 0) / 3));
+      }
+      if (lastSel.from !== before.from || lastSel.to !== before.to) opts?.onSelection?.(lastSel);
+    },
+    applyChanges(changes) {
+      if (!ta) return;
+      let text = '';
+      let at = 0;
+      for (const c of changes) { text += last.slice(at, c.from) + c.insert; at = c.to; }
+      text += last.slice(at);
+      if (text === last) return;
+      push();
+      lastInputAt = -Infinity;
+      const s = readSel();
+      // each offset moves by what the changes before it added; one inside a change goes to its end
+      const map = (p: number): number => {
+        let delta = 0;
+        for (const c of changes) {
+          if (p < c.from || (p === c.from && c.to > c.from)) break;
+          if (p < c.to) return c.from + delta + c.insert.length;
+          delta += c.insert.length - (c.to - c.from);
+        }
+        return p + delta;
+      };
+      ta.value = text;
+      last = ta.value;
+      try { ta.setSelectionRange?.(map(s.from), map(s.to)); } catch { /* detached */ }
+      lastSel = readSel();
+      opts?.onChange();
     },
     hasFocus() {
       const doc = ta?.ownerDocument;

@@ -12,13 +12,13 @@
  * an editor mounts.
  */
 export { createEditorShell } from './shell.js';
-export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext, EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, EditorPreviewChannel, } from './shell.js';
+export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext, EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, TextEdit, EditorPreviewChannel, } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
-export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition } from './adapter.js';
+export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition, TextChange, FocusMode } from './adapter.js';
 export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, ORZ_HIGHLIGHTER, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS, CODEMIRROR6_HISTORY_STEPS } from './codemirror6.js';
 export type { CodeMirror6Modules, CodeMirror6Options } from './codemirror6.js';
 export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_GLOBAL } from './codemirror-pin.js';
-export { createTextModel, toEditorText, minimalChange, detachString } from './text-model.js';
+export { createTextModel, toEditorText, toEditorOffset, minimalChange, detachString } from './text-model.js';
 export type { TextModel } from './text-model.js';
 export { previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS, } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';

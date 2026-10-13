@@ -384,6 +384,8 @@ function createEditorShell(element, options) {
     };
     const adoptBaseline = (text) => { if (!destroyed)
         model.markSaved(text); };
+    /** The label of the `applyEdits` call whose change is being reported (2.4.0). */
+    let changeLabel;
     const changed = () => {
         if (destroyed)
             return;
@@ -391,7 +393,7 @@ function createEditorShell(element, options) {
         model.recall(adapter.getDoc());
         updateDirty();
         if (has('change'))
-            emit('change', { text: getText() });
+            emit('change', changeLabel !== undefined ? { text: getText(), label: changeLabel } : { text: getText() });
         previewStale = true;
         if (staleSince === null)
             staleSince = clock();
@@ -1123,6 +1125,97 @@ function createEditorShell(element, options) {
             const next = (0, header_js_1.editHeader)(current, changes);
             if (next !== current)
                 api.setText(next);
+        },
+        applyEdits(edits, o) {
+            if (!Array.isArray(edits))
+                throw new TypeError('orz editor: applyEdits needs an array of { from, to, insert }');
+            const label = o && typeof o.label === 'string' ? o.label : undefined;
+            if (destroyed || readOnly)
+                return false;
+            const exact = getText();
+            const start = exact.startsWith(BOM) ? 1 : 0;
+            const bad = (i, why) => { throw new RangeError(`orz editor: applyEdits: edit ${i} ${why}`); };
+            const inPair = (n) => n > 0 && exact.charCodeAt(n - 1) === 13 && exact.charCodeAt(n) === 10;
+            let prev = start;
+            const styled = [];
+            edits.forEach((e, i) => {
+                if (!e || typeof e !== 'object' || typeof e.insert !== 'string')
+                    bad(i, 'is not { from, to, insert: string }');
+                const { from, to } = e;
+                if (!Number.isInteger(from) || !Number.isInteger(to) || from > to)
+                    bad(i, `has no integer range from <= to (${String(from)}, ${String(to)})`);
+                if (from < start || to > exact.length)
+                    bad(i, `is outside the text (${from}–${to} of ${start}–${exact.length})`);
+                if (from < prev)
+                    bad(i, 'overlaps or precedes the edit before it (sort by from)');
+                if (inPair(from) || inPair(to))
+                    bad(i, 'splits a CR LF line break');
+                prev = to;
+                styled.push(inDocumentStyle(e.insert));
+            });
+            // the exact text after the edits, and the same edits in the editor text (LF, no BOM)
+            let next = '';
+            let at = 0;
+            const changes = edits.map((e, i) => {
+                next += exact.slice(at, e.from) + styled[i];
+                at = e.to;
+                return { from: (0, text_model_js_1.toEditorOffset)(exact, e.from), to: (0, text_model_js_1.toEditorOffset)(exact, e.to), insert: (0, text_model_js_1.toEditorText)(styled[i]) };
+            });
+            next += exact.slice(at);
+            if (next === exact)
+                return true;
+            const editorText = model.adopt(next);
+            const d = adapter.getDoc();
+            let expected = '';
+            let ed = 0;
+            for (const c of changes) {
+                expected += d.slice(ed, c.from) + c.insert;
+                ed = c.to;
+            }
+            expected += d.slice(ed);
+            setting = true;
+            try {
+                // edits that join or split a line break (a CR before an LF) cannot map one to one: the whole text then
+                if (adapter.applyChanges && expected === editorText)
+                    adapter.applyChanges(changes);
+                else
+                    adapter.setDoc(editorText);
+                if (adapter.getDoc() !== editorText)
+                    adapter.setDoc(editorText);
+            }
+            finally {
+                setting = false;
+            }
+            changeLabel = label;
+            try {
+                changed();
+            }
+            finally {
+                changeLabel = undefined;
+            }
+            return true;
+        },
+        select(from, to, o) {
+            if (destroyed)
+                return;
+            if (typeof from !== 'number' || typeof to !== 'number' || Number.isNaN(from) || Number.isNaN(to))
+                throw new TypeError('orz editor: select needs two offsets');
+            const exact = getText();
+            adapter.setSelection?.({ from: (0, text_model_js_1.toEditorOffset)(exact, from), to: (0, text_model_js_1.toEditorOffset)(exact, to) }, { scroll: o?.scroll !== false });
+        },
+        setFocusRange(from, to, o) {
+            if (destroyed)
+                return;
+            if (from === null) {
+                adapter.setFocusRange?.(null);
+                return;
+            }
+            if (typeof from !== 'number' || typeof to !== 'number' || Number.isNaN(from) || Number.isNaN(to))
+                throw new TypeError('orz editor: setFocusRange needs two offsets, or null');
+            const exact = getText();
+            const a = (0, text_model_js_1.toEditorOffset)(exact, Math.min(from, to));
+            const b = (0, text_model_js_1.toEditorOffset)(exact, Math.max(from, to));
+            adapter.setFocusRange?.({ from: a, to: b }, { mode: o?.mode === 'fold' ? 'fold' : 'dim' });
         },
         isDirty() { updateDirty(); return dirty; },
         markSaved() { if (!destroyed) {

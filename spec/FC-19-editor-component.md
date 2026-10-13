@@ -118,6 +118,10 @@ interface Editor {
   // added 2.2.0 (additive, round 2 of the carrier-app loop)
   readonly ready: Promise<{ engine: string; error?: unknown }>;   // the engine is final (e.g. "codemirror6", or "textarea" with the load error); never rejects
   refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;  // render now; with includes: replace the record (saves write it too), forget fetched includes
+  // added 2.4.0 (additive; orz-slides 1.0's layout editor, REBUILD §3c)
+  applyEdits(edits: Array<{ from: number; to: number; insert: string }>, options?: { label?: string }): boolean;  // ONE undoable edit
+  select(from: number, to: number, options?: { scroll?: boolean }): void;       // exact offsets; scrolls unless scroll: false
+  setFocusRange(from: number | null, to?: number, options?: { mode?: "dim" | "fold" }): void;  // null: show everything
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -131,7 +135,7 @@ type SaveOutcome =
   | { ok: false; via?: SaveVia | "served-notice"; error: string; cancelled?: boolean; conflict?: boolean };
 
 interface EditorEvents {
-  change:    { text: string };
+  change:    { text: string; label?: string };   // label: the applyEdits call's (2.4.0)
   dirty:     { dirty: boolean };
   selection: { from: number; to: number };   // offsets in the exact text (BOM, CR LF counted)
   save:      { text: string; via: SaveVia };
@@ -165,6 +169,34 @@ when the text changed in any way since the proposal was made, when
 read-only or destroyed, a second time, or for another editor's proposal.
 The kit's AI menu and review panel (`orz-markdown/carrier/app`
 `attachAiMenu`, `reviewProposal`) use them.
+
+**`applyEdits`, `select`, `setFocusRange`** (orz-markdown 2.4.0, additive;
+for orz-slides 1.0, whose layout editor rewrites only marker lines and
+edits one slide inside the whole deck text, REBUILD §3c). All offsets are in
+the exact text, as the `selection` event reports them (BOM and CR LF
+counted).
+
+- `applyEdits(edits, { label? })` applies several replacements as **one**
+  undoable edit (one `undo` returns the exact text before them): `edits`
+  sorted by `from` and not overlapping (inserts at one offset apply in the
+  order given), each `insert` written in the document's line endings (and
+  never a BOM). The selection maps through them; the `change` event carries
+  `label`. An edit that is malformed, out of order, overlapping, outside the
+  text, before the BOM or between the CR and LF of a line break throws a
+  `RangeError` and changes nothing. Read-only or destroyed: returns `false`
+  and changes nothing; otherwise `true`.
+- `select(from, to, { scroll? })` selects the range (clamped; a boundary
+  inside a CR LF moves before the break), emits `selection`, and brings it
+  into view unless `scroll: false`. It works read-only and does not move
+  the keyboard focus (call `focus()`).
+- `setFocusRange(from, to, { mode? })` shows the text outside the range
+  dimmed (`mode: "dim"`, the default) or folds those lines away (`"fold"`),
+  so a reader edits one part — a slide — inside the whole text; nothing is
+  removed, and undo, search and `getText()` still see all of it. The range
+  follows later edits (typing at its end grows it). `setFocusRange(null)`
+  shows everything. An engine that cannot (the textarea fallback, an app's
+  CodeMirror build without `StateField` / `StateEffect` / `Decoration`)
+  shows everything; a range set while CodeMirror loads applies when it does.
 
 **`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
 carrier-app loop): the renderer reads an include from `includes` first (an
@@ -772,7 +804,8 @@ interface TextEditorAdapter {
   getDoc(): string;                                  // LF, no BOM
   setDoc(text, { resetHistory? }): void;             // one undoable step unless resetHistory
   focus(): void; destroy(): void;
-  // optional: getSelection, setSelection, setReadOnly, hasFocus, undo, redo, getScroll → { line, fraction }, scrollTo({ line | fraction }), ready()
+  // optional: getSelection, setSelection(sel, { scroll? }), setReadOnly, hasFocus, undo, redo, getScroll → { line, fraction }, scrollTo({ line | fraction }), ready()
+  // optional (2.4.0): applyChanges(changes) — one undoable step; setFocusRange(range | null, { mode? }) — dim / fold outside
 }
 ```
 
@@ -917,3 +950,10 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   option `missingIncludes: false` turns it off); `SaveOutcome.conflict` and
   the conflict question (§8.5); no served notice for an app's page (§8.5);
   the syntax highlighter (`ORZ_HIGHLIGHTER`, §8.6).
+- 2.4.0 (additive; the kit gaps of orz-slides 1.0, REBUILD §3c): `Editor`
+  `applyEdits`, `select`, `setFocusRange` and the `change` event's `label`
+  (§4); adapters may implement `applyChanges` and `setFocusRange`, and
+  `setSelection` takes `{ scroll? }` and reports the selection through
+  `onSelection` (§8.6); the pinned CodeMirror bundle also exports
+  `StateField`, `StateEffect` and `Decoration`; exports `toEditorOffset`
+  and the types `TextEdit`, `TextChange`, `FocusMode`.

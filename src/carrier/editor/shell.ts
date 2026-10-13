@@ -44,7 +44,7 @@ import type { TextEditorAdapter } from './adapter.js';
 import { codemirror6Adapter } from './codemirror6.js';
 import { createPreview, lineToTop, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import { EDITOR_CSS } from './styles.js';
-import { createTextModel, detachString, toEditorText } from './text-model.js';
+import { createTextModel, detachString, toEditorOffset, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
 import type { EdDataTransfer, EdDocument, EdElement, EdEvent, EdFile, EdListener, EdResizeObserver, EdView, ShadowRootLike } from './types.js';
 
@@ -64,8 +64,11 @@ export type SaveOutcome =
   | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean; conflict?: boolean };
 
 export interface EditorEvents {
-  /** The exact text after the change (captured when the event fires). */
-  change: { readonly text: string };
+  /**
+   * The exact text after the change (captured when the event fires); `label`
+   * (2.4.0) is the label an `applyEdits` call gave, when the change is one.
+   */
+  change: { readonly text: string; readonly label?: string };
   dirty: { dirty: boolean };
   /** Offsets in the exact text (BOM and CR LF counted). */
   selection: { from: number; to: number };
@@ -85,6 +88,9 @@ export interface EditorEvents {
 
 /** A range of the exact text (BOM and CR LF counted). */
 export interface TextRange { from: number; to: number }
+
+/** One replacement for `applyEdits` (2.4.0): offsets in the exact text (BOM and CR LF counted). */
+export interface TextEdit { from: number; to: number; insert: string }
 
 /** FC-19 §3 `EditorHooks`: what a host supplies. Every hook is optional. */
 export interface EditorHooks {
@@ -296,6 +302,34 @@ export interface EditorShell {
   setText(text: string, options?: { resetHistory?: boolean }): void;
   /** Apply `editHeader(text, changes)` (FC-18 §9) as one undoable edit. Throws what `editHeader` throws. */
   setHeader(changes: Readonly<Record<string, HeaderChange>>): void;
+  /**
+   * (2.4.0, FC-19 §4) Apply several replacements as ONE undoable edit — a
+   * layout tool's minimal diffs. Offsets are in the exact text (as
+   * `selection` reports them), sorted by `from`, not overlapping (inserts at
+   * one offset apply in the order given); each `insert` is written in the
+   * document's line endings. The selection maps through the edits; the
+   * `change` event carries `label`. Throws a `RangeError` (changing nothing)
+   * for an edit that is malformed, out of order, overlapping, outside the
+   * text, before the BOM or between the CR and LF of a line break. Returns
+   * false (changing nothing) when read-only or destroyed, else true.
+   */
+  applyEdits(edits: readonly TextEdit[], options?: { label?: string }): boolean;
+  /**
+   * (2.4.0) Select a range of the exact text (clamped; a boundary inside a
+   * CR LF moves before it) and, unless `scroll: false`, bring it into view.
+   * Emits `selection`. Works read-only too; does not move the focus.
+   */
+  select(from: number, to: number, options?: { scroll?: boolean }): void;
+  /**
+   * (2.4.0) Show the text outside `from`–`to` (exact offsets) dimmed —
+   * `mode: 'fold'` hides those lines instead — so a reader works on one part
+   * (a slide) inside the whole text: nothing is removed, undo and search
+   * still see all of it, and the range follows later edits. `null` shows
+   * everything again. The textarea engine (CodeMirror not loaded, or an
+   * engine without it) shows everything; a range set before CodeMirror
+   * loads applies when it does.
+   */
+  setFocusRange(from: number | null, to?: number, options?: { mode?: 'dim' | 'fold' }): void;
   isDirty(): boolean;
   /** The current text is the saved one. */
   markSaved(): void;
@@ -679,12 +713,14 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     emit('dirty', { dirty: d });
   };
   const adoptBaseline = (text: string): void => { if (!destroyed) model.markSaved(text); };
+  /** The label of the `applyEdits` call whose change is being reported (2.4.0). */
+  let changeLabel: string | undefined;
   const changed = (): void => {
     if (destroyed) return;
     // back at a remembered text (undo): its BOM and line endings are the document's again
     model.recall(adapter.getDoc());
     updateDirty();
-    if (has('change')) emit('change', { text: getText() });
+    if (has('change')) emit('change', changeLabel !== undefined ? { text: getText(), label: changeLabel } : { text: getText() });
     previewStale = true;
     if (staleSince === null) staleSince = clock();
     scheduleRender();
@@ -1244,6 +1280,68 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       const current = getText();
       const next = editHeader(current, changes);
       if (next !== current) api.setText(next);
+    },
+    applyEdits(edits, o) {
+      if (!Array.isArray(edits)) throw new TypeError('orz editor: applyEdits needs an array of { from, to, insert }');
+      const label = o && typeof o.label === 'string' ? o.label : undefined;
+      if (destroyed || readOnly) return false;
+      const exact = getText();
+      const start = exact.startsWith(BOM) ? 1 : 0;
+      const bad = (i: number, why: string): never => { throw new RangeError(`orz editor: applyEdits: edit ${i} ${why}`); };
+      const inPair = (n: number): boolean => n > 0 && exact.charCodeAt(n - 1) === 13 && exact.charCodeAt(n) === 10;
+      let prev = start;
+      const styled: string[] = [];
+      edits.forEach((e, i) => {
+        if (!e || typeof e !== 'object' || typeof e.insert !== 'string') bad(i, 'is not { from, to, insert: string }');
+        const { from, to } = e;
+        if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) bad(i, `has no integer range from <= to (${String(from)}, ${String(to)})`);
+        if (from < start || to > exact.length) bad(i, `is outside the text (${from}–${to} of ${start}–${exact.length})`);
+        if (from < prev) bad(i, 'overlaps or precedes the edit before it (sort by from)');
+        if (inPair(from) || inPair(to)) bad(i, 'splits a CR LF line break');
+        prev = to;
+        styled.push(inDocumentStyle(e.insert));
+      });
+      // the exact text after the edits, and the same edits in the editor text (LF, no BOM)
+      let next = '';
+      let at = 0;
+      const changes = edits.map((e, i) => {
+        next += exact.slice(at, e.from) + styled[i];
+        at = e.to;
+        return { from: toEditorOffset(exact, e.from), to: toEditorOffset(exact, e.to), insert: toEditorText(styled[i]) };
+      });
+      next += exact.slice(at);
+      if (next === exact) return true;
+      const editorText = model.adopt(next);
+      const d = adapter.getDoc();
+      let expected = '';
+      let ed = 0;
+      for (const c of changes) { expected += d.slice(ed, c.from) + c.insert; ed = c.to; }
+      expected += d.slice(ed);
+      setting = true;
+      try {
+        // edits that join or split a line break (a CR before an LF) cannot map one to one: the whole text then
+        if (adapter.applyChanges && expected === editorText) adapter.applyChanges(changes);
+        else adapter.setDoc(editorText);
+        if (adapter.getDoc() !== editorText) adapter.setDoc(editorText);
+      } finally { setting = false; }
+      changeLabel = label;
+      try { changed(); } finally { changeLabel = undefined; }
+      return true;
+    },
+    select(from, to, o) {
+      if (destroyed) return;
+      if (typeof from !== 'number' || typeof to !== 'number' || Number.isNaN(from) || Number.isNaN(to)) throw new TypeError('orz editor: select needs two offsets');
+      const exact = getText();
+      adapter.setSelection?.({ from: toEditorOffset(exact, from), to: toEditorOffset(exact, to) }, { scroll: o?.scroll !== false });
+    },
+    setFocusRange(from, to, o) {
+      if (destroyed) return;
+      if (from === null) { adapter.setFocusRange?.(null); return; }
+      if (typeof from !== 'number' || typeof to !== 'number' || Number.isNaN(from) || Number.isNaN(to)) throw new TypeError('orz editor: setFocusRange needs two offsets, or null');
+      const exact = getText();
+      const a = toEditorOffset(exact, Math.min(from, to));
+      const b = toEditorOffset(exact, Math.max(from, to));
+      adapter.setFocusRange?.({ from: a, to: b }, { mode: o?.mode === 'fold' ? 'fold' : 'dim' });
     },
     isDirty() { updateDirty(); return dirty; },
     markSaved() { if (!destroyed) { adoptBaseline(getText()); updateDirty(); } },

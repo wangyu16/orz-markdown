@@ -2,6 +2,12 @@ type Eol = '\n' | '\r\n' | '\r';
 /** The editor (LF, no BOM) form of an exact text. */
 export declare function toEditorText(text: string): string;
 /**
+ * An offset in an exact text → the offset in its editor form (2.4.0): the
+ * BOM and the CR of every CR LF before it do not count. An offset between
+ * the CR and the LF of a pair maps to the pair's line break.
+ */
+export declare function toEditorOffset(exact: string, offset: number): number;
+/**
  * A copy of a string that shares no storage with the string it was cut
  * from. V8 keeps a slice of 13 or more characters as a view on its parent,
  * so a short patch cut from a 1 MB text would keep the whole text alive;

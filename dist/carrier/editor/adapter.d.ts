@@ -16,6 +16,14 @@ export interface Selection {
     from: number;
     to: number;
 }
+/** One replacement in an adapter's text (offsets in that text, before any change of the same batch). */
+export interface TextChange {
+    from: number;
+    to: number;
+    insert: string;
+}
+/** How the text outside a focus range is shown (2.4.0, `setFocusRange`). */
+export type FocusMode = 'dim' | 'fold';
 export interface ScrollPosition {
     /** The (fractional, 0-based) line at the top of the viewport. */
     line: number;
@@ -51,8 +59,29 @@ export interface TextEditorAdapter {
     getSelection?(): Selection;
     /** Switch read-only at run time (the shell's `setReadOnly`). Without it the engine keeps its mount-time state. */
     setReadOnly?(readOnly: boolean): void;
-    /** Select a range (offsets in the adapter's text); the shell uses it to put the caret after an inserted asset link. */
-    setSelection?(selection: Selection): void;
+    /**
+     * Select a range (offsets in the adapter's text) and report it through
+     * `onSelection`; the shell uses it to put the caret after an inserted asset
+     * link and for `select` (2.4.0). `scroll` (default true) brings the
+     * selection into view.
+     */
+    setSelection?(selection: Selection, options?: {
+        scroll?: boolean;
+    }): void;
+    /**
+     * Apply several replacements as ONE undoable step (2.4.0, the shell's
+     * `applyEdits`): offsets in the current text, sorted, not overlapping; the
+     * selection maps through them. Without it the shell uses `setDoc`.
+     */
+    applyChanges?(changes: readonly TextChange[]): void;
+    /**
+     * Show the text outside `range` dimmed, or folded away (2.4.0, the shell's
+     * `setFocusRange`); `null` shows everything again. The range follows
+     * later edits. An engine without it shows everything.
+     */
+    setFocusRange?(range: Selection | null, options?: {
+        mode?: FocusMode;
+    }): void;
     hasFocus?(): boolean;
     undo?(): boolean;
     redo?(): boolean;

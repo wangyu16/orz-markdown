@@ -19,10 +19,10 @@ export const CODEMIRROR6_VERSIONS: Readonly<Record<string, string>> = {
 export const CODEMIRROR6_PATH = 'vendor/codemirror6.js';
 
 /** Subresource Integrity of the bundle's exact bytes. */
-export const CODEMIRROR6_INTEGRITY = 'sha384-8e6Vw157xB7MdNcv7b7W7QoOHKX4n85q7JCCyPc4E66BntV95YB6RLW4vkVoDlhS';
+export const CODEMIRROR6_INTEGRITY = 'sha384-265qYkDUs7Cbe/xL4/g6l08dOgRZWX+BGgzt+eU1/BQhla54z4ErWI4XSIekaIC+';
 
 /** The bundle's size in bytes. */
-export const CODEMIRROR6_BYTES = 355812;
+export const CODEMIRROR6_BYTES = 355853;
 
 /** The global the bundle sets. */
 export const CODEMIRROR6_GLOBAL = 'OrzCodeMirror6';

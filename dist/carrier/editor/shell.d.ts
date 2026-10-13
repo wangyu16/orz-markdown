@@ -55,9 +55,13 @@ export type SaveOutcome = {
     conflict?: boolean;
 };
 export interface EditorEvents {
-    /** The exact text after the change (captured when the event fires). */
+    /**
+     * The exact text after the change (captured when the event fires); `label`
+     * (2.4.0) is the label an `applyEdits` call gave, when the change is one.
+     */
     change: {
         readonly text: string;
+        readonly label?: string;
     };
     dirty: {
         dirty: boolean;
@@ -93,6 +97,12 @@ export interface EditorEvents {
 export interface TextRange {
     from: number;
     to: number;
+}
+/** One replacement for `applyEdits` (2.4.0): offsets in the exact text (BOM and CR LF counted). */
+export interface TextEdit {
+    from: number;
+    to: number;
+    insert: string;
 }
 /** FC-19 §3 `EditorHooks`: what a host supplies. Every hook is optional. */
 export interface EditorHooks {
@@ -329,6 +339,40 @@ export interface EditorShell {
     }): void;
     /** Apply `editHeader(text, changes)` (FC-18 §9) as one undoable edit. Throws what `editHeader` throws. */
     setHeader(changes: Readonly<Record<string, HeaderChange>>): void;
+    /**
+     * (2.4.0, FC-19 §4) Apply several replacements as ONE undoable edit — a
+     * layout tool's minimal diffs. Offsets are in the exact text (as
+     * `selection` reports them), sorted by `from`, not overlapping (inserts at
+     * one offset apply in the order given); each `insert` is written in the
+     * document's line endings. The selection maps through the edits; the
+     * `change` event carries `label`. Throws a `RangeError` (changing nothing)
+     * for an edit that is malformed, out of order, overlapping, outside the
+     * text, before the BOM or between the CR and LF of a line break. Returns
+     * false (changing nothing) when read-only or destroyed, else true.
+     */
+    applyEdits(edits: readonly TextEdit[], options?: {
+        label?: string;
+    }): boolean;
+    /**
+     * (2.4.0) Select a range of the exact text (clamped; a boundary inside a
+     * CR LF moves before it) and, unless `scroll: false`, bring it into view.
+     * Emits `selection`. Works read-only too; does not move the focus.
+     */
+    select(from: number, to: number, options?: {
+        scroll?: boolean;
+    }): void;
+    /**
+     * (2.4.0) Show the text outside `from`–`to` (exact offsets) dimmed —
+     * `mode: 'fold'` hides those lines instead — so a reader works on one part
+     * (a slide) inside the whole text: nothing is removed, undo and search
+     * still see all of it, and the range follows later edits. `null` shows
+     * everything again. The textarea engine (CodeMirror not loaded, or an
+     * engine without it) shows everything; a range set before CodeMirror
+     * loads applies when it does.
+     */
+    setFocusRange(from: number | null, to?: number, options?: {
+        mode?: 'dim' | 'fold';
+    }): void;
     isDirty(): boolean;
     /** The current text is the saved one. */
     markSaved(): void;

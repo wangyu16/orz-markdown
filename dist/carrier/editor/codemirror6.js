@@ -125,6 +125,8 @@ const THEME = {
         backgroundColor: 'color-mix(in oklch, var(--orz-chrome-accent) 26%, transparent)',
     },
     '.cm-panels': { backgroundColor: 'var(--orz-chrome-surface-2)', color: 'var(--orz-chrome-fg)' },
+    // setFocusRange (2.4.0): the text outside the focus range, dimmed
+    '.orz-focus-outside': { opacity: '0.38' },
     // syntax (2.2.0): the chrome's syntax tokens, light and dark with the chrome's scheme (E.27)
     '.orz-tok-heading': { color: 'var(--orz-chrome-syntax-heading)', fontWeight: '700' },
     '.orz-tok-strong': { fontWeight: '700' },
@@ -188,6 +190,71 @@ function readOnlyExtensions(m, flag) {
         ...(flag && EditorView.contentAttributes ? [EditorView.contentAttributes.of({ tabindex: '0', 'aria-readonly': 'true' })] : []),
     ];
 }
+/**
+ * The focus range of `setFocusRange` (2.4.0): a state field mapped through
+ * every change (an insertion at its end grows it, one at its start stays
+ * outside), drawing the text outside it dimmed (two mark decorations) or
+ * folded away (whole lines replaced by nothing). Null when the modules lack
+ * `StateField`, `StateEffect` or `Decoration` (an app's own CodeMirror build):
+ * then everything stays shown.
+ */
+function focusExtension(m) {
+    const { StateField, StateEffect } = m.state;
+    const { Decoration, EditorView } = m.view;
+    if (typeof StateField?.define !== 'function' || typeof StateEffect?.define !== 'function' || typeof Decoration?.mark !== 'function' || !EditorView?.decorations)
+        return null;
+    const effect = StateEffect.define();
+    const dim = Decoration.mark({ class: 'orz-focus-outside' });
+    const fold = Decoration.replace({ block: true });
+    const decorate = (v, doc) => {
+        if (!v)
+            return Decoration.none;
+        const len = doc.length;
+        const ranges = [];
+        if (v.mode === 'fold') {
+            const first = doc.lineAt(v.from);
+            const last = doc.lineAt(Math.max(v.from, v.to - (v.to > v.from ? 1 : 0)));
+            if (first.number > 1)
+                ranges.push(fold.range(0, doc.line(first.number - 1).to));
+            if (last.number < doc.lines)
+                ranges.push(fold.range(doc.line(last.number + 1).from, len));
+        }
+        else {
+            if (v.from > 0)
+                ranges.push(dim.range(0, v.from));
+            if (v.to < len)
+                ranges.push(dim.range(v.to, len));
+        }
+        return Decoration.set(ranges, true);
+    };
+    const field = StateField.define({
+        create: () => ({ value: null, deco: Decoration.none }),
+        update(f, tr) {
+            let value = f.value;
+            let touched = false;
+            if (value && tr.docChanged) {
+                const from = tr.changes.mapPos(value.from, 1);
+                value = { from, to: Math.max(from, tr.changes.mapPos(value.to, 1)), mode: value.mode };
+                touched = true;
+            }
+            for (const e of tr.effects)
+                if (e.is(effect)) {
+                    value = e.value;
+                    touched = true;
+                }
+            if (!touched)
+                return f;
+            if (value) {
+                const len = tr.newDoc.length;
+                const from = Math.max(0, Math.min(len, value.from));
+                value = { from, to: Math.max(from, Math.min(len, value.to)), mode: value.mode };
+            }
+            return { value, deco: decorate(value, tr.newDoc) };
+        },
+        provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
+    });
+    return { effect, field, extension: [field] };
+}
 function codemirror6Adapter(options = {}) {
     let fallback = (0, adapter_js_1.textareaAdapter)();
     let view = null;
@@ -200,6 +267,9 @@ function codemirror6Adapter(options = {}) {
     /** Read-only now (mount option, then `setReadOnly`); a Compartment switches it in CodeMirror at run time. */
     let readOnlyNow = false;
     let roCompartment = null;
+    /** The focus range (2.4.0): its CodeMirror field, and the range asked for before CodeMirror arrived. */
+    let focus = null;
+    let pendingFocus = null;
     const build = (m, o) => {
         const { EditorState } = m.state;
         const { EditorView, keymap } = m.view;
@@ -208,6 +278,7 @@ function codemirror6Adapter(options = {}) {
         const ro = readOnlyNow;
         const roExtensions = (flag) => readOnlyExtensions(m, flag);
         roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
+        focus = focusExtension(m);
         const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
         return [
             m.view.highlightSpecialChars?.(),
@@ -225,6 +296,7 @@ function codemirror6Adapter(options = {}) {
             roCompartment ? roCompartment.of(roExtensions(ro)) : roExtensions(ro),
             EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true' }),
             EditorView.theme(THEME),
+            ...(focus ? focus.extension : []),
             options.nonce && EditorView.cspNonce ? EditorView.cspNonce.of(options.nonce) : undefined,
             EditorView.updateListener.of((u) => {
                 if (u.docChanged)
@@ -313,6 +385,13 @@ function codemirror6Adapter(options = {}) {
             adapter.scrollTo({ fraction: scroll.fraction });
         if (focused)
             view.focus();
+        // a focus range asked for while the textarea showed (clamped to the text)
+        if (pendingFocus && focus) {
+            const len = view.state.doc.length;
+            const from = Math.max(0, Math.min(len, pendingFocus.from));
+            view.dispatch({ effects: focus.effect.of({ from, to: Math.max(from, Math.min(len, pendingFocus.to)), mode: pendingFocus.mode }) });
+        }
+        pendingFocus = null;
     };
     const adapter = {
         get name() { return view ? 'codemirror6' : 'textarea'; },
@@ -410,14 +489,36 @@ function codemirror6Adapter(options = {}) {
             const sel = view.state.selection.main;
             view.setState(EditorState.create({ doc: view.state.doc.toString(), extensions, selection: { anchor: sel.anchor, head: sel.head } }));
         },
-        setSelection(s) {
+        setSelection(s, o) {
             if (!view) {
-                fallback?.setSelection?.(s);
+                fallback?.setSelection?.(s, o);
                 return;
             }
             const len = view.state.doc.length;
             const clamp = (n) => Math.max(0, Math.min(len, n));
-            view.dispatch({ selection: { anchor: clamp(s.from), head: clamp(s.to) }, scrollIntoView: true });
+            view.dispatch({ selection: { anchor: clamp(s.from), head: clamp(s.to) }, scrollIntoView: o?.scroll !== false });
+        },
+        applyChanges(changes) {
+            if (!view) {
+                fallback?.applyChanges?.(changes);
+                return;
+            }
+            const list = changes.filter((c) => c.from !== c.to || c.insert !== '');
+            if (list.length === 0)
+                return;
+            const iso = cm.commands.isolateHistory;
+            // one transaction = one undoable step; the selection maps through every change
+            view.dispatch({ changes: list.map((c) => ({ from: c.from, to: c.to, insert: c.insert })), ...(iso ? { annotations: iso.of('full') } : {}) });
+        },
+        setFocusRange(range, o) {
+            const value = range ? { from: Math.min(range.from, range.to), to: Math.max(range.from, range.to), mode: o?.mode === 'fold' ? 'fold' : 'dim' } : null;
+            if (!view) {
+                pendingFocus = value;
+                return;
+            }
+            if (!focus)
+                return; // modules without the decoration API: everything stays shown
+            view.dispatch({ effects: focus.effect.of(value) });
         },
         hasFocus() {
             return view ? view.hasFocus === true : fallback?.hasFocus?.() ?? false;

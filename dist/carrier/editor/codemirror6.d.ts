@@ -8,11 +8,15 @@ type Any = any;
  * import('@codemirror/lang-markdown'), search: … }` (search optional).
  */
 export interface CodeMirror6Modules {
+    /** `StateField`, `StateEffect` (2.4.0, optional): the focus range of `setFocusRange`. */
     state: {
         EditorState: Any;
         Compartment?: Any;
         EditorSelection?: Any;
+        StateField?: Any;
+        StateEffect?: Any;
     };
+    /** `Decoration` (2.4.0, optional): the focus range's dimming and folding. */
     view: {
         EditorView: Any;
         keymap: Any;
@@ -20,6 +24,7 @@ export interface CodeMirror6Modules {
         highlightActiveLine?: Any;
         highlightSpecialChars?: Any;
         dropCursor?: Any;
+        Decoration?: Any;
     };
     commands: {
         history: Any;

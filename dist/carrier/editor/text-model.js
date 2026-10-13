@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.toEditorText = toEditorText;
+exports.toEditorOffset = toEditorOffset;
 exports.detachString = detachString;
 exports.createTextModel = createTextModel;
 exports.minimalChange = minimalChange;
@@ -54,6 +55,22 @@ const REMEMBERED = 16;
 function toEditorText(text) {
     const body = text.startsWith(BOM) ? text.slice(1) : text;
     return body.indexOf('\r') < 0 ? body : body.replace(/\r\n?/g, '\n');
+}
+/**
+ * An offset in an exact text → the offset in its editor form (2.4.0): the
+ * BOM and the CR of every CR LF before it do not count. An offset between
+ * the CR and the LF of a pair maps to the pair's line break.
+ */
+function toEditorOffset(exact, offset) {
+    const at = Math.max(0, Math.min(offset, exact.length));
+    let n = at;
+    if (exact.startsWith(BOM))
+        n -= at > 0 ? 1 : 0;
+    // the CR of a CR LF does not count; an offset between the two maps to the line break (before it)
+    for (let i = exact.indexOf('\r'); i >= 0 && i < at; i = exact.indexOf('\r', i + 1))
+        if (exact.charCodeAt(i + 1) === 10)
+            n--;
+    return n;
 }
 /**
  * A copy of a string that shares no storage with the string it was cut

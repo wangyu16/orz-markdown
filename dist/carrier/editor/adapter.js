@@ -189,16 +189,64 @@ function textareaAdapter() {
             if (ta)
                 ta.readOnly = flag;
         },
-        setSelection(s) {
+        setSelection(s, o) {
             if (!ta)
                 return;
             const clamp = (n) => Math.max(0, Math.min(last.length, n));
+            const before = lastSel;
             try {
                 ta.setSelectionRange?.(clamp(s.from), clamp(s.to));
             }
             catch { /* detached */ }
             lastSel = readSel();
             lastInputAt = -Infinity;
+            if (o?.scroll !== false) {
+                // a textarea has no line geometry: put the selection's line about a third down the view (proportionally)
+                const lines = countLines(last);
+                const line = countLines(last.slice(0, lastSel.from)) - 1;
+                const max = Math.max(0, (ta.scrollHeight ?? 0) - (ta.clientHeight ?? 0));
+                const per = lines > 0 ? (ta.scrollHeight ?? 0) / lines : 0;
+                if (max > 0 && per > 0)
+                    ta.scrollTop = Math.max(0, Math.min(max, line * per - (ta.clientHeight ?? 0) / 3));
+            }
+            if (lastSel.from !== before.from || lastSel.to !== before.to)
+                opts?.onSelection?.(lastSel);
+        },
+        applyChanges(changes) {
+            if (!ta)
+                return;
+            let text = '';
+            let at = 0;
+            for (const c of changes) {
+                text += last.slice(at, c.from) + c.insert;
+                at = c.to;
+            }
+            text += last.slice(at);
+            if (text === last)
+                return;
+            push();
+            lastInputAt = -Infinity;
+            const s = readSel();
+            // each offset moves by what the changes before it added; one inside a change goes to its end
+            const map = (p) => {
+                let delta = 0;
+                for (const c of changes) {
+                    if (p < c.from || (p === c.from && c.to > c.from))
+                        break;
+                    if (p < c.to)
+                        return c.from + delta + c.insert.length;
+                    delta += c.insert.length - (c.to - c.from);
+                }
+                return p + delta;
+            };
+            ta.value = text;
+            last = ta.value;
+            try {
+                ta.setSelectionRange?.(map(s.from), map(s.to));
+            }
+            catch { /* detached */ }
+            lastSel = readSel();
+            opts?.onChange();
         },
         hasFocus() {
             const doc = ta?.ownerDocument;

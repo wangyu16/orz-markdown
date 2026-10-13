@@ -2836,6 +2836,149 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
   });
 });
 
+// ── 2.4.0: applyEdits, select, setFocusRange (FC-19 §4, the layout GUI's API) ──
+
+describe('applyEdits, select and setFocusRange (2.4.0)', () => {
+  const T = '﻿{{nyml\r\nkind: document\r\n}}\r\n\r\n<!-- slide 2col -->\r\n<!-- @left -->\r\nA\r\n<!-- @right -->\r\nB\r\n';
+  const at = (s: string, sub: string): number => { const i = s.indexOf(sub); if (i < 0) throw new Error(sub); return i; };
+
+  it('[E.38] applyEdits applies several replacements (exact offsets, sorted) as ONE undoable edit in the document\'s line endings and BOM, maps the selection, reports the label on the change event and refuses malformed, unsorted, overlapping, out-of-text, before-BOM or CR LF-splitting edits with a RangeError that changes nothing; read-only or destroyed it returns false', () => {
+    const m = mount({ text: T });
+    const changes: Array<{ text: string; label?: string }> = [];
+    m.shell.on('change', (e) => changes.push({ ...e }));
+    // the caret on "B"
+    const d0 = m.shell.adapter.getDoc();
+    m.shell.adapter.setSelection!({ from: d0.indexOf('B'), to: d0.indexOf('B') }, { scroll: false });
+    const marker = at(T, '2col');
+    const left = at(T, '@left');
+    expect(m.shell.applyEdits([
+      { from: marker, to: marker + 4, insert: 'col 2/1 { left; right }' },
+      { from: left, to: left + 5, insert: '@left' },
+      { from: at(T, 'A'), to: at(T, 'A') + 1, insert: 'A1\nA2' },
+    ], { label: 'resize' })).toBe(true);
+    const want = T.replace('2col', 'col 2/1 { left; right }').replace('\r\nA\r\n', '\r\nA1\r\nA2\r\n');
+    expect(m.shell.getText()).toBe(want);
+    expect(changes).toEqual([{ text: want, label: 'resize' }]);
+    // the caret stayed on "B" (mapped through all three edits)
+    const d1 = m.shell.adapter.getDoc();
+    expect(m.shell.adapter.getSelection!()).toEqual({ from: d1.indexOf('B'), to: d1.indexOf('B') });
+    // one undo step back to the exact text, one redo forward
+    expect(m.shell.undo()).toBe(true);
+    expect(m.shell.getText()).toBe(T);
+    expect(m.shell.redo()).toBe(true);
+    expect(m.shell.getText()).toBe(want);
+    m.shell.undo();
+    // a later ordinary change carries no label
+    m.shell.setText(T + 'x');
+    expect(changes.at(-1)).toEqual({ text: T + 'x' });
+    m.shell.setText(T);
+    // inserts at one offset apply in the order given; an empty list and a no-op change nothing
+    const n = changes.length;
+    expect(m.shell.applyEdits([{ from: left, to: left, insert: 'x' }, { from: left, to: left, insert: 'y' }])).toBe(true);
+    expect(m.shell.getText()).toBe(T.slice(0, left) + 'xy' + T.slice(left));
+    m.shell.undo();
+    expect(m.shell.applyEdits([])).toBe(true);
+    expect(m.shell.applyEdits([{ from: left, to: left + 1, insert: '@' }])).toBe(true);
+    expect(changes.length).toBe(n + 2); // the xy insert and its undo
+    // refusals change nothing
+    const refused: Array<[string, unknown]> = [
+      ['out of order', [{ from: left, to: left, insert: 'a' }, { from: marker, to: marker, insert: 'b' }]],
+      ['overlapping', [{ from: marker, to: marker + 4, insert: 'a' }, { from: marker + 2, to: marker + 6, insert: 'b' }]],
+      ['outside', [{ from: 0, to: T.length + 1, insert: '' }]],
+      ['before the BOM', [{ from: 0, to: 0, insert: 'x' }]],
+      ['inside CR LF', [{ from: at(T, '\r\nA') + 1, to: at(T, '\r\nA') + 1, insert: 'x' }]],
+      ['from > to', [{ from: left + 2, to: left, insert: '' }]],
+      ['not an integer', [{ from: 1.5, to: 2, insert: '' }]],
+      ['no insert', [{ from: left, to: left }]],
+    ];
+    for (const [why, edits] of refused) {
+      expect(() => m.shell.applyEdits(edits as never), why).toThrow(RangeError);
+      expect(m.shell.getText(), why).toBe(T);
+    }
+    expect(() => m.shell.applyEdits('x' as never)).toThrow(TypeError);
+    expect(changes.length).toBe(n + 2);
+    m.shell.setReadOnly(true);
+    expect(m.shell.applyEdits([{ from: left, to: left, insert: 'x' }])).toBe(false);
+    expect(m.shell.getText()).toBe(T);
+    m.shell.setReadOnly(false);
+    m.shell.destroy();
+    expect(m.shell.applyEdits([{ from: left, to: left, insert: 'x' }])).toBe(false);
+    expect(m.shell.getText()).toBe(T);
+  });
+
+  it('[E.38] applyEdits keeps every line-ending style exact (LF, CR LF, CR, mixed) — inserted breaks in the document\'s style — and an edit that joins a CR with an LF still yields exactly the text asked for (written whole, one undo step)', () => {
+    for (const [name, text] of Object.entries(TEXTS)) {
+      const m = mount({ text });
+      const start = text.startsWith('﻿') ? 1 : 0;
+      const mid = Math.max(start, Math.min(text.length, Math.floor(text.length / 2)));
+      const safe = mid > 0 && text[mid - 1] === '\r' && text[mid] === '\n' ? mid + 1 : mid;
+      const eol = /\r\n/.test(text.split(/(?<=\r\n|\r|\n)/)[0] ?? '') ? '\r\n' : /\r(?!\n)/.test(text.split(/(?<=\r\n|\r|\n)/)[0] ?? '') ? '\r' : '\n';
+      m.shell.applyEdits([{ from: start, to: start, insert: 'P\n' }, { from: safe, to: safe, insert: 'Q\nR' }]);
+      const style = (s: string): string => s.replace(/\n/g, ['mixed EOL'].includes(name) ? '\r\n' : (text.match(/\r\n|\r|\n/)?.[0] ?? '\n'));
+      expect(m.shell.getText(), name).toBe(text.slice(0, start) + style('P\n') + text.slice(start, safe) + style('Q\nR') + text.slice(safe));
+      void eol;
+      m.shell.undo();
+      expect(m.shell.getText(), name).toBe(text);
+      m.shell.destroy();
+    }
+    // a CR inserted right before an LF in a CR-style text joins them: the shell writes the whole text
+    const cr = 'a\rb\nc\r';
+    const m = mount({ text: cr });
+    expect(m.shell.applyEdits([{ from: 3, to: 3, insert: 'x' }, { from: 3, to: 3, insert: 'y\r' }])).toBe(true);
+    expect(m.shell.getText()).toBe('a\rbxy\r\nc\r');
+    m.shell.undo();
+    expect(m.shell.getText()).toBe(cr);
+    m.shell.destroy();
+  });
+
+  it('[E.39] select(from, to, { scroll }) selects exact offsets (BOM and CR LF counted; clamped; a boundary inside a CR LF moves before it), emits the selection event with those offsets, scrolls unless scroll: false, works read-only and never moves the focus', async () => {
+    const long = T + Array.from({ length: 400 }, (_, i) => `line ${i}\r\n`).join('');
+    const m = mount({ text: long });
+    const sel: Array<{ from: number; to: number }> = [];
+    m.shell.on('selection', (e) => sel.push(e));
+    const b = at(long, 'B');
+    m.shell.select(b, b + 1);
+    const d = m.shell.adapter.getDoc();
+    expect(m.shell.adapter.getSelection!()).toEqual({ from: d.indexOf('B'), to: d.indexOf('B') + 1 });
+    expect(sel.at(-1)).toEqual({ from: b, to: b + 1 });
+    // clamped, and inside a CR LF → before it
+    m.shell.select(-5, 10 ** 9);
+    expect(m.shell.adapter.getSelection!()).toEqual({ from: 0, to: d.length });
+    const crlf = at(long, '\r\nA');
+    m.shell.select(crlf + 1, crlf + 1);
+    expect(m.shell.adapter.getSelection!()).toEqual({ from: d.indexOf('\nA'), to: d.indexOf('\nA') });
+    // scrolling: the textarea moves to the selected line; scroll: false keeps it
+    const ta = m.ta();
+    Object.defineProperty(ta, 'scrollHeight', { configurable: true, get: () => 8000 });
+    Object.defineProperty(ta, 'clientHeight', { configurable: true, get: () => 400 });
+    ta.scrollTop = 0;
+    const far = at(long, 'line 300');
+    m.shell.select(far, far, { scroll: false });
+    expect(ta.scrollTop).toBe(0);
+    m.shell.select(far, far);
+    expect(ta.scrollTop).toBeGreaterThan(4000);
+    // read-only: still selects; the focus is not taken
+    m.shell.setReadOnly(true);
+    m.shell.select(b, b);
+    expect(sel.at(-1)).toEqual({ from: b, to: b });
+    expect(m.root.activeElement).toBeNull();
+    expect(() => m.shell.select('1' as never, 2)).toThrow(TypeError);
+    m.shell.destroy();
+    m.shell.select(0, 1); // a no-op after destroy
+  });
+
+  it('[E.40] setFocusRange with the textarea engine shows everything and changes nothing (no throw, the text exact); bad arguments throw a TypeError; after destroy it is a no-op', () => {
+    const m = mount({ text: T });
+    m.shell.setFocusRange(at(T, '<!-- slide'), T.length);
+    m.shell.setFocusRange(at(T, '<!-- slide'), T.length, { mode: 'fold' });
+    m.shell.setFocusRange(null);
+    expect(m.shell.getText()).toBe(T);
+    expect(() => m.shell.setFocusRange(1, undefined)).toThrow(TypeError);
+    m.shell.destroy();
+    m.shell.setFocusRange(0, 1);
+  });
+});
+
 // ── E.13 real Chrome ─────────────────────────────────────────────────────
 
 type Browser = import('playwright-core').Browser;
@@ -3676,6 +3819,89 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     await p.keyboard.press('ControlOrMeta+ArrowDown');
     await p.keyboard.type('open');
     expect(await p.evaluate('shell_c.getText()')).toBe(`${T}open`);
+    await p.close();
+  });
+
+  it('[E.13] [E.38] [E.39] [E.40] (2.4.0) in CodeMirror: applyEdits is one undo step (the shell\'s undo and Mod+Z) with the caret mapped; select scrolls the range into view (not with scroll: false); setFocusRange dims exactly the text outside the range, follows typing inside it, folds the lines outside with mode fold (only the range\'s lines in the DOM, search and the text still whole), clears with null, and a range set while CodeMirror loads applies when it arrives', async () => {
+    const slides = Array.from({ length: 60 }, (_, i) => `<!-- slide -->\n## Slide ${i}\n\nText of slide ${i}.\n`).join('\n');
+    const T = `{{nyml\nkind: document\n}}\n\n${slides}`;
+    const p = await open();
+    const s30 = T.indexOf('<!-- slide -->\n## Slide 30');
+    const s31 = T.indexOf('<!-- slide -->\n## Slide 31');
+    // a range set while CodeMirror is still loading applies once it arrives
+    await p.evaluate(`void (window.__r = mountOpts('c', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6-slow.js`)}))`);
+    await p.evaluate(`shell_c.setFocusRange(${s30}, ${s31})`);
+    expect(await p.evaluate('window.__r')).toEqual({ engine: 'codemirror6', error: null });
+    const outside = () => p.evaluate(`(function () {
+      var r = shell_c.root, view = r.querySelector('.cm-content');
+      var dim = Array.prototype.map.call(r.querySelectorAll('.orz-focus-outside'), function (n) { return n.textContent; }).join('');
+      var plain = Array.prototype.filter.call(view.querySelectorAll('.cm-line'), function (l) { return !l.querySelector('.orz-focus-outside') && l.textContent; }).map(function (l) { return l.textContent; });
+      return { dim: dim.length > 0, plain: plain };
+    })()`) as Promise<{ dim: boolean; plain: string[] }>;
+    await p.evaluate(`shell_c.select(${s30}, ${s30})`);
+    await p.waitForTimeout(100);
+    let o = await outside();
+    expect(o.dim).toBe(true);
+    expect(o.plain).toEqual(['<!-- slide -->', '## Slide 30', 'Text of slide 30.']);
+    // typing inside the range: the range follows
+    await p.locator('#c .cm-content').click();
+    await p.evaluate(`shell_c.select(${T.indexOf('Text of slide 30.') + 'Text of slide 30.'.length}, ${T.indexOf('Text of slide 30.') + 'Text of slide 30.'.length})`);
+    await p.keyboard.type(' More');
+    o = await outside();
+    expect(o.plain).toEqual(['<!-- slide -->', '## Slide 30', 'Text of slide 30. More']);
+    // fold: only the range's lines are in the DOM (the text and the search see everything)
+    const t2 = String(await p.evaluate('shell_c.getText()'));
+    await p.evaluate(`shell_c.setFocusRange(${s30}, ${t2.indexOf('<!-- slide -->\n## Slide 31')}, { mode: 'fold' })`);
+    // CodeMirror redraws on its next frame (later under load): wait until the folded view has settled
+    const lines = `Array.prototype.map.call(shell_c.root.querySelectorAll('.cm-content .cm-line'), function (l) { return l.textContent; }).filter(function (l) { return l; })`;
+    await p.waitForFunction(`${lines}.length === 3`, null, { timeout: 5000 }).catch(() => undefined);
+    expect(await p.evaluate(lines)).toEqual(['<!-- slide -->', '## Slide 30', 'Text of slide 30. More']);
+    expect(await p.evaluate('shell_c.getText()')).toBe(t2);
+    await p.evaluate('shell_c.setFocusRange(null)');
+    await p.waitForTimeout(100);
+    expect(await p.evaluate(`shell_c.root.querySelectorAll('.orz-focus-outside').length`)).toBe(0);
+    // unfolded: other slides' lines are back in the view (which ones depends on the scroll)
+    await p.waitForFunction(`${lines}.length > 6`, null, { timeout: 5000 }).catch(() => undefined);
+    expect((await p.evaluate(lines) as string[]).filter((l) => /^## Slide \d+$/.test(l) && l !== '## Slide 30').length).toBeGreaterThan(0);
+    // applyEdits: one undo step for several edits, the caret mapped
+    const before = String(await p.evaluate('shell_c.getText()'));
+    const a = before.indexOf('## Slide 2\n');
+    const b = before.indexOf('## Slide 50\n');
+    const caret = before.indexOf('Text of slide 40.');
+    await p.evaluate(`shell_c.select(${caret}, ${caret}, { scroll: false })`);
+    expect(await p.evaluate(`shell_c.applyEdits([{ from: ${a}, to: ${a + 2}, insert: '###' }, { from: ${b}, to: ${b + 2}, insert: '#' }], { label: 'levels' })`)).toBe(true);
+    const after = String(await p.evaluate('shell_c.getText()'));
+    expect(after).toBe(before.slice(0, a) + '###' + before.slice(a + 2, b) + '#' + before.slice(b + 2));
+    expect(await p.evaluate('shell_c.adapter.getSelection()')).toEqual({ from: caret + 1, to: caret + 1 });
+    await p.locator('#c .cm-content').focus();
+    await p.keyboard.press('ControlOrMeta+z');
+    expect(await p.evaluate('shell_c.getText()')).toBe(before);
+    await p.keyboard.press('ControlOrMeta+Shift+z');
+    expect(await p.evaluate('shell_c.getText()')).toBe(after);
+    expect(await p.evaluate('shell_c.undo()')).toBe(true);
+    expect(await p.evaluate('shell_c.getText()')).toBe(before);
+    // select scrolls the range into view; scroll: false does not
+    const scroller = `shell_c.root.querySelector('.cm-scroller')`;
+    // let the undo's own scroll (CodeMirror reveals the caret after it) settle first
+    await p.evaluate('shell_c.root.activeElement && shell_c.root.activeElement.blur()');
+    await p.waitForTimeout(400);
+    await p.evaluate(`${scroller}.scrollTop = 0`);
+    await p.waitForTimeout(200);
+    const top0 = await p.evaluate(`${scroller}.scrollTop`);
+    const end = before.indexOf('Text of slide 58.');
+    await p.evaluate(`shell_c.select(${end}, ${end + 4}, { scroll: false })`);
+    await p.waitForTimeout(200);
+    expect(await p.evaluate(`${scroller}.scrollTop`)).toBe(top0);
+    await p.evaluate(`shell_c.select(${end}, ${end + 4})`);
+    const shown = `(function () {
+      var r = shell_c.root, sc = r.querySelector('.cm-scroller').getBoundingClientRect();
+      var line = Array.prototype.find.call(r.querySelectorAll('.cm-line'), function (l) { return l.textContent === 'Text of slide 58.'; });
+      if (!line) return false;
+      var b = line.getBoundingClientRect();
+      return b.top >= sc.top - 1 && b.bottom <= sc.bottom + 1;
+    })()`;
+    await p.waitForFunction(shown, null, { timeout: 5000 }).catch(() => undefined);
+    expect(await p.evaluate(shown)).toBe(true);
     await p.close();
   });
 
