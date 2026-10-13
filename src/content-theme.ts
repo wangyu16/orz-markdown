@@ -11,6 +11,7 @@
  *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
  *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
  *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
+ *   --chart-font-size       font size in CSS px, a number or Npx (fallback: Chart.js's, 12)
  *   --chart-max-width       the chart frame's maximum width    (fallback: 440px; read by CSS, not here)
  * A colour the chart's own config sets (a dataset's colours, an option) is kept.
  *
@@ -23,8 +24,14 @@
  *   --mm-note     note fill                 (fallback: Mermaid's derivation)
  *   --mm-surface  the diagram's background  (fallback: the nearest opaque background)
  *   --mm-font     font family               (fallback: the element's `font-family`)
- * Without any `--mm-*` property the diagram keeps Mermaid's own default theme
- * (as before 2.4.0). A diagram's own `%%{init}%%` / front-matter config wins.
+ * Without any of these the diagram keeps Mermaid's own default theme (as
+ * before 2.4.0). Two more, which keep the theme as it is:
+ *   --mm-font-size  font size in CSS px, a number or Npx (fallback: Mermaid's, 16)
+ *   --mm-labels     `svg` | `html`: how node labels are drawn (fallback: `html`,
+ *                   Mermaid's default — except under a CSS transform that
+ *                   scales or rotates the diagram, where HTML labels are
+ *                   measured wrong and cut, so `svg`)
+ * A diagram's own `%%{init}%%` / front-matter config wins.
  *
  * ONE source, run in the preview frame (an inline script of `bodyScripts()`,
  * used by `__orzEnhance`) and in a page (injected once per window by
@@ -93,7 +100,10 @@ function surface(el) {
 function isObj(o) { return !!o && typeof o === 'object' && !(o instanceof Array); }
 function obj(parent, key) { if (!isObj(parent[key])) parent[key] = {}; return parent[key]; }
 function def(o, key, value) { if (o[key] === undefined || o[key] === null) o[key] = value; }
-function fontOf(o, family) { var f = obj(o, 'font'); def(f, 'family', family); }
+/* A font object of a Chart.js option: the theme's family and size where the chart sets none. */
+function fontOf(o, t, key) { var f = obj(o, key || 'font'); if (t.font) def(f, 'family', t.font); if (t.size) def(f, 'size', t.size); }
+/* A size in CSS px ('18', '18px'), or 0 when it is not one. */
+function px(v) { var m = /^([0-9]*\.?[0-9]+)(px)?$/i.exec(String(v || '').trim()); var n = m ? parseFloat(m[1]) : 0; return n > 0 && n < 1000 ? n : 0; }
 
 /* The chart's theme, read from its canvas. */
 function chartTheme(canvas) {
@@ -112,7 +122,8 @@ function chartTheme(canvas) {
     palette: palette.length ? palette : CHART_DEFAULT.map(function (h) { return rgba(h) || [0, 0, 0, 1]; }),
     fill: isFinite(fo) && fo >= 0 && fo <= 1 ? fo : 0.5,
     surface: css(sf || surface(canvas.parentElement || canvas)),
-    aspect: parseFloat(prop(cs, '--chart-aspect'))
+    aspect: parseFloat(prop(cs, '--chart-aspect')),
+    size: px(prop(cs, '--chart-font-size'))
   };
 }
 
@@ -132,12 +143,12 @@ function chart(canvas, config) {
   var legend = obj(plugins, 'legend');
   var labels = obj(legend, 'labels');
   def(labels, 'color', t.text);
-  if (t.font) fontOf(labels, t.font);
+  fontOf(labels, t);
   var title = obj(plugins, 'title');
   def(title, 'color', t.text);
-  if (t.font) fontOf(title, t.font);
+  fontOf(title, t);
   var tooltip = obj(plugins, 'tooltip');
-  if (t.font) { def(obj(tooltip, 'titleFont'), 'family', t.font); def(obj(tooltip, 'bodyFont'), 'family', t.font); }
+  fontOf(tooltip, t, 'titleFont'); fontOf(tooltip, t, 'bodyFont');
   if (!NO_AXES[type]) {
     var scales = obj(o, 'scales');
     var ids = [];
@@ -148,17 +159,17 @@ function chart(canvas, config) {
       var sc = obj(scales, ids[i]);
       var ticks = obj(sc, 'ticks');
       def(ticks, 'color', t.text);
-      if (t.font) fontOf(ticks, t.font);
+      fontOf(ticks, t);
       def(obj(sc, 'grid'), 'color', t.grid);
       def(obj(sc, 'border'), 'color', t.grid);
       var st = obj(sc, 'title');
       def(st, 'color', t.text);
-      if (t.font) fontOf(st, t.font);
+      fontOf(st, t);
       if (RADIAL[type]) {
         def(obj(sc, 'angleLines'), 'color', t.grid);
         var pl = obj(sc, 'pointLabels');
         def(pl, 'color', t.text);
-        if (t.font) fontOf(pl, t.font);
+        fontOf(pl, t);
         def(ticks, 'backdropColor', 'transparent');
       }
     }
@@ -189,9 +200,40 @@ function chart(canvas, config) {
   return g;
 }
 
+/*
+ * Drawn under a CSS transform that scales or rotates it: its box on screen is
+ * not its layout box. Mermaid measures HTML labels on screen
+ * (getBoundingClientRect), so there they come out cut; SVG labels are
+ * measured in the SVG's own units (getBBox) and are right.
+ */
+function transformed(el) {
+  try {
+    var w = el.offsetWidth, h = el.offsetHeight;
+    if (!(w > 0) || !(h > 0)) return false;
+    var r = el.getBoundingClientRect();
+    return Math.abs(r.width / w - 1) > 0.005 || Math.abs(r.height / h - 1) > 0.005;
+  } catch (e) { return false; }
+}
+
 /* Mermaid's configuration for a diagram, read from its element: { key, config }. */
 function mermaid(el) {
   var cs = style(el);
+  var size = px(prop(cs, '--mm-font-size'));
+  var labels = prop(cs, '--mm-labels').toLowerCase();
+  var svg = labels === 'svg' || (labels !== 'html' && transformed(el));
+  var m = colours(el, cs);
+  var config = m.config;
+  if (size) {
+    var tv = config.themeVariables || (config.themeVariables = {});
+    tv.fontSize = size + 'px';
+    config.fontSize = size;
+  }
+  if (svg) { config.htmlLabels = false; config.flowchart = { htmlLabels: false }; }
+  return { key: m.key + '|' + size + '|' + (svg ? 'svg' : 'html'), config: config };
+}
+
+/* The colour part of Mermaid's configuration, from the --mm-* colour and font tokens. */
+function colours(el, cs) {
   var names = ['text', 'line', 'node', 'border', 'accent', 'note', 'surface', 'font'];
   var v = {}, any = false;
   for (var i = 0; i < names.length; i++) { v[names[i]] = prop(cs, '--mm-' + names[i]); if (v[names[i]]) any = true; }
@@ -238,10 +280,26 @@ function mermaid(el) {
 
 /*
  * Draw Mermaid diagrams grouped by their configuration: initialize, run, next
- * group (Mermaid's configuration is global). Returns a promise (or undefined
- * when there is nothing to draw).
+ * group (Mermaid's configuration is global). One drawing at a time per window:
+ * a call while another draws waits for it (a diagram shown while the first
+ * pass still draws must not change the configuration under it). Returns a
+ * promise (or undefined when there is nothing to draw).
  */
+var busy = null;
 function runMermaid(lib, nodes) {
+  if (!nodes || !nodes.length) return undefined;
+  var go = function () { return drawGroups(lib, nodes); };
+  var p;
+  if (busy) p = busy.then(go, go);
+  else {
+    p = go();
+    if (!p || typeof p.then !== 'function') return p;
+  }
+  var mine = p.then(function () { if (busy === mine) busy = null; }, function () { if (busy === mine) busy = null; });
+  busy = mine;
+  return mine;
+}
+function drawGroups(lib, nodes) {
   var groups = [], byKey = {};
   for (var i = 0; i < nodes.length; i++) {
     var m = mermaid(nodes[i]);
@@ -262,14 +320,17 @@ function runMermaid(lib, nodes) {
 }
 
 /* Visible: laid out with a size (not display: none, not in a closed details, not visibility: hidden). */
-function visible(el) {
+function visible(el) { return shown(el, true); }
+/* Laid out with a size (not display: none, not in a closed details); visibility: hidden is laid out — enough for Mermaid, which measures text. */
+function laidOut(el) { return shown(el, false); }
+function shown(el, visibility) {
   try {
     if (!el || !el.isConnected) return false;
-    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: false })) return false;
+    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: visibility, contentVisibilityAuto: false })) return false;
     var r = el.getClientRects();
     return r.length > 0 && (r[0].width > 0 || r[0].height > 0);
   } catch (e) { return false; }
 }
 
-window.OrzContentTheme = Object.freeze({ version: 1, chart: chart, chartTheme: chartTheme, mermaid: mermaid, runMermaid: runMermaid, visible: visible, rgba: rgba });
+window.OrzContentTheme = Object.freeze({ version: 1, chart: chart, chartTheme: chartTheme, mermaid: mermaid, runMermaid: runMermaid, visible: visible, laidOut: laidOut, transformed: transformed, rgba: rgba });
 })();`;

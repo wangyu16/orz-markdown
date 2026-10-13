@@ -1718,7 +1718,10 @@ function surface(el) {
 function isObj(o) { return !!o && typeof o === 'object' && !(o instanceof Array); }
 function obj(parent, key) { if (!isObj(parent[key])) parent[key] = {}; return parent[key]; }
 function def(o, key, value) { if (o[key] === undefined || o[key] === null) o[key] = value; }
-function fontOf(o, family) { var f = obj(o, 'font'); def(f, 'family', family); }
+/* A font object of a Chart.js option: the theme's family and size where the chart sets none. */
+function fontOf(o, t, key) { var f = obj(o, key || 'font'); if (t.font) def(f, 'family', t.font); if (t.size) def(f, 'size', t.size); }
+/* A size in CSS px ('18', '18px'), or 0 when it is not one. */
+function px(v) { var m = /^([0-9]*\.?[0-9]+)(px)?$/i.exec(String(v || '').trim()); var n = m ? parseFloat(m[1]) : 0; return n > 0 && n < 1000 ? n : 0; }
 
 /* The chart's theme, read from its canvas. */
 function chartTheme(canvas) {
@@ -1737,7 +1740,8 @@ function chartTheme(canvas) {
     palette: palette.length ? palette : CHART_DEFAULT.map(function (h) { return rgba(h) || [0, 0, 0, 1]; }),
     fill: isFinite(fo) && fo >= 0 && fo <= 1 ? fo : 0.5,
     surface: css(sf || surface(canvas.parentElement || canvas)),
-    aspect: parseFloat(prop(cs, '--chart-aspect'))
+    aspect: parseFloat(prop(cs, '--chart-aspect')),
+    size: px(prop(cs, '--chart-font-size'))
   };
 }
 
@@ -1757,12 +1761,12 @@ function chart(canvas, config) {
   var legend = obj(plugins, 'legend');
   var labels = obj(legend, 'labels');
   def(labels, 'color', t.text);
-  if (t.font) fontOf(labels, t.font);
+  fontOf(labels, t);
   var title = obj(plugins, 'title');
   def(title, 'color', t.text);
-  if (t.font) fontOf(title, t.font);
+  fontOf(title, t);
   var tooltip = obj(plugins, 'tooltip');
-  if (t.font) { def(obj(tooltip, 'titleFont'), 'family', t.font); def(obj(tooltip, 'bodyFont'), 'family', t.font); }
+  fontOf(tooltip, t, 'titleFont'); fontOf(tooltip, t, 'bodyFont');
   if (!NO_AXES[type]) {
     var scales = obj(o, 'scales');
     var ids = [];
@@ -1773,17 +1777,17 @@ function chart(canvas, config) {
       var sc = obj(scales, ids[i]);
       var ticks = obj(sc, 'ticks');
       def(ticks, 'color', t.text);
-      if (t.font) fontOf(ticks, t.font);
+      fontOf(ticks, t);
       def(obj(sc, 'grid'), 'color', t.grid);
       def(obj(sc, 'border'), 'color', t.grid);
       var st = obj(sc, 'title');
       def(st, 'color', t.text);
-      if (t.font) fontOf(st, t.font);
+      fontOf(st, t);
       if (RADIAL[type]) {
         def(obj(sc, 'angleLines'), 'color', t.grid);
         var pl = obj(sc, 'pointLabels');
         def(pl, 'color', t.text);
-        if (t.font) fontOf(pl, t.font);
+        fontOf(pl, t);
         def(ticks, 'backdropColor', 'transparent');
       }
     }
@@ -1814,9 +1818,40 @@ function chart(canvas, config) {
   return g;
 }
 
+/*
+ * Drawn under a CSS transform that scales or rotates it: its box on screen is
+ * not its layout box. Mermaid measures HTML labels on screen
+ * (getBoundingClientRect), so there they come out cut; SVG labels are
+ * measured in the SVG's own units (getBBox) and are right.
+ */
+function transformed(el) {
+  try {
+    var w = el.offsetWidth, h = el.offsetHeight;
+    if (!(w > 0) || !(h > 0)) return false;
+    var r = el.getBoundingClientRect();
+    return Math.abs(r.width / w - 1) > 0.005 || Math.abs(r.height / h - 1) > 0.005;
+  } catch (e) { return false; }
+}
+
 /* Mermaid's configuration for a diagram, read from its element: { key, config }. */
 function mermaid(el) {
   var cs = style(el);
+  var size = px(prop(cs, '--mm-font-size'));
+  var labels = prop(cs, '--mm-labels').toLowerCase();
+  var svg = labels === 'svg' || (labels !== 'html' && transformed(el));
+  var m = colours(el, cs);
+  var config = m.config;
+  if (size) {
+    var tv = config.themeVariables || (config.themeVariables = {});
+    tv.fontSize = size + 'px';
+    config.fontSize = size;
+  }
+  if (svg) { config.htmlLabels = false; config.flowchart = { htmlLabels: false }; }
+  return { key: m.key + '|' + size + '|' + (svg ? 'svg' : 'html'), config: config };
+}
+
+/* The colour part of Mermaid's configuration, from the --mm-* colour and font tokens. */
+function colours(el, cs) {
   var names = ['text', 'line', 'node', 'border', 'accent', 'note', 'surface', 'font'];
   var v = {}, any = false;
   for (var i = 0; i < names.length; i++) { v[names[i]] = prop(cs, '--mm-' + names[i]); if (v[names[i]]) any = true; }
@@ -1863,10 +1898,26 @@ function mermaid(el) {
 
 /*
  * Draw Mermaid diagrams grouped by their configuration: initialize, run, next
- * group (Mermaid's configuration is global). Returns a promise (or undefined
- * when there is nothing to draw).
+ * group (Mermaid's configuration is global). One drawing at a time per window:
+ * a call while another draws waits for it (a diagram shown while the first
+ * pass still draws must not change the configuration under it). Returns a
+ * promise (or undefined when there is nothing to draw).
  */
+var busy = null;
 function runMermaid(lib, nodes) {
+  if (!nodes || !nodes.length) return undefined;
+  var go = function () { return drawGroups(lib, nodes); };
+  var p;
+  if (busy) p = busy.then(go, go);
+  else {
+    p = go();
+    if (!p || typeof p.then !== 'function') return p;
+  }
+  var mine = p.then(function () { if (busy === mine) busy = null; }, function () { if (busy === mine) busy = null; });
+  busy = mine;
+  return mine;
+}
+function drawGroups(lib, nodes) {
   var groups = [], byKey = {};
   for (var i = 0; i < nodes.length; i++) {
     var m = mermaid(nodes[i]);
@@ -1887,39 +1938,49 @@ function runMermaid(lib, nodes) {
 }
 
 /* Visible: laid out with a size (not display: none, not in a closed details, not visibility: hidden). */
-function visible(el) {
+function visible(el) { return shown(el, true); }
+/* Laid out with a size (not display: none, not in a closed details); visibility: hidden is laid out — enough for Mermaid, which measures text. */
+function laidOut(el) { return shown(el, false); }
+function shown(el, visibility) {
   try {
     if (!el || !el.isConnected) return false;
-    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: false })) return false;
+    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: visibility, contentVisibilityAuto: false })) return false;
     var r = el.getClientRects();
     return r.length > 0 && (r[0].width > 0 || r[0].height > 0);
   } catch (e) { return false; }
 }
 
-window.OrzContentTheme = Object.freeze({ version: 1, chart: chart, chartTheme: chartTheme, mermaid: mermaid, runMermaid: runMermaid, visible: visible, rgba: rgba });
+window.OrzContentTheme = Object.freeze({ version: 1, chart: chart, chartTheme: chartTheme, mermaid: mermaid, runMermaid: runMermaid, visible: visible, laidOut: laidOut, transformed: transformed, rgba: rgba });
 })();</script><script>(function(){
 var L=function(f){try{return f()}catch(e){return false}};
 var vis=function(el){var T=window.OrzContentTheme;if(T&&typeof T.visible==='function')return T.visible(el);try{return el.isConnected&&el.getClientRects().length>0}catch(e){return false}};
+var lay=function(el){var T=window.OrzContentTheme;if(T&&typeof T.laidOut==='function')return T.laidOut(el);try{return el.isConnected&&el.getClientRects().length>0}catch(e){return false}};
 var ro=null;
-var pend=function(v,draw){v.__orzPend=draw;if(!ro&&typeof ResizeObserver==='function')ro=new ResizeObserver(function(es){es.forEach(function(e){var t=e.target;if(t.__orzPend&&vis(t)){var d=t.__orzPend;t.__orzPend=null;ro.unobserve(t);d()}})});if(ro)ro.observe(v)};
+var pend=function(v,draw,test){v.__orzPend=draw;v.__orzTest=test||vis;if(!ro&&typeof ResizeObserver==='function')ro=new ResizeObserver(function(es){es.forEach(function(e){var t=e.target;if(t.__orzPend&&(t.__orzTest||vis)(t)){var d=t.__orzPend;t.__orzPend=null;ro.unobserve(t);d()}})});if(ro)ro.observe(v)};
+var mm=function(ns){try{var T=window.OrzContentTheme;if(T&&typeof T.runMermaid==='function')T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}catch(e){}};
 var box=function(v){if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;v.style.width='';v.style.height='';var w=v.clientWidth,h=v.clientHeight;if(w>0&&h>0&&(Math.abs(w-v.__ow)>=1||Math.abs(h-v.__oh)>=1))return[w,h];return[v.__ow,v.__oh]};
 var smiles=function(v){var b=box(v);v.__dw=b[0];v.__dh=b[1];var d=new window.SmilesDrawer.Drawer({width:b[0],height:b[1]});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})};
 var chart=function(v){var w=v.ownerDocument.createElement('div');w.className='orz-chart-frame';w.style.cssText='position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}var T=window.OrzContentTheme;if(T&&typeof T.chart==='function')g=T.chart(v,g);v.__orzChart=new window.Chart(v,g)}catch(e){}};
 var S=function(){return L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'})};
 var C=function(){return L(function(){return typeof window.Chart==='function'})};
+var M=function(){return L(function(){return typeof window.mermaid.run==='function'})};
+window.__orzDrawMermaid=function(root){
+if(!M())return;var now=[];
+try{root.querySelectorAll('.markdown-body .mermaid:not([data-processed])').forEach(function(n){if(n.__orzPend){if(lay(n)){n.__orzPend=null;if(ro)ro.unobserve(n);now.push(n)}return}if(lay(n))now.push(n);else pend(n,function(){mm([n])},lay)})}catch(e){}
+if(now.length)mm(now)};
 window.__orzDrawCanvases=function(root){
 try{if(S())root.querySelectorAll('.markdown-body canvas[data-smiles]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))smiles(v);else pend(v,function(){smiles(v)})})}catch(e){}
 try{if(C())root.querySelectorAll('.markdown-body canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))chart(v);else pend(v,function(){chart(v)})})}catch(e){}
 };
 window.__orzRedraw=function(el){
 el=el||document;var q=function(s){var a=[].slice.call(el.querySelectorAll?el.querySelectorAll(s):[]);if(el.matches&&el.matches(s))a.unshift(el);return a};
-q('canvas[data-smiles],canvas.orz-chart[data-chart]').forEach(function(v){
+q('canvas[data-smiles],canvas.orz-chart[data-chart],.mermaid').forEach(function(v){
+if(v.__orzPend){if(!(v.__orzTest||vis)(v))return;var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d();return}
 if(!vis(v))return;
-if(v.__orzPend){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d();return}
 if(v.__orzChart){try{v.__orzChart.resize()}catch(e){}return}
 if(v.__d&&v.hasAttribute('data-smiles')&&S())smiles(v)
 })};
-})();</script><script>window.__orzEnhance=function(){var R='.markdown-body ';var L=function(f){try{return f()}catch(e){return false}};var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});try{if(H)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}var T=L(function(){return typeof window.OrzContentTheme.chart==='function'})?window.OrzContentTheme:null;try{if(M){var ns=[].slice.call(document.querySelectorAll(R+'.mermaid:not([data-processed])'));if(ns.length){if(T)T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}}}catch(e){}try{if(typeof window.__orzDrawCanvases==='function')window.__orzDrawCanvases(document)}catch(e){}try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}
+})();</script><script>window.__orzEnhance=function(){var R='.markdown-body ';var L=function(f){try{return f()}catch(e){return false}};var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});try{if(H)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}var T=L(function(){return typeof window.OrzContentTheme.chart==='function'})?window.OrzContentTheme:null;try{if(M&&typeof window.__orzDrawMermaid==='function')window.__orzDrawMermaid(document);else if(M){var ns=[].slice.call(document.querySelectorAll(R+'.mermaid:not([data-processed])'));if(ns.length){if(T)T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}}}catch(e){}try{if(typeof window.__orzDrawCanvases==='function')window.__orzDrawCanvases(document)}catch(e){}try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}
 };</script>
   <script>window.__orzEnhance();</script>
 

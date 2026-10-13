@@ -172,8 +172,9 @@ export declare function swapStylesheet(doc: unknown, id: string, href: string, o
 }): unknown;
 /**
  * Draw again what a newly shown container holds (2.4.0) — a slide coming
- * into view, a tab, a dialog: inside `el` (itself included), every chart or
- * SMILES drawing that waited for it to be visible is drawn now, every drawn
+ * into view, a tab, a dialog: inside `el` (itself included), every chart,
+ * SMILES drawing or Mermaid diagram that waited for it to be visible (a
+ * diagram: laid out) is drawn now, every drawn
  * chart is resized to its container, and every drawn SMILES is drawn again
  * at its box's size. Content `enhanceDocument` never saw is left alone. A
  * ResizeObserver already draws a waiting canvas when it gets a size (from

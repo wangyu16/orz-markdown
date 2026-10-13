@@ -212,6 +212,146 @@ chrome('themed charts and diagrams (real Chrome, real libraries)', { timeout: 12
       await p.context().close();
     }
   });
+
+  // ── 2.4.0, the orz-slides engine's kit gaps (step 3): Mermaid hidden and scaled, font sizes ──
+
+  const FLOW = '{{mermaid\ngraph LR\n  A[Initiator] --> B[Responder]\n}}\n';
+  /** Per diagram in `sel`: does it use HTML labels (foreignObject); per node its label, its box width and the label's own width (in the SVG's units). */
+  const nodes = (p: Page, sel: string) => p.evaluate(`(function () {
+    var svg = document.querySelector(${JSON.stringify(sel)} + ' .mermaid svg');
+    if (!svg) return null;
+    var r = svg.getBoundingClientRect();
+    return {
+      html: !!svg.querySelector('.node foreignObject'),
+      size: [r.width > 0, r.height > 0],
+      nodes: [].slice.call(svg.querySelectorAll('g.node')).map(function (g) {
+        var box = g.querySelector('rect, polygon').getBBox();
+        var fo = g.querySelector('foreignObject');
+        var label = fo ? fo.querySelector('span, div') : g.querySelector('text');
+        var own = fo ? label.scrollWidth : label.getBBox().width;
+        var room = fo ? +fo.getAttribute('width') : box.width;
+        return { text: label.textContent.trim(), box: Math.round(box.width), fits: own <= room + 1 };
+      })
+    };
+  })()`) as Promise<{ html: boolean; size: boolean[]; nodes: Array<{ text: string; box: number; fits: boolean }> } | null>;
+
+  it('[M.35] a Mermaid diagram is drawn only when laid out: one under display: none waits (not processed, no SVG) and, shown, is drawn by redrawEnhancement(el) with the layout of a diagram drawn visible (labels complete, nonzero size); one under visibility: hidden is laid out and drawn at once; a ResizeObserver draws one that gets a size; a later enhanceDocument pass draws one that was shown; disposeEnhancement stops the waiting; static: true draws hidden ones; the preview frame waits the same way (__orzRedraw(el), the ResizeObserver)', async () => {
+    const p = await open(`<article class="markdown-body" id="doc"><div id="none" style="display:none">${md.render(FLOW)}</div><div id="hid" style="visibility:hidden">${md.render(FLOW)}</div><div id="vis">${md.render(FLOW)}</div></article>`);
+    await enhance(p, '#doc');
+    const ref = await nodes(p, '#vis');
+    expect(ref!.size).toEqual([true, true]);
+    expect(ref!.nodes.map((n) => [n.text, n.fits])).toEqual([['Initiator', true], ['Responder', true]]);
+    expect(await p.evaluate(`[document.querySelector('#none .mermaid').hasAttribute('data-processed'), !!document.querySelector('#none .mermaid svg')]`)).toEqual([false, false]);
+    expect(await nodes(p, '#hid')).toEqual(ref); // laid out: drawn right away, the same
+    await p.evaluate(`document.getElementById('none').style.display = 'block'; PF.redrawEnhancement(document.getElementById('none'))`);
+    await p.waitForFunction(`!!document.querySelector('#none .mermaid svg g.node')`, null, { timeout: 10_000 });
+    expect(await nodes(p, '#none')).toEqual(ref);
+    await p.context().close();
+
+    // the ResizeObserver; a later pass; dispose
+    const q = await open(`<article class="markdown-body" id="a"><div id="ro" style="display:none">${md.render(FLOW)}</div></article><article class="markdown-body" id="b"><div id="later" style="display:none">${md.render(FLOW)}</div></article><article class="markdown-body" id="c"><div id="gone" style="display:none">${md.render(FLOW)}</div></article>`);
+    await enhance(q, '#a'); await enhance(q, '#b'); await enhance(q, '#c');
+    await q.evaluate(`document.getElementById('ro').style.display = 'block'`);
+    await q.waitForFunction(`!!document.querySelector('#ro .mermaid svg g.node')`, null, { timeout: 10_000 });
+    expect((await nodes(q, '#ro'))!.nodes.every((n) => n.fits)).toBe(true);
+    await q.evaluate(`PF.disposeEnhancement(document.getElementById('c')); document.getElementById('gone').style.display = 'block'`);
+    await q.waitForTimeout(500);
+    expect(await q.evaluate(`!!document.querySelector('#gone .mermaid svg')`)).toBe(false);
+    await q.evaluate(`document.getElementById('later').style.display = 'block'`);
+    await enhance(q, '#b');
+    expect(await q.evaluate(`!!document.querySelector('#later .mermaid svg g.node')`)).toBe(true);
+    await q.context().close();
+
+    // static (print): drawn even when hidden
+    const r = await open(`<article class="markdown-body" id="doc"><div style="display:none">${md.render(FLOW)}</div></article>`);
+    await enhance(r, '#doc', '{ static: true }');
+    expect(await r.evaluate(`!!document.querySelector('#doc .mermaid svg')`)).toBe(true);
+    await r.context().close();
+
+    // the preview frame
+    const f = await open(`<article class="markdown-body"><div id="none" style="display:none">${md.render(FLOW)}</div><div id="ro" style="display:none">${md.render(FLOW)}</div><div id="vis">${md.render(FLOW)}</div></article>`, { frame: true });
+    await f.waitForFunction(`window.mermaid && typeof window.mermaid.run === 'function' && typeof window.__orzEnhance === 'function'`);
+    await f.evaluate('window.__orzEnhance()');
+    await f.waitForFunction(`!!document.querySelector('#vis .mermaid svg g.node')`, null, { timeout: 10_000 });
+    expect(await f.evaluate(`!!document.querySelector('#none .mermaid svg')`)).toBe(false);
+    const fref = await nodes(f, '#vis');
+    await f.evaluate(`document.getElementById('none').style.display = 'block'; window.__orzRedraw(document.getElementById('none'))`);
+    await f.waitForFunction(`!!document.querySelector('#none .mermaid svg g.node')`, null, { timeout: 10_000 });
+    expect(await nodes(f, '#none')).toEqual(fref);
+    await f.evaluate(`document.getElementById('ro').style.display = 'block'`);
+    await f.waitForFunction(`!!document.querySelector('#ro .mermaid svg g.node')`, null, { timeout: 10_000 });
+    expect(await nodes(f, '#ro')).toEqual(fref);
+    await f.context().close();
+  });
+
+  it('[M.36] Mermaid under a CSS transform that scales it (a slide at scale(0.6)) draws SVG labels, measured right: every label complete and its node as wide as unscaled; --mm-labels: svg asks for SVG labels anywhere, --mm-labels: html keeps HTML labels (cut under the transform, as Mermaid measures them); unscaled diagrams keep HTML labels; the preview frame the same', async () => {
+    const body = `<article class="markdown-body" id="doc">
+      <div id="plain">${md.render(FLOW)}</div>
+      <div style="transform: scale(0.6); transform-origin: 0 0"><div id="scaled">${md.render(FLOW)}</div><div id="forced" style="--mm-labels: html">${md.render(FLOW)}</div></div>
+      <div id="svg" style="--mm-labels: svg">${md.render(FLOW)}</div></article>`;
+    for (const frame of [false, true]) {
+      const p = await open(body, { frame });
+      if (frame) {
+        await p.waitForFunction(`window.mermaid && typeof window.mermaid.run === 'function' && typeof window.__orzEnhance === 'function'`);
+        await p.evaluate('window.__orzEnhance()');
+        await p.waitForFunction(`document.querySelectorAll('#doc .mermaid svg g.node').length === 8`, null, { timeout: 10_000 });
+      } else await enhance(p, '#doc');
+      const [plain, scaled, forced, svg] = await Promise.all(['#plain', '#scaled', '#forced', '#svg'].map((s) => nodes(p, s)));
+      const where = frame ? 'frame' : 'page';
+      expect(plain!.html, where).toBe(true);
+      expect(scaled!.html, where).toBe(false);
+      expect(svg!.html, where).toBe(false);
+      expect(forced!.html, where).toBe(true);
+      for (const d of [plain!, scaled!, svg!]) expect(d.nodes.map((n) => [n.text, n.fits]), where).toEqual([['Initiator', true], ['Responder', true]]);
+      // scaled: as wide as unscaled (within 10 %); HTML labels under the transform: measured at the scale, cut
+      for (let i = 0; i < 2; i++) {
+        expect(Math.abs(scaled!.nodes[i].box - plain!.nodes[i].box) / plain!.nodes[i].box, where).toBeLessThan(0.1);
+        expect(forced!.nodes[i].box, where).toBeLessThan(plain!.nodes[i].box * 0.9);
+        expect(forced!.nodes[i].fits, where).toBe(false);
+      }
+      await p.context().close();
+    }
+  });
+
+  it('[M.37] --chart-font-size sets Chart.js\'s font size (ticks, legend, title, tooltip) and --mm-font-size Mermaid\'s (keeping its default theme when no colour token is set, with the --mm-* colours otherwise); without them Chart.js\'s 12 and Mermaid\'s 16 as before; a chart\'s own size wins; the preview frame the same', async () => {
+    const own = md.render('{{chart\ntype: bar\nlabels: A, B\nseries: S = 1, 2\n}}\n').replace(/data-chart="([^"]*)"/, (_m, json: string) => {
+      const g = JSON.parse(json.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+      g.options = { scales: { x: { ticks: { font: { size: 9 } } } } };
+      return `data-chart="${JSON.stringify(g).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+    });
+    const CHART = '{{chart\ntype: bar\nlabels: A, B\nseries: S = 1, 2\n}}\n';
+    const body = `<article class="markdown-body" id="doc">
+      <div id="big" style="--chart-font-size: 18px; --mm-font-size: 24px">${md.render(CHART)}${md.render(FLOW)}</div>
+      <div id="num" style="--chart-font-size: 20; --mm-font-size: 22; --mm-node: #e0f0e0; --mm-border: #208020">${md.render(CHART)}${md.render(FLOW)}</div>
+      <div id="own" style="--chart-font-size: 18px">${own}</div>
+      <div id="plain">${md.render(CHART)}${md.render(FLOW)}</div></article>`;
+    const facts = (p: Page) => p.evaluate(`['big', 'num', 'own', 'plain'].map(function (id) {
+      var c = Chart.getChart(document.querySelector('#' + id + ' canvas.orz-chart'));
+      var o = c.options;
+      var label = document.querySelector('#' + id + ' .mermaid svg .nodeLabel, #' + id + ' .mermaid svg g.node text');
+      var rect = document.querySelector('#' + id + ' .mermaid svg .node rect');
+      return [o.scales.x.ticks.font.size, o.scales.y.ticks.font.size, o.plugins.legend.labels.font.size, o.plugins.title.font.size, o.plugins.tooltip.bodyFont.size,
+        label ? getComputedStyle(label).fontSize : null, rect ? getComputedStyle(rect).fill : null];
+    })`);
+    const results: unknown[] = [];
+    for (const frame of [false, true]) {
+      const p = await open(body, { frame });
+      if (frame) {
+        await p.waitForFunction(`typeof window.Chart === 'function' && window.mermaid && typeof window.mermaid.run === 'function' && typeof window.__orzEnhance === 'function'`);
+        await p.evaluate('window.__orzEnhance()');
+        await p.waitForFunction(`document.querySelectorAll('#doc .mermaid svg g.node').length === 6`, null, { timeout: 10_000 });
+      } else await enhance(p, '#doc');
+      results.push(await facts(p));
+      await p.context().close();
+    }
+    expect(results[0]).toEqual([
+      [18, 18, 18, 18, 18, '24px', 'rgb(236, 236, 255)'],
+      [20, 20, 20, 20, 20, '22px', 'rgb(224, 240, 224)'],
+      [9, 18, 18, 18, 18, null, null],
+      [12, 12, 12, 12, 12, '16px', 'rgb(236, 236, 255)'],
+    ]);
+    expect(results[1]).toEqual(results[0]);
+  });
 });
 
 void PREVIEW_CDN;

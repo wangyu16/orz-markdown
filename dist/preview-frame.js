@@ -72,10 +72,11 @@ function guard(js) {
     return js.replace(/<\/(script)/gi, '<\\/$1');
 }
 /*
- * The frame's canvas drawing (2.4.0; `enhanceRoot`'s twin, M.8): SMILES and
+ * The frame's drawing (2.4.0; `enhanceRoot`'s twin, M.8): SMILES and
  * charts inside `.markdown-body`, each drawn once and only when it is visible
  * (laid out with a size) — a hidden one waits (a ResizeObserver draws it
  * when it gets a size, `__orzRedraw(el)` when it is shown otherwise);
+ * Mermaid diagrams (`__orzDrawMermaid`) likewise, when laid out (M.35);
  * SMILES at the size of its box (its 250×180 when the box is not
  * constrained), charts themed by `OrzContentTheme.chart` (CSS custom
  * properties) in a frame `.orz-chart-frame` (max width `--chart-max-width`,
@@ -85,22 +86,29 @@ function guard(js) {
 const FRAME_DRAW_SCRIPT = String.raw `(function(){
 var L=function(f){try{return f()}catch(e){return false}};
 var vis=function(el){var T=window.OrzContentTheme;if(T&&typeof T.visible==='function')return T.visible(el);try{return el.isConnected&&el.getClientRects().length>0}catch(e){return false}};
+var lay=function(el){var T=window.OrzContentTheme;if(T&&typeof T.laidOut==='function')return T.laidOut(el);try{return el.isConnected&&el.getClientRects().length>0}catch(e){return false}};
 var ro=null;
-var pend=function(v,draw){v.__orzPend=draw;if(!ro&&typeof ResizeObserver==='function')ro=new ResizeObserver(function(es){es.forEach(function(e){var t=e.target;if(t.__orzPend&&vis(t)){var d=t.__orzPend;t.__orzPend=null;ro.unobserve(t);d()}})});if(ro)ro.observe(v)};
+var pend=function(v,draw,test){v.__orzPend=draw;v.__orzTest=test||vis;if(!ro&&typeof ResizeObserver==='function')ro=new ResizeObserver(function(es){es.forEach(function(e){var t=e.target;if(t.__orzPend&&(t.__orzTest||vis)(t)){var d=t.__orzPend;t.__orzPend=null;ro.unobserve(t);d()}})});if(ro)ro.observe(v)};
+var mm=function(ns){try{var T=window.OrzContentTheme;if(T&&typeof T.runMermaid==='function')T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}catch(e){}};
 var box=function(v){if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;v.style.width='';v.style.height='';var w=v.clientWidth,h=v.clientHeight;if(w>0&&h>0&&(Math.abs(w-v.__ow)>=1||Math.abs(h-v.__oh)>=1))return[w,h];return[v.__ow,v.__oh]};
 var smiles=function(v){var b=box(v);v.__dw=b[0];v.__dh=b[1];var d=new window.SmilesDrawer.Drawer({width:b[0],height:b[1]});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})};
 var chart=function(v){var w=v.ownerDocument.createElement('div');w.className='orz-chart-frame';w.style.cssText='position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}var T=window.OrzContentTheme;if(T&&typeof T.chart==='function')g=T.chart(v,g);v.__orzChart=new window.Chart(v,g)}catch(e){}};
 var S=function(){return L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'})};
 var C=function(){return L(function(){return typeof window.Chart==='function'})};
+var M=function(){return L(function(){return typeof window.mermaid.run==='function'})};
+window.__orzDrawMermaid=function(root){
+if(!M())return;var now=[];
+try{root.querySelectorAll('.markdown-body .mermaid:not([data-processed])').forEach(function(n){if(n.__orzPend){if(lay(n)){n.__orzPend=null;if(ro)ro.unobserve(n);now.push(n)}return}if(lay(n))now.push(n);else pend(n,function(){mm([n])},lay)})}catch(e){}
+if(now.length)mm(now)};
 window.__orzDrawCanvases=function(root){
 try{if(S())root.querySelectorAll('.markdown-body canvas[data-smiles]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))smiles(v);else pend(v,function(){smiles(v)})})}catch(e){}
 try{if(C())root.querySelectorAll('.markdown-body canvas.orz-chart[data-chart]').forEach(function(v){if(v.__d){if(v.__orzPend&&vis(v)){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d()}return}v.__d=1;if(vis(v))chart(v);else pend(v,function(){chart(v)})})}catch(e){}
 };
 window.__orzRedraw=function(el){
 el=el||document;var q=function(s){var a=[].slice.call(el.querySelectorAll?el.querySelectorAll(s):[]);if(el.matches&&el.matches(s))a.unshift(el);return a};
-q('canvas[data-smiles],canvas.orz-chart[data-chart]').forEach(function(v){
+q('canvas[data-smiles],canvas.orz-chart[data-chart],.mermaid').forEach(function(v){
+if(v.__orzPend){if(!(v.__orzTest||vis)(v))return;var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d();return}
 if(!vis(v))return;
-if(v.__orzPend){var d=v.__orzPend;v.__orzPend=null;if(ro)ro.unobserve(v);d();return}
 if(v.__orzChart){try{v.__orzChart.resize()}catch(e){}return}
 if(v.__d&&v.hasAttribute('data-smiles')&&S())smiles(v)
 })};
@@ -111,6 +119,8 @@ if(v.__d&&v.hasAttribute('data-smiles')&&S())smiles(v)
  * window.__orzSmilesTheme ('dark' → light bonds); reset its flag and re-run to
  * redraw after a theme switch. A chart whose datasets are all unnamed
  * (`data: …` shorthand) hides its legend instead of showing "undefined".
+ * Mermaid diagrams are drawn only when laid out (2.4.0, M.35: one under
+ * `display: none` waits; `__orzRedraw(el)` or a ResizeObserver draws it).
  * Last, the baseline grid (2.3.0, M.31) watches every article: it acts only
  * where the theme sets `--orz-grid` (light-playful-1's ruled notebook). */
 const ENHANCE_BODY = "var R='.markdown-body ';" +
@@ -118,7 +128,7 @@ const ENHANCE_BODY = "var R='.markdown-body ';" +
     "var H=L(function(){return typeof window.hljs.highlightElement==='function'}),M=L(function(){return typeof window.mermaid.run==='function'}),S=L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'}),C=L(function(){return typeof window.Chart==='function'}),O=L(function(){return typeof window.OrzMarkdownRuntime.init==='function'});" +
     "try{if(H)document.querySelectorAll(R+'pre code:not(.hljs)').forEach(function(b){window.hljs.highlightElement(b)})}catch(e){}" +
     "var T=L(function(){return typeof window.OrzContentTheme.chart==='function'})?window.OrzContentTheme:null;" +
-    "try{if(M){var ns=[].slice.call(document.querySelectorAll(R+'.mermaid:not([data-processed])'));if(ns.length){if(T)T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}}}catch(e){}" +
+    "try{if(M&&typeof window.__orzDrawMermaid==='function')window.__orzDrawMermaid(document);else if(M){var ns=[].slice.call(document.querySelectorAll(R+'.mermaid:not([data-processed])'));if(ns.length){if(T)T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}}}catch(e){}" +
     "try{if(typeof window.__orzDrawCanvases==='function')window.__orzDrawCanvases(document)}catch(e){}" +
     "try{if(O)window.OrzMarkdownRuntime.init(document)}catch(e){}" +
     "try{if(L(function(){return typeof window.OrzBaselineGrid.watch==='function'}))document.querySelectorAll('.markdown-body').forEach(function(a){window.OrzBaselineGrid.watch(a)})}catch(e){}";
@@ -592,10 +602,30 @@ function isVisible(el, w) {
             return false;
         }
     }
+    return shown(el, true);
+}
+/**
+ * Laid out with a size: not `display: none`, not in a closed `details`
+ * (2.4.0, M.35). `visibility: hidden` is laid out, which is all Mermaid needs
+ * to measure its text.
+ */
+function isLaidOut(el, w) {
+    const kit = themeKit(w);
+    if (kit && typeof kit.laidOut === 'function') {
+        try {
+            return kit.laidOut(el) === true;
+        }
+        catch {
+            return false;
+        }
+    }
+    return shown(el, false);
+}
+function shown(el, visibility) {
     try {
         if (!el.isConnected)
             return false;
-        if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: true }))
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ visibilityProperty: visibility }))
             return false;
         const r = el.getClientRects();
         return r.length > 0 && (r[0].width > 0 || r[0].height > 0);
@@ -604,11 +634,17 @@ function isVisible(el, w) {
         return false;
     }
 }
+/** The test a waiting element is drawn after: visible (a canvas) or laid out (a Mermaid diagram). */
+const readyToDraw = (v, w) => (v.__orzPendLaidOut ? isLaidOut(v, w) : isVisible(v, w));
 /** Canvases waiting to be shown, per window (one ResizeObserver each) and per enhanced root (released with it). */
 const waiting = new WeakMap();
 const waitingByRoot = new WeakMap();
-/** Draw `v` when it becomes visible: a ResizeObserver catches it getting a size; `redrawEnhancement` catches the rest. */
-function whenVisible(root, v, w, draw) {
+/**
+ * Draw `v` when it becomes visible (`laidOut`: when it is laid out, for a
+ * Mermaid diagram): a ResizeObserver catches it getting a size;
+ * `redrawEnhancement` catches the rest.
+ */
+function whenVisible(root, v, w, draw, laidOut = false) {
     let st = waiting.get(w);
     if (!st) {
         let ro = null;
@@ -617,7 +653,7 @@ function whenVisible(root, v, w, draw) {
                 ro = new w.ResizeObserver((entries) => {
                     for (const e of entries) {
                         const t = e.target;
-                        if (t.__orzPend && isVisible(t, w))
+                        if (t.__orzPend && readyToDraw(t, w))
                             run(t);
                     }
                 });
@@ -629,6 +665,7 @@ function whenVisible(root, v, w, draw) {
         waiting.set(w, (st = { ro }));
     }
     v.__orzPend = draw;
+    v.__orzPendLaidOut = laidOut;
     v.__orzPendRoot = root;
     let set = waitingByRoot.get(root);
     if (!set)
@@ -652,6 +689,7 @@ function run(v) {
 }
 function unwait(v) {
     v.__orzPend = null;
+    v.__orzPendLaidOut = undefined;
     const root = v.__orzPendRoot;
     v.__orzPendRoot = undefined;
     if (root)
@@ -728,6 +766,11 @@ function drawChart(root, v, w, isStatic) {
     }
     catch { /* a bad chart */ }
 }
+/** Draw Mermaid diagrams: themed from CSS custom properties (2.4.0), one Mermaid configuration per group of diagrams. */
+function drawMermaid(w, nodes) {
+    const kit = themeKit(w);
+    return kit ? kit.runMermaid(w.mermaid, nodes) : w.mermaid.run({ nodes });
+}
 /** One enhancement pass over `root` with the libraries the window has (the in-page twin of `__orzEnhance`). */
 async function enhanceRoot(root, w, isStatic = false) {
     const all = (sel) => { try {
@@ -746,9 +789,23 @@ async function enhanceRoot(root, w, isStatic = false) {
     try {
         const nodes = all('.mermaid:not([data-processed])');
         if (LIB.mermaid(w) && nodes.length) {
-            const kit = themeKit(w);
-            // themed from CSS custom properties (2.4.0), one Mermaid configuration per group of diagrams
-            drawn = kit ? kit.runMermaid(w.mermaid, nodes) : w.mermaid.run({ nodes });
+            // drawn only when laid out (2.4.0, M.35): Mermaid measures its text, which a display: none container has none of
+            const now = [];
+            for (const n of nodes) {
+                if (n.__orzPend) {
+                    if (isStatic || isLaidOut(n, w)) {
+                        unwait(n);
+                        now.push(n);
+                    }
+                    continue;
+                }
+                if (isStatic || isLaidOut(n, w))
+                    now.push(n);
+                else
+                    whenVisible(root, n, w, () => { drawMermaid(w, [n]); }, true);
+            }
+            if (now.length)
+                drawn = drawMermaid(w, now);
         }
     }
     catch { /* Mermaid's own error */ }
@@ -801,8 +858,9 @@ async function enhanceRoot(root, w, isStatic = false) {
 }
 /**
  * Draw again what a newly shown container holds (2.4.0) — a slide coming
- * into view, a tab, a dialog: inside `el` (itself included), every chart or
- * SMILES drawing that waited for it to be visible is drawn now, every drawn
+ * into view, a tab, a dialog: inside `el` (itself included), every chart,
+ * SMILES drawing or Mermaid diagram that waited for it to be visible (a
+ * diagram: laid out) is drawn now, every drawn
  * chart is resized to its container, and every drawn SMILES is drawn again
  * at its box's size. Content `enhanceDocument` never saw is left alone. A
  * ResizeObserver already draws a waiting canvas when it gets a size (from
@@ -818,7 +876,7 @@ function redrawEnhancement(el) {
     if (!w)
         return;
     let list = [];
-    const sel = 'canvas[data-smiles], canvas.orz-chart[data-chart]';
+    const sel = 'canvas[data-smiles], canvas.orz-chart[data-chart], .mermaid';
     try {
         list = Array.from(e.querySelectorAll(sel));
     }
@@ -831,12 +889,13 @@ function redrawEnhancement(el) {
     }
     catch { /* not an element */ }
     for (const v of list) {
-        if (!isVisible(v, w))
-            continue;
         if (v.__orzPend) {
-            run(v);
+            if (readyToDraw(v, w))
+                run(v);
             continue;
         }
+        if (!isVisible(v, w))
+            continue;
         if (v.__orzChart) {
             try {
                 v.__orzChart.resize();

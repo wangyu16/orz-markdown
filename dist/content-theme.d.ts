@@ -11,6 +11,7 @@
  *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
  *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
  *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
+ *   --chart-font-size       font size in CSS px, a number or Npx (fallback: Chart.js's, 12)
  *   --chart-max-width       the chart frame's maximum width    (fallback: 440px; read by CSS, not here)
  * A colour the chart's own config sets (a dataset's colours, an option) is kept.
  *
@@ -23,8 +24,14 @@
  *   --mm-note     note fill                 (fallback: Mermaid's derivation)
  *   --mm-surface  the diagram's background  (fallback: the nearest opaque background)
  *   --mm-font     font family               (fallback: the element's `font-family`)
- * Without any `--mm-*` property the diagram keeps Mermaid's own default theme
- * (as before 2.4.0). A diagram's own `%%{init}%%` / front-matter config wins.
+ * Without any of these the diagram keeps Mermaid's own default theme (as
+ * before 2.4.0). Two more, which keep the theme as it is:
+ *   --mm-font-size  font size in CSS px, a number or Npx (fallback: Mermaid's, 16)
+ *   --mm-labels     `svg` | `html`: how node labels are drawn (fallback: `html`,
+ *                   Mermaid's default — except under a CSS transform that
+ *                   scales or rotates the diagram, where HTML labels are
+ *                   measured wrong and cut, so `svg`)
+ * A diagram's own `%%{init}%%` / front-matter config wins.
  *
  * ONE source, run in the preview frame (an inline script of `bodyScripts()`,
  * used by `__orzEnhance`) and in a page (injected once per window by
