@@ -573,7 +573,8 @@ const FRONT_MATTER = /^\uFEFF?(---|\+\+\+)[ \t]*(\r\n|\r|\n)/;
  * 2.3.0). Text codes, with or without a header:
  * `nul` (error), `lone-surrogate` (error), `mixed-eol` (warning),
  * `deck-block` (error, kind `slides`, 2.4.0: a top-level `<!-- deck … -->`
- * block — format 1 keeps the deck config in the header only, FC-18 §7.2),
+ * block — format 1 keeps the deck config in the header only, FC-18 §7.2;
+ * `next: 'upgrade'`),
  * `front-matter` (warning: a leading `---`/`+++` front matter, which a header
  * inserted by a tool would precede), `stray-document-block` (warning: a
  * `kind: document` block that is not the header; it renders nothing).
@@ -623,7 +624,7 @@ function lintLocated(text, loc, kind, blocks, themes, tokens) {
     const carrierKey = loc && Object.prototype.hasOwnProperty.call(loc.header.fields, 'carrier') ? loc.header.fields['carrier'] : undefined;
     if ((kind ?? (isKindName(carrierKey) ? carrierKey : undefined)) === 'slides') {
         for (const d of deckBlocks(text, tokens)) {
-            out.push({ level: 'error', code: 'deck-block', message: 'a <!-- deck … --> block: format 1 keeps the deck config in the header only, so this block renders nothing and is not read (a 0.x text: upgrade it)', ...at(d.from, d.to) });
+            out.push({ level: 'error', code: 'deck-block', message: 'a <!-- deck … --> block: format 1 keeps the deck config in the header only, so this block renders nothing and is not read (a 0.x text: upgrade it)', next: 'upgrade', ...at(d.from, d.to) });
         }
     }
     if (!loc) {

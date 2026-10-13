@@ -45,15 +45,6 @@ export declare function kindFromFilename(name: string): Kind | null;
  * give `null`, so `twinName(twinName(n)) === n` whenever both are non-null.
  */
 export declare function twinName(name: string): string | null;
-type Tok = {
-    type: string;
-    tag: string;
-    info: string;
-    level: number;
-    content: string;
-    children: Tok[] | null;
-    map: [number, number] | null;
-};
 /**
  * Read a document's facts from its text, without rendering (FC-19 §2).
  *
@@ -66,8 +57,31 @@ type Tok = {
  * (`lintHeader`'s `themes`: a header `theme` not among them is `unknown-theme`).
  * `opts.tokens` / `opts.lint` (2.4.0): a carrier's parse shared, its own lints added.
  */
-/** A token of the kit's parser (markdown-it's), as `readDocument` reads it (2.4.0). */
-export type KitToken = Tok;
+/**
+ * A token of the kit's parser (2.4.0): markdown-it's `Token`, its data fields
+ * (no methods), so `kitParser().parse(text, {})` gives `KitToken[]` and a
+ * carrier's block scanner can read every field — `nesting` (1 open, 0 self,
+ * -1 close), `level`, `map`, `block`, `hidden` … (K.32).
+ */
+export interface KitToken {
+    /** e.g. `html_block`, `heading_open`, `inline`. */
+    type: string;
+    tag: string;
+    attrs: Array<[string, string]> | null;
+    /** Source lines `[begin, end)`, 0-based, for block tokens. */
+    map: [number, number] | null;
+    /** 1 an opening tag, 0 a self-contained token, -1 a closing tag. */
+    nesting: 1 | 0 | -1;
+    /** Nesting depth (0 = top level). */
+    level: number;
+    children: KitToken[] | null;
+    content: string;
+    markup: string;
+    info: string;
+    meta: unknown;
+    block: boolean;
+    hidden: boolean;
+}
 /** Options of {@link readDocument}. */
 export interface ReadDocumentOptions {
     kind?: Kind;

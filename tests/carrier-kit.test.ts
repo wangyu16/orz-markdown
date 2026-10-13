@@ -1336,14 +1336,14 @@ describe('2.4.0: slides registry and the deck-block lint (FC-18 §5.1, §7.2)', 
     expect(lintHeader(head('ratio: wide\n'), 'slides').map((l) => l.code)).toEqual(['bad-ratio']);
   });
 
-  it('[K.29] a top-level <!-- deck … --> block in a slides text is the lint error deck-block (with its line and offsets), from lintHeader and readDocument for kind slides, with or without a header, LF, CR LF or CR; a deck comment inside code, a list, a quote or a container, a comment whose first word is not deck, and any other kind are not reported', () => {
+  it('[K.29] a top-level <!-- deck … --> block in a slides text is the lint error deck-block (with its line, offsets and next: upgrade), from lintHeader and readDocument for kind slides, with or without a header, LF, CR LF or CR; a deck comment inside code, a list, a quote or a container, a comment whose first word is not deck, and any other kind are not reported', () => {
     const deck = '<!-- deck\ntitle: Old\ntheme: paper\n-->';
     const body = `${deck}\n\n<!-- slide -->\n# One\n`;
     for (const eol of ['\n', '\r\n', '\r']) {
       const t = (head('title: New\n') + '\n' + body).replace(/\n/g, eol);
       const found = lintHeader(t, 'slides').filter((l) => l.code === 'deck-block');
       expect(found).toHaveLength(1);
-      expect(found[0]).toMatchObject({ level: 'error', line: 6 });
+      expect(found[0]).toMatchObject({ level: 'error', line: 6, next: 'upgrade' });
       expect(t.slice(found[0].from!, found[0].to!)).toBe(deck.replace(/\n/g, eol));
       expect(readDocument(t, { kind: 'slides' }).lint.filter((l) => l.code === 'deck-block')).toEqual(found);
     }

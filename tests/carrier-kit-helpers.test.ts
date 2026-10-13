@@ -8,7 +8,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   assembleEnvelope, assembledStructure, decodeEntities, editHeader, extract, generatorOf, hasRawAttr, heldText, lintHeader, looksHtml, normalizeHeader,
   rawAttr, rawElements, readDocument, readHeader, readLegacyIsland, scriptElement, sha256, shellWord, storedText, twinCheck, withoutHeader,
@@ -250,4 +252,29 @@ describe('2.4.0 additions for orz-slides', () => {
       parser.parse = parse;
     }
   });
+  it('[K.32] KitToken is markdown-it\'s token as data (type, tag, attrs, map, nesting, level, children, content, markup, info, meta, block, hidden): kitParser().parse(text, {}) is a KitToken[] without a cast (tsc), and a carrier\'s block scanner reads nesting and map from it', async () => {
+    const carrier = await import('../src/carrier');
+    const tokens = carrier.kitParser().parse('<!-- slide -->\n# One\n\n- a\n', {});
+    const fields = ['type', 'tag', 'attrs', 'map', 'nesting', 'level', 'children', 'content', 'markup', 'info', 'meta', 'block', 'hidden'];
+    for (const t of tokens) for (const f of fields) expect(f in t, f).toBe(true);
+    expect(tokens.filter((t) => t.level === 0 && t.nesting !== -1 && t.map).map((t) => [t.type, t.nesting, t.map])).toEqual([['html_block', 0, [0, 1]], ['heading_open', 1, [1, 2]], ['bullet_list_open', 1, [3, 4]]]);
+    const ts = await import('typescript');
+    const dir = mkdtempSync(join(tmpdir(), 'orz-kit-token-'));
+    const fixture = join(dir, 'scan.ts');
+    writeFileSync(fixture, `
+import { kitParser, readDocument, type KitToken } from ${JSON.stringify(join(process.cwd(), 'src/carrier'))};
+const text = '<!-- slide -->\\n# One\\n';
+const tokens: KitToken[] = kitParser().parse(text, {});
+const closes: number = tokens.filter((t) => t.nesting === -1 && t.block && !t.hidden).length;
+const attrs: Array<[string, string]> | null = tokens[0].attrs;
+const markup: string = tokens[0].markup;
+const meta: unknown = tokens[0].meta;
+readDocument(text, { kind: 'slides', tokens, lint: ({ tokens: tk }) => tk.filter((t) => t.nesting === 1).map(() => ({ level: 'warning' as const, code: 'x', message: 'x', next: 'upgrade' })) });
+void [closes, attrs, markup, meta];
+`, 'utf8');
+    const program = ts.createProgram([fixture], { strict: true, noEmit: true, target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, moduleResolution: ts.ModuleResolutionKind.Node10, skipLibCheck: true, esModuleInterop: true });
+    const errors = ts.getPreEmitDiagnostics(program).filter((x) => x.file?.fileName === fixture).map((x) => ts.flattenDiagnosticMessageText(x.messageText, '\n'));
+    rmSync(dir, { recursive: true, force: true });
+    expect(errors).toEqual([]);
+  }, 60_000);
 });
