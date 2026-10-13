@@ -1,3 +1,10 @@
+{{nyml
+kind: document
+carrier: md
+uid: doc-nbkfmj9yts85zm8q
+theme: light-neat-1
+}}
+
 # Untitled notes
 
 Write your document here. This file is a continuous `.md.html` document: good
@@ -18,4 +25,3 @@ you can keep on your computer.
 |---|:---:|
 | Draft | Ready |
 | Review | Soon |
-

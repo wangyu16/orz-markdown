@@ -4,9 +4,9 @@ const docsDir = new URL('../docs/', import.meta.url);
 const startersDir = new URL('../docs/starters/', import.meta.url);
 
 const starters = [
-  { file: 'new-mdhtml.md.html', version: '0.9.3' },
+  { file: 'new-mdhtml.md.html', version: '1.0.1' },
   { file: 'new-slides.slides.html', version: '0.8.5' },
-  { file: 'new-paged.paged.html', version: '0.7.3' },
+  { file: 'new-paged.paged.html', version: '1.0.0' },
 ] as const;
 
 const failures: string[] = [];
@@ -19,11 +19,15 @@ const htmlPages = readdirSync(docsDir)
 
 for (const starter of starters) {
   const source = readFileSync(new URL(starter.file, startersDir), 'utf8');
+  // Format-1 files (carriers 1.0+) carry their shell version in #orz-shell;
+  // 0.x files in their config's rendererVersion / version.
+  const shellMatch = source.match(/<script type="application\/json" id="orz-shell">\{[^<]*?"shell":"([^"]+)"/);
   const rendererMatch = source.match(/rendererVersion["']?\s*:\s*["']([^"']+)/);
   const versionMatches = Array.from(
     source.matchAll(/["']version["']\s*:\s*["'](\d+\.\d+\.\d+)/g),
   );
-  const embeddedVersion = rendererMatch?.[1]
+  const embeddedVersion = shellMatch?.[1]
+    ?? rendererMatch?.[1]
     ?? versionMatches.at(-1)?.[1];
 
   if (embeddedVersion !== starter.version) {

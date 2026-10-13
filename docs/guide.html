@@ -78,9 +78,9 @@
           button, make your changes, then Save or download your own local copy. This is safer than copying starter
           HTML from an unknown source.</p>
           <div class="btns">
-            <a class="btn" href="./starters/new-mdhtml.md.html?v=0.9.3" target="_blank" rel="noopener">Create .md.html</a>
+            <a class="btn" href="./starters/new-mdhtml.md.html?v=1.0.1" target="_blank" rel="noopener">Create .md.html</a>
             <a class="btn" href="./starters/new-slides.slides.html?v=0.8.5" target="_blank" rel="noopener">Create .slides.html</a>
-            <a class="btn" href="./starters/new-paged.paged.html?v=0.7.3" target="_blank" rel="noopener">Create .paged.html</a>
+            <a class="btn" href="./starters/new-paged.paged.html?v=1.0.0" target="_blank" rel="noopener">Create .paged.html</a>
           </div>
           <p><a href="./family.html">See the document family guide →</a></p>
           <p style="margin-top:16px"><a class="btn" href="./editor.html">Open the editor →</a></p>
@@ -99,8 +99,10 @@ npx orz-slides  deck.md        # -> deck.slides.html
 npx orz-paged paper.md       # -> paper.paged.html</code></pre>
           <p>Each writes one portable, self-editing HTML file. Open it to read, present, or print; click the edit affordance
           to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
-          jsDelivr; <code>--inline</code> embeds the engine. Defaults differ: <code>orz-mdhtml</code> defaults to
-          <code>--cdn</code>, while <code>orz-slides</code> and <code>orz-paged</code> default to <code>--inline</code>.</p>
+          jsDelivr; <code>--inline</code> (the default) embeds the engine. <code>orz-mdhtml</code> and
+          <code>orz-paged</code> 1.0 also keep the text as a twin: <code>npx orz-mdhtml new notes.md</code> /
+          <code>npx orz-paged new paper.paged.md --template article-page</code> start one, and
+          <code>extract</code>, <code>upgrade</code> and <code>inspect</code> work on any file.</p>
           <p><a href="./family.html">More about the three document types →</a></p>
         </div>
         <!-- PARSER -->
@@ -126,10 +128,11 @@ const html = md.render('# Hello {{emoji wave}}');
 
     <section class="section" style="margin-top:40px">
       <h2>Portable authorship and license metadata</h2>
-      <p>When generating <code>.md.html</code> or <code>.paged.html</code> from a source file, add a leading
-      <code>{{nyml kind: meta}}</code> block for the title, author, license, canonical source, date,
-      description, and keywords. For slides, the deck config's <code>title:</code> and <code>author:</code>
-      seed the same metadata. The builders write standard HTML head tags and a machine-readable
+      <p>In a <code>.md.html</code> or <code>.paged.html</code> text (orz-mdhtml / orz-paged 1.0), put the title,
+      author, license, canonical source, date, description, and keywords in the header — the
+      <code>{{nyml kind: document}}</code> block at the top of the text (older files used a separate
+      <code>{{nyml kind: meta}}</code> block, shown below; <code>upgrade</code> moves it into the header). For slides,
+      the deck config's <code>title:</code> and <code>author:</code> seed the same metadata. The builders write standard HTML head tags and a machine-readable
       <code>#orz-meta</code> record that remains in the portable file after browser edits.</p>
       <pre><code>{{nyml
 kind: meta
@@ -140,8 +143,8 @@ license_url: https://creativecommons.org/licenses/by/4.0/
 source: https://example.org/field-notes
 date: 2026-07-11
 }}</code></pre>
-      <p>The metadata block is consumed during generation, so update the original source and regenerate when
-      those details change. Host applications can inject authoritative metadata programmatically; host values
+      <p>In a 1.0 file the header stays in the text, so edits in the browser keep the head tags current; an older
+      file's metadata block was consumed during generation (update the source and regenerate). Host applications can inject authoritative metadata programmatically; host values
       take precedence field by field (blank host values are ignored).</p>
     </section>
 

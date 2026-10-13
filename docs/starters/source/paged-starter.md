@@ -5,6 +5,8 @@ theme: light-academic-1
 header_center: Untitled report
 page_number_position: footer-center
 page_number_style: page-n-of-N
+carrier: paged
+uid: doc-ep6jkmaok7ra6pal
 }}
 
 {{nyml
@@ -42,5 +44,5 @@ real pages for printing or saving as PDF.
 ## Next Steps
 
 - Edit the source with the pencil button.
-- Print or export to PDF when the pages look right.
-
+- Print from the pencil's list (or Cmd/Ctrl+P) when the pages look right;
+  choose "Save as PDF" in the print dialog to export.
