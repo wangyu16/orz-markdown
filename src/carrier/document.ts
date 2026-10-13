@@ -166,18 +166,46 @@ function pagedTitle(blocks: NymlBlock[], header: Header | null): string | null {
  * (the first nyml block whose kind ends in `-title`), else `Untitled`.
  * `opts.themes` (2.3.0): the kind's theme ids, passed to the lint
  * (`lintHeader`'s `themes`: a header `theme` not among them is `unknown-theme`).
+ * `opts.tokens` / `opts.lint` (2.4.0): a carrier's parse shared, its own lints added.
  */
-export function readDocument(text: string, opts?: { kind?: Kind; filename?: string; themes?: readonly string[] }): DocumentInfo {
+/** A token of the kit's parser (markdown-it's), as `readDocument` reads it (2.4.0). */
+export type KitToken = Tok;
+
+/** Options of {@link readDocument}. */
+export interface ReadDocumentOptions {
+  kind?: Kind;
+  filename?: string;
+  /** The kind's theme ids (2.3.0): a header `theme` not among them is `unknown-theme`. */
+  themes?: readonly string[];
+  /**
+   * (2.4.0) The text's tokens from `kitParser().parse(text, {})`, when the
+   * carrier parsed it already (its own grammar pass, e.g. slides'
+   * `parseDeck`): used instead of parsing again. They must be the tokens of
+   * exactly this text from the kit's parser.
+   */
+  tokens?: readonly KitToken[];
+  /**
+   * (2.4.0) A carrier's own lints, added after the kit's: called with the
+   * text's tokens (shared, parsed at most once) and the header. Value lints
+   * of the carrier's keys and its grammar lints go here, so `inspect`,
+   * `assemble` and the editor report one list (FC-18 §5.1: warnings and
+   * errors of its own codes, never a kit code).
+   */
+  lint?: (ctx: { text: string; tokens: readonly KitToken[]; header: Header | null }) => readonly Lint[];
+}
+
+export function readDocument(text: string, opts?: ReadDocumentOptions): DocumentInfo {
   const named = opts?.kind ?? (opts?.filename ? kindFromFilename(opts.filename) : null);
   const peek = named ? null : readHeader(text);
   const carrier = peek && Object.prototype.hasOwnProperty.call(peek.fields, 'carrier') ? peek.fields['carrier'] : undefined;
   const kind: Kind = named ?? (isKind(carrier) ? carrier : null) ?? 'md';
   // One parse at most, shared by the title and the lint's block scan.
   let tokens: Tok[] | null = null;
-  const parse = (): Tok[] => (tokens ??= kitParser().parse(text, {}) as unknown as Tok[]);
+  const parse = (): Tok[] => (tokens ??= (opts?.tokens ? (opts.tokens as Tok[]) : (kitParser().parse(text, {}) as unknown as Tok[])));
   let blocks: NymlBlock[] | null = null;
   const scan = (): NymlBlock[] => (blocks ??= scanNymlBlocks(text, parse() as never));
   const { header, lint } = readHeaderAndLint(text, kind, scan, opts?.themes, parse);
+  if (typeof opts?.lint === 'function') lint.push(...opts.lint({ text, tokens: parse(), header }));
   const fields: Record<string, string> = header ? header.fields : {};
   const get = (k: string): string | undefined => (Object.prototype.hasOwnProperty.call(fields, k) ? fields[k] : undefined);
   const fmt = get('format');

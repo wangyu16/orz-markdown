@@ -205,3 +205,49 @@ describe('the kind-independent core of inspect (2.3.0)', () => {
     }
   });
 });
+
+describe('2.4.0 additions for orz-slides', () => {
+  it('[K.30] readLegacyIsland takes the writer\'s island id and type ({ island: { id, type } }): a deck island <script type="text/orz-slides" id="orz-deck"> is read exactly (wrapper removed, </script restored, no type note), an #orz-src in that file is not taken for it, a missing #orz-deck is null; another type than the writer\'s is noted; without the option #orz-src / text/markdown as before', () => {
+    const SLIDES = { generator: /^orz-slides(\s|$)/, config: '__ORZ_SLIDES__', island: { id: 'orz-deck', type: 'text/orz-slides' } };
+    const deck = '<!-- deck\ntitle: Old\n-->\n\n<!-- slide -->\n# One </script>\n';
+    const file = (island: string, type = 'text/orz-slides') => `<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="orz-slides 0.8.5"><title>Old</title></head><body><script type="text/markdown" id="orz-src">\nnot the deck\n</script><script type="${type}" id="orz-deck">${island}</script><script>window.__ORZ_SLIDES__ = {"version":"0.8.5"};</script></body></html>`;
+    const l = readLegacyIsland(file(`\n${deck.replace(/<\/(script)/gi, '<\\/$1')}\n`), SLIDES)!;
+    expect([l.text, l.wrapped, l.scriptEscapes, l.generator, l.config, l.notes]).toEqual([deck, true, 1, 'orz-slides 0.8.5', { version: '0.8.5' }, []]);
+    expect(readLegacyIsland(file('\nx\n', 'text/plain'), SLIDES)!.notes).toEqual(['the source island\'s type is "text/plain", not text/orz-slides']);
+    expect(readLegacyIsland(file('\nx\n').replace('id="orz-deck"', 'id="other"'), SLIDES)).toBeNull();
+    // without the option: #orz-src, text/markdown
+    expect(readLegacyIsland(file('\nx\n'), { generator: /^orz-slides(\s|$)/, config: '__ORZ_SLIDES__' })!.text).toBe('not the deck');
+  });
+
+  it('[K.31] orz-markdown/carrier exports kitParser (the parser readDocument and the lints use; one shared instance), and readDocument({ tokens, lint }) lets a carrier share its parse and add its own lints: given the tokens it does not parse the text again (only the header\'s own lines), the lint callback gets the text, those tokens and the header and its lints follow the kit\'s (deck-block included), and the result is the same as without the tokens', async () => {
+    const carrier = await import('../src/carrier');
+    expect(carrier.kitParser()).toBe(carrier.kitParser());
+    const text = '{{nyml\nkind: document\ntitle: T\nprogress: maybe\n}}\n\n<!-- deck x -->\n\n<!-- slide -->\n# One\n';
+    const parser = carrier.kitParser();
+    const tokens = parser.parse(text, {});
+    const parse = parser.parse.bind(parser);
+    let parses = 0;
+    // whole-text parses only (the header reader parses the header's own few lines, O(header))
+    parser.parse = ((src: string, env: object) => { if (src === text) parses++; return parse(src, env); }) as typeof parser.parse;
+    try {
+      const seen: unknown[] = [];
+      const info = readDocument(text, {
+        kind: 'slides',
+        tokens: tokens as never,
+        lint: ({ text: t, tokens: tk, header }) => {
+          seen.push(t === text, tk === (tokens as unknown), header?.fields['title']);
+          return header?.fields['progress'] === 'maybe' ? [{ level: 'warning', code: 'invalid-value', key: 'progress', message: 'progress is yes or no' }] : [];
+        },
+      });
+      expect(parses).toBe(0);
+      expect(seen).toEqual([true, true, 'T']);
+      expect(info.lint.map((l) => l.code)).toEqual(['deck-block', 'invalid-value']);
+      parses = 0;
+      const plain = readDocument(text, { kind: 'slides' });
+      expect(parses).toBe(1);
+      expect({ ...plain, lint: plain.lint.map((l) => l.code) }).toEqual({ ...info, lint: ['deck-block'] });
+    } finally {
+      parser.parse = parse;
+    }
+  });
+});

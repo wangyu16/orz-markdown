@@ -81,6 +81,28 @@ Everything kind-specific is behind this interface; the app names no kind
 | `readDocument(text)` | FC-19 `readDocument` (typically the kit's with the kind) |
 | `extract?(html)`, `renderPreview?(text, options?)` | FC-19 `extract` (default: the kit's parser-free one) and `renderPreview` |
 
+**A carrier's own grammar and lints in `readDocument`** (2.4.0). A kind
+whose body grammar the kit does not know (slides' markers, paged's
+elements) parses the text with the kit's parser, `kitParser()` from
+`orz-markdown/carrier`, and hands both to the kit, so the text is tokenized
+once and every reader (`inspect`, `assemble`, the editor) sees one lint
+list:
+
+```ts
+const tokens = kitParser().parse(text, {});           // the carrier's own pass (e.g. parseDeck) reads these
+readDocument(text, {
+  kind: 'slides', themes: SLIDE_THEME_IDS,
+  tokens,                                              // not parsed again (only the header's own lines)
+  lint: ({ tokens, header }) => deckLints(tokens, header),   // the carrier's codes, after the kit's
+});
+```
+
+The carrier's lints follow FC-18 §5.1 (codes of its own, never a kit code;
+`invalid-value` for its keys' values). Do not `set()` / `use()` the shared
+`kitParser()`. A carrier reading its 0.x files passes its island to
+`readLegacyIsland(html, { generator, config, island: { id, type } })`
+(slides 0.x: `{ id: 'orz-deck', type: 'text/orz-slides' }`).
+
 A carrier written with the DOM lib's types (`HTMLElement`, `Document`,
 `Window`) satisfies it; the kit types the DOM structurally (`AppElement`,
 `AppDocument`, `AppWindow`), as the rest of the kit does.

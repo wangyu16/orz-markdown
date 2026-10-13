@@ -4,7 +4,7 @@ format: 1
 title: Presenter Features — Titration Lab Briefing
 author: Yu Wang
 license: CC-BY-4.0
-theme: executive
+theme: orchard
 ratio: 4:3
 footer: Titration lab · week 5
 transition: fade

@@ -34,6 +34,15 @@ export interface LegacyWriter {
     generator: RegExp;
     /** The 0.x config global (`__ORZ_PAGED__`, `__ORZ_MDHTML__`): a script `window.<name> = {…}`. */
     config: string;
+    /**
+     * (2.4.0) The 0.x source island: its element id (default `orz-src`) and
+     * the `type` it should have (default `text/markdown`; another type is a
+     * note). orz-slides 0.x wrote `{ id: 'orz-deck', type: 'text/orz-slides' }`.
+     */
+    island?: {
+        id?: string;
+        type?: string;
+    };
 }
 /** What {@link readLegacyIsland} reads from a 0.x file. */
 export interface LegacyIsland {
@@ -68,7 +77,8 @@ export interface LegacyIsland {
 }
 /**
  * Read the source island of a carrier's legacy 0.x file; `null` when `html`
- * is not one of `writer`'s 0.x files (no `#orz-src` island, a format-1
+ * is not one of `writer`'s 0.x files (no `#orz-src` island — or the
+ * writer's `island.id` — a format-1
  * `#orz-shell`, or neither the writer's generator nor its config script).
  */
 export declare function readLegacyIsland(html: string, writer: LegacyWriter): LegacyIsland | null;

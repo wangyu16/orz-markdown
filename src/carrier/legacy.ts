@@ -125,6 +125,12 @@ export interface LegacyWriter {
   generator: RegExp;
   /** The 0.x config global (`__ORZ_PAGED__`, `__ORZ_MDHTML__`): a script `window.<name> = {…}`. */
   config: string;
+  /**
+   * (2.4.0) The 0.x source island: its element id (default `orz-src`) and
+   * the `type` it should have (default `text/markdown`; another type is a
+   * note). orz-slides 0.x wrote `{ id: 'orz-deck', type: 'text/orz-slides' }`.
+   */
+  island?: { id?: string; type?: string };
 }
 
 /** What {@link readLegacyIsland} reads from a 0.x file. */
@@ -161,7 +167,8 @@ export interface LegacyIsland {
 
 /**
  * Read the source island of a carrier's legacy 0.x file; `null` when `html`
- * is not one of `writer`'s 0.x files (no `#orz-src` island, a format-1
+ * is not one of `writer`'s 0.x files (no `#orz-src` island — or the
+ * writer's `island.id` — a format-1
  * `#orz-shell`, or neither the writer's generator nor its config script).
  */
 export function readLegacyIsland(html: string, writer: LegacyWriter): LegacyIsland | null {
@@ -169,7 +176,9 @@ export function readLegacyIsland(html: string, writer: LegacyWriter): LegacyIsla
   const els = rawElements(html);
   const scripts = els.filter((e) => e.name === 'script');
   if (scripts.some((e) => rawAttr(e.attrs, 'id') === 'orz-shell')) return null;
-  const island = scripts.find((e) => rawAttr(e.attrs, 'id') === 'orz-src');
+  const islandId = writer.island?.id ?? 'orz-src';
+  const islandType = writer.island?.type ?? 'text/markdown';
+  const island = scripts.find((e) => rawAttr(e.attrs, 'id') === islandId);
   if (!island) return null;
   const gen = generatorOf(html);
   const configRe = new RegExp(`^\\s*window\\.${writer.config.replace(/\$/g, '\\$')}\\s*=`);
@@ -199,7 +208,7 @@ export function readLegacyIsland(html: string, writer: LegacyWriter): LegacyIsla
   const trail = lead === 2 && raw.endsWith('\r\n') ? 2 : raw.endsWith('\n') ? 1 : 0;
   const wrapped = lead > 0 && trail > 0 && raw.length >= lead + trail;
   if (!wrapped) notes.push('the source island lacks the 0.x writer\'s "\\n…\\n" wrapper; its content is kept exactly');
-  if (rawAttr(island.attrs, 'type') !== 'text/markdown') notes.push(`the source island's type is ${JSON.stringify(rawAttr(island.attrs, 'type'))}, not text/markdown`);
+  if (rawAttr(island.attrs, 'type') !== islandType) notes.push(`the source island's type is ${JSON.stringify(rawAttr(island.attrs, 'type'))}, not ${islandType}`);
 
   const titleEl = els.find((e) => e.name === 'title');
   const engine = scripts.find((e) => rawAttr(e.attrs, 'data-orz-asset') === 'engine');

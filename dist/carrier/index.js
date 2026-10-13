@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = exports.looksHtml = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
+exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -54,6 +54,9 @@ Object.defineProperty(exports, "hasRawAttr", { enumerable: true, get: function (
 Object.defineProperty(exports, "decodeEntities", { enumerable: true, get: function () { return legacy_js_1.decodeEntities; } });
 Object.defineProperty(exports, "generatorOf", { enumerable: true, get: function () { return legacy_js_1.generatorOf; } });
 Object.defineProperty(exports, "readLegacyIsland", { enumerable: true, get: function () { return legacy_js_1.readLegacyIsland; } });
+// 2.4.0: the kit's private parser (what readDocument and the lints parse with), for a carrier's own parse of the same text
+var parser_js_1 = require("./parser.js");
+Object.defineProperty(exports, "kitParser", { enumerable: true, get: function () { return parser_js_1.kitParser; } });
 var inspect_js_1 = require("./inspect.js");
 Object.defineProperty(exports, "looksHtml", { enumerable: true, get: function () { return inspect_js_1.looksHtml; } });
 Object.defineProperty(exports, "shellWord", { enumerable: true, get: function () { return inspect_js_1.shellWord; } });

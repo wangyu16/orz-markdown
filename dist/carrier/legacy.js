@@ -113,7 +113,8 @@ function generatorOf(html) {
 }
 /**
  * Read the source island of a carrier's legacy 0.x file; `null` when `html`
- * is not one of `writer`'s 0.x files (no `#orz-src` island, a format-1
+ * is not one of `writer`'s 0.x files (no `#orz-src` island — or the
+ * writer's `island.id` — a format-1
  * `#orz-shell`, or neither the writer's generator nor its config script).
  */
 function readLegacyIsland(html, writer) {
@@ -123,7 +124,9 @@ function readLegacyIsland(html, writer) {
     const scripts = els.filter((e) => e.name === 'script');
     if (scripts.some((e) => rawAttr(e.attrs, 'id') === 'orz-shell'))
         return null;
-    const island = scripts.find((e) => rawAttr(e.attrs, 'id') === 'orz-src');
+    const islandId = writer.island?.id ?? 'orz-src';
+    const islandType = writer.island?.type ?? 'text/markdown';
+    const island = scripts.find((e) => rawAttr(e.attrs, 'id') === islandId);
     if (!island)
         return null;
     const gen = generatorOf(html);
@@ -156,8 +159,8 @@ function readLegacyIsland(html, writer) {
     const wrapped = lead > 0 && trail > 0 && raw.length >= lead + trail;
     if (!wrapped)
         notes.push('the source island lacks the 0.x writer\'s "\\n…\\n" wrapper; its content is kept exactly');
-    if (rawAttr(island.attrs, 'type') !== 'text/markdown')
-        notes.push(`the source island's type is ${JSON.stringify(rawAttr(island.attrs, 'type'))}, not text/markdown`);
+    if (rawAttr(island.attrs, 'type') !== islandType)
+        notes.push(`the source island's type is ${JSON.stringify(rawAttr(island.attrs, 'type'))}, not ${islandType}`);
     const titleEl = els.find((e) => e.name === 'title');
     const engine = scripts.find((e) => rawAttr(e.attrs, 'data-orz-asset') === 'engine');
     return {
