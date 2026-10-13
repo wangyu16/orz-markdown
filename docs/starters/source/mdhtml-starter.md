@@ -1,7 +1,6 @@
 {{nyml
 kind: document
 carrier: md
-uid: doc-nbkfmj9yts85zm8q
 theme: light-neat-1
 }}
 
