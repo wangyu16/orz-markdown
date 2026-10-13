@@ -312,10 +312,13 @@ export const lawChecks = (corpus: () => Record<string, string>): Record<string, 
         return out;
       }`, list);
     };
-    const mineP = await previews(s.releases.target);
+    // renderPreview is compared with `next` only (a build of this source): a previous release may
+    // render the same text differently (its parser's output changed) and still be content-independent,
+    // which is about the text-derived parts compared below (2.4.0, STATUS D-60)
+    const mineP = s.releases.next ? await previews(s.releases.target) : null;
     for (const r of others) {
       const files = await s.chromeAssemble(r, list, 'cdn');
-      const theirsP = await previews(r);
+      const theirsP = r === s.releases.next ? await previews(r) : null;
       for (let i = 0; i < texts.length; i++) {
         const [name, text] = texts[i];
         const a = derivedParts(await s.assemble(text, { delivery: 'cdn' }));

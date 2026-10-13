@@ -40,7 +40,9 @@ export type StubVariant =
   // round 3 of the carrier-app loop: the page's save and the update answer a conflict themselves
   | 'page-overwrites-conflict' | 'update-overwrites-conflict'
   // round 4 of the carrier-app loop: a replace after a download, a silent revert, a second question for the editor
-  | 'r4-after-download' | 'r4-revert-silent' | 'r4-two-questions' | 'r4-no-app-handle';
+  | 'r4-after-download' | 'r4-revert-silent' | 'r4-two-questions' | 'r4-no-app-handle'
+  // 2.4.0 (STATUS D-60): NOT a bug — a release whose parser renders the same text differently (as a previous release)
+  | 'render-changed';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 

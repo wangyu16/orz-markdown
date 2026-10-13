@@ -19,7 +19,7 @@ export const CHECKS: readonly CheckInfo[] = [
   { id: 'C.law.determinism', chrome: true, spec: 'FC-18 §2 law 2', title: 'assemble gives the same bytes twice in Node, and under a clock moved by years, and the browser bundle gives the Node bytes in Chrome (also under a moved clock)' },
   { id: 'C.law.idempotence', chrome: false, spec: 'FC-18 §2 law 3', title: 'assemble(extract(F).text) === F' },
   { id: 'C.law.eol-bom', chrome: true, spec: 'FC-18 §2, §8.1', title: 'CR LF, CR and a BOM are recorded on the island and come back exactly — from the file, from its DOM in Chrome and from a mounted editor' },
-  { id: 'C.law.content-independence', chrome: true, spec: 'FC-18 §2 law 4, FD-03', title: 'the text-derived parts of the file (lang, title, head metadata, #orz-meta, island) are the kit envelope\'s, and equal across shells (previous / next) — as is renderPreview' },
+  { id: 'C.law.content-independence', chrome: true, spec: 'FC-18 §2 law 4, FD-03', title: 'the text-derived parts of the file (lang, title, head metadata, #orz-meta, island) are the kit envelope\'s, and equal across shells (previous / next) — as is renderPreview with next (a build of this source; a previous release may render differently, 2.4.0)' },
   { id: 'C.law.refusals', chrome: true, spec: 'FC-18 §2, §8.4', title: 'assemble refuses a text holding NUL or a lone surrogate, and a header format above 1 — in Node and in the browser bundle' },
   // bundle rule
   { id: 'C.bundle.script-safe', chrome: false, spec: 'spec/shell-runtime.md §6', title: 'the bundle is script-safe (no <script or </script, any case, after any backslashes), strict UTF-8, with no CR or NUL, so it inlines byte for byte' },

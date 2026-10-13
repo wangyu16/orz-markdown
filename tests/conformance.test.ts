@@ -531,3 +531,29 @@ describe('harness additions of 2.2.0', () => {
     }
   }, 120_000);
 });
+
+// ── 2.4.0: a previous release is compared on its text-derived parts only (STATUS D-60) ──
+
+chrome('a previous release with another parser (2.4.0, D-60)', () => {
+  const run = async (o: { previous: StubVariant; current?: StubVariant; next?: StubVariant }): Promise<ConformanceReport> => {
+    const [previous, current, next] = await Promise.all([buildStub('1.0.0', o.previous), buildStub('1.1.0', o.current ?? 'good'), buildStub('1.2.0', o.next ?? 'good')]);
+    return runConformance(stubTarget(current, { previous, next }), { only: ['C.law.content-independence', 'C.update.from-previous'], browser: browser! });
+  };
+
+  it('[H.9] a previous release whose parser renders the same text differently (its renderPreview and read view carry another element) passes C.law.content-independence and C.update.from-previous: the previous release is compared on the text-derived parts only, renderPreview only with next', async () => {
+    const r = await run({ previous: 'render-changed' });
+    expect(result(r, 'C.law.content-independence')).toMatchObject({ status: 'passed' });
+    expect(result(r, 'C.update.from-previous')).toMatchObject({ status: 'passed' });
+  }, 300_000);
+
+  it('[H.9] real regressions still fail: a previous release deriving other head content from the same text fails C.law.content-independence; a next build (this source) whose renderPreview differs fails it; a release that cannot update a render-changed previous file to its own assemble (its browser bundle writes a stale shell version) fails C.update.from-previous', async () => {
+    const meta = await run({ previous: 'meta-from-body' });
+    expect(result(meta, 'C.law.content-independence').status).toBe('failed');
+    expect(result(meta, 'C.law.content-independence').message).toMatch(/the previous release \(1\.0\.0\) derives other content from the same text/);
+    const next = await run({ previous: 'good', next: 'render-changed' });
+    expect(result(next, 'C.law.content-independence').status).toBe('failed');
+    expect(result(next, 'C.law.content-independence').message).toMatch(/renderPreview differs between this release and next 1\.2\.0/);
+    const save = await run({ previous: 'render-changed', current: 'browser-shell-lie' });
+    expect(result(save, 'C.update.from-previous').status).toBe('failed');
+  }, 600_000);
+});

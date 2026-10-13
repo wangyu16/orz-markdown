@@ -107,6 +107,9 @@ const SPACING: ReaderChoiceControl = {
 
 // ── the read view: the document in the page ──────────────────────────────
 
+/** The `render-changed` release's parser output: every render carries one more element (2.4.0, D-60). */
+const changedRender = (html: string): string => (VARIANT === 'render-changed' ? `<p data-stub-render="changed"></p>${html}` : html);
+
 function createReadView(doc: AppDocument): CarrierReadView {
   let main = doc.getElementById('orz-app');
   if (!main) { main = doc.createElement('main'); main.id = 'orz-app'; doc.body.prepend(main); }
@@ -132,7 +135,7 @@ function createReadView(doc: AppDocument): CarrierReadView {
       const mine = ++generation;
       present(text);
       const html = await renderMarkdownPreviewWithIncludes(text, { ...(ctx.includes ? { includes: ctx.includes } : {}), ...(ctx.fetchInclude ? { fetchInclude: ctx.fetchInclude } : {}) });
-      if (mine === generation) body.innerHTML = html;
+      if (mine === generation) body.innerHTML = changedRender(html);
     },
   };
 }
@@ -206,7 +209,8 @@ const STUB_KIND: StandaloneKind = {
   actions: ACTIONS,
   extract: (html) => bugs.extract(html),
   readDocument: (text) => readDocument(text, { kind: 'md' }),
-  renderPreview: (text) => Promise.resolve(renderMarkdownPreview(text)),
+  // 'render-changed' (2.4.0, D-60) is a release whose parser output differs (not a bug): its preview and read view render differently
+  renderPreview: (text) => Promise.resolve(changedRender(renderMarkdownPreview(text))),
 };
 
 const { app } = startCarrier(STUB_KIND, { services: bugs.services });
