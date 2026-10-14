@@ -1217,6 +1217,14 @@ function createEditorShell(element, options) {
             const b = (0, text_model_js_1.toEditorOffset)(exact, Math.max(from, to));
             adapter.setFocusRange?.({ from: a, to: b }, { mode: o?.mode === 'fold' ? 'fold' : 'dim' });
         },
+        flash(ranges, o) {
+            if (!Array.isArray(ranges) || ranges.some((r) => !r || typeof r.from !== 'number' || typeof r.to !== 'number' || Number.isNaN(r.from) || Number.isNaN(r.to)))
+                throw new TypeError('orz editor: flash needs an array of { from, to }');
+            if (destroyed || ranges.length === 0)
+                return;
+            const exact = getText();
+            adapter.flash?.(ranges.map((r) => ({ from: (0, text_model_js_1.toEditorOffset)(exact, Math.min(r.from, r.to)), to: (0, text_model_js_1.toEditorOffset)(exact, Math.max(r.from, r.to)) })), typeof o?.ms === 'number' ? { ms: o.ms } : undefined);
+        },
         isDirty() { updateDirty(); return dirty; },
         markSaved() { if (!destroyed) {
             adoptBaseline(getText());

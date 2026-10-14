@@ -330,6 +330,14 @@ export interface EditorShell {
    * loads applies when it does.
    */
   setFocusRange(from: number | null, to?: number, options?: { mode?: 'dim' | 'fold' }): void;
+  /**
+   * (2.4.0) Light the lines the ranges (exact offsets) touch for a moment —
+   * `ms`, default 1600 — so a reader sees what a tool just changed (a layout
+   * GUI's marker lines). Nothing in the text or its history changes; a range
+   * that ends at a line start does not light that line. The textarea engine
+   * shows nothing. Bad arguments throw a `TypeError`.
+   */
+  flash(ranges: ReadonlyArray<{ from: number; to: number }>, options?: { ms?: number }): void;
   isDirty(): boolean;
   /** The current text is the saved one. */
   markSaved(): void;
@@ -1342,6 +1350,12 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       const a = toEditorOffset(exact, Math.min(from, to));
       const b = toEditorOffset(exact, Math.max(from, to));
       adapter.setFocusRange?.({ from: a, to: b }, { mode: o?.mode === 'fold' ? 'fold' : 'dim' });
+    },
+    flash(ranges, o) {
+      if (!Array.isArray(ranges) || ranges.some((r) => !r || typeof r.from !== 'number' || typeof r.to !== 'number' || Number.isNaN(r.from) || Number.isNaN(r.to))) throw new TypeError('orz editor: flash needs an array of { from, to }');
+      if (destroyed || ranges.length === 0) return;
+      const exact = getText();
+      adapter.flash?.(ranges.map((r) => ({ from: toEditorOffset(exact, Math.min(r.from, r.to)), to: toEditorOffset(exact, Math.max(r.from, r.to)) })), typeof o?.ms === 'number' ? { ms: o.ms } : undefined);
     },
     isDirty() { updateDirty(); return dirty; },
     markSaved() { if (!destroyed) { adoptBaseline(getText()); updateDirty(); } },

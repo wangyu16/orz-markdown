@@ -2979,6 +2979,17 @@ describe('applyEdits, select and setFocusRange (2.4.0)', () => {
     m.shell.destroy();
     m.shell.setFocusRange(0, 1);
   });
+
+  it('[E.41] flash with the textarea engine lights nothing and changes nothing (no throw, the text exact); bad arguments throw a TypeError; after destroy it is a no-op', () => {
+    const m = mount({ text: T });
+    m.shell.flash([{ from: at(T, '<!-- slide'), to: at(T, '<!-- slide') + 4 }]);
+    m.shell.flash([], { ms: 100 });
+    expect(m.shell.getText()).toBe(T);
+    expect(() => m.shell.flash('x' as never)).toThrow(TypeError);
+    expect(() => m.shell.flash([{ from: 1 } as never])).toThrow(TypeError);
+    m.shell.destroy();
+    m.shell.flash([{ from: 0, to: 1 }]);
+  });
 });
 
 // ── E.13 real Chrome ─────────────────────────────────────────────────────
@@ -3904,6 +3915,27 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     })()`;
     await p.waitForFunction(shown, null, { timeout: 5000 }).catch(() => undefined);
     expect(await p.evaluate(shown)).toBe(true);
+    await p.close();
+  });
+
+  it('[E.41] (2.4.0) in CodeMirror: flash lights exactly the lines the ranges touch (a range ending at a line start not that line; CR LF offsets mapped), follows an edit above it, and is gone after its time; the text and the undo history are untouched', async () => {
+    const T = `{{nyml\r\nkind: document\r\n}}\r\n\r\n<!-- slide 2col -->\r\n## One\r\nLeft\r\n<!-- @right -->\r\nRight\r\n`;
+    const p = await open();
+    expect(await p.evaluate(`mountOpts('b', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    const lit = `Array.prototype.map.call(shell_b.root.querySelectorAll('.cm-line.orz-flash'), function (l) { return l.textContent; })`;
+    const a = T.indexOf('<!-- slide');
+    const b = T.indexOf('<!-- @right');
+    // the slide marker line (a whole-line range: it ends at the next line's start) and the region marker
+    await p.evaluate(`shell_b.flash([{ from: ${a}, to: ${T.indexOf('## One')} }, { from: ${b}, to: ${b + 3} }], { ms: 900 })`);
+    await p.waitForFunction(`${lit}.length === 2`, null, { timeout: 3000 });
+    expect(await p.evaluate(lit)).toEqual(['<!-- slide 2col -->', '<!-- @right -->']);
+    // an edit above: the light follows its lines
+    await p.evaluate(`shell_b.applyEdits([{ from: ${T.indexOf('}}')}, to: ${T.indexOf('}}')}, insert: 'title: x\\n' }])`);
+    expect(await p.evaluate(lit)).toEqual(['<!-- slide 2col -->', '<!-- @right -->']);
+    await p.waitForFunction(`${lit}.length === 0`, null, { timeout: 3000 });
+    expect(await p.evaluate('shell_b.undo()')).toBe(true);
+    expect(await p.evaluate('shell_b.getText()')).toBe(T);
+    expect(await p.evaluate('shell_b.undo()')).toBe(false);
     await p.close();
   });
 

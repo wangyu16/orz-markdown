@@ -84,6 +84,13 @@ export interface TextEditorAdapter {
    * later edits. An engine without it shows everything.
    */
   setFocusRange?(range: Selection | null, options?: { mode?: FocusMode }): void;
+  /**
+   * Light the lines the ranges touch for a moment (2.4.0, the shell's
+   * `flash`): what a tool just changed. Offsets in the current text; a range
+   * that ends at a line start does not light that line. An engine without
+   * it shows nothing.
+   */
+  flash?(ranges: readonly Selection[], options?: { ms?: number }): void;
   hasFocus?(): boolean;
   undo?(): boolean;
   redo?(): boolean;

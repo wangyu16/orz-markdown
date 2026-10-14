@@ -82,12 +82,15 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   CSS px, where the chart sets none) and **`--mm-font-size`** (Mermaid's; its
   default theme kept when no colour token is set). Unset (every bundled
   theme): 12 px charts and 16 px diagrams as before.
-- **FC-19 editor API** (`orz-markdown/carrier/editor`; E.38–E.40):
+- **FC-19 editor API** (`orz-markdown/carrier/editor`; E.38–E.41):
   `applyEdits([{ from, to, insert }], { label })` — several exact-offset
   replacements as ONE undoable edit (the `change` event carries `label`);
   `select(from, to, { scroll })`; `setFocusRange(from, to, { mode: 'dim' |
-  'fold' })` / `setFocusRange(null)` — dim or fold the text outside a range.
-  Adapters may implement `applyChanges` and `setFocusRange`;
+  'fold' })` / `setFocusRange(null)` — dim or fold the text outside a range;
+  `flash(ranges, { ms })` (E.41) — light the lines a tool just changed for a
+  moment (orz-slides' layout editor; nothing in the text or its history
+  changes). Adapters may implement `applyChanges`, `setFocusRange` and
+  `flash`;
   `setSelection(sel, { scroll })` reports the selection. Exports
   `toEditorOffset` and the types `TextEdit`, `TextChange`, `FocusMode`.
 - **FC-18 §5.1 / §7.2 for slides** (`orz-markdown/carrier`; K.28, K.29): the

@@ -122,6 +122,7 @@ interface Editor {
   applyEdits(edits: Array<{ from: number; to: number; insert: string }>, options?: { label?: string }): boolean;  // ONE undoable edit
   select(from: number, to: number, options?: { scroll?: boolean }): void;       // exact offsets; scrolls unless scroll: false
   setFocusRange(from: number | null, to?: number, options?: { mode?: "dim" | "fold" }): void;  // null: show everything
+  flash(ranges: Array<{ from: number; to: number }>, options?: { ms?: number }): void;  // light the lines a tool changed
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -197,6 +198,13 @@ counted).
   shows everything. An engine that cannot (the textarea fallback, an app's
   CodeMirror build without `StateField` / `StateEffect` / `Decoration`)
   shows everything; a range set while CodeMirror loads applies when it does.
+- `flash(ranges, { ms? })` lights the lines the ranges touch for a moment
+  (default 1600 ms; a range that ends at a line start does not light that
+  line), so a reader sees what a tool just changed — a layout editor's
+  marker lines. The light follows later edits; nothing in the text or its
+  history changes. An engine that cannot (the textarea fallback, a
+  CodeMirror build without `Decoration`) lights nothing. Bad arguments
+  throw a `TypeError`.
 
 **`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
 carrier-app loop): the renderer reads an include from `includes` first (an
@@ -805,7 +813,8 @@ interface TextEditorAdapter {
   setDoc(text, { resetHistory? }): void;             // one undoable step unless resetHistory
   focus(): void; destroy(): void;
   // optional: getSelection, setSelection(sel, { scroll? }), setReadOnly, hasFocus, undo, redo, getScroll → { line, fraction }, scrollTo({ line | fraction }), ready()
-  // optional (2.4.0): applyChanges(changes) — one undoable step; setFocusRange(range | null, { mode? }) — dim / fold outside
+  // optional (2.4.0): applyChanges(changes) — one undoable step; setFocusRange(range | null, { mode? }) — dim / fold outside;
+  //                  flash(ranges, { ms? }) — light the lines the ranges touch for a moment
 }
 ```
 
@@ -951,8 +960,9 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   the conflict question (§8.5); no served notice for an app's page (§8.5);
   the syntax highlighter (`ORZ_HIGHLIGHTER`, §8.6).
 - 2.4.0 (additive; the kit gaps of orz-slides 1.0, REBUILD §3c): `Editor`
-  `applyEdits`, `select`, `setFocusRange` and the `change` event's `label`
-  (§4); adapters may implement `applyChanges` and `setFocusRange`, and
+  `applyEdits`, `select`, `setFocusRange`, `flash` and the `change` event's
+  `label` (§4); adapters may implement `applyChanges`, `setFocusRange` and
+  `flash`, and
   `setSelection` takes `{ scroll? }` and reports the selection through
   `onSelection` (§8.6); the pinned CodeMirror bundle also exports
   `StateField`, `StateEffect` and `Decoration`; exports `toEditorOffset`

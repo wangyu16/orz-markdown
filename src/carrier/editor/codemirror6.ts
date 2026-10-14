@@ -153,6 +153,9 @@ const THEME = {
   '.cm-panels': { backgroundColor: 'var(--orz-chrome-surface-2)', color: 'var(--orz-chrome-fg)' },
   // setFocusRange (2.4.0): the text outside the focus range, dimmed
   '.orz-focus-outside': { opacity: '0.38' },
+  // flash (2.4.0): the lines a tool just changed, lit briefly
+  '.cm-line.orz-flash': { backgroundColor: 'color-mix(in oklch, var(--orz-chrome-flash, oklch(85% 0.16 90)) 42%, transparent)', animation: 'orz-flash-fade var(--orz-flash-ms, 1600ms) ease-in forwards' },
+  '@keyframes orz-flash-fade': { '0%, 55%': { backgroundColor: 'color-mix(in oklch, var(--orz-chrome-flash, oklch(85% 0.16 90)) 42%, transparent)' }, '100%': { backgroundColor: 'transparent' } },
   // syntax (2.2.0): the chrome's syntax tokens, light and dark with the chrome's scheme (E.27)
   '.orz-tok-heading': { color: 'var(--orz-chrome-syntax-heading)', fontWeight: '700' },
   '.orz-tok-strong': { fontWeight: '700' },
@@ -275,6 +278,44 @@ function focusExtension(m: CodeMirror6Modules): { effect: Any; field: Any; exten
   return { effect, field, extension: [field] };
 }
 
+/**
+ * The flash of `flash` (2.4.0): a state field of line decorations (`orz-flash`) over the lines the
+ * ranges touch, mapped through later changes, cleared by an effect. Null without the decoration API.
+ */
+function flashExtension(m: CodeMirror6Modules): { effect: Any; field: Any; extension: Any[] } | null {
+  const { StateField, StateEffect } = m.state;
+  const { Decoration, EditorView } = m.view;
+  if (typeof StateField?.define !== 'function' || typeof StateEffect?.define !== 'function' || typeof Decoration?.line !== 'function' || !EditorView?.decorations) return null;
+  const effect = StateEffect.define();
+  const line = Decoration.line({ class: 'orz-flash' });
+  const field = StateField.define({
+    create: (): Any => Decoration.none,
+    update(deco: Any, tr: Any): Any {
+      let d = tr.docChanged ? deco.map(tr.changes) : deco;
+      for (const e of tr.effects) {
+        if (!e.is(effect)) continue;
+        const ranges = e.value as Selection[] | null;
+        if (!ranges) { d = Decoration.none; continue; }
+        const doc = tr.state.doc;
+        const starts = new Set<number>();
+        for (const r of ranges) {
+          const len: number = doc.length;
+          const a = Math.max(0, Math.min(len, Math.min(r.from, r.to)));
+          const b = Math.max(a, Math.min(len, Math.max(r.from, r.to)));
+          const first = doc.lineAt(a).number;
+          // a range that ends at a line start does not touch that line (a whole-line edit)
+          const last = b > a && doc.lineAt(b).from === b ? doc.lineAt(b).number - 1 : doc.lineAt(b).number;
+          for (let n = first; n <= Math.max(first, last) && starts.size < 2000; n++) starts.add(doc.line(n).from);
+        }
+        d = Decoration.set([...starts].sort((x, y) => x - y).map((p) => line.range(p)));
+      }
+      return d;
+    },
+    provide: (f: Any) => EditorView.decorations.from(f),
+  });
+  return { effect, field, extension: [field] };
+}
+
 export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditorAdapter {
   let fallback: TextEditorAdapter | null = textareaAdapter();
   let view: Any = null;
@@ -290,6 +331,9 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
   /** The focus range (2.4.0): its CodeMirror field, and the range asked for before CodeMirror arrived. */
   let focus: { effect: Any; field: Any; extension: Any[] } | null = null;
   let pendingFocus: FocusValue | null = null;
+  /** The flash (2.4.0): its CodeMirror field and the timer that clears it. */
+  let flashExt: { effect: Any; field: Any; extension: Any[] } | null = null;
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   const build = (m: CodeMirror6Modules, o: AdapterMountOptions): Any[] => {
     const { EditorState } = m.state;
@@ -300,6 +344,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     const roExtensions = (flag: boolean): Any[] => readOnlyExtensions(m, flag);
     roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
     focus = focusExtension(m);
+    flashExt = flashExtension(m);
     const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
     return [
       m.view.highlightSpecialChars?.(),
@@ -318,6 +363,7 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true' }),
       EditorView.theme(THEME),
       ...(focus ? focus.extension : []),
+      ...(flashExt ? flashExt.extension : []),
       options.nonce && EditorView.cspNonce ? EditorView.cspNonce.of(options.nonce) : undefined,
       EditorView.updateListener.of((u: Any) => {
         if (u.docChanged) o.onChange();
@@ -497,6 +543,15 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       if (!view) { pendingFocus = value; return; }
       if (!focus) return; // modules without the decoration API: everything stays shown
       view.dispatch({ effects: focus.effect.of(value) });
+    },
+    flash(ranges, o) {
+      if (!view || !flashExt) return; // the textarea (and a build without the decoration API): nothing lights up
+      if (flashTimer !== null) clearTimeout(flashTimer);
+      const ms = typeof o?.ms === 'number' && o.ms > 0 ? Math.min(10_000, o.ms) : 1600;
+      view.dom?.style?.setProperty?.('--orz-flash-ms', `${ms}ms`);
+      view.dispatch({ effects: flashExt.effect.of(ranges.map((r) => ({ from: r.from, to: r.to }))) });
+      const ext = flashExt;
+      flashTimer = setTimeout(() => { flashTimer = null; if (view && ext) view.dispatch({ effects: ext.effect.of(null) }); }, ms);
     },
     hasFocus() {
       return view ? view.hasFocus === true : fallback?.hasFocus?.() ?? false;
