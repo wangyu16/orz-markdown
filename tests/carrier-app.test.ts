@@ -196,7 +196,9 @@ function valueImports(entry: string): Set<string> {
 // settings, reader choices, menuButton submenus): own 60,146 B, delta 74,515 B, both 1,098,908 B; bounds ~10 % above.
 const APP_OWN_LIMIT = 66_000;
 const APP_DELTA_LIMIT = 82_000;
-const EDITOR_AND_APP_LIMIT = 1_150_000;
+// 2026-10-14 (2.4.0, orz-slides closed-loop round A2: the chart palette past its end and the span-aware gantt axis in
+// the content-theme script, +4.3 KB): both 1,150,373 B; the total bound raised to 1.16 MB (own and delta unchanged).
+const EDITOR_AND_APP_LIMIT = 1_160_000;
 
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
@@ -211,7 +213,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.15 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.16 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });

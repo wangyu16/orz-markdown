@@ -38,7 +38,18 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   d3 time format, e.g. `'%b %-d'`; Mermaid's `gantt.axisFormat`), read where
   the diagram is drawn; the chart's own `axisFormat` wins. A large-type
   gantt (a slide) keeps its axis labels apart (orz-slides closed-loop round
-  A).
+  A). **`auto`** (M.40; round A2) picks the format by the chart's span (read
+  from its source) and the tick interval by its width, so labels never
+  overprint and a multi-year chart shows its years; with `--mm-font-size` a
+  gantt's task, section and axis text is drawn at that size (Mermaid's 10–11
+  before), its bars sized to hold it; **`--mm-gantt-today: off`** draws no
+  today line.
+- **A palette that never repeats** (M.39; round A2): past `--chart-1…8` a
+  chart's further series or slices are tints and shades of the palette, each
+  chosen as far (CIE76 ΔE) from every colour before it as possible — a
+  10-slice pie on a six-colour theme had A = G … D = J.
+  The content-theme script grew 4.3 KB with these two: the carrier bundle's
+  total bound (claim A.2) is raised from 1.15 to 1.16 MB (measured 1.150 MB).
 - **Visible-only drawing** (M.33): a chart or SMILES drawing in a hidden
   container waits and is drawn when it gets a size (a ResizeObserver), on the
   next pass, or by the new **`redrawEnhancement(el)`** (frame:

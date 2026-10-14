@@ -7,7 +7,8 @@
  *   --chart-text            labels, ticks, legend, title      (fallback: the canvas's `color`)
  *   --chart-grid            grid and axis lines                (fallback: the text colour at 15 %)
  *   --chart-font            font family                        (fallback: the canvas's `font-family`)
- *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours)
+ *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours);
+ *                           past its end the palette again, lighter, then darker — never a repeat
  *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
  *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
  *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
@@ -35,7 +36,14 @@
  *                   (`'%b %-d'`, quoted or not; fallback: Mermaid's
  *                   `%Y-%m-%d`) — a compact one keeps a large-type gantt's
  *                   axis labels apart (2.4.0, orz-slides closed-loop round A);
- *                   the chart's own `axisFormat` wins
+ *                   `auto`: the format by the chart's span (days, months,
+ *                   years) and the tick interval by its width, so the labels
+ *                   never overprint and keep the year when it matters (round
+ *                   A2); the chart's own `axisFormat` / `tickInterval` win
+ *   --mm-gantt-today  `off`: no "today" line (a deck shown on another day
+ *                   draws the same chart)
+ * With --mm-font-size a gantt chart's task, section and axis text is drawn at
+ * that size too (Mermaid's own are 11 and 10), its bars sized to hold it.
  * A diagram's own `%%{init}%%` / front-matter config wins.
  *
  * ONE source, run in the preview frame (an inline script of `bodyScripts()`,

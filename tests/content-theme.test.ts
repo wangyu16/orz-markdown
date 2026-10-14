@@ -383,6 +383,73 @@ chrome('themed charts and diagrams (real Chrome, real libraries)', { timeout: 12
     expect(r[3]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(results[1]).toEqual(results[0]);
   });
+
+  it('[M.39] past the palette\'s end a chart never repeats a colour: series (or slices) n+1 … are tints and shades of the palette, each as far (CIE76 ΔE) from every colour before it as one can be — a 10-slice pie on a six-colour theme has ten colours ΔE ≥ 10 apart (2.3.0/2.4.0 wrapped: A = G … D = J); the preview frame the same', async () => {
+    const PIE = '{{chart\ntype: pie\nlabels: A, B, C, D, E, F, G, H, I, J\nseries: s = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10\n}}\n';
+    const css = '#t { --chart-text: #2c3e50; --chart-surface: #f8fafb; --chart-1: #2c3e50; --chart-2: #b83a26; --chart-3: #4f86b5; --chart-4: #8796a3; --chart-5: #c08a2b; --chart-6: #3f7f5f; }';
+    const body = `<article class="markdown-body" id="t">${md.render(PIE)}</article>`;
+    const lab = (rgb: number[]): number[] => {
+      const lin = (c: number): number => { const x = c / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+      const [r, g, b] = rgb.map(lin);
+      const f = (t: number): number => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+      const X = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047), Y = f(r * 0.2126 + g * 0.7152 + b * 0.0722), Z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
+      return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+    };
+    const rgb = (c: string): number[] => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c); return m ? [1, 2, 3].map((k) => parseInt(m[k], 16)) : (/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c) ?? []).slice(1, 4).map(Number); };
+    const results: string[][] = [];
+    for (const frame of [false, true]) {
+      const p = await open(body, { css, frame });
+      if (frame) {
+        await p.waitForFunction(`typeof window.Chart === 'function' && typeof window.__orzEnhance === 'function'`);
+        await p.evaluate('window.__orzEnhance()');
+      } else await enhance(p, '#t');
+      await p.waitForFunction(`!!Chart.getChart(document.querySelector('#t canvas.orz-chart'))`, null, { timeout: 10_000 });
+      results.push(await p.evaluate(`Chart.getChart(document.querySelector('#t canvas.orz-chart')).config.data.datasets[0].backgroundColor`) as string[]);
+      await p.context().close();
+    }
+    const c = results[0];
+    expect(c).toHaveLength(10);
+    expect(c.slice(0, 6)).toEqual(['#2c3e50', '#b83a26', '#4f86b5', '#8796a3', '#c08a2b', '#3f7f5f']);
+    const close: string[] = [];
+    for (let a = 0; a < 10; a++) for (let b = a + 1; b < 10; b++) {
+      const p = lab(rgb(c[a])), q = lab(rgb(c[b]));
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+      if (d < 10) close.push(`${a + 1} ~ ${b + 1} (${d.toFixed(1)})`);
+    }
+    expect(close).toEqual([]);
+    expect(results[1]).toEqual(results[0]);
+  });
+
+  it('[M.40] --mm-gantt-axis-format: auto picks a gantt chart\'s axis by its span (days and months up to four months, month and year up to three years, years beyond) and its tick interval by its width, so labels never overprint; with --mm-font-size the gantt\'s text is that size (Mermaid\'s 10–11 before); --mm-gantt-today: off draws no today line; the chart\'s own axisFormat wins', async () => {
+    const G = (b: string): string => md.render(`{{mermaid\ngantt\n  dateFormat YYYY-MM-DD\n${b}\n}}\n`);
+    const SEM = G('  section Lectures\n  Part 1 :p1, 2026-08-24, 35d\n  Part 2 :p2, after p1, 40d\n  section Labs\n  Lab A :2026-09-01, 30d\n  Lab B :2026-10-05, 45d');
+    const YRS = G('  section Aims\n  Aim 1 :a1, 2026-01-01, 400d\n  Aim 2 :a2, after a1, 300d\n  Aim 3 :2026-06-01, 600d');
+    const OWN = G('  axisFormat %d/%m\n  section A\n  Task one :a1, 2026-01-01, 60d');
+    const body = `<article class="markdown-body" id="doc" style="--mm-gantt-axis-format: auto; --mm-gantt-today: off; --mm-font-size: 18">
+      <div id="sem" style="width: 480px">${SEM}</div><div id="yrs" style="width: 480px">${YRS}</div><div id="own" style="width: 480px">${OWN}</div>
+      <div id="plain" style="--mm-gantt-axis-format: initial; --mm-gantt-today: initial; width: 480px">${SEM}</div></article>`;
+    const p = await open(body);
+    await enhance(p, '#doc');
+    await p.waitForFunction(`document.querySelectorAll('#doc .mermaid svg .tick text').length > 8`, null, { timeout: 15_000 });
+    const facts = await p.evaluate(`['sem', 'yrs', 'own', 'plain'].map(function (id) {
+      var svg = document.querySelector('#' + id + ' .mermaid svg');
+      var t = Array.prototype.slice.call(svg.querySelectorAll('.tick text'));
+      var r = t.map(function (x) { return x.getBoundingClientRect(); }).filter(function (x) { return x.width > 0; }).sort(function (a, b) { return a.left - b.left; });
+      var over = 0; for (var i = 1; i < r.length; i++) if (r[i].left < r[i - 1].right - 1) over++;
+      var today = Array.prototype.slice.call(svg.querySelectorAll('.today')).filter(function (x) { return getComputedStyle(x).display !== 'none'; }).length;
+      return { labels: t.map(function (x) { return x.textContent; }), over: over, size: t.length ? parseFloat(getComputedStyle(t[0]).fontSize) : 0, today: today };
+    })`) as Array<{ labels: string[]; over: number; size: number; today: number }>;
+    await p.context().close();
+    const [sem, yrs, own, plain] = facts;
+    expect(sem.over).toBe(0);
+    expect(sem.labels[0]).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+    expect(sem.size).toBe(18);
+    expect(sem.today).toBe(0);
+    expect(yrs.over).toBe(0);
+    expect(yrs.labels.join(' ')).toMatch(/^[A-Z][a-z]{2} 20\d\d/);
+    expect(own.labels[0]).toMatch(/^\d{2}\/\d{2}$/);
+    expect(plain.labels[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });
 
 void PREVIEW_CDN;

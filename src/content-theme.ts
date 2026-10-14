@@ -7,7 +7,8 @@
  *   --chart-text            labels, ticks, legend, title      (fallback: the canvas's `color`)
  *   --chart-grid            grid and axis lines                (fallback: the text colour at 15 %)
  *   --chart-font            font family                        (fallback: the canvas's `font-family`)
- *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours)
+ *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours);
+ *                           past its end the palette again, lighter, then darker — never a repeat
  *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
  *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
  *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
@@ -35,7 +36,14 @@
  *                   (`'%b %-d'`, quoted or not; fallback: Mermaid's
  *                   `%Y-%m-%d`) — a compact one keeps a large-type gantt's
  *                   axis labels apart (2.4.0, orz-slides closed-loop round A);
- *                   the chart's own `axisFormat` wins
+ *                   `auto`: the format by the chart's span (days, months,
+ *                   years) and the tick interval by its width, so the labels
+ *                   never overprint and keep the year when it matters (round
+ *                   A2); the chart's own `axisFormat` / `tickInterval` win
+ *   --mm-gantt-today  `off`: no "today" line (a deck shown on another day
+ *                   draws the same chart)
+ * With --mm-font-size a gantt chart's task, section and axis text is drawn at
+ * that size too (Mermaid's own are 11 and 10), its bars sized to hold it.
  * A diagram's own `%%{init}%%` / front-matter config wins.
  *
  * ONE source, run in the preview frame (an inline script of `bodyScripts()`,
@@ -132,6 +140,30 @@ function chartTheme(canvas) {
   };
 }
 
+function lab(c) {
+  var f = function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }, h = function (t) { return t > 0.008856 ? Math.pow(t, 1 / 3) : 7.787 * t + 16 / 116; };
+  var r = f(c[0]), g = f(c[1]), b = f(c[2]), x = h((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047), y = h(0.2126 * r + 0.7152 * g + 0.0722 * b), z = h((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+function dE(a, b) { var p = lab(a), q = lab(b); return Math.sqrt(Math.pow(p[0] - q[0], 2) + Math.pow(p[1] - q[1], 2) + Math.pow(p[2] - q[2], 2)); }
+function cycled(t, k) {
+  var n = t.palette.length;
+  if (k < n) return t.palette[k];
+  var list = t.extended || (t.extended = t.palette.slice()), surf = rgba(t.surface) || [255, 255, 255, 1], ink = rgba(t.text) || [0, 0, 0, 1];
+  var AM = [[surf, 0.45], [ink, 0.35], [surf, 0.65], [ink, 0.55], [surf, 0.3], [ink, 0.7]];
+  while (list.length <= k) {
+    var best = null, bd = -1;
+    for (var i = 0; i < n; i++) for (var a = 0; a < AM.length; a++) {
+      var c = mix(t.palette[i], AM[a][0], AM[a][1]), d = dE(c, surf) * 1.5;
+      c[3] = t.palette[i][3];
+      for (var u = 0; u < list.length; u++) d = Math.min(d, dE(c, list[u]));
+      if (d > bd + 1e-9) { bd = d; best = c; }
+    }
+    list.push(best);
+  }
+  return list[k];
+}
+
 var ARC = { pie: 1, doughnut: 1 };
 var POLAR = { polarArea: 1 };
 var RADIAL = { radar: 1, polarArea: 1 };
@@ -182,7 +214,7 @@ function chart(canvas, config) {
   /* the series palette, the way Chart.js's colors plugin assigns its own: one colour per dataset, per slice for arcs */
   var data = isObj(g.data) ? g.data : {};
   var sets = data.datasets instanceof Array ? data.datasets : [];
-  var n = t.palette.length, at = 0;
+  var at = 0;
   for (var d = 0; d < sets.length; d++) {
     var ds = sets[d];
     if (!isObj(ds)) continue;
@@ -192,12 +224,12 @@ function chart(canvas, config) {
       var count = ds.data instanceof Array ? ds.data.length : 0;
       if (!own) {
         var bg = [];
-        for (var j = 0; j < count; j++) { var pc = t.palette[at++ % n]; bg.push(ARC[dtype] ? css(pc) : css(pc, t.fill)); }
+        for (var j = 0; j < count; j++) { var pc = cycled(t, at++); bg.push(ARC[dtype] ? css(pc) : css(pc, t.fill)); }
         ds.backgroundColor = bg;
       } else at += count;
       def(ds, 'borderColor', t.surface);
     } else {
-      if (!own) { ds.borderColor = css(t.palette[at % n]); ds.backgroundColor = css(t.palette[at % n], t.fill); }
+      if (!own) { var sc0 = cycled(t, at); ds.borderColor = css(sc0); ds.backgroundColor = css(sc0, t.fill); }
       at++;
       if (dtype === 'line' || dtype === 'radar') { def(ds, 'pointBackgroundColor', ds.borderColor); }
     }
@@ -235,8 +267,60 @@ function mermaid(el) {
   }
   if (svg) { config.htmlLabels = false; config.flowchart = { htmlLabels: false }; }
   var axis = prop(cs, '--mm-gantt-axis-format').replace(/^(['"])(.*)\1$/, '$2');
-  if (axis) config.gantt = { axisFormat: axis };
-  return { key: m.key + '|' + size + '|' + (svg ? 'svg' : 'html') + '|' + axis, config: config };
+  var today = prop(cs, '--mm-gantt-today').toLowerCase();
+  var key = m.key + '|' + size + '|' + (svg ? 'svg' : 'html');
+  if (/^\s*gantt\b/m.test(el.textContent || '')) {
+    var gantt = {};
+    if (axis === 'auto') {
+      var a = ganttAxis(ganttSpan(el.textContent || ''), el.clientWidth || 0, size || 11);
+      if (a) { gantt.axisFormat = a.format; gantt.tickInterval = a.interval; }
+    } else if (axis) gantt.axisFormat = axis;
+    var extra = '';
+    if (size) {
+      gantt.fontSize = size; gantt.sectionFontSize = size;
+      gantt.barHeight = Math.round(size * 1.5); gantt.barGap = Math.max(4, Math.round(size * 0.3));
+      extra += '.tick text{font-size:' + size + 'px}';
+    }
+    if (today === 'off' || today === 'none') extra += '.today{display:none}';
+    if (extra) config.themeCSS = (config.themeCSS || '') + extra;
+    config.gantt = gantt;
+    key += '|' + JSON.stringify(gantt) + '|' + extra;
+  }
+  return { key: key, config: config };
+}
+
+function ganttSpan(src) {
+  var L = String(src).split('\n'), D = 864e5, U = { ms: 1, s: 1e3, m: 6e4, h: 36e5, d: D, w: 7 * D }, lo = Infinity, hi = -Infinity, cur = NaN, ends = {};
+  for (var i = 0; i < L.length; i++) {
+    var df = /^\s*dateFormat\s+(\S+)/.exec(L[i]), at = L[i].indexOf(':');
+    if (df && df[1] !== 'YYYY-MM-DD') return 0;
+    if (at < 0 || /^\s*(?:%%|title|section|axisFormat|tickInterval|excludes|includes|todayMarker|weekday|acc)/.test(L[i])) continue;
+    var ps = L[i].slice(at + 1).split(','), st = NaN, en = NaN, du = 0, id = null;
+    for (var j = 0; j < ps.length; j++) {
+      var p = ps[j].trim(), m;
+      if ((m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(p))) { if (isNaN(st)) st = Date.UTC(+m[1], m[2] - 1, +m[3]); else en = Date.UTC(+m[1], m[2] - 1, +m[3]); }
+      else if ((m = /^(\d+(?:\.\d+)?)(ms|s|m|h|d|w)$/.exec(p))) du = m[1] * U[m[2]];
+      else if ((m = /^after\s+(.+)$/.exec(p))) { st = NaN; m[1].split(/\s+/).forEach(function (x) { if (ends[x] !== undefined && !(ends[x] <= st)) st = ends[x]; }); if (isNaN(st)) st = cur; }
+      else if (/^[A-Za-z_][\w-]*$/.test(p) && !/^(done|active|crit|milestone)$/.test(p)) id = p;
+    }
+    if (isNaN(st)) st = cur;
+    if (isNaN(st)) continue;
+    if (isNaN(en)) en = st + du;
+    if (id) ends[id] = en;
+    cur = en; lo = Math.min(lo, st); hi = Math.max(hi, en);
+  }
+  return hi > lo ? (hi - lo) / D : 0;
+}
+function ganttAxis(span, width, size) {
+  if (!(span > 0)) return null;
+  var g = span <= 124 ? 0 : span <= 1100 ? 1 : 2, fit = Math.max(2, Math.floor(Math.max(120, (width > 0 ? width : 600) - 150) / ([6, 8, 4][g] * size * 0.62 + size * 1.2)));
+  var S = [[1, 1], [2, 1], [7, 1], [14, 1], [30.44, 2], [60.9, 2], [91.3, 2], [182.6, 2], [365.25, 3], [730.5, 3], [1826.25, 3], [3652.5, 3]], last = null;
+  for (var i = 0; i < S.length; i++) {
+    if ((g === 0 && S[i][1] > 2) || (g === 1 && S[i][1] < 2) || (g === 2 && S[i][1] < 3)) continue;
+    last = S[i][0] < 28 ? S[i][0] + 'day' : Math.round(S[i][0] / 30.44) + 'month';
+    if (span / S[i][0] <= fit) break;
+  }
+  return { format: ['%b %-d', '%b %Y', '%Y'][g], interval: last };
 }
 
 /* The colour part of Mermaid's configuration, from the --mm-* colour and font tokens. */
