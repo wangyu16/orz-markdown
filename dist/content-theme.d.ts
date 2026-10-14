@@ -8,7 +8,8 @@
  *   --chart-grid            grid and axis lines                (fallback: the text colour at 15 %)
  *   --chart-font            font family                        (fallback: the canvas's `font-family`)
  *   --chart-1 … --chart-8   the series palette, in order       (fallback: Chart.js's own seven colours);
- *                           past its end the palette again, lighter, then darker — never a repeat
+ *                           past its end tints and shades of it, each as far from every colour
+ *                           before it as can be for every reader (colour-blind ones included) — never a repeat
  *   --chart-fill-opacity    area / bar fill opacity, 0–1       (fallback: 0.5, as Chart.js's)
  *   --chart-surface         the colour between pie slices      (fallback: the nearest opaque background)
  *   --chart-aspect          width / height of the chart        (fallback: Chart.js's, 2; 1 for pie, doughnut, radar, polar)
@@ -39,7 +40,10 @@
  *                   `auto`: the format by the chart's span (days, months,
  *                   years) and the tick interval by its width, so the labels
  *                   never overprint and keep the year when it matters (round
- *                   A2); the chart's own `axisFormat` / `tickInterval` win
+ *                   A2; round A3: only intervals d3 counts continuously —
+ *                   days, weeks, months that divide the year, the year —
+ *                   with every k-th label kept when even years crowd); the
+ *                   chart's own `axisFormat` / `tickInterval` win
  *   --mm-gantt-today  `off`: no "today" line (a deck shown on another day
  *                   draws the same chart)
  * With --mm-font-size a gantt chart's task, section and axis text is drawn at

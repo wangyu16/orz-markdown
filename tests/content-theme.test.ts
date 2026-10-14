@@ -450,6 +450,78 @@ chrome('themed charts and diagrams (real Chrome, real libraries)', { timeout: 12
     expect(own.labels[0]).toMatch(/^\d{2}\/\d{2}$/);
     expect(plain.labels[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
+
+  /*
+   * orz-slides closed-loop round A3 (A3-TH-3, A3-TH-2): the extension colours
+   * were picked for normal vision only (a 10-slice pie merged two slices for a
+   * deutan reader in five slide themes), and the auto axis used day steps that
+   * restart every month and month steps past 12 that collapse to one a year.
+   * Each failed on orz-markdown@10b2bc6.
+   */
+  it('[M.39] round A3: the colours past the palette\'s end are apart for colour-blind readers too — every pair of a 10-slice pie ΔE ≥ 10 under protan, deutan and tritan simulation (Machado 2009), on palettes whose extension merged slices (ΔE 1.0 deutan)', async () => {
+    const PIE = '{{chart\ntype: pie\nlabels: A, B, C, D, E, F, G, H, I, J\nseries: s = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10\n}}\n';
+    const PALETTES: Record<string, string> = {
+      preprint: '--chart-text: #343a44; --chart-surface: #fdfdfc; --chart-1: #1a4379; --chart-2: #c51e21; --chart-3: #1f6d16; --chart-4: #be7200; --chart-5: #7244a2; --chart-6: #2a7f8f;',
+      chalk: '--chart-text: #e9e4d8; --chart-surface: #1d2a25; --chart-1: #ffd663; --chart-2: #98e1fb; --chart-3: #efacc0; --chart-4: #a3e4b5; --chart-5: #ffab6e; --chart-6: #bfabec;',
+      paper: '--chart-text: #4a342d; --chart-surface: #fbf7ef; --chart-1: #6d3b2a; --chart-2: #497e92; --chart-3: #b07d1e; --chart-4: #6b8a3a; --chart-5: #914c74; --chart-6: #4a5a8c;',
+    };
+    const lin = (c: number): number => { const x = c / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+    const lab = (rgb: number[]): number[] => {
+      const [r, g, b] = rgb.map(lin);
+      const f = (t: number): number => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+      const X = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047), Y = f(r * 0.2126 + g * 0.7152 + b * 0.0722), Z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
+      return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+    };
+    const M = { protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]], deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]], tritan: [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]] };
+    const sim = (rgb: number[], m: number[][]): number[] => { const l = rgb.map(lin); return m.map((row) => { const v = Math.min(1, Math.max(0, row[0] * l[0] + row[1] * l[1] + row[2] * l[2])); return 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055); }); };
+    const rgb = (c: string): number[] => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c); return m ? [1, 2, 3].map((k) => parseInt(m[k], 16)) : (/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c) ?? []).slice(1, 4).map(Number); };
+    const dE = (a: number[], b: number[]): number => { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+    const close: string[] = [];
+    for (const [name, vars] of Object.entries(PALETTES)) {
+      const p = await open(`<article class="markdown-body" id="t">${md.render(PIE)}</article>`, { css: `#t { ${vars} }` });
+      await enhance(p, '#t');
+      await p.waitForFunction(`!!Chart.getChart(document.querySelector('#t canvas.orz-chart'))`, null, { timeout: 10_000 });
+      const c = (await p.evaluate(`Chart.getChart(document.querySelector('#t canvas.orz-chart')).config.data.datasets[0].backgroundColor`) as string[]).map(rgb);
+      await p.context().close();
+      expect(c).toHaveLength(10);
+      for (let a = 0; a < 10; a++) for (let b = a + 1; b < 10; b++) {
+        const d = Math.min(dE(c[a], c[b]), ...Object.values(M).map((m) => dE(sim(c[a], m), sim(c[b], m))));
+        if (d < 10) close.push(`${name}: ${a + 1} ~ ${b + 1} (ΔE ${d.toFixed(1)})`);
+      }
+    }
+    expect(close).toEqual([]);
+  });
+
+  it('[M.40] round A3: the auto axis counts its ticks continuously — weeks (never day steps that restart each month), months that divide the year, and a year step whose labels are thinned (never 24 or 60 months, which fell back to one a year and overprinted) — at full and half width, with ≥ 2 labels, evenly spaced and apart; a span under four months that crosses New Year shows the year', async () => {
+    const G = (b: string): string => md.render(`{{mermaid\ngantt\n  dateFormat YYYY-MM-DD\n${b}\n}}\n`);
+    const SEM = G('  section Lectures\n  Part 1 :p1, 2026-08-24, 35d\n  Part 2 :p2, after p1, 40d\n  section Labs\n  Lab A :2026-09-01, 30d\n  Lab B :2026-10-05, 45d');
+    const D10 = G('  section Sprint\n  Build :b1, 2026-03-03, 6d\n  Test :after b1, 4d');
+    const D110 = G('  section Project\n  Plan :p1, 2026-03-01, 30d\n  Build :p2, after p1, 50d\n  Ship :after p2, 30d');
+    const DEC = G('  section Break\n  Reading :r1, 2026-12-01, 40d\n  Exams :after r1, 30d');
+    const Y12 = G('  section Programme\n  Phase 1 :q1, 2026-01-01, 1500d\n  Phase 2 :q2, after q1, 1500d\n  Phase 3 :after q2, 1380d');
+    const cases: Array<[string, string, number]> = [['sem-full', SEM, 1082], ['sem-half', SEM, 500], ['d10-half', D10, 500], ['d110-full', D110, 1082], ['d110-half', D110, 500], ['dec-full', DEC, 1082], ['y12-half', Y12, 500], ['y12-full', Y12, 1082]];
+    const body = `<article class="markdown-body" id="doc" style="--mm-gantt-axis-format: auto; --mm-gantt-today: off; --mm-font-size: 18">${cases.map(([id, g, w]) => `<div id="${id}" style="width: ${w}px">${g}</div>`).join('')}</article>`;
+    const p = await open(body);
+    await enhance(p, '#doc');
+    await p.waitForFunction(`document.querySelectorAll('#doc .mermaid svg').length === ${cases.length}`, null, { timeout: 20_000 });
+    const facts = await p.evaluate(`${JSON.stringify(cases.map((c) => c[0]))}.map(function (id) {
+      var svg = document.querySelector('#' + id + ' .mermaid svg');
+      var shown = Array.prototype.slice.call(svg.querySelectorAll('.tick text')).filter(function (x) { var r = x.getBoundingClientRect(); return r.width > 0 && getComputedStyle(x).display !== 'none'; });
+      var r = shown.map(function (x) { return { r: x.getBoundingClientRect(), t: x.textContent }; }).sort(function (a, b) { return a.r.left - b.r.left; });
+      var over = 0; for (var i = 1; i < r.length; i++) if (r[i].r.left < r[i - 1].r.right - 1) over++;
+      var gaps = []; for (var j = 1; j < r.length; j++) gaps.push((r[j].r.left + r[j].r.right) / 2 - (r[j - 1].r.left + r[j - 1].r.right) / 2);
+      var even = gaps.length < 2 ? 1 : Math.max.apply(null, gaps) / Math.min.apply(null, gaps);
+      return { id: id, labels: r.map(function (x) { return x.t; }), over: over, even: Math.round(even * 100) / 100 };
+    })`) as Array<{ id: string; labels: string[]; over: number; even: number }>;
+    await p.context().close();
+    for (const f of facts) {
+      expect(f.over, JSON.stringify(f)).toBe(0);
+      expect(f.labels.length, JSON.stringify(f)).toBeGreaterThanOrEqual(2);
+      expect(f.even, `uneven ticks ${JSON.stringify(f)}`).toBeLessThan(1.2);
+    }
+    expect(facts.find((f) => f.id === 'dec-full')!.labels.join(' '), 'a span across New Year shows the year').toMatch(/202[67]/);
+    expect(facts.find((f) => f.id === 'y12-half')!.labels.every((l) => /^20\d\d$/.test(l))).toBe(true);
+  });
 });
 
 void PREVIEW_CDN;

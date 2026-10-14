@@ -43,11 +43,19 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   overprint and a multi-year chart shows its years; with `--mm-font-size` a
   gantt's task, section and axis text is drawn at that size (Mermaid's 10–11
   before), its bars sized to hold it; **`--mm-gantt-today: off`** draws no
-  today line.
+  today line. Round A3: `auto` uses only intervals d3 counts without
+  restarting — days, weeks, months that divide the year, the year (Mermaid's
+  `Nday` restarted every month: `Sep 29 | Oct 1` overprinted on a full-width
+  semester; `24month`/`60month` fell back to one a year) — thins the labels
+  (every k-th tick keeps its label) when even the year step has too many,
+  and shows the year on a span under four months that crosses New Year.
 - **A palette that never repeats** (M.39; round A2): past `--chart-1…8` a
   chart's further series or slices are tints and shades of the palette, each
   chosen as far (CIE76 ΔE) from every colour before it as possible — a
-  10-slice pie on a six-colour theme had A = G … D = J.
+  10-slice pie on a six-colour theme had A = G … D = J. Round A3: apart for
+  colour-blind readers too — each candidate is scored by its least ΔE in
+  normal vision and under protan, deutan and tritan simulation (Machado
+  2009); a 10-slice pie had two slices ΔE 0.8 apart for a deutan reader.
   The content-theme script grew 4.3 KB with these two: the carrier bundle's
   total bound (claim A.2) is raised from 1.15 to 1.16 MB (measured 1.150 MB).
 - **Visible-only drawing** (M.33): a chart or SMILES drawing in a hidden
