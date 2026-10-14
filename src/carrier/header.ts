@@ -199,9 +199,13 @@ function lineStartOffset(text: string, n: number): number {
   return text.length;
 }
 
-/** A top-level HTML-comment block whose first word is `deck` (slides 0.x's config preamble; FC-18 §7.2). */
-const DECK_HINT = /<!--\s*deck\b/;
-const DECK_BLOCK = /^[ \t]*<!--\s*deck\b/;
+/**
+ * A top-level HTML-comment block whose first word is `deck` (slides 0.x's
+ * config preamble; FC-18 §7.2) — the word itself, so `<!-- deck-notes -->`
+ * (an author's comment) is not one.
+ */
+const DECK_HINT = /<!--\s*deck(?!\w|-(?!->))/;
+const DECK_BLOCK = /^[ \t]*<!--\s*deck(?!\w|-(?!->))/;
 type BlockToken = { type: string; level: number; content: string; map: [number, number] | null };
 
 /**

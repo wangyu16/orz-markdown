@@ -34,6 +34,11 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   by `enhanceDocument` (with its nonce) and included in `bodyScripts()`.
   Every bundled theme sets the tokens (`references/themes.md`, "Chart and
   diagram tokens").
+- **`--mm-gantt-axis-format`** (M.38): a gantt chart's date axis format (a
+  d3 time format, e.g. `'%b %-d'`; Mermaid's `gantt.axisFormat`), read where
+  the diagram is drawn; the chart's own `axisFormat` wins. A large-type
+  gantt (a slide) keeps its axis labels apart (orz-slides closed-loop round
+  A).
 - **Visible-only drawing** (M.33): a chart or SMILES drawing in a hidden
   container waits and is drawn when it gets a size (a ResizeObserver), on the
   next pass, or by the new **`redrawEnhancement(el)`** (frame:
@@ -70,7 +75,9 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   header keys `slide_numbers`, `progress` (`yes`/`no`, default `yes` in
   `readDocument().settings`) and `section_numbers` (`plain`/`roman`/`01`/
   `none`); `ratio` values `16:9` / `4:3`; the lint **`deck-block`** (error)
-  for a top-level `<!-- deck … -->` block in a slides text; the spec states
+  for a top-level `<!-- deck … -->` block in a slides text (the word `deck`
+  itself: `<!-- deck-notes … -->` is an author's comment, not a deck block —
+  orz-slides closed-loop round A); the spec states
   the header-only deck config, the `here=N` outline option, and that
   duplicate region names and a region filled both by leading text and its own
   marker are lint errors (the slides parser lives in orz-slides).

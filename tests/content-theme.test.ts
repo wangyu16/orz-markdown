@@ -352,6 +352,37 @@ chrome('themed charts and diagrams (real Chrome, real libraries)', { timeout: 12
     ]);
     expect(results[1]).toEqual(results[0]);
   });
+
+  it('[M.38] --mm-gantt-axis-format sets a gantt chart\'s date axis (Mermaid\'s gantt.axisFormat, a d3 time format, quoted or not); without it Mermaid\'s %Y-%m-%d; the chart\'s own axisFormat wins; the preview frame the same', async () => {
+    const GANTT = '{{mermaid\ngantt\n  dateFormat YYYY-MM-DD\n  section A\n  Task one :a1, 2026-01-01, 10d\n  Task two :after a1, 5d\n}}\n';
+    const OWN = '{{mermaid\ngantt\n  dateFormat YYYY-MM-DD\n  axisFormat %d/%m\n  section A\n  Task one :a1, 2026-01-01, 10d\n}}\n';
+    const body = `<article class="markdown-body" id="doc">
+      <div id="short" style="--mm-gantt-axis-format: '%b %-d'">${md.render(GANTT)}</div>
+      <div id="bare" style="--mm-gantt-axis-format: %b %-d; --mm-node: #e0f0e0">${md.render(GANTT)}</div>
+      <div id="own" style="--mm-gantt-axis-format: '%b %-d'">${md.render(OWN)}</div>
+      <div id="plain">${md.render(GANTT)}</div></article>`;
+    const facts = (p: Page) => p.evaluate(`['short', 'bare', 'own', 'plain'].map(function (id) {
+      var t = document.querySelector('#' + id + ' .mermaid svg .tick text');
+      return t ? t.textContent : null;
+    })`);
+    const results: unknown[] = [];
+    for (const frame of [false, true]) {
+      const p = await open(body, { frame });
+      if (frame) {
+        await p.waitForFunction(`window.mermaid && typeof window.mermaid.run === 'function' && typeof window.__orzEnhance === 'function'`);
+        await p.evaluate('window.__orzEnhance()');
+      } else await enhance(p, '#doc');
+      await p.waitForFunction(`document.querySelectorAll('#doc .mermaid svg .tick text').length > 3`, null, { timeout: 10_000 });
+      results.push(await facts(p));
+      await p.context().close();
+    }
+    const r = results[0] as string[];
+    expect(r[0]).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+    expect(r[1]).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+    expect(r[2]).toMatch(/^\d{2}\/\d{2}$/);
+    expect(r[3]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(results[1]).toEqual(results[0]);
+  });
 });
 
 void PREVIEW_CDN;

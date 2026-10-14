@@ -94,9 +94,13 @@ function lineStartOffset(text, n) {
     }
     return text.length;
 }
-/** A top-level HTML-comment block whose first word is `deck` (slides 0.x's config preamble; FC-18 §7.2). */
-const DECK_HINT = /<!--\s*deck\b/;
-const DECK_BLOCK = /^[ \t]*<!--\s*deck\b/;
+/**
+ * A top-level HTML-comment block whose first word is `deck` (slides 0.x's
+ * config preamble; FC-18 §7.2) — the word itself, so `<!-- deck-notes -->`
+ * (an author's comment) is not one.
+ */
+const DECK_HINT = /<!--\s*deck(?!\w|-(?!->))/;
+const DECK_BLOCK = /^[ \t]*<!--\s*deck(?!\w|-(?!->))/;
 /**
  * `deck-block` (2.4.0, FC-18 §7.2): every top-level `<!-- deck … -->` block of
  * a slides text — format 1 keeps the deck config in the header only. Found

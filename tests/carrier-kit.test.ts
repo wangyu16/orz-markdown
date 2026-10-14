@@ -1361,6 +1361,8 @@ describe('2.4.0: slides registry and the deck-block lint (FC-18 §5.1, §7.2)', 
       '> <!-- deck x -->\n',
       '::: info\n<!-- deck x -->\n:::\n',
       '<!-- decks are fine -->\n',
+      '<!-- deck-notes: draft -->\n',
+      '<!-- deck_2 -->\n',
       '<!-- slide deck -->\n',
       'text <!-- deck x --> inline\n',
     ];

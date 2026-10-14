@@ -1847,7 +1847,9 @@ function mermaid(el) {
     config.fontSize = size;
   }
   if (svg) { config.htmlLabels = false; config.flowchart = { htmlLabels: false }; }
-  return { key: m.key + '|' + size + '|' + (svg ? 'svg' : 'html'), config: config };
+  var axis = prop(cs, '--mm-gantt-axis-format').replace(/^(['"])(.*)\1$/, '$2');
+  if (axis) config.gantt = { axisFormat: axis };
+  return { key: m.key + '|' + size + '|' + (svg ? 'svg' : 'html') + '|' + axis, config: config };
 }
 
 /* The colour part of Mermaid's configuration, from the --mm-* colour and font tokens. */

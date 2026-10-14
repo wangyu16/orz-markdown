@@ -31,6 +31,11 @@
  *                   Mermaid's default — except under a CSS transform that
  *                   scales or rotates the diagram, where HTML labels are
  *                   measured wrong and cut, so `svg`)
+ *   --mm-gantt-axis-format  a gantt chart's date axis, a d3 time format
+ *                   (`'%b %-d'`, quoted or not; fallback: Mermaid's
+ *                   `%Y-%m-%d`) — a compact one keeps a large-type gantt's
+ *                   axis labels apart (2.4.0, orz-slides closed-loop round A);
+ *                   the chart's own `axisFormat` wins
  * A diagram's own `%%{init}%%` / front-matter config wins.
  *
  * ONE source, run in the preview frame (an inline script of `bodyScripts()`,
