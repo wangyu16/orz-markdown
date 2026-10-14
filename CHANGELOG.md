@@ -125,6 +125,20 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
 - Corpus: `slides/notes-and-fragments.slides.md` uses the kept slides theme
   `orchard` (was `executive`, dropped for slides 1.0).
 
+### Fixed
+
+- **`type: polarArea` draws** (M.41; orz-slides closed-loop round A4): the
+  chart plugin lower-cased the type to `polararea`, which Chart.js refused
+  silently. Chart.js's own names are kept in any case the author writes
+  them. A chart Chart.js refuses now carries `data-chart-error` on its
+  canvas (`enhanceDocument` and the preview frame's `__orzEnhance`) instead
+  of leaving an unexplained gap.
+- **An image in a link, a list item or a table cell keeps its line**
+  (M.42; `themes/common.css`, every bundled theme): only `p > img` was
+  inline, so a linked inline icon or a badge row broke its sentence into
+  three lines. `:is(p, a, li, td, th) > img` is inline now; a raw `<img>` of
+  its own stays a block, a picture alone in its paragraph looks as before.
+
 ## [2.3.0] - 2026-10-11
 
 The carrier-kit gaps the orz-paged 1.0 rebuild found (family plan REBUILD

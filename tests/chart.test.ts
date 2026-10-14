@@ -52,6 +52,11 @@ describe('Chart plugin', () => {
     expect(config.data.datasets[0]).toEqual({ label: 'Users', data: [5, 8] });
   });
 
+  it('[M.41] keeps Chart.js\'s own type names in any case the author writes them (polarArea, not polararea; orz-slides round A4, A4-ENG-4: a polarArea chart drew nothing)', () => {
+    for (const t of ['polarArea', 'polararea', 'POLARAREA', 'PolarArea']) expect(extractConfig(md.render(`{{chart\ntype: ${t}\nlabels: A, B\ndata: 1, 2\n}}`)).type, t).toBe('polarArea');
+    for (const [t, want] of [['Bar', 'bar'], ['DOUGHNUT', 'doughnut'], ['Bubble', 'bubble'], ['scatter', 'scatter']]) expect(extractConfig(md.render(`{{chart\ntype: ${t}\nlabels: A, B\ndata: 1, 2\n}}`)).type).toBe(want);
+  });
+
   it('defaults to bar when no type is given', () => {
     const html = md.render('{{chart\nlabels: A, B\ndata: 1, 2\n}}');
     const config = extractConfig(html);

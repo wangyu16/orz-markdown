@@ -1022,4 +1022,39 @@ suite('enhanceDocument: the preview frame\'s enhancement for content rendered in
     expect(print.ytHeight).toBeLessThan(60); // a line of text, not a 16:9 blank
     await pg.close();
   }, 60_000);
+
+  it('[M.42] an image inside a link, a list item or a table cell keeps its line (common.css, every bundled theme): a linked inline icon, an icon in a tight list item and in a cell, and a badge row stay inline beside their text; a picture alone in its paragraph keeps its look (orz-slides round A4, A4-TH-2: they were display: block)', async () => {
+    const pg = await own!.newPage();
+    const icon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAAAGklEQVR4nGM4oaFBNmIY1TyqeVTzqOaB1QwAtuG1kCqIhKwAAAAASUVORK5CYII='; // 20 × 20
+    const src = `Press the ![gear](${icon}) button, then [![gear](${icon})](https://x.org) and pick the format.\n\n- Press ![gear](${icon}) in a list\n\n| Key | What |\n|---|---|\n| ![gear](${icon}) here | a cell |\n\n[![build](${icon})](https://x.org) [![cov](${icon})](https://x.org) badges\n`;
+    const html = md.render(src);
+    const look = () => pg.evaluate(() => Array.from(document.querySelectorAll<HTMLImageElement>('.markdown-body img')).map((im) => {
+      const host = im.parentElement!.tagName === 'A' ? im.parentElement! : im;
+      let n: Node | null = host.previousSibling;
+      while (n && !(n.nodeType === 3 && (n.textContent ?? '').trim())) n = n.previousSibling;
+      let last = true;
+      if (!n) { last = false; n = host.nextSibling; while (n && !(n.nodeType === 3 && (n.textContent ?? '').trim())) n = n.nextSibling; }
+      const rg = document.createRange();
+      rg.selectNodeContents(n!);
+      const rects = Array.from(rg.getClientRects());
+      const near = last ? rects[rects.length - 1] : rects[0];
+      const c = im.getBoundingClientRect();
+      const mid = (c.top + c.bottom) / 2;
+      return `${im.parentElement!.tagName.toLowerCase()} > img: ${getComputedStyle(im).display}${mid < near.top - 2 || mid > near.bottom + 2 ? ' OFF ITS LINE' : ''}`;
+    }));
+    const common = readFileSync('themes/common.css', 'utf8');
+    const themes = ['', ...readdirSync('themes').filter((f) => f.endsWith('.css') && f !== 'common.css')];
+    const bad: string[] = [];
+    for (const theme of themes) {
+      const css = theme ? readFileSync(`themes/${theme}`, 'utf8').replace(/@import\s+['"]\.\/common\.css['"];?/, common).replace(/@import[^;]+;/g, '') : common;
+      await pg.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><article class="markdown-body">${html}</article></body></html>`);
+      for (const x of await look()) if (/block|OFF/.test(x)) bad.push(`${theme || 'common.css'}: ${x}`);
+    }
+    expect(bad).toEqual([]);
+    expect(themes.length).toBeGreaterThan(10);
+    // a picture alone in its paragraph, and a raw <img> block, look as before
+    await pg.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${common}</style></head><body><article class="markdown-body">${md.render(`![p](${icon})\n\n<img src="${icon}">\n`)}</article></body></html>`);
+    expect(await pg.evaluate(() => Array.from(document.querySelectorAll('.markdown-body img')).map((i) => getComputedStyle(i).display))).toEqual(['inline', 'block']);
+    await pg.close();
+  }, 60_000);
 });

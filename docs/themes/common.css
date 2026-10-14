@@ -147,7 +147,10 @@
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }

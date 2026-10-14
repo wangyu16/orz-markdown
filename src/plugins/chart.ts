@@ -58,6 +58,9 @@ function parseList(value: string): string[] {
     .filter((part) => part.length > 0);
 }
 
+/** Chart.js's built-in chart types by their lower-case spelling (its names are case-sensitive: `polarArea`). */
+const CHART_TYPES: Readonly<Record<string, string>> = { bar: 'bar', line: 'line', pie: 'pie', doughnut: 'doughnut', radar: 'radar', polararea: 'polarArea', scatter: 'scatter', bubble: 'bubble' };
+
 function parseChart(body: string): ChartConfig {
   let type = 'bar';
   let title = '';
@@ -74,7 +77,8 @@ function parseChart(body: string): ChartConfig {
 
     switch (key) {
       case 'type':
-        if (value) type = value.toLowerCase();
+        // Chart.js's own names, in any case the author writes them (`polarArea`: lower-cased, Chart.js refused it; M.41)
+        if (value) type = CHART_TYPES[value.toLowerCase()] ?? value.toLowerCase();
         break;
       case 'title':
         title = value;

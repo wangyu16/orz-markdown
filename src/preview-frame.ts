@@ -89,7 +89,7 @@ var pend=function(v,draw,test){v.__orzPend=draw;v.__orzTest=test||vis;if(!ro&&ty
 var mm=function(ns){try{var T=window.OrzContentTheme;if(T&&typeof T.runMermaid==='function')T.runMermaid(window.mermaid,ns);else window.mermaid.run({nodes:ns})}catch(e){}};
 var box=function(v){if(v.__ow===undefined){v.__ow=v.width;v.__oh=v.height}v.width=v.__ow;v.height=v.__oh;v.style.width='';v.style.height='';var w=v.clientWidth,h=v.clientHeight;if(w>0&&h>0&&(Math.abs(w-v.__ow)>=1||Math.abs(h-v.__oh)>=1))return[w,h];return[v.__ow,v.__oh]};
 var smiles=function(v){var b=box(v);v.__dw=b[0];v.__dh=b[1];var d=new window.SmilesDrawer.Drawer({width:b[0],height:b[1]});window.SmilesDrawer.parse(v.getAttribute('data-smiles'),function(t){try{d.draw(t,v,window.__orzSmilesTheme||'light',false)}catch(e){}})};
-var chart=function(v){var w=v.ownerDocument.createElement('div');w.className='orz-chart-frame';w.style.cssText='position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}var T=window.OrzContentTheme;if(T&&typeof T.chart==='function')g=T.chart(v,g);v.__orzChart=new window.Chart(v,g)}catch(e){}};
+var chart=function(v){var w=v.ownerDocument.createElement('div');w.className='orz-chart-frame';w.style.cssText='position:relative;width:100%;max-width:var(--chart-max-width,440px);margin:.4em auto';v.parentNode.insertBefore(w,v);w.appendChild(v);v.removeAttribute('width');v.removeAttribute('height');try{var g=JSON.parse(v.getAttribute('data-chart')||'{}');g.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},g.options||{});if(!((g.data&&g.data.datasets)||[]).some(function(d){return d&&d.label})){g.options.plugins=Object.assign({},g.options.plugins,{legend:{display:false}})}var T=window.OrzContentTheme;if(T&&typeof T.chart==='function')g=T.chart(v,g);v.__orzChart=new window.Chart(v,g)}catch(e){try{v.setAttribute('data-chart-error',String(e&&e.message||e).slice(0,200))}catch(x){}}};
 var S=function(){return L(function(){return typeof window.SmilesDrawer.parse==='function'&&typeof window.SmilesDrawer.Drawer==='function'})};
 var C=function(){return L(function(){return typeof window.Chart==='function'})};
 var M=function(){return L(function(){return typeof window.mermaid.run==='function'})};
@@ -717,7 +717,10 @@ function drawChart(root: EnhanceRoot, v: AnyEl, w: EnhanceWin, isStatic: boolean
     const chart = new w.Chart(v, g);
     v.__orzChart = chart;
     track(root, chart, v);
-  } catch { /* a bad chart */ }
+  } catch (e) {
+    // a chart Chart.js refuses (an unknown type, bad data) says why instead of leaving an unexplained gap (M.41)
+    try { v.setAttribute('data-chart-error', String((e as { message?: unknown } | null)?.message ?? e).slice(0, 200)); } catch { /* no attribute */ }
+  }
 }
 
 /** Draw Mermaid diagrams: themed from CSS custom properties (2.4.0), one Mermaid configuration per group of diagrams. */

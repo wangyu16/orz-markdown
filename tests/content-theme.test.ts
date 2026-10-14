@@ -522,6 +522,20 @@ chrome('themed charts and diagrams (real Chrome, real libraries)', { timeout: 12
     expect(facts.find((f) => f.id === 'dec-full')!.labels.join(' '), 'a span across New Year shows the year').toMatch(/202[67]/);
     expect(facts.find((f) => f.id === 'y12-half')!.labels.every((l) => /^20\d\d$/.test(l))).toBe(true);
   });
+
+  it('[M.41] a polarArea chart is drawn (its type kept as Chart.js names it), and a chart Chart.js refuses says so — data-chart-error on its canvas, enhanceDocument and the preview frame alike (orz-slides round A4, A4-ENG-4: an empty gap, the error swallowed)', async () => {
+    const DOCP = '{{chart\ntype: polarArea\nlabels: A, B, C\ndata: 1, 2, 3\n}}\n\n{{chart\ntype: nosuchtype\nlabels: A, B\ndata: 1, 2\n}}\n';
+    for (const frame of [false, true]) {
+      const p = await open(`<article class="markdown-body" id="doc">${md.render(DOCP)}</article>`, { frame });
+      if (frame) { await p.waitForFunction(`typeof window.Chart === 'function' && typeof window.__orzEnhance === 'function'`); await p.evaluate('window.__orzEnhance()'); } else await enhance(p, '#doc');
+      await p.waitForFunction(`document.querySelectorAll('#doc canvas.orz-chart').length === 2 && !!Chart.getChart(document.querySelectorAll('#doc canvas.orz-chart')[0])`, null, { timeout: 20_000 });
+      const r = await p.evaluate(`(function () { var c = document.querySelectorAll('#doc canvas.orz-chart'); var a = Chart.getChart(c[0]); return { type: a && a.config.type, err: c[1].getAttribute('data-chart-error'), drawn: !!c[1].__orzChart }; })()`) as { type: string; err: string | null; drawn: boolean };
+      await p.context().close();
+      expect(r.type, `frame=${frame}`).toBe('polarArea');
+      expect(r.err, `frame=${frame}: the refused chart says why`).toBeTruthy();
+      expect(r.drawn, `frame=${frame}`).toBe(false);
+    }
+  });
 });
 
 void PREVIEW_CDN;
