@@ -386,6 +386,17 @@ export interface EditorShell {
     }>, options?: {
         ms?: number;
     }): void;
+    /**
+     * (2.4.0) The selection now, in exact offsets (`from` ≤ `to`), or null
+     * (no engine selection yet, or destroyed). It is the engine's own, so it
+     * has followed every change — a header setting, `setText`, `applyEdits`,
+     * an AI edit — also when no `selection` event came (a change MAPS the
+     * selection; it does not set it).
+     */
+    getSelection(): {
+        from: number;
+        to: number;
+    } | null;
     isDirty(): boolean;
     /** The current text is the saved one. */
     markSaved(): void;

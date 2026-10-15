@@ -184,7 +184,7 @@ header tools, `readDocument`, `assembleEnvelope` / `extract`),
 (save, preferences, host protocols, quiet update), `orz-markdown/carrier/editor`
 (the shared editor shell, incl. the AI review flow `proposeAi`/`applyAi`
 ≥ 2.2.0; ≥ 2.4.0 `applyEdits` (several edits as one undo step), `select`
-`setFocusRange` (dim or fold the text outside a range) and `flash` (light the lines a tool changed); ≥ 2.3.0 the reader's Cmd/Ctrl+P as a `print` event and
+`setFocusRange` (dim or fold the text outside a range), `flash` (light the lines a tool changed) and `getSelection` (the caret in exact offsets); ≥ 2.3.0 the reader's Cmd/Ctrl+P as a `print` event and
 `printDocument(html)` to print the document rather than the app's page — see
 `references/embedding.md` §4), `orz-markdown/carrier/app` (≥ 2.2.0: the standalone file's runtime,
 `startCarrier(kind)`; a file's read view shows one pencil at the bottom-left

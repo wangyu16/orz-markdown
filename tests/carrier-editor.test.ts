@@ -2980,6 +2980,15 @@ describe('applyEdits, select and setFocusRange (2.4.0)', () => {
     m.shell.setFocusRange(0, 1);
   });
 
+  it('[E.42] getSelection with the textarea engine: the selection in exact offsets (BOM, CR LF), as select set it and as a change above it moved it; null after destroy', () => {
+    const m = mount({ text: T });
+    const r = at(T, '<!-- @right');
+    m.shell.select(r, r + 4);
+    expect(m.shell.getSelection()).toEqual({ from: r, to: r + 4 });
+    m.shell.destroy();
+    expect(m.shell.getSelection()).toBeNull();
+  });
+
   it('[E.41] flash with the textarea engine lights nothing and changes nothing (no throw, the text exact); bad arguments throw a TypeError; after destroy it is a no-op', () => {
     const m = mount({ text: T });
     m.shell.flash([{ from: at(T, '<!-- slide'), to: at(T, '<!-- slide') + 4 }]);
@@ -3936,6 +3945,31 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     expect(await p.evaluate('shell_b.undo()')).toBe(true);
     expect(await p.evaluate('shell_b.getText()')).toBe(T);
     expect(await p.evaluate('shell_b.undo()')).toBe(false);
+    await p.close();
+  });
+
+  it('[E.42] (2.4.0) in CodeMirror: getSelection gives the selection in exact offsets (BOM, CR LF) and follows a change that maps it without a selection event — a header setting above the caret, applyEdits, setText', async () => {
+    const T = `\ufeff{{nyml\r\nkind: document\r\n}}\r\n\r\n<!-- slide -->\r\n## One\r\nBody one\r\n<!-- slide -->\r\n## Two\r\nBody two\r\n`;
+    const p = await open();
+    expect(await p.evaluate(`mountOpts('b', ${JSON.stringify(T)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    const two = T.indexOf('## Two');
+    await p.evaluate(`shell_b.select(${two}, ${two + 2})`);
+    expect(await p.evaluate('shell_b.getSelection()')).toEqual({ from: two, to: two + 2 });
+    await p.evaluate(`window.__sel = 0; shell_b.on('selection', function () { window.__sel++; })`);
+    // a header setting adds a line above the caret: no selection event, the selection moved with its text
+    await p.evaluate(`shell_b.setHeader({ title: 'A title' })`);
+    const t1 = await p.evaluate('shell_b.getText()') as string;
+    const s1 = await p.evaluate('shell_b.getSelection()') as { from: number; to: number };
+    expect(t1.slice(s1.from, s1.to)).toBe('##');
+    expect(s1.from).toBe(t1.indexOf('## Two'));
+    // applyEdits before it, then setText with the same text around it
+    await p.evaluate(`shell_b.applyEdits([{ from: ${T.indexOf('Body one')}, to: ${T.indexOf('Body one')}, insert: 'More. ' }])`);
+    const t2 = await p.evaluate('shell_b.getText()') as string;
+    const s2 = await p.evaluate('shell_b.getSelection()') as { from: number; to: number };
+    expect(t2.slice(s2.from, s2.to)).toBe('##');
+    expect(await p.evaluate('window.__sel')).toBe(0);
+    await p.evaluate('shell_b.destroy()');
+    expect(await p.evaluate('shell_b.getSelection()')).toBeNull();
     await p.close();
   });
 

@@ -338,6 +338,14 @@ export interface EditorShell {
    * shows nothing. Bad arguments throw a `TypeError`.
    */
   flash(ranges: ReadonlyArray<{ from: number; to: number }>, options?: { ms?: number }): void;
+  /**
+   * (2.4.0) The selection now, in exact offsets (`from` ≤ `to`), or null
+   * (no engine selection yet, or destroyed). It is the engine's own, so it
+   * has followed every change — a header setting, `setText`, `applyEdits`,
+   * an AI edit — also when no `selection` event came (a change MAPS the
+   * selection; it does not set it).
+   */
+  getSelection(): { from: number; to: number } | null;
   isDirty(): boolean;
   /** The current text is the saved one. */
   markSaved(): void;
@@ -1356,6 +1364,13 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       if (destroyed || ranges.length === 0) return;
       const exact = getText();
       adapter.flash?.(ranges.map((r) => ({ from: toEditorOffset(exact, Math.min(r.from, r.to)), to: toEditorOffset(exact, Math.max(r.from, r.to)) })), typeof o?.ms === 'number' ? { ms: o.ms } : undefined);
+    },
+    getSelection() {
+      if (destroyed) return null;
+      const sel = adapter.getSelection?.();
+      if (!sel || typeof sel.from !== 'number' || typeof sel.to !== 'number') return null;
+      const d = adapter.getDoc();
+      return { from: model.toExactOffset(d, Math.min(sel.from, sel.to)), to: model.toExactOffset(d, Math.max(sel.from, sel.to)) };
     },
     isDirty() { updateDirty(); return dirty; },
     markSaved() { if (!destroyed) { adoptBaseline(getText()); updateDirty(); } },

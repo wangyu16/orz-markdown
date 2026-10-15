@@ -1225,6 +1225,15 @@ function createEditorShell(element, options) {
             const exact = getText();
             adapter.flash?.(ranges.map((r) => ({ from: (0, text_model_js_1.toEditorOffset)(exact, Math.min(r.from, r.to)), to: (0, text_model_js_1.toEditorOffset)(exact, Math.max(r.from, r.to)) })), typeof o?.ms === 'number' ? { ms: o.ms } : undefined);
         },
+        getSelection() {
+            if (destroyed)
+                return null;
+            const sel = adapter.getSelection?.();
+            if (!sel || typeof sel.from !== 'number' || typeof sel.to !== 'number')
+                return null;
+            const d = adapter.getDoc();
+            return { from: model.toExactOffset(d, Math.min(sel.from, sel.to)), to: model.toExactOffset(d, Math.max(sel.from, sel.to)) };
+        },
         isDirty() { updateDirty(); return dirty; },
         markSaved() { if (!destroyed) {
             adoptBaseline(getText());

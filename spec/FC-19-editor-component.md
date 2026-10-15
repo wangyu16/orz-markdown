@@ -123,6 +123,7 @@ interface Editor {
   select(from: number, to: number, options?: { scroll?: boolean }): void;       // exact offsets; scrolls unless scroll: false
   setFocusRange(from: number | null, to?: number, options?: { mode?: "dim" | "fold" }): void;  // null: show everything
   flash(ranges: Array<{ from: number; to: number }>, options?: { ms?: number }): void;  // light the lines a tool changed
+  getSelection(): { from: number; to: number } | null;                          // exact offsets, mapped by every change
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -205,6 +206,12 @@ counted).
   history changes. An engine that cannot (the textarea fallback, a
   CodeMirror build without `Decoration`) lights nothing. Bad arguments
   throw a `TypeError`.
+- `getSelection()` is the selection now in exact offsets (`from` ≤ `to`),
+  or null (no engine selection yet; after `destroy`). It is the engine's
+  own, so it has followed every change — a header setting, `setText`,
+  `applyEdits`, an AI edit — which MAPS the selection and emits no
+  `selection` event: a host that keeps the caret reads it here rather than
+  keeping a copy from the last event.
 
 **`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
 carrier-app loop): the renderer reads an include from `includes` first (an
@@ -960,7 +967,7 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   the conflict question (§8.5); no served notice for an app's page (§8.5);
   the syntax highlighter (`ORZ_HIGHLIGHTER`, §8.6).
 - 2.4.0 (additive; the kit gaps of orz-slides 1.0, REBUILD §3c): `Editor`
-  `applyEdits`, `select`, `setFocusRange`, `flash` and the `change` event's
+  `applyEdits`, `select`, `setFocusRange`, `flash`, `getSelection` and the `change` event's
   `label` (§4); adapters may implement `applyChanges`, `setFocusRange` and
   `flash`, and
   `setSelection` takes `{ scroll? }` and reports the selection through
