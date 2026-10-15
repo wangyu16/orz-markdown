@@ -6,7 +6,7 @@ export declare const EXIT_USAGE = 2;
  * Why a command failed: a stable code for scripts and agents (`reason` in the
  * `--json` failure object).
  */
-export type Reason = 'bad-usage' | 'no-such-file' | 'unreadable' | 'not-utf8' | 'write-failed' | 'exists' | 'not-orz' | 'twin-differs' | 'output-differs' | 'replaces-mismatch' | 'legacy-file' | 'newer-shell' | 'newer-format' | 'unclosed-island' | 'other-kind' | 'assembled-input' | 'invalid-text' | 'engine-unavailable' | 'failed';
+export type Reason = 'bad-usage' | 'no-such-file' | 'unreadable' | 'not-utf8' | 'write-failed' | 'exists' | 'not-orz' | 'twin-differs' | 'output-differs' | 'replaces-mismatch' | 'legacy-file' | 'newer-shell' | 'newer-format' | 'unclosed-island' | 'other-kind' | 'assembled-input' | 'invalid-text' | 'engine-unavailable' | 'no-browser' | 'failed';
 /** Every reason code, in the order above. */
 export declare const REASONS: readonly Reason[];
 /** The command that resolves a refusal: `<tool> <command> <args…>` — runnable verbatim, never with `--force`. */

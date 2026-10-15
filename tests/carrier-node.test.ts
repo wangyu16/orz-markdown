@@ -93,7 +93,7 @@ describe('carrier/node boundaries', () => {
 
 describe('carrier/node vocabulary', () => {
   it('[N.9] the shared reason codes, CliError (exit 1 with a reason, 2 = bad-usage), next commands as runnable shell words, --replaces tokens, assembleArgs repeating the user\'s options, libReason and the one-object --json failure', () => {
-    expect(REASONS).toEqual(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'failed']);
+    expect(REASONS).toEqual(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'no-browser', 'failed']);
     expect(new CliError('x')).toMatchObject({ code: 1, reason: 'failed' });
     expect(new CliError('x', EXIT_USAGE)).toMatchObject({ code: 2, reason: 'bad-usage' });
     expect(new CliError('x', 'twin-differs', { command: 'extract', args: ['a b.md.html'] })).toMatchObject({ code: 1, reason: 'twin-differs', next: { command: 'extract', args: ['a b.md.html'] } });

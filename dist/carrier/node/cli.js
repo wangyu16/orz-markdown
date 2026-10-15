@@ -18,7 +18,7 @@ exports.EXIT_OK = 0;
 exports.EXIT_FAILED = 1;
 exports.EXIT_USAGE = 2;
 /** Every reason code, in the order above. */
-exports.REASONS = Object.freeze(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'failed']);
+exports.REASONS = Object.freeze(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'no-browser', 'failed']);
 /** An expected failure: printed as a message (or `{ ok: false, reason, next }` with --json), never as a stack. */
 class CliError extends Error {
     constructor(message, codeOrReason = exports.EXIT_FAILED, next) {

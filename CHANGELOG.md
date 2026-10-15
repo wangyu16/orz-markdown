@@ -115,6 +115,10 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   `kitParser().parse(text, {})` is a `KitToken[]` without a cast. **`Lint`**
   has an optional **`next`** (the carrier CLI command that resolves the
   finding); the kit's `deck-block` carries `next: 'upgrade'` (FC-18 §7.2).
+- **Reason code `no-browser`** (`orz-markdown/carrier/node`, N.9): a
+  command that renders in an installed browser found none (orz-slides
+  `inspect --layout`, rebuild step 7). Added to `Reason` and `REASONS`
+  before `failed`; no code renamed.
 
 ### Changed
 

@@ -28,7 +28,9 @@ only from this API, `tests/helpers/node-cli.ts`).
   `not-orz`, `twin-differs`, `output-differs`, `replaces-mismatch`,
   `legacy-file`, `newer-shell`, `newer-format`, `unclosed-island`,
   `other-kind`, `assembled-input`, `invalid-text`, `engine-unavailable`,
-  `failed`. New codes may be added; none is renamed.
+  `no-browser` (2.4.0: a command that renders in an installed browser — orz-slides
+  `inspect --layout` — found none), `failed`. New codes may be added; none is
+  renamed.
 - `Next` `{ command, args }` — the command that resolves a refusal,
   runnable verbatim as `<tool> <command> <args…>` (`commandLine`, words
   quoted by `sh`), built from the user's own arguments (`assembleArgs`) and

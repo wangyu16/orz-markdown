@@ -34,10 +34,11 @@ export type Reason =
   | 'assembled-input'    // assemble was given an assembled file, not a text
   | 'invalid-text'       // the text cannot be assembled (NUL, a lone surrogate, …)
   | 'engine-unavailable' // the inline engine is missing or stale
+  | 'no-browser'         // a command that renders in an installed browser found none (2.4.0: orz-slides `inspect --layout`)
   | 'failed';            // anything else
 
 /** Every reason code, in the order above. */
-export const REASONS: readonly Reason[] = Object.freeze(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'failed'] as Reason[]);
+export const REASONS: readonly Reason[] = Object.freeze(['bad-usage', 'no-such-file', 'unreadable', 'not-utf8', 'write-failed', 'exists', 'not-orz', 'twin-differs', 'output-differs', 'replaces-mismatch', 'legacy-file', 'newer-shell', 'newer-format', 'unclosed-island', 'other-kind', 'assembled-input', 'invalid-text', 'engine-unavailable', 'no-browser', 'failed'] as Reason[]);
 
 /** The command that resolves a refusal: `<tool> <command> <args…>` — runnable verbatim, never with `--force`. */
 export interface Next { command: string; args: string[] }
