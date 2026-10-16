@@ -13,7 +13,8 @@ The carrier-kit gaps of the orz-slides 1.0 rebuild (family plan REBUILD
 §3c), all additive: nothing slides-specific enters the kit. **Additive for
 `^2.3.0` consumers**: no export was removed or changed incompatibly; the
 orz-mdhtml 1.0.1 and orz-paged 1.0.0 suites pass against it. The parser's
-`md.render` output is unchanged. What changes on screen: charts and Mermaid
+`md.render` output is unchanged except a chart's type, now kept in
+Chart.js's own spelling (`polarArea`, M.41). What changes on screen: charts and Mermaid
 diagrams take the theme's colours (every bundled theme sets them), and the
 dark themes' charts — slivers in 2.3.0 — draw again. The pinned CodeMirror
 bundle `vendor/codemirror6.js` now also exports `StateField`, `StateEffect`
@@ -133,9 +134,36 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   chart frame's inline width cap is `var(--chart-max-width, 440px)`.
 - Corpus: `slides/notes-and-fragments.slides.md` uses the kept slides theme
   `orchard` (was `executive`, dropped for slides 1.0).
+- **The package ships `spec/`** (the binding carrier specs the carriers'
+  `PROTOCOL.md` point to in the installed package).
 
 ### Fixed
 
+- **A plain `extract` never replaces a committed text with a file of
+  unknown age** (`orz-markdown/carrier/node`; N.11; orz-slides final loop
+  CLI-1; present since 2.3.0, so orz-mdhtml and orz-paged get it at their
+  next release): a twin known only through git (committed and unchanged)
+  beside a file that holds none of its commits — a fresh clone, a shallow
+  clone, CI, another machine — was refused with `next: extract <file>` and
+  the words "the file holds newer work", and following it replaced the
+  committed text with the file's older one. Only the pair's own record
+  proves the file newer now; the git-only case gets the safe pull
+  (`extract <file> -o <other>`, merge, `--replaces`).
+- **A read-only editor never changes its header** (E.43; FC-19 §8.3): the
+  toolbar's setting pickers (`attachSettings`) changed the header of a
+  `readOnly`, newer-format or update-locked editor (the save was refused,
+  but `change` and `dirty` fired). `setHeader` now throws in read-only, as
+  `applyEdits` refuses, and the pickers show their values with every choice
+  disabled.
+- **Uploads kept as `blob:` URLs show in the preview** (E.44; FC-19 §8.4):
+  an app's `resolveAsset` returning the page's own object URLs gave broken
+  pictures — the preview frame's opaque origin cannot load them. The shell
+  copies their bytes into `data:` URLs before the HTML enters the frame
+  (`inlineBlobUrls`, exported for carriers' own frame surfaces); a URL it
+  cannot read stays and is one `error { source: 'hook' }`.
+- FC-19's CSP note: a `style-src-elem` directive replaces `style-src` for
+  elements, so it must repeat the stylesheet hosts and cannot carry the
+  nonce.
 - **`type: polarArea` draws** (M.41; orz-slides closed-loop round A4): the
   chart plugin lower-cased the type to `polararea`, which Chart.js refused
   silently. Chart.js's own names are kept in any case the author writes
