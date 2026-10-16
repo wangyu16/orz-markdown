@@ -387,6 +387,7 @@ shell.setMode(m) / getMode() / getView() / setSplitRatio(r) / getSplitRatio() / 
 shell.focus() / on(event, fn) → off / refreshPreview() / destroy()
 shell.root (its shadow root) / shell.toolbar (the carrier's slot) / shell.adapter / shell.ready / shell.readOnly
 shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, articleClass? })   // the frame channel (§8.4)
+shell.preview.context / resolveAsset(ref) / resolveAssets(html) / shareAssets(html, surface?)   // (2.4.0) §8.4, §8.8
 ```
 
 ### 8.2 Layout, modes, keyboard
@@ -650,9 +651,18 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   `shell.preview.on(type, fn) → off` hears the frame's messages of a type
   (claims: data); `shell.preview.setOptions({ head?, scheme?, articleClass? })`
   rebuilds the frame document (e.g. a theme or measure change; `articleClass`
-  since 2.2.0) and shows the last HTML again.
+  since 2.2.0) and shows the last HTML again. (2.4.0, additive)
+  `shell.preview.context` is the render context the shell passes to
+  `render(text, ctx)` — the same object, so a carrier's own surfaces
+  resolve includes through the one per-shell cache (`previewIncludes(text,
+  shell.preview.context)`: each include fetched once per shell);
+  `shell.preview.resolveAsset(reference)` / `resolveAssets(html)` resolve a
+  carrier's own references as the shell does (§8.8 `resolveAsset`); and
+  `shell.preview.shareAssets(html, surface)` shares the `blob:` assets a
+  carrier's own message holds (§8.8).
 - Protocol (shell → frame): `orz-preview-port { channel }` (with the port),
-  `orz-preview-render { id, html, diff? }`, `orz-preview-scroll { top }`,
+  `orz-preview-render { id, html, diff? }`, (2.4.0) `orz-preview-assets {
+  add: [url, Blob][], drop: url[] }`, `orz-preview-scroll { top }`,
   `orz-preview-navigate { line }`, and a carrier's own types; (frame →
   shell, on the window): `orz-preview-ready { channel, secret }` (or a plain
   `orz-preview-ready` of a bridge without the port) and a carrier's own
@@ -911,19 +921,35 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   standard reads it (`mapSrcset`: a URL runs to whitespace, trailing commas
   end a candidate, descriptors run to a comma outside parentheses). A renderer should not resolve these
   attributes itself (the shell would see its relative results again).
-  (2.4.0, E.44) A `blob:` URL in a start tag of the result — what a host
-  gives for uploads kept as object URLs — is copied into a `data:` URL
-  before the HTML enters the frame (`inlineBlobUrls`): the frame's opaque
-  origin cannot load the page's object URLs. Each is read once per editor;
-  one that cannot be read (revoked, a policy without `connect-src blob:`,
-  over 32 MB) stays and is one `error { source: 'hook' }`. A `data:` or
-  http(s) URL is the cheaper answer for large assets.
+  (2.4.0) **`resolveAsset` receives the path as `uploadAsset` returned
+  it**: the reference as written in the rendered HTML, percent-decoded once
+  (`assetPath`: `decodeURI`, a malformed escape left as written) — the
+  parser writes a Markdown target percent-encoded (`my%20pic.png`,
+  `%E5%9B%BE.png`), and every surface (the shell's preview, a carrier's live
+  card, a slide background through `shell.preview.resolveAsset`) asks with
+  the same decoded form.
+  (2.4.0, E.44, E.46) A `blob:` URL `resolveAsset` gave — uploads kept as
+  object URLs — reaches the frame, whose opaque origin cannot load the
+  page's object URLs, as the page's Blob, sent ONCE per frame document over
+  the bridge's port (`orz-preview-assets`); the frame makes its own object
+  URL and its bridge swaps it in for the page's URL in each render's HTML
+  (`window.__orzPreview.assets(html)` for a carrier's own messages,
+  `shell.preview.shareAssets(html, surface)` on the page side). The HTML
+  that crosses keeps the page's short URL: no `data:` copy per render. One
+  that is no surface's any more is released (the frame revokes its URL);
+  one that cannot be read (revoked, a policy without `connect-src blob:`)
+  stays as written and is one `error { source: 'hook' }`. A `blob:` URL
+  written in the document itself is never read. The frame needs `img-src
+  blob:` (and `media-src blob:` for media) under a policy.
+  (`inlineBlobUrls`, the 2.4.0-prepared `data:` copy, stays exported for a
+  surface outside the shell's frame.)
 - `resolveLink` — preview link clicks (§8.4).
 - `uploadAsset` — a file pasted or dropped into the editor (capture phase,
   before the engine reads it as text) is uploaded and its Markdown inserted at
   the selection as one undoable edit: `![name](path)` for `image/*`, else
-  `[file name](path)` (spaces, parentheses and angle brackets in the path
-  percent-encoded); the caret goes after it. `uploadAssets(files)` does the
+  `[file name](path)` (`%`, spaces, parentheses and angle brackets in the
+  path percent-encoded, so the decoded target is the path the upload
+  returned); the caret goes after it. `uploadAssets(files)` does the
   same from code. A failing upload is `error { source: 'hook' }` and a toast.
 - `ai` — `requestAi(op, { selection? })`: `hooks.ai.request(op, { text,
   selection? })` with the exact text and, for a passage operation

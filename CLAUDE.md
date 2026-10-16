@@ -153,7 +153,12 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   handle a message in the captured `setTimeout`, since `window.event` is the
   port's event during the listener and its microtasks (E.35: a document script can override any built-in the
   bridge calls later and so steal the port); recompute
-  `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. Patches and other
+  `PREVIEW_BRIDGE_HASH` (E.19) after any bridge change. `blob:` assets
+  (2.4.0, E.46): only the URLs `resolveAsset` gave cross, each ONCE per
+  frame document as a Blob (`orz-preview-assets`), and the bridge swaps
+  its own object URL in — never put their bytes into the render's HTML
+  again (E-M2: `data:` copies froze the page); `resolveAsset` gets the
+  decoded path (`assetPath`, E.47). Patches and other
   strings the editor keeps go through `detachString` (V8 slices keep the whole
   text alive; E.21). `print.ts` (`printDocument`, 2.3.0, E.37: a hidden
   `allow-scripts allow-modals` frame prints a whole document; never

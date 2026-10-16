@@ -2282,7 +2282,7 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     expect(bridgeAt).toBeGreaterThan(0);
     expect(bridgeAt).toBeLessThan(full.indexOf('<link'));
     expect(bridgeAt).toBeLessThan(full.indexOf('id="orz-doc"'));
-    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', 'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}))']) expect(PREVIEW_BRIDGE).toContain(hook);
+    for (const hook of ['__orzPreviewApply', '__orzPreviewNavigate', '__orzPreviewMessage', 'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated),assets:FZ(swap)}))']) expect(PREVIEW_BRIDGE).toContain(hook);
     const custom = previewFrameDocument({ assets: false, bridge: 'void 0', head: '<link rel="stylesheet" href="t.css">' });
     expect(custom.indexOf('<script>void 0</script>')).toBeGreaterThan(custom.indexOf('id="orz-doc"'));
     // the frame's secret rides on the bridge's own <script> (its text, and so its hash, stays the same), first in <head>, nonce-stamped
@@ -2445,7 +2445,7 @@ describe('the authenticated preview channel (option B: the frame secret)', () =>
       'if(tr(e))send({type:"orz-preview-link"', 'if(!tr(e)||NOW()<mute||NOW()-lastIn>1500||queued)return;', 'NOW()-lastIn<1500)send({type:"orz-preview-scrolled",line:l})',
     ]) expect(PREVIEW_BRIDGE).toContain(guard);
     for (const gone of ['orz-preview-focus', 'orz-preview-ping', 'orz-preview-pong', 'hasFocus']) expect(PREVIEW_BRIDGE).not.toContain(gone);
-    expect(PREVIEW_BRIDGE).toContain('pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}))'); // post: a window message, never the port
+    expect(PREVIEW_BRIDGE).toContain('pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated),assets:FZ(swap)}))'); // post: a window message, never the port
   });
 
   it('[E.35] (2.3.0 round 4) the default bridge, run in a bare vm: a handover without its channel is not taken; the port\'s message is handled after its listener returns (never inside the dispatch, where window.event is the port\'s event), as is a window message before the port, and after it window messages do nothing; untrusted key, pointer, wheel, touch and click events report nothing and __orzPreview.navigated reports nothing without the reader\'s input — trusted ones do; __orzPreview (and its functions) and __orzLibsReady are frozen, non-writable, non-configurable window properties', async () => {
@@ -3145,7 +3145,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     throw new Error(`no preview frame shows ${marker}`);
   };
 
-  it('[E.44] a resolveAsset that returns the page\'s own blob: URLs (uploads kept as object URLs) shows the pictures in the opaque preview frame: their bytes go in as data: URLs, read once per editor; a revoked one stays as written and is one error { source: hook } (slides final loop EI-1)', async () => {
+  it('[E.44] a resolveAsset that returns the page\'s own blob: URLs (uploads kept as object URLs) shows the pictures in the opaque preview frame: their bytes go over once and the frame shows its own object URL; a revoked one stays as written and is one error { source: hook } (slides final loop EI-1)', async () => {
     const p = await open();
     await p.evaluate(`(function () {
       var E = window.OrzEditor;
@@ -3166,8 +3166,8 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       window.shell_blob = s;
     })()`);
     const f = await frameOf(p, 'Pictures');
-    await expect.poll(async () => f.evaluate('[].map.call(document.querySelectorAll("#orz-doc img"), function (i) { return (i.alt) + ":" + (i.complete ? i.naturalWidth : -1) + ":" + i.getAttribute("src").slice(0, 5); }).join(" ")'), { timeout: 10_000 })
-      .toBe('up:40:data: gone:0:blob: again:20:data:'); // again: 2x of the srcset
+    await expect.poll(async () => f.evaluate('[].map.call(document.querySelectorAll("#orz-doc img"), function (i) { return (i.alt) + ":" + (i.complete ? i.naturalWidth : -1) + ":" + (/^(blob:null|blob:http|data:)/.exec(i.getAttribute("src")) || ["?"])[0]; }).join(" ")'), { timeout: 10_000 })
+      .toMatch(/^up:40:blob:null gone:0:blob:http again:(20|40):blob:null$/); // the frame's own object URL (E.46); again: its src or the 2x of its srcset
     const errs = await p.evaluate('window.__errs') as string[];
     expect(errs).toHaveLength(1);
     expect(errs[0]).toMatch(/^hook: blob:.* could not be read for the preview/);
@@ -3177,6 +3177,126 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     expect(await f2.evaluate('document.querySelector("#orz-doc img").naturalWidth')).toBe(40);
     expect(await p.evaluate('window.__errs.length')).toBe(1);
     expect(await p.evaluate('shell_blob.getText().indexOf("data:")')).toBe(-1);
+    await p.close();
+  });
+
+  it('[E.46] blob: uploads cross once: 10 pictures of 4 MB kept as object URLs — each Blob is sent to the frame once (not per render), the rendered HTML that crosses holds no data: copy and stays small, typing keeps the preview within 2 s with no long task over 1 s; a blob: URL written in the document is never read; an asset no longer used is released; the frame stays allow-scripts and shows its own blob:null URLs (slides confirming round E-M2)', async () => {
+    const p = await open();
+    await p.evaluate(`(function () {
+      var E = window.OrzEditor;
+      window.__sent = [];
+      var pm = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (m) {
+        try { if (m && typeof m === 'object') window.__sent.push({ type: m.type, html: typeof m.html === 'string' ? m.html.length : -1, add: m.add ? m.add.map(function (a) { return a[0]; }) : [], drop: m.drop || [] }); } catch (e) {}
+        return pm.apply(this, arguments);
+      };
+      window.__urls = {};
+      var text = '# Photos\\n\\n';
+      for (var i = 0; i < 10; i++) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (30 + i) + '" height="20"><rect width="10" height="10"/><!-- ' + 'abcdefgh'.repeat(512 * 1024) + ' --></svg>';
+        window.__urls['assets/p' + i + '.svg'] = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+        text += '![p' + i + '](assets/p' + i + '.svg)\\n\\n';
+      }
+      window.__own = URL.createObjectURL(new Blob(['secret'], { type: 'text/plain' }));
+      text += '<img alt="own" src="' + window.__own + '">\\n\\nend\\n';
+      window.__errs = [];
+      var s = E.createEditorShell(document.getElementById('a'), {
+        text: text,
+        render: function (t) { return E.renderMarkdownPreview(t); },
+        adapter: E.textareaAdapter(),
+        hooks: { resolveAsset: function (p) { return window.__urls[p] || p; } },
+        preview: { assets: false, debounceMs: 20 },
+      });
+      s.on('error', function (e) { window.__errs.push(e.source + ': ' + e.message); });
+      window.shell_big = s;
+    })()`);
+    const f = await frameOf(p, 'Photos');
+    await expect.poll(async () => f.evaluate('[].filter.call(document.querySelectorAll("#orz-doc img"), function (i) { return i.complete && i.naturalWidth > 0 && i.getAttribute("src").indexOf("blob:null/") === 0; }).length'), { timeout: 20_000 }).toBe(10);
+    // the page's own blob: written in the text is not the host's to hand over: never read, never shared
+    expect(await f.evaluate('document.querySelector("#orz-doc img[alt=own]").getAttribute("src").indexOf("blob:http")')).toBe(0);
+    expect(await f.evaluate('document.querySelector("#orz-doc img[alt=own]").naturalWidth')).toBe(0);
+    // type 11 characters, one render after another
+    await p.evaluate('window.__lt = 0; new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { window.__lt = Math.max(window.__lt, e.duration); }); }).observe({ type: "longtask" })');
+    await p.evaluate('(function () { var at = shell_big.getText().lastIndexOf("end"); shell_big.focus(); shell_big.select(at, at); })()');
+    const t0 = Date.now();
+    for (const ch of 'kkkkkkkkkk1') await p.keyboard.type(ch, { delay: 30 });
+    await f.waitForFunction('document.getElementById("orz-doc").textContent.indexOf("kkkkkkkkkk1end") >= 0', undefined, { timeout: 20_000 });
+    const caughtUp = Date.now() - t0 - 11 * 30;
+    expect(caughtUp, 'preview behind typing (ms)').toBeLessThan(2000);
+    expect(await p.evaluate('window.__lt'), 'longest task (ms)').toBeLessThan(1000);
+    const sent = await p.evaluate('window.__sent') as Array<{ type: string; html: number; add: string[]; drop: string[] }>;
+    const renders = sent.filter((m) => m.type === 'orz-preview-render');
+    expect(renders.length).toBeGreaterThan(1);
+    expect(Math.max(...renders.map((m) => m.html)), 'largest render HTML').toBeLessThan(20_000);
+    const added = sent.flatMap((m) => m.add);
+    expect(added.length).toBe(10); // each once, for all those renders
+    expect(new Set(added).size).toBe(10);
+    expect(added).not.toContain(await p.evaluate('window.__own'));
+    // one picture taken out: released (dropped once), the others stay
+    await p.evaluate('shell_big.setText(shell_big.getText().replace("![p3](assets/p3.svg)", "gone"))');
+    await expect.poll(async () => (await p.evaluate('window.__sent') as typeof sent).flatMap((m) => m.drop), { timeout: 10_000 }).toEqual([await p.evaluate('window.__urls["assets/p3.svg"]')]);
+    expect(await p.evaluate('window.__errs')).toEqual([]);
+    expect(await p.evaluate('shell_big.root.querySelector("iframe").getAttribute("sandbox")')).toBe('allow-scripts');
+    await p.close();
+  }, 120_000);
+
+  it('[E.48] shell.preview.context is the very render context the shell passes to render(text, ctx): a carrier\'s own surface resolving includes through it (previewIncludes) asks the host once per shell for what the preview already fetched (FC-19 §8.8 "once per shell"; slides confirming round E-L1)', async () => {
+    const p = await open();
+    const r = await p.evaluate(`(async function () {
+      var E = window.OrzEditor, seen = null, asked = [];
+      var s = E.createEditorShell(document.getElementById('a'), {
+        text: '# Inc\\n\\n{{md-include parts/a.md}}\\n',
+        render: function (t, ctx) { seen = ctx; return E.renderMarkdownPreviewWithIncludes(t, ctx); },
+        adapter: E.textareaAdapter(),
+        hooks: { fetchInclude: function (t) { asked.push(t); return Promise.resolve('included ' + t); } },
+        preview: { assets: false, debounceMs: 20 },
+      });
+      await s.refreshPreview();
+      var same = s.preview.context === seen && s.preview.context.cache instanceof Map;
+      var inc = await E.previewIncludes(s.getText(), s.preview.context);
+      var again = await E.previewIncludes(s.getText(), s.preview.context);
+      s.destroy();
+      return { same: same, asked: asked, a: inc.includes && inc.includes['parts/a.md'], b: again.includes && again.includes['parts/a.md'] };
+    })()`);
+    expect(r).toEqual({ same: true, asked: ['parts/a.md'], a: 'included parts/a.md', b: 'included parts/a.md' });
+    await p.close();
+  });
+
+  it('[E.47] uploads named with spaces, non-ASCII letters or a percent sign show in the preview: the inserted Markdown is percent-encoded and resolveAsset receives exactly the path uploadAsset returned (assetPath decodes once), from the shell and from shell.preview.resolveAsset (slides confirming round E-M1)', async () => {
+    const p = await open();
+    await p.evaluate(`(function () {
+      var E = window.OrzEditor;
+      window.__urls = {};
+      window.__asked = [];
+      var s = E.createEditorShell(document.getElementById('a'), {
+        text: '# Uploads\\n\\n',
+        render: function (t) { return E.renderMarkdownPreview(t); },
+        adapter: E.textareaAdapter(),
+        hooks: {
+          uploadAsset: function (f) { var path = 'assets/' + f.name; window.__urls[path] = URL.createObjectURL(f); return Promise.resolve(path); },
+          resolveAsset: function (p) { window.__asked.push(p); return window.__urls[p] || 'missing:' + p; },
+        },
+        preview: { assets: false, debounceMs: 20 },
+      });
+      window.shell_up = s;
+    })()`);
+    const svg = (w: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20"><rect width="10" height="10"/></svg>`;
+    const r = await p.evaluate(`(function () {
+      var mk = function (n, w) { return new File([${JSON.stringify(svg(31))}.replace('31', String(w))], n, { type: 'image/svg+xml' }); };
+      shell_up.select(shell_up.getText().length, shell_up.getText().length);
+      return shell_up.uploadAssets([mk('Screen Shot 1.svg', 41), mk('图表.svg', 42), mk('100% (final).svg', 43)]);
+    })()`) as { ok: boolean; inserted: string[] };
+    expect(r.ok).toBe(true);
+    expect(r.inserted).toEqual(['![Screen Shot 1](assets/Screen%20Shot%201.svg)', '![图表](assets/图表.svg)', '![100% (final)](assets/100%25%20%28final%29.svg)']);
+    const f = await frameOf(p, 'Uploads');
+    await expect.poll(async () => f.evaluate('[].map.call(document.querySelectorAll("#orz-doc img"), function (i) { return i.complete ? i.naturalWidth : -1; }).join(",")'), { timeout: 10_000 }).toBe('41,42,43');
+    const asked = new Set(await p.evaluate('window.__asked') as string[]);
+    expect([...asked].sort()).toEqual(['assets/100% (final).svg', 'assets/Screen Shot 1.svg', 'assets/图表.svg']);
+    // a carrier's own reference (a slide background) is asked the same way
+    expect(await p.evaluate('shell_up.preview.resolveAsset("assets/Screen%20Shot%201.svg") === window.__urls["assets/Screen Shot 1.svg"]')).toBe(true);
+    expect(await p.evaluate('shell_up.preview.resolveAsset("assets/图表.svg") === window.__urls["assets/图表.svg"]')).toBe(true);
+    expect(await p.evaluate('shell_up.preview.resolveAsset("https://x.test/a.png")')).toBe('https://x.test/a.png');
+    expect(await p.evaluate('shell_up.preview.resolveAsset("bad%E0%A4%A.png")')).toBe('missing:bad%E0%A4%A.png'); // a malformed escape: as written
     await p.close();
   });
 

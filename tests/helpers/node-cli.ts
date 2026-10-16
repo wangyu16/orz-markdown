@@ -121,7 +121,7 @@ function cmdExtract(p: Parsed, o: Io): void {
   const other = node.otherName(names.out);
   const outArgs = outArg !== undefined ? ['-o', outArg] : [];
   const check = node.textOutputCheck({
-    out, text: ex.text, file: input, names, token, uid: node.uidOf(ex.text),
+    out, text: ex.text, file: input, names, token, uid: node.uidOf(ex.text), fileHtml: html,
     advice: (h) => {
       const pull: Next = { command: 'extract', args: [file, '-o', other] };
       return { message: `extract to another name and merge: \`${node.commandLine(pull)}\`.${h ? ` \`${node.commandLine({ command: 'extract', args: [file, ...outArgs, '--replaces', h] })}\` replaces it while it still holds that text;` : ''} --force replaces it anyway`, next: pull };

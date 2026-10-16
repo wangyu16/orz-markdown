@@ -6,7 +6,11 @@ exports.previewFrameParts = previewFrameParts;
 exports.previewFrameDocument = previewFrameDocument;
 exports.previewScriptHashes = previewScriptHashes;
 exports.mapSrcset = mapSrcset;
+exports.assetPath = assetPath;
+exports.isRelativeAsset = isRelativeAsset;
 exports.rewriteAssetUrls = rewriteAssetUrls;
+exports.blobUrlsIn = blobUrlsIn;
+exports.readBlobUrl = readBlobUrl;
 exports.inlineBlobUrls = inlineBlobUrls;
 exports.createPreview = createPreview;
 exports.lineToTop = lineToTop;
@@ -149,6 +153,16 @@ exports.PREVIEW_SECRET_ATTRIBUTE = 'data-orz-preview-secret';
  * preview shows (navigate mode) through the port, only within 1.5 s of the
  * reader's own input in the frame; `window.__orzPreview.post(msg)` posts a
  * carrier's own message to the shell as a plain window message (data).
+ *
+ * Shared assets (2.4.0, E.46). The frame's opaque origin cannot load the host
+ * page's `blob:` URLs. The shell sends the bytes of each `blob:` URL that
+ * `resolveAsset` gave ONCE, as a `Blob` (`orz-preview-assets { add: [[url,
+ * blob]], drop: [url] }`); the bridge makes its own object URL for it and
+ * swaps the host's URL for it in every render's HTML (and
+ * `window.__orzPreview.assets(html)` does the same for a carrier's own
+ * messages); a dropped one is revoked 30 s later. The HTML that crosses
+ * stays small: no `data:` copy per render. A frame document that loads again
+ * starts empty; the shell sends them again with the next ready.
  */
 exports.PREVIEW_BRIDGE = [
     '(function(){"use strict";',
@@ -161,6 +175,8 @@ exports.PREVIEW_BRIDGE = [
     'AEL=G(EventTarget.prototype,"addEventListener"),DATA=G(EP,"data"),PORTS=G(EP,"ports"),SRC=G(EP,"source"),TGT=G(VP,"target"),PD=G(VP,"preventDefault"),SIP=G(VP,"stopImmediatePropagation"),DP=G(VP,"defaultPrevented"),',
     'TRU=G(new Event("orz"),"isTrusted"),KEY=G(KP,"key"),META=G(KP,"metaKey"),CTRL=G(KP,"ctrlKey"),ALT=G(KP,"altKey"),SHIFT=G(KP,"shiftKey"),BTN=W.MouseEvent?G(MouseEvent.prototype,"buttons"):null,',
     'CLO=G(LP,"closest"),GA=G(LP,"getAttribute"),PM=G(MP,"postMessage"),PS=G(MP,"start");',
+    // (2.4.0) the host's blob: assets, sent once as Blobs: host URL -> this frame's own object URL
+    'var AU=W.URL,COU=AU?AU.createObjectURL:null,ROU=AU?AU.revokeObjectURL:null,AS=Object.create(null),AK=[];',
     'function C(f,o,a){return RA(f,o,a||[])}',
     'function on(t,n,f,o){C(AEL,t,[n,f,o])}',
     'function tr(e){try{return TRU?C(TRU,e)===true:false}catch(x){return false}}',
@@ -205,8 +221,15 @@ exports.PREVIEW_BRIDGE = [
     'if(r&&typeof r.then==="function"){busy=1;var fin=function(ok){busy=0;var q=next;next=null;if(q){render(q,0);return}if(want===d.id){last=d.id;if(ok)done();else report()}};try{r.then(function(){fin(1)},function(){fin(0)})}catch(x){fin(0)}}else{last=d.id;done()}return}',
     'if(!A()){if((n||0)<400)ST(function(){if(want===d.id)render(d,(n||0)+1)},25);return}',
     'last=d.id;if(d.diff===false)whole(String(d.html));else try{apply(String(d.html))}catch(x){whole(String(d.html))}done()}',
+    'function swap(h){h=String(h);if(!AK.length||h.indexOf("blob:")<0)return h;for(var i=0;i<AK.length;i++)if(h.indexOf(AK[i])>=0)h=h.split(AK[i]).join(AS[AK[i]]);return h}',
+    'function keys(){AK=[];for(var k in AS)AK.push(k)}',
+    'function assets(d){var a=d.add,r=d.drop,i,u,l;',
+    'if(a&&a.length)for(i=0;i<a.length;i++){u=a[i]&&a[i][0];if(typeof u!=="string"||u.indexOf("blob:")!==0||AS[u]||!COU)continue;try{AS[u]=C(COU,AU,[a[i][1]])}catch(x){}}',
+    'if(r&&r.length)for(i=0;i<r.length;i++){u=r[i];l=typeof u==="string"?AS[u]:null;if(!l)continue;delete AS[u];(function(l){ST(function(){try{if(ROU)C(ROU,AU,[l])}catch(x){}},30000)})(l)}',
+    'keys()}',
     'function handle(d){if(!d||typeof d!=="object")return;',
-    'if(d.type==="orz-preview-render")render(d,0);',
+    'if(d.type==="orz-preview-assets"){assets(d);return}',
+    'if(d.type==="orz-preview-render"){d.html=swap(d.html);render(d,0)}',
     'else if(d.type==="orz-preview-scroll"&&typeof d.top==="number"){mute=NOW()+150;se().scrollTop=d.top}',
     'else if(d.type==="orz-preview-navigate"){if(typeof W.__orzPreviewNavigate==="function"&&typeof d.line==="number")try{W.__orzPreviewNavigate(d.line)}catch(x){}}',
     'else if(typeof W.__orzPreviewMessage==="function")try{W.__orzPreviewMessage(d)}catch(x){}}',
@@ -222,7 +245,7 @@ exports.PREVIEW_BRIDGE = [
     'function libs(){enhance();report()}',
     'function pin(n,v){try{DFP(W,n,{value:v,writable:false,configurable:false,enumerable:true})}catch(e){try{W[n]=v}catch(x){}}}',
     'pin("__orzLibsReady",FZ(libs));',
-    'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated)}));',
+    'pin("__orzPreview",FZ({report:FZ(report),post:FZ(post),navigated:FZ(navigated),assets:FZ(swap)}));',
     'post(sec?{type:"orz-preview-ready",channel:chan,secret:sec}:{type:"orz-preview-ready"});sec=null;',
     '})();',
 ].join('');
@@ -233,7 +256,7 @@ exports.PREVIEW_BRIDGE = [
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-exports.PREVIEW_BRIDGE_HASH = 'sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=';
+exports.PREVIEW_BRIDGE_HASH = 'sha256-MAI8js5YeoyeRzISaCz3JUhiXCr4fDNbvse0M6ydAFI=';
 /** The inline call that tells the bridge the pinned libraries have loaded. */
 const LIBS_READY = 'window.__orzLibsReady()';
 const BASE_STYLE = 'html{scroll-behavior:auto}body{margin:0;padding:1.5rem 1.75rem}';
@@ -363,8 +386,28 @@ function mapSrcset(value, map) {
     return out;
 }
 /**
+ * (2.4.0, E-M1) The path `resolveAsset` receives for a reference as written
+ * in rendered HTML: percent-decoded once (`decodeURI`; a malformed escape
+ * leaves it as written). The parser writes a Markdown link's target
+ * percent-encoded (`my%20pic.png`, `%E5%9B%BE.png`) while `uploadAsset`
+ * returned `my pic.png` / `图.png`: the hook gets the path as the upload
+ * gave it, whatever surface asks (FC-19 §3).
+ */
+function assetPath(reference) {
+    try {
+        return decodeURI(reference);
+    }
+    catch {
+        return reference;
+    }
+}
+/** True for a reference `resolveAsset` is asked about: relative (no scheme, not `/`, `\\`, `#` or `?` first), not empty. */
+function isRelativeAsset(reference) {
+    return isRelative(reference.trim());
+}
+/**
  * Rewrite the relative asset references of rendered HTML through `resolve`
- * (FC-19 `hooks.resolveAsset`) before it enters the preview: `src`,
+ * (FC-19 `hooks.resolveAsset`, given the path {@link assetPath} decodes) before it enters the preview: `src`,
  * `poster`, every URL of `srcset` (parsed as {@link mapSrcset}), and `href` on elements other than `<a>` /
  * `<area>` (links stay as written; a click goes to `resolveLink`). A resolver
  * that throws or returns a non-string leaves the reference as it was. Tags
@@ -376,7 +419,7 @@ function rewriteAssetUrls(html, resolve) {
         if (!isRelative(t))
             return u;
         try {
-            const r = resolve(t);
+            const r = resolve(assetPath(t));
             return typeof r === 'string' ? r : u;
         }
         catch {
@@ -407,6 +450,26 @@ function rewriteAssetUrls(html, resolve) {
 const BLOB_URL = /blob:[^\s"'<>()\\,&]+/g;
 /** The largest asset `inlineBlobUrls` copies into the preview (bytes): above it the reference stays, with an error. */
 exports.PREVIEW_BLOB_MAX_BYTES = 32 * 1024 * 1024;
+/** (2.4.0, E.46) The `blob:` URLs in the start tags of `html` (attribute values, a `style`'s url()), each once. */
+function blobUrlsIn(html) {
+    if (!html.includes('blob:'))
+        return [];
+    const urls = new Set();
+    for (const tag of html.match(START_TAG) ?? [])
+        for (const u of tag.match(BLOB_URL) ?? [])
+            urls.add(u);
+    return [...urls];
+}
+/** (2.4.0, E.46) A `blob:` URL's Blob, read in the page (needs `connect-src blob:` under a policy). */
+async function readBlobUrl(url) {
+    const g = globalThis;
+    if (typeof g.fetch !== 'function')
+        throw new Error('no fetch in this page');
+    const res = await g.fetch(url);
+    if (!res.ok)
+        throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+}
 /** A blob's bytes as a `data:` URL (base64; the blob's own type when it is a plain MIME type). */
 async function blobDataUrl(url) {
     const g = globalThis;
@@ -510,6 +573,9 @@ function createPreview(doc, parent, options, events) {
     /** An authenticated ready was taken since the frame last loaded: another one before the next load is ignored. */
     let taken = false;
     const subscribers = new Map();
+    /** The blob: assets shared with the frame (E.46): url → Blob, sent once per frame document. */
+    const sharedAssets = new Map();
+    const sentAssets = new Set();
     const settle = (acked) => { const w = waiting; waiting = null; w?.resolve(acked); };
     const send = (msg) => {
         try {
@@ -601,6 +667,13 @@ function createPreview(doc, parent, options, events) {
             stall = null;
         }
         settle(false);
+        // a new frame document holds none of the shared assets: all of them first, then the pending render
+        sentAssets.clear();
+        if (sharedAssets.size > 0) {
+            send({ type: 'orz-preview-assets', add: [...sharedAssets] });
+            for (const u of sharedAssets.keys())
+                sentAssets.add(u);
+        }
         if (pending !== null)
             send(renderMessage(pending));
         events.onReady?.();
@@ -700,6 +773,23 @@ function createPreview(doc, parent, options, events) {
             send(msg);
             return p;
         },
+        shareAssets(add, drop = []) {
+            if (destroyed)
+                return;
+            const fresh = [];
+            for (const [u, b] of add) {
+                if (typeof u !== 'string' || sharedAssets.has(u))
+                    continue;
+                sharedAssets.set(u, b);
+                if (ready) {
+                    fresh.push([u, b]);
+                    sentAssets.add(u);
+                }
+            }
+            const gone = drop.filter((u) => sharedAssets.delete(u) && sentAssets.delete(u));
+            if (ready && (fresh.length > 0 || gone.length > 0))
+                send({ type: 'orz-preview-assets', add: fresh, drop: gone });
+        },
         scrollTo(top) {
             if (ready && num(top))
                 send({ type: 'orz-preview-scroll', top });
@@ -748,6 +838,8 @@ function createPreview(doc, parent, options, events) {
             retired.clear();
             settle(false);
             subscribers.clear();
+            sharedAssets.clear();
+            sentAssets.clear();
             iframe.remove();
             pending = null;
         },

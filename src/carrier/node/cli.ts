@@ -29,7 +29,7 @@ export type Reason =
   | 'legacy-file'        // a 0.x file where a format-1 file is needed
   | 'newer-shell'        // the existing file was made by a newer version of the tool
   | 'newer-format'       // the text's format is newer than this tool writes
-  | 'unclosed-island'    // upgrade: the file was cut off inside its text
+  | 'unclosed-island'    // the file was cut off inside its text (upgrade; 2.4.0: assemble over it, extract from it over another text)
   | 'other-kind'         // another kind's document: use its own tool
   | 'assembled-input'    // assemble was given an assembled file, not a text
   | 'invalid-text'       // the text cannot be assembled (NUL, a lone surrogate, …)

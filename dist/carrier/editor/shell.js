@@ -81,7 +81,8 @@ function formatOf(fields) {
 function assetMarkdown(file, path) {
     const name = String(file.name ?? 'file');
     const label = (/^image\//i.test(String(file.type ?? '')) ? name.replace(/\.[^.]*$/, '') : name).replace(/[[\]\\\r\n]/g, '');
-    const target = path.replace(/[ ()<>\r\n]/g, (c) => ({ ' ': '%20', '(': '%28', ')': '%29', '<': '%3C', '>': '%3E', '\r': '', '\n': '' }[c]));
+    // percent-encoded so that the decoded target (assetPath, what resolveAsset receives) is exactly the path the upload gave
+    const target = path.replace(/[% ()<>\r\n]/g, (c) => ({ '%': '%25', ' ': '%20', '(': '%28', ')': '%29', '<': '%3C', '>': '%3E', '\r': '', '\n': '' }[c]));
     return /^image\//i.test(String(file.type ?? '')) ? `![${label}](${target})` : `[${label}](${target})`;
 }
 const filesOf = (t) => {
@@ -418,9 +419,18 @@ function createEditorShell(element, options) {
     const renderDelay = () => Math.max(debounceMs, 2 * lastRenderMs);
     /** While edits continue, a render runs at least this often (LOW6); `preview.maxWaitMs: Infinity` never forces one (E.32). */
     const maxWait = () => Math.max(maxWaitMs, 4 * lastRenderMs);
+    /** The blob: URLs hooks.resolveAsset gave (E.46): only these are shared with the frame. */
+    const resolvedBlobs = new Set();
+    /** hooks.resolveAsset, remembering the blob: URLs it gives. */
+    const resolveAssetHook = hooks.resolveAsset ? (p) => {
+        const r = hooks.resolveAsset(p);
+        if (typeof r === 'string' && /^blob:/i.test(r.trim()))
+            resolvedBlobs.add(r.trim());
+        return r;
+    } : null;
     const renderCtx = {
         ...(hooks.fetchInclude ? { fetchInclude: (t) => hooks.fetchInclude(t) } : {}),
-        ...(hooks.resolveAsset ? { resolveAsset: (p) => hooks.resolveAsset(p) } : {}),
+        ...(hooks.resolveAsset ? { resolveAsset: (p) => resolveAssetHook(p) } : {}),
         // B#12: with the host's own link resolution, links stay as written so resolveLink gets the source href
         ...(hooks.resolveLink ? { twinLinks: false } : {}),
         cache: new Map(),
@@ -451,10 +461,43 @@ function createEditorShell(element, options) {
             void acked.then((ok) => { cancel(timer); resolve(ok); });
         });
     };
-    /** The `blob:` URLs read for the preview (E.44): each once per editor; a failure is one `error { source: 'hook' }`. */
-    const blobCache = new Map();
-    const blobError = (_url, msg) => { if (!destroyed)
-        emit('error', { source: 'hook', message: msg, error: new Error(msg) }); };
+    /** The `blob:` URLs read for the preview (E.44, E.46): each Blob read once while any surface uses it; a failure is one `error { source: 'hook' }`. */
+    const assetBlobs = new Map();
+    /** Each surface's last HTML's shared URLs (`preview`: the shell's own render). */
+    const assetSurfaces = new Map();
+    const blobError = (url, e) => {
+        const msg = `${url} (from resolveAsset) could not be read for the preview: ${e instanceof Error ? e.message : String(e)}. Return a data: or http(s) URL from resolveAsset, or allow connect-src blob: in the page's policy`;
+        if (!destroyed)
+            emit('error', { source: 'hook', message: msg, error: new Error(msg) });
+    };
+    const shareAssets = async (html, surface = 'preview') => {
+        if (destroyed)
+            return;
+        // only what resolveAsset gave: a blob: URL written in the document is not the host's to hand over
+        const urls = new Set((0, preview_js_1.blobUrlsIn)(html).filter((u) => resolvedBlobs.has(u)));
+        assetSurfaces.set(String(surface), urls);
+        const add = [];
+        await Promise.all([...urls].map(async (u) => {
+            let p = assetBlobs.get(u);
+            if (!p) {
+                p = (0, preview_js_1.readBlobUrl)(u).catch((e) => { blobError(u, e); return null; });
+                assetBlobs.set(u, p);
+            }
+            const b = await p;
+            if (b !== null)
+                add.push([u, b]);
+        }));
+        if (destroyed)
+            return;
+        const used = new Set();
+        for (const set of assetSurfaces.values())
+            for (const u of set)
+                used.add(u);
+        const drop = [...assetBlobs.keys()].filter((u) => !used.has(u));
+        for (const u of drop)
+            assetBlobs.delete(u);
+        preview.shareAssets(add, drop);
+    };
     const runRender = async () => {
         const text = getText();
         if (text === lastRendered) {
@@ -478,10 +521,11 @@ function createEditorShell(element, options) {
         lastRenderMs = renderMs;
         if (destroyed)
             return;
-        if (hooks.resolveAsset)
-            html = (0, preview_js_1.rewriteAssetUrls)(html, (p) => hooks.resolveAsset(p));
-        // the frame cannot load the page's blob: URLs (an opaque origin): their bytes go in as data: URLs (E.44)
-        html = await (0, preview_js_1.inlineBlobUrls)(html, blobCache, blobError);
+        if (resolveAssetHook)
+            html = (0, preview_js_1.rewriteAssetUrls)(html, resolveAssetHook);
+        // the frame cannot load the page's blob: URLs (an opaque origin): each one's bytes go over ONCE, as a Blob the
+        // frame makes its own URL of (E.44, E.46); the HTML keeps the page's URL, which the frame's bridge swaps
+        await shareAssets(html, 'preview');
         if (destroyed)
             return;
         lastRendered = text;
@@ -1457,6 +1501,21 @@ function createEditorShell(element, options) {
             on: (type, fn) => preview.on(type, fn),
             setOptions: (o) => { if (!destroyed)
                 preview.setOptions(o ?? {}); },
+            context: renderCtx,
+            resolveAsset: (reference) => {
+                const t = String(reference ?? '').trim();
+                if (!resolveAssetHook || !(0, preview_js_1.isRelativeAsset)(t))
+                    return reference;
+                try {
+                    const r = resolveAssetHook((0, preview_js_1.assetPath)(t));
+                    return typeof r === 'string' ? r : reference;
+                }
+                catch {
+                    return reference;
+                }
+            },
+            resolveAssets: (html) => (resolveAssetHook ? (0, preview_js_1.rewriteAssetUrls)(String(html), resolveAssetHook) : String(html)),
+            shareAssets: (html, surface) => shareAssets(String(html ?? ''), surface),
         },
         destroy() {
             if (destroyed)
@@ -1472,7 +1531,8 @@ function createEditorShell(element, options) {
             if (saver)
                 (0, conflict_js_1.dropSaveConflict)(saver, root);
             model.clear();
-            blobCache.clear();
+            assetBlobs.clear();
+            assetSurfaces.clear();
             renderCtx.cache?.clear();
             for (const id of [...timers])
                 cancel(id);

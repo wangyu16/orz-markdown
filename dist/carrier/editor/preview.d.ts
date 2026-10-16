@@ -182,6 +182,16 @@ export declare const PREVIEW_SECRET_ATTRIBUTE = "data-orz-preview-secret";
  * preview shows (navigate mode) through the port, only within 1.5 s of the
  * reader's own input in the frame; `window.__orzPreview.post(msg)` posts a
  * carrier's own message to the shell as a plain window message (data).
+ *
+ * Shared assets (2.4.0, E.46). The frame's opaque origin cannot load the host
+ * page's `blob:` URLs. The shell sends the bytes of each `blob:` URL that
+ * `resolveAsset` gave ONCE, as a `Blob` (`orz-preview-assets { add: [[url,
+ * blob]], drop: [url] }`); the bridge makes its own object URL for it and
+ * swaps the host's URL for it in every render's HTML (and
+ * `window.__orzPreview.assets(html)` does the same for a carrier's own
+ * messages); a dropped one is revoked 30 s later. The HTML that crosses
+ * stays small: no `data:` copy per render. A frame document that loads again
+ * starts empty; the shell sends them again with the next ready.
  */
 export declare const PREVIEW_BRIDGE: string;
 /**
@@ -191,7 +201,7 @@ export declare const PREVIEW_BRIDGE: string;
  * secret is an attribute of the `<script>` element, not its text: the hash
  * does not change per frame.)
  */
-export declare const PREVIEW_BRIDGE_HASH = "sha256-FagkTQO0IRoHGlouIRxLnJr2zUTTmrE641Fi/DdXJfY=";
+export declare const PREVIEW_BRIDGE_HASH = "sha256-MAI8js5YeoyeRzISaCz3JUhiXCr4fDNbvse0M6ydAFI=";
 /** The pieces of the frame document for these options. */
 export declare function previewFrameParts(options?: PreviewFrameOptions): PreviewFrameParts;
 /** The preview frame's `srcdoc`. */
@@ -211,8 +221,19 @@ export declare function previewScriptHashes(options?: PreviewFrameOptions): Prom
  */
 export declare function mapSrcset(value: string, map: (url: string) => string): string;
 /**
+ * (2.4.0, E-M1) The path `resolveAsset` receives for a reference as written
+ * in rendered HTML: percent-decoded once (`decodeURI`; a malformed escape
+ * leaves it as written). The parser writes a Markdown link's target
+ * percent-encoded (`my%20pic.png`, `%E5%9B%BE.png`) while `uploadAsset`
+ * returned `my pic.png` / `图.png`: the hook gets the path as the upload
+ * gave it, whatever surface asks (FC-19 §3).
+ */
+export declare function assetPath(reference: string): string;
+/** True for a reference `resolveAsset` is asked about: relative (no scheme, not `/`, `\\`, `#` or `?` first), not empty. */
+export declare function isRelativeAsset(reference: string): boolean;
+/**
  * Rewrite the relative asset references of rendered HTML through `resolve`
- * (FC-19 `hooks.resolveAsset`) before it enters the preview: `src`,
+ * (FC-19 `hooks.resolveAsset`, given the path {@link assetPath} decodes) before it enters the preview: `src`,
  * `poster`, every URL of `srcset` (parsed as {@link mapSrcset}), and `href` on elements other than `<a>` /
  * `<area>` (links stay as written; a click goes to `resolveLink`). A resolver
  * that throws or returns a non-string leaves the reference as it was. Tags
@@ -221,6 +242,10 @@ export declare function mapSrcset(value: string, map: (url: string) => string): 
 export declare function rewriteAssetUrls(html: string, resolve: (path: string) => string): string;
 /** The largest asset `inlineBlobUrls` copies into the preview (bytes): above it the reference stays, with an error. */
 export declare const PREVIEW_BLOB_MAX_BYTES: number;
+/** (2.4.0, E.46) The `blob:` URLs in the start tags of `html` (attribute values, a `style`'s url()), each once. */
+export declare function blobUrlsIn(html: string): string[];
+/** (2.4.0, E.46) A `blob:` URL's Blob, read in the page (needs `connect-src blob:` under a policy). */
+export declare function readBlobUrl(url: string): Promise<unknown>;
 /**
  * Copy the bytes of every `blob:` URL in the start tags of `html` (an asset
  * reference `resolveAsset` gave, or any attribute or `style` that holds one)
@@ -264,6 +289,12 @@ export interface PreviewController {
      * a newer render replaced it, or the preview went.
      */
     render(html: string): Promise<boolean>;
+    /**
+     * (2.4.0, E.46) Share `blob:` assets with the frame: each `[url, blob]` of
+     * `add` is sent once per frame document (again after a reload, before the
+     * pending render); `drop` releases them (the frame revokes its object URL).
+     */
+    shareAssets(add: ReadonlyArray<readonly [string, unknown]>, drop?: ReadonlyArray<string>): void;
     scrollTo(top: number): void;
     /** Ask a navigating bridge to show the source line (`orz-preview-navigate`). */
     navigate(line: number): void;

@@ -9,7 +9,7 @@
 import { readDocument, twinName, type Kind } from '../document.js';
 import { extract } from '../envelope.js';
 import { UID_PATTERN } from '../header.js';
-import { looksHtml, storedText as kitStoredText, type EarlierState, type LegacyTextReader } from '../inspect.js';
+import { looksHtml, scriptElement, storedText as kitStoredText, type EarlierState, type LegacyTextReader } from '../inspect.js';
 import { fs, path, proc } from './builtins.js';
 import { assembleArgs, cliIo, CliError, commandLine, type AssembleCall, type Io, type Next, type Reason, type Risk } from './cli.js';
 import { backup, mtime, readMaybe } from './files.js';
@@ -62,6 +62,13 @@ export interface TextTarget {
   token: string | null;
   /** The uid of `text` that may vouch for identity (null: no automatic replacement as a known state). */
   uid: string | null;
+  /**
+   * (2.4.0) The assembled file's content the text was read from. When its
+   * `#orz-src` island is not closed (the file was cut off) the text may be
+   * incomplete: an existing different text is then never replaced without
+   * --force — no known state and no token vouches for it.
+   */
+  fileHtml?: string;
   /** The command's own advice for a refusal (given the hash `out` holds, '' when unreadable). */
   advice(hash: string): { message: string; next?: Next };
 }
@@ -77,6 +84,10 @@ export interface CarrierNode {
   shown(p: string, typed?: string): string;
   /** A free name for another copy of a text: `x.browser<suffix>`, then `x.browser-2<suffix>`, …, never doubled, never an existing file. */
   otherName(textName: string): string;
+  /** (2.4.0) A free name for the text recovered from a cut-off file: `x.recovered<suffix>`, then `x.recovered-2<suffix>`, … */
+  recoveredName(name: string): string;
+  /** (2.4.0) True when an assembled file's `#orz-src` island is present and not closed (the file was cut off inside its text). */
+  cutOff(html: string): boolean;
   /** The text an orz file holds (format 1, else the tool's 0.x reader), or null. */
   documentTextOf(html: string): string | null;
   /** A text's well-formed uid (`UID_PATTERN`), else null. */
@@ -133,12 +144,20 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
   };
   const realOrSelf = (p: string): string => { try { return fs().realpathSync(p); } catch { return p; } };
 
-  const otherName = (textName: string): string => {
-    const stem = (suffixRe.test(textName) ? textName.replace(suffixRe, '') : textName.replace(/\.md$/i, '')).replace(/\.browser(?:-\d+)?$/i, '');
+  const freeName = (textName: string, tag: string): string => {
+    const stem = (suffixRe.test(textName) ? textName.replace(suffixRe, '') : textName.replace(/\.md$/i, '')).replace(new RegExp(`\\.${tag}(?:-\\d+)?$`, 'i'), '');
     for (let i = 1; ; i++) {
-      const n = i === 1 ? `${stem}.browser${tool.textSuffix}` : `${stem}.browser-${i}${tool.textSuffix}`;
+      const n = i === 1 ? `${stem}.${tag}${tool.textSuffix}` : `${stem}.${tag}-${i}${tool.textSuffix}`;
       if (path().resolve(n) !== path().resolve(textName) && !fs().existsSync(path().resolve(n))) return n;
     }
+  };
+  const otherName = (textName: string): string => freeName(textName, 'browser');
+  /** From a text's name or an assembled file's name (`x.slides.html` → `x.recovered.slides.md`). */
+  const recoveredName = (name: string): string =>
+    freeName(/\.html?$/i.test(name) ? twinName(name) ?? name.replace(/\.html?$/i, tool.textSuffix) : name, 'recovered');
+  const cutOff = (html: string): boolean => {
+    const island = scriptElement(html, 'orz-src');
+    return island !== null && island.end === null;
   };
 
   const legacyText = (html: string): string | null => (tool.readLegacy ? tool.readLegacy(html)?.text ?? null : null);
@@ -231,6 +250,20 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
         earlier: null,
       };
     }
+    // (2.4.0, slides confirming round C-H1) a file cut off inside its text holds an INCOMPLETE text, not changes to
+    // bring in: never advise an extract over the input (the record or git would wave it through); the input is the
+    // complete text, so the repair is this assemble with the token of what the cut file holds
+    if (cutOff(existing!)) {
+      const recovered = recoveredName(names.out);
+      return {
+        risk: {
+          message: `${names.out} was cut off inside its text (its #orz-src island is not closed): it holds an incomplete text, not changes to bring in; not replaced. Keep ${names.input}'s complete text and repair the file from it: \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that cut text). To look at what the cut file holds first: \`${line({ command: 'extract', args: [names.out, '-o', recovered] })}\``,
+          reason: 'unclosed-island',
+          next: { command: 'assemble', args: assembleArgs(call, names.input, ['--replaces', heldHash]) },
+        },
+        earlier: null,
+      };
+    }
     // only the file changed — and only for the SAME document (the uid-identity gate): neither the record nor git
     // proves that the file was not replaced by another document's file, and following `extract` would then replace
     // the input with that other text
@@ -314,13 +347,41 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     if (uid !== null && existingUid !== null && uid !== existingUid) {
       return { risk: { message: `${names.out} holds another document (uid ${existingUid}; ${names.file} is ${uid}); not overwritten. Write it to another path (-o), or pass --force to replace it (the old text is kept as ${names.out}~)`, reason: 'output-differs' }, earlier: null };
     }
+    // (2.4.0, C-H1) the text of a cut-off file may be incomplete: no record, commit or token vouches for replacing
+    // another text with it
+    if (t.fileHtml !== undefined && cutOff(t.fileHtml)) {
+      const recovered = recoveredName(names.file);
+      return {
+        risk: {
+          message: `${names.file} was cut off inside its text (its #orz-src island is not closed): the text it holds may be incomplete; ${names.out} not overwritten. Write what it holds to another name and compare: \`${line({ command: 'extract', args: [names.file, '-o', recovered] })}\`; --force replaces ${names.out} anyway (the old text is kept as ${names.out}~)`,
+          reason: 'unclosed-island',
+          next: { command: 'extract', args: [names.file, '-o', recovered] },
+        },
+        earlier: null,
+      };
+    }
     if (token !== null) {
       if (h === token) return { risk: null, earlier: 'token' };
       const a = advice(h ?? '');
       return { risk: { message: `${names.out} no longer holds the text you named (--replaces ${token})${h ? `: it holds another one (sha256 ${h})` : ''}; not overwritten. ${a.message}`, reason: 'replaces-mismatch', ...(a.next ? { next: a.next } : {}) }, earlier: null };
     }
-    const known = existing === null ? null : twinStateOf(cache, out, file, existing, { git: twinName(file) === out });
-    if (known !== null && uid !== null && existingUid === uid) return { risk: null, earlier: known };
+    const git = twinName(file) === out;
+    const known = existing === null ? null : twinStateOf(cache, out, file, existing, { git });
+    if (known !== null && uid !== null && existingUid === uid) {
+      // (2.4.0, C-L1) …unless the FILE holds a known earlier state of the pair (the text the CLI last synced it
+      // with, or one of the twin's commits): then the file is the older side and the twin's text the newer one
+      const older = stored(existing!) === text ? null : earlierStateOf(cache, out, file, text, stored, { git });
+      if (older === null) return { risk: null, earlier: known };
+      const bring: Next = { command: 'assemble', args: [names.out, ...(git ? [] : ['-o', names.file])] };
+      return {
+        risk: {
+          message: `${names.file} holds an earlier text of ${names.out} (${earlierSource[older]}), and ${names.out} has changed since: the text is the newer side; not overwritten. \`${line(bring)}\` brings ${names.file} up to date; --force replaces ${names.out} with the older text anyway (the old text is kept as ${names.out}~)`,
+          reason: 'twin-differs',
+          next: bring,
+        },
+        earlier: null,
+      };
+    }
     const later = changedAfter(out, file, (n) => `, changed after ${n}`, names.file);
     const a = advice(h ?? '');
     if (known !== null) {
@@ -351,6 +412,8 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     commandLine: line,
     shown,
     otherName,
+    recoveredName,
+    cutOff,
     documentTextOf,
     uidOf,
     sameDocument: (a, b) => { const u = uidOf(a); return u !== null && u === uidOf(b); },

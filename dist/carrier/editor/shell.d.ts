@@ -160,6 +160,33 @@ export interface EditorPreviewChannel {
         scheme?: ColorScheme;
         articleClass?: string;
     }): void;
+    /**
+     * (2.4.0, FC-19 §8.8) The render context the shell passes to `render(text,
+     * ctx)` — the same object, so a carrier's own surfaces (a live card) resolve
+     * includes through the one per-shell cache (`previewIncludes(text, context)`).
+     */
+    readonly context: Readonly<RenderContext>;
+    /**
+     * (2.4.0, E-M1) A reference as written in rendered HTML through
+     * `hooks.resolveAsset`, given the path decoded (`assetPath`) — what the
+     * shell's own render does for `src`/`srcset`/`poster`; for a carrier's own
+     * attributes (a slide background). As written when it is not relative,
+     * without the hook, or when the hook throws or returns no string.
+     */
+    resolveAsset(reference: string): string;
+    /** (2.4.0) `rewriteAssetUrls(html)` through the shell's resolver (as written without `hooks.resolveAsset`). */
+    resolveAssets(html: string): string;
+    /**
+     * (2.4.0, E.46) Share the `blob:` URLs `resolveAsset` gave that `html`
+     * holds with the frame — each one's bytes sent ONCE as a Blob, which the
+     * frame's bridge swaps in (`window.__orzPreview.assets(html)` for a
+     * carrier's own messages) — and release those no surface uses any more.
+     * `surface` names the caller's last HTML (the shell's own render is
+     * `preview`); an asset stays shared while any surface's last HTML holds it.
+     * Resolves when they are sent; a URL that cannot be read is one `error {
+     * source: 'hook' }` and stays as written.
+     */
+    shareAssets(html: string, surface?: string): Promise<void>;
 }
 /** The preview's scroll mapping context (`preview.mapLine` / `mapPosition`). */
 export interface PreviewMapContext {

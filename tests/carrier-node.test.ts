@@ -688,6 +688,80 @@ describe('carrier/node: the comparisons are exact', () => {
     expect(text(join(shallow, 'x.md'))).toBe(`${X}c2\nc3\n`);
   }, 120_000);
 
+  it('[N.12] a file cut off inside its text (#orz-src not closed) is never read as newer work: assemble refuses with unclosed-island and next `assemble <input> --replaces <its hash>` (never an extract over the input), whatever the record or git say; extract from it never replaces another text without --force (in place and -o; next: extract to a free recovered name), and --force keeps the old text as ~; following each next keeps the complete text (slides confirming round C-H1)', () => {
+    const cutAt = (html: string): string => { const i = html.indexOf('id="orz-src"'); return html.slice(0, html.indexOf('\n', html.indexOf('\n', i) + 1) + 1); };
+    const X = `${doc('X', 'doc-n1200000001')}${Array.from({ length: 30 }, (_, i) => `- line ${i}\n`).join('')}`;
+    for (const withGit of [false, true]) {
+      const d = folder();
+      const git = withGit ? gitIn(d) : null;
+      if (withGit && !git) continue;
+      const env = { XDG_CACHE_HOME: join(d, '.c') };
+      write(join(d, 'x.md'), X);
+      expect(cli(['assemble', 'x.md'], d, env).code).toBe(0); // the pair is recorded: x.md is unchanged since the sync
+      if (git) { git('add', 'x.md', 'x.md.html'); git('commit', '-q', '-m', 'a'); }
+      write(join(d, 'x.md.html'), cutAt(text(join(d, 'x.md.html'))));
+      expect(node.cutOff(text(join(d, 'x.md.html')))).toBe(true);
+      const held = extract(text(join(d, 'x.md.html')))!.text;
+      expect(held.length).toBeLessThan(X.length);
+      // extract in place and -o onto the complete text: refused, the text untouched
+      for (const args of [['extract', 'x.md.html'], ['extract', 'x.md.html', '-o', 'x.md']]) {
+        const r = json(cli([...args, '--json'], d, env));
+        expect(r, JSON.stringify(r)).toMatchObject({ ok: false, reason: 'unclosed-island', next: { command: 'extract', args: ['x.md.html', '-o', 'x.recovered.md'] } });
+        expect(text(join(d, 'x.md'))).toBe(X);
+      }
+      const a = json(cli(['assemble', 'x.md', '--json'], d, env));
+      expect(a, JSON.stringify(a)).toMatchObject({ ok: false, reason: 'unclosed-island', next: { command: 'assemble', args: ['x.md', '--replaces', sha256(held)] } });
+      expect(a.error).not.toMatch(/newer work/);
+      // the recovered name is free and following it writes the cut text beside the complete one
+      expect(json(cli(['extract', 'x.md.html', '-o', 'x.recovered.md', '--json'], d, env))).toMatchObject({ ok: true });
+      expect(text(join(d, 'x.recovered.md'))).toBe(held);
+      // --force replaces the text and keeps it
+      const f = json(cli(['extract', 'x.md.html', '--force', '--json'], d, env));
+      expect(f).toMatchObject({ ok: true, backup: join(d, 'x.md~') });
+      expect(text(join(d, 'x.md~'))).toBe(X);
+      write(join(d, 'x.md'), X); rmSync(join(d, 'x.md~'));
+      // the assemble next, verbatim, repairs the file from the complete text (a cache that knows nothing of the cut text)
+      const e2 = { XDG_CACHE_HOME: join(d, '.c2') };
+      expect(cli(['assemble', 'x.md', '--force'], d, e2).code).toBe(0);
+      write(join(d, 'x.md.html'), cutAt(text(join(d, 'x.md.html'))));
+      const b = json(cli(['assemble', 'x.md', '--json'], d, e2));
+      expect(b.reason).toBe('unclosed-island');
+      expect(json(cli([b.next.command, ...b.next.args, '--json'], d, e2))).toMatchObject({ ok: true });
+      expect(extract(text(join(d, 'x.md.html')))!.text).toBe(X);
+      expect(node.cutOff(text(join(d, 'x.md.html')))).toBe(false);
+      expect(text(join(d, 'x.md'))).toBe(X);
+    }
+  }, 60_000);
+
+  it('[N.13] extract in place never replaces a newer twin with an earlier state the file holds: when the file holds the text the CLI last synced it with, or one of the twin\'s commits, and the twin has changed since (committed), it is refused (twin-differs, next `assemble <twin>`, which then brings the file up to date as a known state); --force keeps the twin as ~; a file newer than an unchanged twin is still brought in (slides confirming round C-L1)', () => {
+    const d = folder();
+    const git = gitIn(d);
+    if (!git) return;
+    const env = { XDG_CACHE_HOME: join(d, '.c') };
+    const A = doc('A', 'doc-n1300000001');
+    write(join(d, 'x.md'), A);
+    expect(cli(['assemble', 'x.md'], d, env).code).toBe(0);
+    git('add', 'x.md', 'x.md.html'); git('commit', '-q', '-m', 'a');
+    write(join(d, 'x.md'), `${A}b\n`); git('commit', '-q', '-am', 'b');
+    write(join(d, 'x.md'), `${A}b\nc\n`); git('commit', '-q', '-am', 'c');
+    for (const e of [env, { XDG_CACHE_HOME: join(d, '.fresh') }]) { // the record, then git alone (no record: a fresh machine)
+      const r = json(cli(['extract', 'x.md.html', '--json'], d, e));
+      expect(r, JSON.stringify(r)).toMatchObject({ ok: false, reason: 'twin-differs', next: { command: 'assemble', args: ['x.md'] } });
+      expect(text(join(d, 'x.md'))).toBe(`${A}b\nc\n`);
+    }
+    const f = json(cli(['extract', 'x.md.html', '--force', '--json'], d, env));
+    expect(f).toMatchObject({ ok: true, backup: join(d, 'x.md~') });
+    expect(text(join(d, 'x.md~'))).toBe(`${A}b\nc\n`);
+    write(join(d, 'x.md'), `${A}b\nc\n`); rmSync(join(d, 'x.md~'));
+    const r = json(cli(['extract', 'x.md.html', '--json'], d, env));
+    expect(json(cli([r.next.command, ...r.next.args, '--json'], d, env))).toMatchObject({ ok: true, replaced: expect.stringMatching(/cache|git-log/) });
+    expect(extract(text(join(d, 'x.md.html')))!.text).toBe(`${A}b\nc\n`);
+    // the other way round still works: a browser save over an unchanged twin is brought in
+    write(join(d, 'x.md.html'), assemble(`${A}b\nc\nd from the browser\n`));
+    expect(json(cli(['extract', 'x.md.html', '--json'], d, env))).toMatchObject({ ok: true, replaced: 'cache' });
+    expect(text(join(d, 'x.md'))).toBe(`${A}b\nc\nd from the browser\n`);
+  }, 60_000);
+
   it('[N.10] [N.2] writeOut keeps the replaced file\'s mode whatever the umask (chmod after the write)', () => {
     const d = folder();
     const f = join(d, 'm.md');

@@ -134,13 +134,24 @@ prefix), its kind, its cache folder (default `name`), its text twin's suffix
   and the same uid → `twin-differs`/`output-differs`, next a plain `extract`;
   otherwise next `extract <out> -o <free name>` and the re-run with
   `--replaces <the hash it holds>`. Not an orz file, or empty → `not-orz`.
+  (2.4.0) A file cut off inside its text (`#orz-src` not closed) →
+  `unclosed-island`, next `assemble <input> --replaces <the hash it holds>`
+  (checked after the token, the known states, another document and a 0.x
+  file): it holds an incomplete text, never newer work.
 - `textOutputCheck({ out, text, file, names, token, uid, advice })`: absent
   or the same text → write; another document → `output-differs`; a token →
-  only that hash; a known state of the pair AND the same uid → replace;
-  otherwise `twin-differs` with the command's own `advice`.
+  only that hash; a known state of the pair AND the same uid → replace —
+  unless (2.4.0) the text being written is itself a known earlier state of
+  the pair (the record, or a commit of the twin) and differs from the twin:
+  then the twin is the newer side → `twin-differs`, next `assemble <twin>`;
+  otherwise `twin-differs` with the command's own `advice`. (2.4.0) With
+  `fileHtml` (the file the text was read from) cut off inside its text, an
+  existing different text is never replaced without `--force` (no state or
+  token vouches for it): `unclosed-island`, next `extract <file> -o
+  <recoveredName>`.
 - `guard(path, risk, force, io)` refuses (a `CliError` with the risk's reason
   and next) or, with `--force`, keeps a backup first.
-- Also bound: `shown`, `otherName`, `commandLine`, `documentTextOf`, `uidOf`,
+- Also bound: `shown`, `otherName`, `recoveredName` and `cutOff` (2.4.0), `commandLine`, `documentTextOf`, `uidOf`,
   `sameDocument`, `cacheDir`, `rememberPair`, `earlierStateOf`,
   `twinStateOf`, `lastWriter`, `isLastWriter`, `earlierSource`,
   `changedAfter`, `libReason`.

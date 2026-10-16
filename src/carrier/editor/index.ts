@@ -24,7 +24,7 @@ export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRR
 export { createTextModel, toEditorText, toEditorOffset, minimalChange, detachString } from './text-model.js';
 export type { TextModel } from './text-model.js';
 export {
-  previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, inlineBlobUrls, PREVIEW_BLOB_MAX_BYTES,
+  previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, inlineBlobUrls, PREVIEW_BLOB_MAX_BYTES, assetPath, isRelativeAsset, blobUrlsIn, readBlobUrl,
   PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS,
 } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';

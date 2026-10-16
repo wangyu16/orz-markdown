@@ -64,6 +64,13 @@ export interface TextTarget {
     token: string | null;
     /** The uid of `text` that may vouch for identity (null: no automatic replacement as a known state). */
     uid: string | null;
+    /**
+     * (2.4.0) The assembled file's content the text was read from. When its
+     * `#orz-src` island is not closed (the file was cut off) the text may be
+     * incomplete: an existing different text is then never replaced without
+     * --force — no known state and no token vouches for it.
+     */
+    fileHtml?: string;
     /** The command's own advice for a refusal (given the hash `out` holds, '' when unreadable). */
     advice(hash: string): {
         message: string;
@@ -81,6 +88,10 @@ export interface CarrierNode {
     shown(p: string, typed?: string): string;
     /** A free name for another copy of a text: `x.browser<suffix>`, then `x.browser-2<suffix>`, …, never doubled, never an existing file. */
     otherName(textName: string): string;
+    /** (2.4.0) A free name for the text recovered from a cut-off file: `x.recovered<suffix>`, then `x.recovered-2<suffix>`, … */
+    recoveredName(name: string): string;
+    /** (2.4.0) True when an assembled file's `#orz-src` island is present and not closed (the file was cut off inside its text). */
+    cutOff(html: string): boolean;
     /** The text an orz file holds (format 1, else the tool's 0.x reader), or null. */
     documentTextOf(html: string): string | null;
     /** A text's well-formed uid (`UID_PATTERN`), else null. */

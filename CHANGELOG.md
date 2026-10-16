@@ -149,18 +149,62 @@ and `Decoration` (new bytes, new integrity; the pin is exported as before).
   committed text with the file's older one. Only the pair's own record
   proves the file newer now; the git-only case gets the safe pull
   (`extract <file> -o <other>`, merge, `--replaces`).
+- **A cut-off file is never read as newer work** (`orz-markdown/carrier/node`;
+  N.12; orz-slides confirming round C-H1; present since 2.3.0): a file cut
+  off inside its text (`#orz-src` not closed) beside a twin unchanged since
+  the last sync was refused by `assemble` with `next: extract <file>`, and
+  following it replaced the complete text with the truncated one, without a
+  backup. `assemble` over a cut file is now refused with `unclosed-island`
+  and next `assemble <input> --replaces <its hash>` (the repair from the
+  complete text); `textOutputCheck` takes the file's content (`fileHtml`)
+  and never lets a cut file's text replace another text without `--force`
+  (next: `extract <file> -o <x.recovered…>`, `recoveredName`); `cutOff(html)`
+  is bound too. orz-mdhtml and orz-paged get it at their next release
+  (passing `fileHtml` from their `extract`).
+- **`extract` never puts an older text over a newer twin** (N.13; C-L1):
+  when the file holds a known earlier state of the pair (the text the CLI
+  last synced it with, or one of the twin's commits) and the twin has
+  changed since, `extract` in place is refused (`twin-differs`, next
+  `assemble <twin>`); it replaced the newer committed text without a backup.
 - **A read-only editor never changes its header** (E.43; FC-19 §8.3): the
   toolbar's setting pickers (`attachSettings`) changed the header of a
   `readOnly`, newer-format or update-locked editor (the save was refused,
   but `change` and `dirty` fired). `setHeader` now throws in read-only, as
   `applyEdits` refuses, and the pickers show their values with every choice
   disabled.
-- **Uploads kept as `blob:` URLs show in the preview** (E.44; FC-19 §8.4):
-  an app's `resolveAsset` returning the page's own object URLs gave broken
-  pictures — the preview frame's opaque origin cannot load them. The shell
-  copies their bytes into `data:` URLs before the HTML enters the frame
-  (`inlineBlobUrls`, exported for carriers' own frame surfaces); a URL it
-  cannot read stays and is one `error { source: 'hook' }`.
+- **Uploads kept as `blob:` URLs show in the preview** (E.44, E.46; FC-19
+  §8.4): an app's `resolveAsset` returning the page's own object URLs gave
+  broken pictures — the preview frame's opaque origin cannot load them.
+  Each one's bytes now cross ONCE per frame document, as the page's Blob
+  over the bridge's port (`orz-preview-assets`); the frame makes its own
+  object URL and its bridge swaps it in for the page's URL in each render
+  (`window.__orzPreview.assets(html)` for a carrier's own messages). The
+  first fix of this release copied them into `data:` URLs in every render's
+  HTML, which with 20 pictures of 4 MB held the preview 47–52 s behind
+  typing and froze the page for seconds (slides confirming round E-M2); now
+  10 such pictures keep it within 2 s, with no long task over 1 s. Only
+  URLs `resolveAsset` gave are read (a `blob:` written in a document is
+  not the host's to hand over); an asset no surface uses any more is
+  released. A URL it cannot read stays and is one `error { source: 'hook'
+  }`. The bridge changed: `PREVIEW_BRIDGE_HASH` is now
+  `sha256-MAI8js5YeoyeRzISaCz3JUhiXCr4fDNbvse0M6ydAFI=`; a policy needs
+  `img-src blob:` for them. `inlineBlobUrls` (the `data:` copy) stays
+  exported for a surface outside the shell's frame.
+- **Uploads named with spaces or non-ASCII letters show in the preview**
+  (E.47; FC-19 §3; slides confirming round E-M1): `resolveAsset` was asked
+  for the parser's percent-encoded form (`my%20pic.png`, `%E5%9B%BE.png`)
+  while `uploadAsset` had returned `my pic.png` / `图.png`, so every surface
+  showed a broken picture. Every reference is decoded once before the hook
+  (`assetPath`), and the inserted Markdown also encodes `%`, so the hook
+  receives exactly the path the upload returned.
+- **One include cache per shell** (E.48; FC-19 §8.8; slides confirming
+  round E-L1): `shell.preview.context` is the render context the shell
+  passes to `render(text, ctx)`, so a carrier's own surface (orz-slides'
+  live card) resolves includes through the same cache instead of asking
+  the host again. Also on `shell.preview` (additive):
+  `resolveAsset(reference)` / `resolveAssets(html)` (the shell's resolver,
+  decoded paths) and `shareAssets(html, surface)` (E.46) for a carrier's
+  own frame messages.
 - FC-19's CSP note: a `style-src-elem` directive replaces `style-src` for
   elements, so it must repeat the stylesheet hosts and cannot carry the
   nonce.
