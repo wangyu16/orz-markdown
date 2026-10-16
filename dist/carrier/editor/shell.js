@@ -451,6 +451,10 @@ function createEditorShell(element, options) {
             void acked.then((ok) => { cancel(timer); resolve(ok); });
         });
     };
+    /** The `blob:` URLs read for the preview (E.44): each once per editor; a failure is one `error { source: 'hook' }`. */
+    const blobCache = new Map();
+    const blobError = (_url, msg) => { if (!destroyed)
+        emit('error', { source: 'hook', message: msg, error: new Error(msg) }); };
     const runRender = async () => {
         const text = getText();
         if (text === lastRendered) {
@@ -476,6 +480,10 @@ function createEditorShell(element, options) {
             return;
         if (hooks.resolveAsset)
             html = (0, preview_js_1.rewriteAssetUrls)(html, (p) => hooks.resolveAsset(p));
+        // the frame cannot load the page's blob: URLs (an opaque origin): their bytes go in as data: URLs (E.44)
+        html = await (0, preview_js_1.inlineBlobUrls)(html, blobCache, blobError);
+        if (destroyed)
+            return;
         lastRendered = text;
         previewStale = getText() !== text;
         // the render runs until the frame says it has shown it; the pause then counts both
@@ -1121,6 +1129,8 @@ function createEditorShell(element, options) {
         setHeader(changes) {
             if (destroyed)
                 return;
+            if (readOnly)
+                throw new Error('orz editor: read-only — the header cannot change'); // like applyEdits and the uid methods (E.43)
             const current = getText();
             const next = (0, header_js_1.editHeader)(current, changes);
             if (next !== current)
@@ -1462,6 +1472,7 @@ function createEditorShell(element, options) {
             if (saver)
                 (0, conflict_js_1.dropSaveConflict)(saver, root);
             model.clear();
+            blobCache.clear();
             renderCtx.cache?.clear();
             for (const id of [...timers])
                 cancel(id);

@@ -27,7 +27,7 @@ import {
   createEditorShell, textareaAdapter, codemirror6Adapter, createTextModel, toEditorText, minimalChange, createPreview, previewFrameDocument,
   lineToTop, topToLine, renderMarkdownPreview, isCodeMirror6Modules, PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_SECRET_ATTRIBUTE, previewFrameParts, CODEMIRROR6_URL, CODEMIRROR6_VERSIONS,
   CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_PATH, CODEMIRROR6_GLOBAL, EDITOR_CSS, PREVIEW_BRIDGE_HASH, previewScriptHashes,
-  previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, includeRecordEnv, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
+  previewSandbox, rewriteAssetUrls, mapSrcset, renderMarkdownPreviewWithIncludes, includeRecordEnv, previewIncludes, undoSteps, detachString, loadCodeMirror6, CODEMIRROR6_HISTORY_STEPS,
   type EditorShell, type EditorShellOptions, type EdElement, type EdDocument, type EdFile, type RenderContext,
 } from '../src/carrier/editor';
 import { historyChars, undoTexts } from '../src/carrier/editor/adapter';
@@ -917,6 +917,26 @@ describe('renderMarkdownPreview', () => {
 });
 
 describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-app loop)', () => {
+  it('[E.45] previewIncludes is the one include resolution of every preview surface: a file include from the record, else fetchInclude(path as written); a URL include from fetchInclude(url), else the record; each host answer once per cache; without a host the record alone', async () => {
+    const asked: string[] = [];
+    const fetchInclude = async (t: string): Promise<string | null> => { asked.push(t); return t === 'parts/a.md' ? 'A from host\n' : t === 'parts/rec.md' ? 'REC from host\n' : t.startsWith('https://ex.test/live') ? 'LIVE from host\n' : null; };
+    const cache = new Map<string, unknown>();
+    const text = '# T\n\n{{md parts/a.md}}\n\n{{md parts/rec.md}}\n\n{{md https://ex.test/live.md}}\n\n{{md https://ex.test/g.md}}\n';
+    const includes = { 'parts/rec.md': 'REC from record\n', 'https://ex.test/g.md': 'G from record\n' };
+    const r = await previewIncludes(text, { includes, fetchInclude, cache });
+    expect(r.includes).toEqual({ 'parts/a.md': 'A from host\n', ...includes });
+    expect(await r.fetcher('https://ex.test/live.md')).toBe('LIVE from host\n');
+    expect(await r.fetcher('https://ex.test/g.md')).toBe('G from record\n');
+    expect(await r.fetcher('https://ex.test/none.md')).toBeNull();
+    const again = await previewIncludes(text, { includes, fetchInclude, cache });
+    await again.fetcher('https://ex.test/live.md');
+    expect(asked.filter((a) => a === 'parts/a.md' || a === 'https://ex.test/live.md')).toEqual(['parts/a.md', 'https://ex.test/live.md']); // once per cache
+    expect(asked).not.toContain('parts/rec.md'); // the record answers a file include first
+    const bare = await previewIncludes(text, { includes });
+    expect(bare.includes).toBe(includes);
+    expect(await bare.fetcher('https://ex.test/g.md')).toBe('G from record\n');
+  });
+
   it('[E.29] a file include the record does not hold goes to fetchInclude(path) (the path as written), once per shell through ctx.cache — the record answers first; URL includes as before; the shell\'s includes option (FC-19 §3 includes) reaches the renderer', async () => {
     const asked: string[] = [];
     const fetchInclude = async (t: string) => { asked.push(t); return t === 'parts/a.md' ? '## From the app\n' : t === 'https://x.test/u.md' ? '## From a URL\n' : null; };
@@ -3124,6 +3144,41 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     }
     throw new Error(`no preview frame shows ${marker}`);
   };
+
+  it('[E.44] a resolveAsset that returns the page\'s own blob: URLs (uploads kept as object URLs) shows the pictures in the opaque preview frame: their bytes go in as data: URLs, read once per editor; a revoked one stays as written and is one error { source: hook } (slides final loop EI-1)', async () => {
+    const p = await open();
+    await p.evaluate(`(function () {
+      var E = window.OrzEditor;
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="red"/></svg>';
+      window.__blob = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      window.__gone = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      URL.revokeObjectURL(window.__gone);
+      window.__asked = [];
+      window.__errs = [];
+      var s = E.createEditorShell(document.getElementById('a'), {
+        text: '# Pictures\\n\\n![up](assets/up.svg) ![gone](assets/gone.svg)\\n\\n<img src="assets/up.svg" srcset="assets/up.svg 2x" alt="again">\\n',
+        render: function (t) { return E.renderMarkdownPreview(t); },
+        adapter: E.textareaAdapter(),
+        hooks: { resolveAsset: function (p) { window.__asked.push(p); return p === 'assets/up.svg' ? window.__blob : window.__gone; } },
+        preview: { assets: false, debounceMs: 20 },
+      });
+      s.on('error', function (e) { window.__errs.push(e.source + ': ' + e.message); });
+      window.shell_blob = s;
+    })()`);
+    const f = await frameOf(p, 'Pictures');
+    await expect.poll(async () => f.evaluate('[].map.call(document.querySelectorAll("#orz-doc img"), function (i) { return (i.alt) + ":" + (i.complete ? i.naturalWidth : -1) + ":" + i.getAttribute("src").slice(0, 5); }).join(" ")'), { timeout: 10_000 })
+      .toBe('up:40:data: gone:0:blob: again:20:data:'); // again: 2x of the srcset
+    const errs = await p.evaluate('window.__errs') as string[];
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatch(/^hook: blob:.* could not be read for the preview/);
+    // the text is never touched; a second render reads nothing again (the cache) and still shows the picture
+    await p.evaluate('shell_blob.setText(shell_blob.getText() + "\\nmore\\n")');
+    const f2 = await frameOf(p, 'more');
+    expect(await f2.evaluate('document.querySelector("#orz-doc img").naturalWidth')).toBe(40);
+    expect(await p.evaluate('window.__errs.length')).toBe(1);
+    expect(await p.evaluate('shell_blob.getText().indexOf("data:")')).toBe(-1);
+    await p.close();
+  });
 
   it('[E.13] [E.1] [E.5] [E.7] [E.4] two shells mount CodeMirror 6 from the pinned bundle (one SRI-checked script for the page), typing keeps each document\'s exact form, and the sandboxed previews update — the document\'s scripts run there but cannot reach the host page', async () => {
     const p = await open();

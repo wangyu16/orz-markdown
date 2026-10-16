@@ -219,6 +219,21 @@ export declare function mapSrcset(value: string, map: (url: string) => string): 
  * the pattern cannot read are left unchanged.
  */
 export declare function rewriteAssetUrls(html: string, resolve: (path: string) => string): string;
+/** The largest asset `inlineBlobUrls` copies into the preview (bytes): above it the reference stays, with an error. */
+export declare const PREVIEW_BLOB_MAX_BYTES: number;
+/**
+ * Copy the bytes of every `blob:` URL in the start tags of `html` (an asset
+ * reference `resolveAsset` gave, or any attribute or `style` that holds one)
+ * into a `data:` URL (2.4.0, E.44). The preview frame of an app host has an
+ * opaque origin (`allow-scripts` only), and a browser refuses it the page's
+ * own `blob:` URLs ("Not allowed to load local resource"), so a host that
+ * keeps uploads as object URLs would see every picture broken; the page
+ * itself can read them. Each URL is read once per `cache` (the shell keeps
+ * one per editor); a URL that cannot be read (revoked, a page policy without
+ * `connect-src blob:`, larger than {@link PREVIEW_BLOB_MAX_BYTES}) stays as it
+ * was and is reported once through `onError`. Text content is never changed.
+ */
+export declare function inlineBlobUrls(html: string, cache: Map<string, Promise<string | null>>, onError?: (url: string, message: string) => void): Promise<string>;
 export interface PreviewEvents {
     /** The frame reported anchors after a render (`[line, top]`, sorted by top) and its scrollable height. */
     onRendered?(anchors: Array<[number, number]>, max: number): void;

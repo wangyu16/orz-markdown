@@ -428,8 +428,9 @@ function settingChanges(control, text, value) {
     return typeof control.apply === 'function' ? control.apply(text, value) : { [control.key]: value };
 }
 /** The radio items of a setting for a text: checked by the choice's own `checked`, else by `current(text)`. */
-function settingItems(control, getText, choose) {
+function settingItems(control, getText, choose, readOnly) {
     const text = getText();
+    const locked = readOnly?.() === true; // a read-only editor shows its settings, but none can be chosen (2.4.0, E.43)
     let now = null;
     const current = () => (now ?? (now = control.current(text)));
     return settingChoices(control, text).map((c) => {
@@ -439,8 +440,10 @@ function settingItems(control, getText, choose) {
             checked: toggle ? c.checked : c.value === current(),
             ...(c.swatch ? { swatch: c.swatch } : {}),
             ...(c.separator ? { separator: true } : {}),
+            ...(locked ? { disabled: true } : {}),
             // a toggle is applied either way (its apply turns it off); a radio choice writes only a change
-            run: () => { if (toggle || c.value !== control.current(getText()))
+            run: () => { if (readOnly?.() === true)
+                return; if (toggle || c.value !== control.current(getText()))
                 choose(c.value); },
         };
     });
@@ -457,7 +460,7 @@ function settingPicker(doc, control, getText, apply, o = {}) {
         ...(control.icon ? { icon: control.icon } : {}),
         iconOnly: o.iconOnly ?? false,
         heading: control.label,
-        items: () => settingItems(control, getText, (value) => apply(control.key, value)),
+        items: () => settingItems(control, getText, (value) => apply(control.key, value), o.readOnly),
     });
 }
 /** The toolbar slot of an editor shell (null with `chrome: 'none'`). */
@@ -466,7 +469,8 @@ const rootOf = (shell) => shell.root;
 /**
  * The header settings in an editor's toolbar: each picker writes the header
  * through `shell.setHeader` (one undoable edit, FC-18 §9); a refused change
- * is a toast and changes nothing. A kind's `mountEditor` calls it, so app
+ * is a toast and changes nothing. While the editor is read-only the pickers
+ * show the current values with every choice disabled (E.43). A kind's `mountEditor` calls it, so app
  * hosts get the same tools (FC-19 §1).
  */
 function attachSettings(shell, settings, o = {}) {
@@ -482,13 +486,15 @@ function attachSettings(shell, settings, o = {}) {
         for (const control of settings) {
             // the picker writes the setting's changes (2.3.0: its own `apply`, a block value included) as one undoable edit
             const picker = settingPicker(toolbar.ownerDocument, control, () => shell.getText(), (_key, value) => {
+                if (shell.readOnly)
+                    return; // read-only (asked for, a newer format, an update running): the header never changes (E.43)
                 try {
                     shell.setHeader({ ...settingChanges(control, shell.getText(), value) });
                 }
                 catch (e) {
                     (0, chrome_js_1.showToast)(shell.root, `Could not change the header: ${e instanceof Error ? e.message : String(e)}`, { tone: 'error' });
                 }
-            }, o);
+            }, { ...o, readOnly: () => shell.readOnly });
             pickers.push(picker);
             toolbar.append(picker.element);
             if (typeof control.hidden === 'function')

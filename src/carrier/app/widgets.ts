@@ -403,8 +403,9 @@ export function settingChanges(control: SettingControl, text: string, value: str
 }
 
 /** The radio items of a setting for a text: checked by the choice's own `checked`, else by `current(text)`. */
-function settingItems(control: SettingControl, getText: () => string, choose: (value: string) => void): MenuItem[] {
+function settingItems(control: SettingControl, getText: () => string, choose: (value: string) => void, readOnly?: () => boolean): MenuItem[] {
   const text = getText();
+  const locked = readOnly?.() === true; // a read-only editor shows its settings, but none can be chosen (2.4.0, E.43)
   let now: string | null = null;
   const current = (): string => (now ??= control.current(text));
   return settingChoices(control, text).map((c) => {
@@ -414,8 +415,9 @@ function settingItems(control: SettingControl, getText: () => string, choose: (v
       checked: toggle ? c.checked! : c.value === current(),
       ...(c.swatch ? { swatch: c.swatch } : {}),
       ...(c.separator ? { separator: true } : {}),
+      ...(locked ? { disabled: true } : {}),
       // a toggle is applied either way (its apply turns it off); a radio choice writes only a change
-      run: () => { if (toggle || c.value !== control.current(getText())) choose(c.value); },
+      run: () => { if (readOnly?.() === true) return; if (toggle || c.value !== control.current(getText())) choose(c.value); },
     };
   });
 }
@@ -426,13 +428,13 @@ function settingItems(control: SettingControl, getText: () => string, choose: (v
  * `settingChanges(control, text, value)` — `attachSettings` does). Its items
  * are `choicesFor(text)` when the setting has it (read at each opening).
  */
-export function settingPicker(doc: AppDocument, control: SettingControl, getText: () => string, apply: (key: string, value: string) => void, o: { iconOnly?: boolean } = {}): MenuButton {
+export function settingPicker(doc: AppDocument, control: SettingControl, getText: () => string, apply: (key: string, value: string) => void, o: { iconOnly?: boolean; readOnly?: () => boolean } = {}): MenuButton {
   return menuButton(doc, {
     label: control.label,
     ...(control.icon ? { icon: control.icon } : {}),
     iconOnly: o.iconOnly ?? false,
     heading: control.label,
-    items: () => settingItems(control, getText, (value) => apply(control.key, value)),
+    items: () => settingItems(control, getText, (value) => apply(control.key, value), o.readOnly),
   });
 }
 
@@ -443,7 +445,8 @@ const rootOf = (shell: EditorShell): AppShadowRoot => shell.root as unknown as A
 /**
  * The header settings in an editor's toolbar: each picker writes the header
  * through `shell.setHeader` (one undoable edit, FC-18 §9); a refused change
- * is a toast and changes nothing. A kind's `mountEditor` calls it, so app
+ * is a toast and changes nothing. While the editor is read-only the pickers
+ * show the current values with every choice disabled (E.43). A kind's `mountEditor` calls it, so app
  * hosts get the same tools (FC-19 §1).
  */
 export function attachSettings(shell: EditorShell, settings: readonly SettingControl[], o: { iconOnly?: boolean } = {}): { readonly pickers: readonly MenuButton[]; destroy(): void } {
@@ -459,10 +462,11 @@ export function attachSettings(shell: EditorShell, settings: readonly SettingCon
     for (const control of settings) {
       // the picker writes the setting's changes (2.3.0: its own `apply`, a block value included) as one undoable edit
       const picker = settingPicker(toolbar.ownerDocument, control, () => shell.getText(), (_key, value) => {
+        if (shell.readOnly) return; // read-only (asked for, a newer format, an update running): the header never changes (E.43)
         try { shell.setHeader({ ...settingChanges(control, shell.getText(), value) }); } catch (e) {
           showToast(shell.root, `Could not change the header: ${e instanceof Error ? e.message : String(e)}`, { tone: 'error' });
         }
-      }, o);
+      }, { ...o, readOnly: () => shell.readOnly });
       pickers.push(picker);
       toolbar.append(picker.element);
       if (typeof control.hidden === 'function') conditional.push([control, picker]);

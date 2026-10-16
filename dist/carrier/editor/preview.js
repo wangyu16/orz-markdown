@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_SANDBOX = void 0;
+exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_BLOB_MAX_BYTES = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_SANDBOX = void 0;
 exports.previewSandbox = previewSandbox;
 exports.previewFrameParts = previewFrameParts;
 exports.previewFrameDocument = previewFrameDocument;
 exports.previewScriptHashes = previewScriptHashes;
 exports.mapSrcset = mapSrcset;
 exports.rewriteAssetUrls = rewriteAssetUrls;
+exports.inlineBlobUrls = inlineBlobUrls;
 exports.createPreview = createPreview;
 exports.lineToTop = lineToTop;
 exports.topToLine = topToLine;
@@ -401,6 +402,67 @@ function rewriteAssetUrls(html, resolve) {
         });
         return changed ? `<${name}${out}${tail}` : tag;
     });
+}
+/** A `blob:` URL inside a start tag (an attribute value, a `style` url()): up to a quote, space, paren, comma, `&` or `<>`. */
+const BLOB_URL = /blob:[^\s"'<>()\\,&]+/g;
+/** The largest asset `inlineBlobUrls` copies into the preview (bytes): above it the reference stays, with an error. */
+exports.PREVIEW_BLOB_MAX_BYTES = 32 * 1024 * 1024;
+/** A blob's bytes as a `data:` URL (base64; the blob's own type when it is a plain MIME type). */
+async function blobDataUrl(url) {
+    const g = globalThis;
+    if (typeof g.fetch !== 'function' || typeof g.btoa !== 'function')
+        throw new Error('no fetch in this page');
+    const res = await g.fetch(url);
+    if (!res.ok)
+        throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (blob.size > exports.PREVIEW_BLOB_MAX_BYTES)
+        throw new Error(`${blob.size} bytes, above the preview's ${exports.PREVIEW_BLOB_MAX_BYTES}`);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000)
+        bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(blob.type) ? blob.type : 'application/octet-stream';
+    return `data:${type};base64,${g.btoa(bin)}`;
+}
+/**
+ * Copy the bytes of every `blob:` URL in the start tags of `html` (an asset
+ * reference `resolveAsset` gave, or any attribute or `style` that holds one)
+ * into a `data:` URL (2.4.0, E.44). The preview frame of an app host has an
+ * opaque origin (`allow-scripts` only), and a browser refuses it the page's
+ * own `blob:` URLs ("Not allowed to load local resource"), so a host that
+ * keeps uploads as object URLs would see every picture broken; the page
+ * itself can read them. Each URL is read once per `cache` (the shell keeps
+ * one per editor); a URL that cannot be read (revoked, a page policy without
+ * `connect-src blob:`, larger than {@link PREVIEW_BLOB_MAX_BYTES}) stays as it
+ * was and is reported once through `onError`. Text content is never changed.
+ */
+async function inlineBlobUrls(html, cache, onError) {
+    if (!html.includes('blob:'))
+        return html;
+    const urls = new Set();
+    for (const tag of html.match(START_TAG) ?? [])
+        for (const u of tag.match(BLOB_URL) ?? [])
+            urls.add(u);
+    if (urls.size === 0)
+        return html;
+    const found = new Map();
+    await Promise.all([...urls].map(async (u) => {
+        let p = cache.get(u);
+        if (!p) {
+            p = blobDataUrl(u).catch((e) => {
+                onError?.(u, `${u} (from resolveAsset) could not be read for the preview: ${e instanceof Error ? e.message : String(e)}. Return a data: or http(s) URL from resolveAsset, or allow connect-src blob: in the page's policy`);
+                return null;
+            });
+            cache.set(u, p);
+        }
+        const d = await p;
+        if (d !== null)
+            found.set(u, d);
+    }));
+    if (found.size === 0)
+        return html;
+    return html.replace(START_TAG, (tag) => (tag.includes('blob:') ? tag.replace(BLOB_URL, (u) => found.get(u) ?? u) : tag));
 }
 /** How long the frame may take to say ready before `onStall`. */
 exports.PREVIEW_READY_TIMEOUT_MS = 8000;

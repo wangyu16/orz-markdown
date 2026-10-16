@@ -2067,6 +2067,40 @@ describe('round 5 (closing): writes that settle late, attached editors, the upda
 });
 
 describe('chrome widgets', () => {
+  it('[E.43] a read-only editor (readOnly: true, a newer text format, setReadOnly) never changes its header: the toolbar\'s setting pickers show the current value with every choice disabled, a click writes nothing (no change, not dirty), and setHeader throws, changing nothing (slides final loop EI-6)', () => {
+    const { doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
+    const newer = editHeader(TEXT, { format: '2' });
+    for (const [label, o] of [['readOnly', { text: TEXT, readOnly: true }], ['newer format', { text: newer }], ['setReadOnly', { text: TEXT }]] as const) {
+      const el = doc.createElement('div');
+      doc.body.append(el);
+      const shell = createEditorShell(el as never, { ...o, render: () => '', adapter: textareaAdapter(), preview: { assets: false } });
+      if (label === 'setReadOnly') shell.setReadOnly(true);
+      const before = shell.getText();
+      let changes = 0;
+      shell.on('change', () => { changes++; });
+      const s = attachSettings(shell, [THEME]);
+      const sroot = shell.root as unknown as ShadowRoot;
+      (s.pickers[0].button as unknown as HTMLButtonElement).click();
+      const items = [...sroot.querySelectorAll('[role="menuitemradio"]')] as HTMLButtonElement[];
+      expect(items.length, label).toBeGreaterThan(1);
+      expect(items.every((i) => i.disabled), label).toBe(true);
+      items.find((i) => i.textContent === 'Beige')!.click();
+      expect(shell.getText() === before, label).toBe(true);
+      expect([changes, shell.isDirty()], label).toEqual([0, false]);
+      expect(() => shell.setHeader({ theme: 'light-neat-1' }), label).toThrow(/read-only/);
+      expect(shell.getText() === before, label).toBe(true);
+      if (label === 'setReadOnly') {
+        shell.setReadOnly(false);
+        s.pickers[0].close();
+        (s.pickers[0].button as unknown as HTMLButtonElement).click();
+        ([...sroot.querySelectorAll('[role="menuitemradio"]')].find((i) => i.textContent === 'Beige') as HTMLButtonElement).click();
+        expect(shell.getText() === editHeader(TEXT, { theme: 'beige-decent-1' })).toBe(true);
+      }
+      s.destroy();
+      shell.destroy();
+    }
+  });
+
   it('[A.11] menuButton is a keyboard-operable, non-modal menu (ArrowDown opens on the checked item, arrows/Home/End move, Esc closes with focus back, an outside pointer-down closes); settingPicker marks the current value and writes only a change; attachSettings puts the pickers in an editor\'s toolbar (one undoable setHeader each; a refusal is a toast); followPresentation rebuilds the preview when the presentation changes', async () => {
     const { win, doc } = filePage('<!doctype html><body></body>', 'https://app.test/');
     const host = doc.createElement('div');

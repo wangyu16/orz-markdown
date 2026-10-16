@@ -24,12 +24,12 @@ export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRR
 export { createTextModel, toEditorText, toEditorOffset, minimalChange, detachString } from './text-model.js';
 export type { TextModel } from './text-model.js';
 export {
-  previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes,
+  previewFrameDocument, previewFrameParts, createPreview, lineToTop, topToLine, previewSandbox, rewriteAssetUrls, mapSrcset, previewScriptHashes, inlineBlobUrls, PREVIEW_BLOB_MAX_BYTES,
   PREVIEW_SANDBOX, PREVIEW_BRIDGE, PREVIEW_BRIDGE_HASH, PREVIEW_SECRET_ATTRIBUTE, PREVIEW_READY_TIMEOUT_MS,
 } from './preview.js';
 export type { PreviewFrameOptions, PreviewFrameParts, PreviewContext, PreviewController, PreviewEvents, PreviewMessage } from './preview.js';
-export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes, includeRecordEnv } from './render-md.js';
-export type { MarkdownPreviewOptions } from './render-md.js';
+export { renderMarkdownPreview, renderMarkdownPreviewWithIncludes, includeRecordEnv, previewIncludes } from './render-md.js';
+export type { MarkdownPreviewOptions, PreviewIncludes } from './render-md.js';
 export { EDITOR_CSS } from './styles.js';
 export { printDocument, PRINT_SANDBOX, PRINT_READY_TIMEOUT_MS } from './print.js';
 export type { PrintDocumentOptions } from './print.js';

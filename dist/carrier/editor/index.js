@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PRINT_READY_TIMEOUT_MS = exports.PRINT_SANDBOX = exports.printDocument = exports.EDITOR_CSS = exports.includeRecordEnv = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorOffset = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.ORZ_HIGHLIGHTER = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
+exports.PRINT_READY_TIMEOUT_MS = exports.PRINT_SANDBOX = exports.printDocument = exports.EDITOR_CSS = exports.previewIncludes = exports.includeRecordEnv = exports.renderMarkdownPreviewWithIncludes = exports.renderMarkdownPreview = exports.PREVIEW_READY_TIMEOUT_MS = exports.PREVIEW_SECRET_ATTRIBUTE = exports.PREVIEW_BRIDGE_HASH = exports.PREVIEW_BRIDGE = exports.PREVIEW_SANDBOX = exports.PREVIEW_BLOB_MAX_BYTES = exports.inlineBlobUrls = exports.previewScriptHashes = exports.mapSrcset = exports.rewriteAssetUrls = exports.previewSandbox = exports.topToLine = exports.lineToTop = exports.createPreview = exports.previewFrameParts = exports.previewFrameDocument = exports.detachString = exports.minimalChange = exports.toEditorOffset = exports.toEditorText = exports.createTextModel = exports.CODEMIRROR6_GLOBAL = exports.CODEMIRROR6_BYTES = exports.CODEMIRROR6_INTEGRITY = exports.CODEMIRROR6_PATH = exports.CODEMIRROR6_VERSIONS = exports.CODEMIRROR6_HISTORY_STEPS = exports.CODEMIRROR6_TIMEOUT_MS = exports.CODEMIRROR6_URL = exports.ORZ_HIGHLIGHTER = exports.isCodeMirror6Modules = exports.loadCodeMirror6 = exports.codemirror6Adapter = exports.undoSteps = exports.textareaAdapter = exports.createEditorShell = void 0;
 /**
  * `orz-markdown/carrier/editor` — the editor shell (FC-19 §8): the
  * kind-independent base each carrier's `mountEditor` wraps. Chrome toolbar,
@@ -49,6 +49,8 @@ Object.defineProperty(exports, "previewSandbox", { enumerable: true, get: functi
 Object.defineProperty(exports, "rewriteAssetUrls", { enumerable: true, get: function () { return preview_js_1.rewriteAssetUrls; } });
 Object.defineProperty(exports, "mapSrcset", { enumerable: true, get: function () { return preview_js_1.mapSrcset; } });
 Object.defineProperty(exports, "previewScriptHashes", { enumerable: true, get: function () { return preview_js_1.previewScriptHashes; } });
+Object.defineProperty(exports, "inlineBlobUrls", { enumerable: true, get: function () { return preview_js_1.inlineBlobUrls; } });
+Object.defineProperty(exports, "PREVIEW_BLOB_MAX_BYTES", { enumerable: true, get: function () { return preview_js_1.PREVIEW_BLOB_MAX_BYTES; } });
 Object.defineProperty(exports, "PREVIEW_SANDBOX", { enumerable: true, get: function () { return preview_js_1.PREVIEW_SANDBOX; } });
 Object.defineProperty(exports, "PREVIEW_BRIDGE", { enumerable: true, get: function () { return preview_js_1.PREVIEW_BRIDGE; } });
 Object.defineProperty(exports, "PREVIEW_BRIDGE_HASH", { enumerable: true, get: function () { return preview_js_1.PREVIEW_BRIDGE_HASH; } });
@@ -58,6 +60,7 @@ var render_md_js_1 = require("./render-md.js");
 Object.defineProperty(exports, "renderMarkdownPreview", { enumerable: true, get: function () { return render_md_js_1.renderMarkdownPreview; } });
 Object.defineProperty(exports, "renderMarkdownPreviewWithIncludes", { enumerable: true, get: function () { return render_md_js_1.renderMarkdownPreviewWithIncludes; } });
 Object.defineProperty(exports, "includeRecordEnv", { enumerable: true, get: function () { return render_md_js_1.includeRecordEnv; } });
+Object.defineProperty(exports, "previewIncludes", { enumerable: true, get: function () { return render_md_js_1.previewIncludes; } });
 var styles_js_1 = require("./styles.js");
 Object.defineProperty(exports, "EDITOR_CSS", { enumerable: true, get: function () { return styles_js_1.EDITOR_CSS; } });
 var print_js_1 = require("./print.js");

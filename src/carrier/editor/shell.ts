@@ -42,7 +42,7 @@ import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import type { TextEditorAdapter } from './adapter.js';
 import { codemirror6Adapter } from './codemirror6.js';
-import { createPreview, lineToTop, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
+import { createPreview, inlineBlobUrls, lineToTop, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import { EDITOR_CSS } from './styles.js';
 import { createTextModel, detachString, toEditorOffset, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
@@ -787,6 +787,9 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       void acked.then((ok) => { cancel(timer); resolve(ok); });
     });
   };
+  /** The `blob:` URLs read for the preview (E.44): each once per editor; a failure is one `error { source: 'hook' }`. */
+  const blobCache = new Map<string, Promise<string | null>>();
+  const blobError = (_url: string, msg: string): void => { if (!destroyed) emit('error', { source: 'hook', message: msg, error: new Error(msg) }); };
   const runRender = async (): Promise<void> => {
     const text = getText();
     if (text === lastRendered) { previewStale = false; staleSince = null; return; }
@@ -804,6 +807,9 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     lastRenderMs = renderMs;
     if (destroyed) return;
     if (hooks.resolveAsset) html = rewriteAssetUrls(html, (p) => hooks.resolveAsset!(p));
+    // the frame cannot load the page's blob: URLs (an opaque origin): their bytes go in as data: URLs (E.44)
+    html = await inlineBlobUrls(html, blobCache, blobError);
+    if (destroyed) return;
     lastRendered = text;
     previewStale = getText() !== text;
     // the render runs until the frame says it has shown it; the pause then counts both
@@ -1293,6 +1299,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     },
     setHeader(changes) {
       if (destroyed) return;
+      if (readOnly) throw new Error('orz editor: read-only — the header cannot change'); // like applyEdits and the uid methods (E.43)
       const current = getText();
       const next = editHeader(current, changes);
       if (next !== current) api.setText(next);
@@ -1543,6 +1550,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       // its question goes with its root (the next save of the file asks again)
       if (saver) dropSaveConflict(saver, root);
       model.clear();
+      blobCache.clear();
       renderCtx.cache?.clear();
       for (const id of [...timers]) cancel(id);
       for (const f of cleanups.splice(0)) { try { f(); } catch { /* gone */ } }

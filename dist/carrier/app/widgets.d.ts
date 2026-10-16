@@ -105,11 +105,13 @@ export declare function settingChanges(control: SettingControl, text: string, va
  */
 export declare function settingPicker(doc: AppDocument, control: SettingControl, getText: () => string, apply: (key: string, value: string) => void, o?: {
     iconOnly?: boolean;
+    readOnly?: () => boolean;
 }): MenuButton;
 /**
  * The header settings in an editor's toolbar: each picker writes the header
  * through `shell.setHeader` (one undoable edit, FC-18 §9); a refused change
- * is a toast and changes nothing. A kind's `mountEditor` calls it, so app
+ * is a toast and changes nothing. While the editor is read-only the pickers
+ * show the current values with every choice disabled (E.43). A kind's `mountEditor` calls it, so app
  * hosts get the same tools (FC-19 §1).
  */
 export declare function attachSettings(shell: EditorShell, settings: readonly SettingControl[], o?: {

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.includeRecordEnv = includeRecordEnv;
 exports.renderMarkdownPreview = renderMarkdownPreview;
 exports.renderMarkdownPreviewWithIncludes = renderMarkdownPreviewWithIncludes;
+exports.previewIncludes = previewIncludes;
 /**
  * The `md` kind's preview renderer (FC-18 §7.1, §8.3): the body without its
  * header, rendered by orz-markdown with twin links on (`env.orzTwinLinks`),
@@ -108,33 +109,11 @@ async function renderMarkdownPreviewWithIncludes(text, options = {}) {
     const recorded = rec && typeof rec === 'object' ? Object.keys(rec).filter((k) => isUrl(k) && typeof rec[k] === 'string') : [];
     if (!host && recorded.length === 0)
         return renderMarkdownPreview(text, options);
-    // file includes the record does not hold: the host's own reading (an app host's files), fetched first
-    if (host)
-        options = await withHostFiles(text, options, host);
-    const fromRecord = (url) => (rec && Object.prototype.hasOwnProperty.call(rec, url) && typeof rec[url] === 'string' ? rec[url] : null);
-    const resolve = async (url) => {
-        if (host) {
-            try {
-                const t = await host(url);
-                if (typeof t === 'string')
-                    return t;
-            }
-            catch { /* the record, if any */ }
-        }
-        return fromRecord(url);
-    };
-    const cache = options.cache;
-    const fetcher = (url) => {
-        const key = `orz-include:${url}`;
-        const hit = cache?.get(key);
-        if (hit)
-            return hit;
-        const p = Promise.resolve().then(() => resolve(url)).then((t) => (typeof t === 'string' ? t : null), () => null);
-        cache?.set(key, p);
-        void p.then((t) => { if (t === null && cache?.get(key) === p)
-            cache.delete(key); });
-        return p;
-    };
+    // the record first, then the host (FC-19 §3): file includes the record lacks, then URL includes (E.45)
+    const resolved = await previewIncludes(text, options);
+    if (resolved.includes !== options.includes)
+        options = { ...options, includes: resolved.includes };
+    const fetcher = resolved.fetcher;
     // a missing record is an empty one: without a reader, prepareSources keeps every URL include of a
     // text that also has a file include (it cannot tell them apart from a reader's point of view)
     const env = renderEnv(options.includes === undefined ? { ...options, includes: {} } : options);
@@ -168,6 +147,46 @@ function unresolvedFileIncludes(body, options) {
             out.add(target);
     }
     return [...out];
+}
+/**
+ * How a preview resolves a text's includes (FC-19 §3; 2.4.0, E.45): a FILE
+ * include from the `includes` record, else the host's `fetchInclude` with the
+ * path as written (an app host reads its own files); a URL include from
+ * `fetchInclude(url)` (the host's trust policy and current copy), else the
+ * record (E.12) — each host answer asked once per `cache` (a failed one asked
+ * again next time). The md preview uses it; a carrier's own preview surfaces
+ * (a flattened deck, a live slide) use it, so every surface reads the same
+ * includes the same way.
+ */
+async function previewIncludes(text, options = {}) {
+    const host = typeof options.fetchInclude === 'function' ? options.fetchInclude : undefined;
+    const merged = host ? (await withHostFiles(text, options, host)).includes : options.includes;
+    const rec = options.includes;
+    const fromRecord = (url) => (rec && Object.prototype.hasOwnProperty.call(rec, url) && typeof rec[url] === 'string' ? rec[url] : null);
+    const cache = options.cache;
+    const resolve = async (url) => {
+        if (host) {
+            try {
+                const t = await host(url);
+                if (typeof t === 'string')
+                    return t;
+            }
+            catch { /* the record, if any */ }
+        }
+        return fromRecord(url);
+    };
+    const fetcher = (url) => {
+        const key = `orz-include:${url}`;
+        const hit = cache?.get(key);
+        if (hit)
+            return hit;
+        const p = Promise.resolve().then(() => resolve(url)).then((t) => (typeof t === 'string' ? t : null), () => null);
+        cache?.set(key, p);
+        void p.then((t) => { if (t === null && cache?.get(key) === p)
+            cache.delete(key); });
+        return p;
+    };
+    return { includes: merged, fetcher };
 }
 /**
  * `options` with the file includes the record lacks read through the host's

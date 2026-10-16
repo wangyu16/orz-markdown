@@ -60,4 +60,22 @@ export declare function renderMarkdownPreview(text: string, options?: MarkdownPr
  * first include's line.
  */
 export declare function renderMarkdownPreviewWithIncludes(text: string, options?: MarkdownPreviewOptions): Promise<string>;
+/** What {@link previewIncludes} gives: the record with the host's file includes added, and the URL reader. */
+export interface PreviewIncludes {
+    /** The `includes` record plus the file includes `fetchInclude(path)` answered (the record's entries win); the same object when none was added. */
+    includes: Readonly<Record<string, string>> | undefined;
+    /** A URL include's text: `fetchInclude(url)` (the host's current copy; once per `cache`), else the record's entry, else null (E.12). */
+    fetcher(url: string): Promise<string | null>;
+}
+/**
+ * How a preview resolves a text's includes (FC-19 §3; 2.4.0, E.45): a FILE
+ * include from the `includes` record, else the host's `fetchInclude` with the
+ * path as written (an app host reads its own files); a URL include from
+ * `fetchInclude(url)` (the host's trust policy and current copy), else the
+ * record (E.12) — each host answer asked once per `cache` (a failed one asked
+ * again next time). The md preview uses it; a carrier's own preview surfaces
+ * (a flattened deck, a live slide) use it, so every surface reads the same
+ * includes the same way.
+ */
+export declare function previewIncludes(text: string, options?: Pick<MarkdownPreviewOptions, 'includes' | 'fetchInclude' | 'cache' | 'env'>): Promise<PreviewIncludes>;
 //# sourceMappingURL=render-md.d.ts.map

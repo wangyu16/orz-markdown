@@ -214,11 +214,14 @@ counted).
   keeping a copy from the last event.
 
 **`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
-carrier-app loop): the renderer reads an include from `includes` first (an
+carrier-app loop): a FILE include is read from `includes` first (an
 assembled file passes its `#orz-includes`; an app may pass what it
-resolved), then asks `fetchInclude` — with the URL for a URL include, or
-with the path as written in the directive for a file include `includes`
-lacks (an app host reads its own files). An include neither answers renders
+resolved), then from `fetchInclude` with the path as written in the
+directive (an app host reads its own files); a URL include goes to
+`fetchInclude` with the URL first (the host's trust policy and its current
+copy), then to `includes` for what the host does not answer (§8, E.12).
+Every preview surface of a carrier resolves them this way (2.4.0:
+`previewIncludes`, E.45). An include neither answers renders
 a quiet "Included file not available: <target>" note in the preview (§8.8).
 In an assembled file inside a host frame, `fetchInclude` is the host's
 `orz-host-include@1`, which resolves URLs only: a path is never sent to it.
@@ -434,7 +437,10 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   the history over. It does not mark the text saved.
 - `setHeader(changes)` = `setText(editHeader(getText(), changes))`: one
   undoable edit, FC-18 §9 rules; what `editHeader` refuses throws, changing
-  nothing.
+  nothing. A read-only editor refuses it the same way (throws, changes
+  nothing; 2.4.0): read-only covers the header too, and the toolbar's setting
+  pickers (`attachSettings`) show the current values with every choice
+  disabled.
 - `isDirty()` = the text differs from the last saved one (undoing back to it
   is clean); per keystroke the shell compares editor forms first (a different
   editor text is a different text) and converts only when they are equal.
@@ -449,7 +455,8 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   `hooks.save`, `assemble` or the saver.
 - **Read-only at run time.** `setReadOnly(flag)` switches the engine
   (CodeMirror through a compartment; also when set while it still loads), the
-  Save button, Cmd/Ctrl+S, `save()`, uploads and AI; `isReadOnly()` (and
+  Save button, Cmd/Ctrl+S, `save()`, uploads, AI, `applyEdits`, `setHeader`
+  and the setting pickers; `isReadOnly()` (and
   `readOnly`) tell the state. A carrier makes the editor read-only while a
   quiet update runs (spec/shell-runtime.md §7.2). A document in a newer text
   format stays read-only: `setReadOnly(false)` does not unlock it.
@@ -709,8 +716,11 @@ shell.preview.post(msg) / on(type, fn) → off / setOptions({ head?, scheme?, ar
   `cdnjs.cloudflare.com`, the carrier's theme), `style-src-attr
   'unsafe-inline'` (KaTeX and the diagram libraries write `style` attributes;
   without it formulas lose their layout), and `<style>` elements that
-  libraries insert at run time (Mermaid, Paged.js) need `'unsafe-inline'` in
-  `style-src-elem` or a carrier that stamps them; fonts — KaTeX's font host;
+  libraries insert at run time (Mermaid, Paged.js) need `'unsafe-inline'` or
+  a carrier that stamps them — note that a `style-src-elem` directive
+  REPLACES `style-src` for `<style>` and `<link>` elements, so it must repeat
+  the whole list (`'self'` and the stylesheet hosts) and cannot carry the
+  nonce (a nonce switches `'unsafe-inline'` off); fonts — KaTeX's font host;
   images — wherever the document's images are (`resolveAsset` decides). A
   frame that does not say ready within `preview.readyTimeoutMs` (8 s) is an
   `error { source: 'render' }` and a quiet notice in the preview pane instead
@@ -901,6 +911,13 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   standard reads it (`mapSrcset`: a URL runs to whitespace, trailing commas
   end a candidate, descriptors run to a comma outside parentheses). A renderer should not resolve these
   attributes itself (the shell would see its relative results again).
+  (2.4.0, E.44) A `blob:` URL in a start tag of the result — what a host
+  gives for uploads kept as object URLs — is copied into a `data:` URL
+  before the HTML enters the frame (`inlineBlobUrls`): the frame's opaque
+  origin cannot load the page's object URLs. Each is read once per editor;
+  one that cannot be read (revoked, a policy without `connect-src blob:`,
+  over 32 MB) stays and is one `error { source: 'hook' }`. A `data:` or
+  http(s) URL is the cheaper answer for large assets.
 - `resolveLink` — preview link clicks (§8.4).
 - `uploadAsset` — a file pasted or dropped into the editor (capture phase,
   before the engine reads it as text) is uploaded and its Markdown inserted at
