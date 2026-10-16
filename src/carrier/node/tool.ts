@@ -206,7 +206,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
       if (heldHash === token) return { risk: null, earlier: 'token' };
       return {
         risk: {
-          message: `${names.out} no longer holds the text you named (--replaces ${token}): it holds another one (sha256 ${heldHash}) — saved in the browser or written by someone else since; not replaced. Bring its changes in: \`${line(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])}\` followed by the sha256 that upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
+          message: `${names.out} no longer holds the text you named (--replaces ${token}): it holds another one (sha256 ${heldHash}) — saved in the browser or written by someone else since; not replaced. Bring its changes in: \`${line(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])} <sha256>\` with the sha256 that upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
           reason: 'replaces-mismatch',
           next: legacy ? legacyPull : pull,
         },
@@ -224,7 +224,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     if (legacy) {
       return {
         risk: {
-          message: `${names.out} is a legacy ${name} 0.x file holding a different text than ${names.input}; not replaced. Its text is not readable by extract: \`${line(legacyPull)}\` writes its format-1 text to ${other} (and makes ${names.out} a file of this version, printing the sha256 of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])}\` followed by that sha256 (it replaces ${names.out} only while it still holds that text)`,
+          message: `${names.out} is a legacy ${name} 0.x file holding a different text than ${names.input}; not replaced. Its text is not readable by extract: \`${line(legacyPull)}\` writes its format-1 text to ${other} (and makes ${names.out} a file of this version, printing the sha256 of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])} <sha256>\` with that sha256 (it replaces ${names.out} only while it still holds that text)`,
           reason: 'legacy-file',
           next: legacyPull,
         },
@@ -234,15 +234,30 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     // only the file changed — and only for the SAME document (the uid-identity gate): neither the record nor git
     // proves that the file was not replaced by another document's file, and following `extract` would then replace
     // the input with that other text
+    // Only the pair's own record proves the FILE is the newer side (the input is exactly what was last synced, so
+    // the file changed after the sync). git proves only that the input is committed: the file beside it may be newer
+    // (a browser save) or older (built from a text never committed — a fresh clone, a shallow clone, another
+    // machine), so that case gets the safe pull below, never a plain extract over the committed text (CLI-1).
     const sameDocument = heldUid !== null && heldUid === ownUid;
-    const unchanged = twinStateOf(cache, input, out, text, { git: names.twin }) !== null;
-    if (sameDocument && unchanged) {
+    const twinState = twinStateOf(cache, input, out, text, { git: names.twin });
+    const unchanged = twinState !== null;
+    if (sameDocument && twinState === 'cache') {
       const bring: Next = { command: 'extract', args: [names.out, ...(twinName(out) === input ? [] : ['-o', names.input])] };
       return {
         risk: {
-          message: `${names.out} holds a different text than ${names.input}, and ${names.input} is unchanged since ${name} last synced the pair (or is committed): the file holds newer work (saved in the browser?); not replaced. \`${line(bring)}\` brings it into ${names.input} (no --force needed). To put ${names.input}'s text in the file anyway: \`${again(['--replaces', heldHash])}\``,
+          message: `${names.out} holds a different text than ${names.input}, and ${names.input} is unchanged since ${name} last synced the pair: the file holds newer work (saved in the browser?); not replaced. \`${line(bring)}\` brings it into ${names.input} (no --force needed). To put ${names.input}'s text in the file anyway: \`${again(['--replaces', heldHash])}\``,
           reason: names.twin ? 'twin-differs' : 'output-differs',
           next: bring,
+        },
+        earlier: null,
+      };
+    }
+    if (unchanged && sameDocument) {
+      return {
+        risk: {
+          message: `${names.out} holds a different text than ${names.input}. ${names.input} is committed and unchanged, but the file holds none of its recent commits and ${name} has no record of syncing this pair here (a fresh clone or another machine?), so it cannot be told which is newer: the file may hold work saved in the browser, or an older build; not replaced. Bring its text out and compare: \`${line(pull)}\`; merge what belongs into ${names.input}, then \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that text). When ${names.input} has everything, run again with --force (the old file is kept as ${names.out}~)`,
+          reason: names.twin ? 'twin-differs' : 'output-differs',
+          next: pull,
         },
         earlier: null,
       };
@@ -259,7 +274,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     }
     const writer = lastWriter(cache, out);
     const later = writer !== null && writer !== realOrSelf(input)
-      ? ` (${name} last wrote it from ${shown(writer)})`
+      ? ` (${name} last synced it with ${shown(writer)})`
       : changedAfter(out, input, () => ' and was changed after it (saved in the browser?)', names.input);
     if (!names.twin) {
       return {

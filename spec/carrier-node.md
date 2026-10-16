@@ -7,7 +7,7 @@ other work, and the vocabulary they refuse in. Lifted from orz-mdhtml 1.0's
 KIT GAP). Each carrier keeps its commands, their wording and extras (help
 texts, templates, its 0.x forms); the rules below are the same in every
 carrier. Implementation note, binding for the carriers that adopt it; claims
-N.1–N.10, tests `tests/carrier-node.test.ts` (through a reference CLI built
+N.1–N.11, tests `tests/carrier-node.test.ts` (through a reference CLI built
 only from this API, `tests/helpers/node-cli.ts`).
 
 ## 1. Boundary
@@ -79,6 +79,16 @@ over it. A twin is replaced as a known state, and a refusal says "only the
 file changed" (next: a plain `extract`), only when both texts carry a
 well-formed uid and the same one (`sameDocument`). A different uid on both
 sides is `output-differs` with no `next`.
+
+**Only the record proves the file newer** (2.4.0, N.11). "Only the file
+changed" (a plain `extract` into the twin) needs the pair's own record: the
+twin is exactly the text the CLI last synced, so the file changed after the
+sync. git proves only that the twin is committed: the file beside it may be
+newer (a browser save) or older (built from a text never committed — a fresh
+clone, a shallow clone, another machine, CI), so a twin known only through git
+gets the safe pull (`extract <file> -o <other name>`, merge, `--replaces`).
+A plain `extract` never replaces a committed text with a file whose age
+nothing proved.
 
 ## 4. Files
 

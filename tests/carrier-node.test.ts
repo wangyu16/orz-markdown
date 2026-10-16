@@ -304,7 +304,7 @@ describe('carrier/node guards', () => {
     write(join(d, 'x.md.html'), legacyFile('# old\n'));
     const r4 = json(cli(['assemble', 'x.md', '--json'], d));
     expect(r4).toMatchObject({ ok: false, reason: 'legacy-file', next: { command: 'upgrade', args: ['x.md.html', '--text', 'x.browser-2.md'] } });
-    expect(r4.error).toMatch(/a legacy orz-kittest 0\.x file.*`orz-kittest assemble x\.md --replaces` followed by that sha256/);
+    expect(r4.error).toMatch(/a legacy orz-kittest 0\.x file.*`orz-kittest assemble x\.md --replaces <sha256>` with that sha256/);
     const up = json(cli(['upgrade', 'x.md.html', '--text', 'x.browser-2.md', '--json'], d));
     expect(up.ok).toBe(true);
     expect(text(join(d, 'x.browser-2.md'))).toBe('# old\n');
@@ -649,6 +649,43 @@ describe('carrier/node: the comparisons are exact', () => {
     const r = json(cli(['extract', 'x.md.html', '--json'], g, env));
     expect(r).toMatchObject({ ok: false, reason: 'twin-differs' });
     expect(text(join(g, 'x.md'))).toBe(X);
+  }, 120_000);
+
+  it('[N.11] only the pair record proves the file newer: in a fresh clone (no record) a committed file built from a text never committed, and in a shallow clone a file built from an older commit, are refused with the safe pull (extract to another name), never a plain extract that would replace the committed text; following the next keeps the text (slides final loop CLI-1)', () => {
+    const g = folder();
+    const git = gitIn(g);
+    if (!git) return;
+    const X = doc('X', 'doc-n1100000001');
+    write(join(g, 'x.md'), X);
+    git('add', 'x.md'); git('commit', '-q', '-m', 'a');
+    const env = fresh(g, 'own');
+    write(join(g, 'x.md'), `${X}- x\n`);
+    expect(cli(['assemble', 'x.md'], g, env).code).toBe(0); // the file holds X + x, never committed
+    write(join(g, 'x.md'), `${X}- x\n- y newer\n`);
+    git('add', 'x.md', 'x.md.html'); git('commit', '-q', '-m', 'b');
+    const follow = (d: string, e: Record<string, string>): Record<string, any> => {
+      const r = json(cli(['assemble', 'x.md', '--json'], d, e));
+      expect(r).toMatchObject({ ok: false, reason: 'twin-differs' });
+      expect(r.next.args, JSON.stringify(r)).toEqual(['x.md.html', '-o', 'x.browser.md']);
+      expect(r.error).not.toMatch(/holds newer work/);
+      expect(json(cli([r.next.command, ...r.next.args, '--json'], d, e))).toMatchObject({ ok: true });
+      return r;
+    };
+    follow(g, fresh(g, 'clone')); // a fresh machine: no record
+    expect(text(join(g, 'x.md'))).toBe(`${X}- x\n- y newer\n`);
+    expect(text(join(g, 'x.browser.md'))).toBe(`${X}- x\n`);
+    // a shallow clone: the file holds commit 1's text, the text is at commit 3
+    const src = folder();
+    const sg = gitIn(src)!;
+    write(join(src, 'x.md'), X);
+    write(join(src, 'x.md.html'), assemble(X));
+    sg('add', 'x.md', 'x.md.html'); sg('commit', '-q', '-m', 'c1');
+    write(join(src, 'x.md'), `${X}c2\n`); sg('commit', '-q', '-am', 'c2');
+    write(join(src, 'x.md'), `${X}c2\nc3\n`); sg('commit', '-q', '-am', 'c3');
+    const shallow = join(tmp, `shallow${n}`);
+    execFileSync('git', ['clone', '-q', '--depth', '1', `file://${src}`, shallow], { stdio: 'ignore', env: { ...process.env, ...GIT_ENV } });
+    follow(shallow, fresh(shallow, 's'));
+    expect(text(join(shallow, 'x.md'))).toBe(`${X}c2\nc3\n`);
   }, 120_000);
 
   it('[N.10] [N.2] writeOut keeps the replaced file\'s mode whatever the umask (chmod after the write)', () => {
