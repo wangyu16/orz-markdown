@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.4.0] - 2026-10-13 (prepared; not yet published)
+## [2.4.0] - 2026-10-17
 
 The carrier-kit gaps of the orz-slides 1.0 rebuild (family plan REBUILD
 §3c), all additive: nothing slides-specific enters the kit. **Additive for
