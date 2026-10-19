@@ -10,7 +10,7 @@
   </url>
   <url>
     <loc>https://markdown.orz.how/features.html</loc>
-    <lastmod>2026-07-17</lastmod>
+    <lastmod>2026-10-19</lastmod>
   </url>
   <url>
     <loc>https://markdown.orz.how/guide.html</loc>
@@ -26,7 +26,11 @@
   </url>
   <url>
     <loc>https://markdown.orz.how/editor.html</loc>
-    <lastmod>2026-07-17</lastmod>
+    <lastmod>2026-10-19</lastmod>
+  </url>
+  <url>
+    <loc>https://markdown.orz.how/mdhtml.html</loc>
+    <lastmod>2026-10-19</lastmod>
   </url>
   <url>
     <loc>https://markdown.orz.how/slides.html</loc>
@@ -34,6 +38,6 @@
   </url>
   <url>
     <loc>https://markdown.orz.how/paged.html</loc>
-    <lastmod>2026-10-12</lastmod>
+    <lastmod>2026-10-19</lastmod>
   </url>
 </urlset>

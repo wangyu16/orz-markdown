@@ -27,6 +27,9 @@
     <a href="./">Home</a>
     <a href="./features.html">Features</a>
     <a href="./family.html" class="here">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
     <a href="./guide.html">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -37,6 +40,7 @@
 <main>
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <h1>The self-editing document family</h1>
+    <p class="stamp">This page describes orz-mdhtml 1.0 · orz-slides 1.0 · orz-paged 1.0, on orz-markdown 2.4</p>
     <p class="lead" style="max-width:680px">Three tools, one renderer. Each turns your Markdown into a single,
     <strong>self-editing</strong> HTML file. Different shapes for different documents.</p>
   </div></section>
@@ -72,12 +76,12 @@
   <section class="section" style="margin-top:24px">
     <h2>What they all share</h2>
     <div class="grid c3">
-      <div class="card"><h3 style="margin-top:0">One portable file</h3><p>The Markdown source lives inside the file; it renders itself on open. Nothing to install to read it.</p></div>
+      <div class="card"><h3 style="margin-top:0">One portable file</h3><p>The Markdown source lives inside the file; it renders itself on open. Nothing to install to read it. Beside it you can keep the same text as a plain file (<code>notes.md</code>), for git or an AI agent.</p></div>
       <div class="card"><h3 style="margin-top:0">Edit in place</h3><p>A built-in editor with live preview. Save writes back to the same file (in Chromium browsers).</p></div>
       <div class="card"><h3 style="margin-top:0">Copy as Markdown</h3><p>Select rendered content, copy, and get clean Markdown source back, ready to reuse anywhere.</p></div>
       <div class="card"><h3 style="margin-top:0">Portable metadata</h3><p>Generated files can carry authorship, license, canonical source, date, description, and keywords in their own HTML head.</p></div>
-      <div class="card"><h3 style="margin-top:0">Inline or CDN</h3><p><code>--inline</code> embeds the engine (and, for slides/paged, themes); <code>--cdn</code> makes a smaller file.</p></div>
-      <div class="card"><h3 style="margin-top:0">Verifiable</h3><p>The embedded framework hashes against the published packages, so tampering is detectable.</p></div>
+      <div class="card"><h3 style="margin-top:0">Inline or CDN</h3><p>Files carry their engine by default (1–2&nbsp;MB); <code>--cdn</code> makes a small file that loads it from jsDelivr. Either way fonts, math styles, diagram libraries and the editor (and an <code>.md.html</code>'s themes) load from CDNs.</p></div>
+      <div class="card"><h3 style="margin-top:0">Checkable</h3><p>The <a href="./verify.html">verifier</a> rebuilds a file's shell with the published package of its version and compares. A file cannot prove its own integrity: treat files from unknown sources like programs.</p></div>
     </div>
   </section>
 
@@ -88,14 +92,17 @@
         <span class="ext">.md.html</span>
         <h2 style="margin:.4em 0 .2em">orz-mdhtml</h2>
         <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A continuous document.</p>
-        <p>The classic article, README, or notes view, rendered for true WYSIWYG. The editor sits beside a live
-        preview with optional scroll-sync, exactly like the one on this site.</p>
+        <p>A text (<code>notes.md</code>) and one file that reads like a themed web page: twelve themes, three
+        line lengths, a reader's text size. The pencil at the bottom-left opens the editor — the Markdown beside a
+        live preview (split, editor only or preview only) — and Save writes the file back in place. Copying from the
+        page copies Markdown.</p>
         <ul class="compact">
-          <li><strong>Best for</strong> articles, documentation, notes, web-style reading.</li>
-          <li>Resizable split, theme switch, copy-as-Markdown.</li>
+          <li><strong>Best for</strong> articles, documentation, notes, handouts, web-style reading.</li>
+          <li><code>npx orz-mdhtml@1 new notes.md</code>; <code>inspect</code> says what any file is and what to do next.</li>
         </ul>
         <div class="btns">
           <a class="btn" href="./starters/new-mdhtml.md.html?v=1.0.1" target="_blank" rel="noopener">Create new .md.html</a>
+          <a class="btn ghost" href="./mdhtml.html">Document reference</a>
           <a class="btn ghost" href="https://github.com/wangyu16/orz-mdhtml">GitHub</a>
         </div>
       </div>
@@ -130,7 +137,7 @@ A continuous, themed document.
         <span class="ext">.slides.html</span>
         <h2 style="margin:.4em 0 .2em">orz-slides</h2>
         <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A slide deck that edits itself.</p>
-        <p>A text twin (<code>talk.slides.md</code>) and one file that presents it in any browser: overview, speaker
+        <p>A text (<code>talk.slides.md</code>) and one file that presents it in any browser: overview, speaker
         view, timer, full screen, print one slide per page. 14 themes, 16:9 or 4:3, a layout grammar (presets,
         splits, boxes, floats) and template pages (title, section, outline, closing). Edit the whole deck beside a
         live slide card, or one slide at a time in the layout editor.</p>
@@ -154,15 +161,18 @@ A continuous, themed document.
         <span class="ext">.paged.html</span>
         <h2 style="margin:.4em 0 .2em">orz-paged</h2>
         <p class="lead" style="font-size:1.12rem;margin:.1em 0 .7em">A paginated print document.</p>
-        <p>Markdown laid out as pages with <a href="https://pagedjs.org/">paged.js</a>: A4 or Letter, margins,
-        running headers and footers, page numbers. Edit side by side, then <strong>export to PDF by printing</strong>.
-        No PDF binary, no server. Curated templates for articles, letters, CVs, reports, and exams.</p>
+        <p>A text (<code>report.paged.md</code>) and one file that shows it as real pages, laid out with
+        <a href="https://pagedjs.org/">Paged.js</a>: A4, Letter and other sizes, margins, running headers and footers,
+        page numbers, a contents page with page numbers, versions (an exam with or without its answer key). Edit side
+        by side, then <strong>save a PDF by printing</strong> — no PDF binary, no server. Twelve templates (articles,
+        reports, exams, letters, CVs, notes) and nine print themes.</p>
         <ul class="compact">
           <li><strong>Best for</strong> papers, reports, CVs, exams, anything destined for paper or PDF.</li>
+          <li><code>npx orz-paged@1 new report.paged.md --template report-page</code>; <code>inspect</code> checks the header.</li>
         </ul>
         <div class="btns">
           <a class="btn" href="./starters/new-paged.paged.html?v=1.0.0" target="_blank" rel="noopener">Create new .paged.html</a>
-          <a class="btn ghost" href="./paged.html">Layout reference</a>
+          <a class="btn ghost" href="./paged.html">Print reference</a>
           <a class="btn ghost" href="https://github.com/wangyu16/orz-paged">GitHub</a>
         </div>
       </div>
@@ -185,6 +195,9 @@ A continuous, themed document.
     </table>
     <div class="callout amber" style="margin-top:18px"><strong>In-place Save needs a Chromium-based
     browser</strong> (Chrome or Edge); elsewhere, save downloads a copy. Viewing, editing, presenting, and printing work in any modern browser.</div>
+    <div class="callout" style="margin-top:14px"><strong>A file from an older release (0.x)?</strong> It still opens as it
+    was, but the 1.0 tools need it upgraded first — one command per file, <code>npx orz-mdhtml@1 upgrade old.md.html</code>
+    (or <code>orz-slides@1</code>, <code>orz-paged@1</code>). See <a href="./guide.html#upgrading">Upgrading from 0.x</a>.</div>
     <footer><div class="row">
       <a href="./">Home</a><a href="./guide.html">Guide</a><a href="./verify.html">Verify a file</a>
     </div></footer>

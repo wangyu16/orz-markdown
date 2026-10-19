@@ -39,7 +39,10 @@
   <span class="links">
     <a href="./">Home</a>
     <a href="./features.html">Features</a>
-    <a href="./family.html" class="here">The family</a>
+    <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)" class="here">Print</a>
     <a href="./guide.html">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -51,10 +54,13 @@
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.paged.html</span>
     <h1 style="margin:.3em 0 .15em">orz-paged — documents &amp; layout</h1>
+    <p class="stamp">This page describes orz-paged 1.0 (orz-paged-browser 1.0), on orz-markdown 2.4</p>
     <p class="lead" style="max-width:730px">Markdown that edits itself, laid out as print-ready pages. This page
     describes <strong>orz-paged 1.0</strong>: the text twin and its file, the header, templates and print themes,
     page furniture, versions, columns, printing and the CLI. Part of
-    <a href="./family.html#paged">the orz editable-document family</a>.</p>
+    <a href="./family.html#paged">the orz editable-document family</a>, with
+    <a href="./mdhtml.html">orz-mdhtml</a> (documents) and <a href="./slides.html">orz-slides</a> (decks). New to the
+    words "text twin", "assemble" or "shell"? See <a href="./guide.html#words">the guide's short glossary</a>.</p>
   </div></section>
 
   <div class="wide">
@@ -91,7 +97,8 @@
       in orz-markdown prints; tabs, spoilers and video are discouraged (they hide content or do not print), not
       forbidden.</p></div>
       <div class="card"><h3 style="margin-top:0">One family</h3><p>The same text twin, pencil, editor, saving, quiet
-      update, host protocols and CLI as <a href="./family.html#mdhtml">orz-mdhtml</a> 1.0 — built on the orz-markdown
+      update, host protocols and CLI as <a href="./mdhtml.html">orz-mdhtml</a> and
+      <a href="./slides.html">orz-slides</a> 1.0 — built on the orz-markdown
       carrier kit (text format 1). What paged adds is pages.</p></div>
     </div>
     <p style="opacity:.75;font-size:.95em;margin-top:14px">Published on npm as <code>orz-paged</code> (CLI and Node
@@ -109,10 +116,10 @@
 npx orz-paged@1 report.paged.md                                                # → report.paged.html</pre>
     <table>
       <tr><th>Command</th><th>What it does</th></tr>
-      <tr><td><code>orz-paged new [x.paged.md] [--template id] [--title T] [--theme id] [--html] [--cdn]</code></td><td>writes a new text twin from a template (default <code>note</code>): its header with <code>carrier: paged</code> and a fresh <code>uid</code>, then the template's skeleton; <code>--html</code> also assembles it</td></tr>
-      <tr><td><code>orz-paged assemble x.paged.md [-o out] [--cdn]</code></td><td>writes <code>x.paged.html</code> from the text — the same bytes every time (also: <code>orz-paged x.paged.md</code>; a plain <code>x.md</code> assembles to <code>x.paged.html</code>)</td></tr>
-      <tr><td><code>orz-paged extract x.paged.html</code></td><td>writes the exact text twin back out of a file</td></tr>
-      <tr><td><code>orz-paged upgrade old.paged.html</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin</td></tr>
+      <tr><td><code>orz-paged new [x.paged.md] [--template id] [--title T] [--theme id] [--html] [--cdn]</code></td><td>writes a new text twin from a template (default <code>note</code>): its header with <code>carrier: paged</code>, a fresh <code>uid</code> and the template's settings (the <code>-page</code> templates add <code>front_matter: clean</code>), then the template's skeleton; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
+      <tr><td><code>orz-paged assemble x.paged.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.paged.html</code> from the text — the same bytes every time (also: <code>orz-paged x.paged.md</code>; a plain <code>x.md</code> assembles to <code>x.paged.html</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it); an include left out shows an "Included file not available" note and is reported (<code>unresolved</code>, or <code>stale</code> when its file changed since)</td></tr>
+      <tr><td><code>orz-paged extract x.paged.html [-o out] [--replaces sha256]</code></td><td>writes the exact text twin back out of a file</td></tr>
+      <tr><td><code>orz-paged upgrade old.paged.html [--text t | --no-text] [--cdn | --inline]</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin</td></tr>
       <tr><td><code>orz-paged inspect &lt;file&gt;</code></td><td>says what any text or file is — version, settings, lint, whether its twin matches — and what to do next</td></tr>
       <tr><td><code>orz-paged themes</code> · <code>orz-paged templates</code></td><td>list the print themes and the templates</td></tr>
     </table>
@@ -120,11 +127,15 @@ npx orz-paged@1 report.paged.md                                                #
     header; <code>assemble</code> has no content options. Every command takes <code>--json</code> (one object with a
     stable <code>reason</code> and a <code>next</code> step on refusals), and nothing that could hold other work (a file
     saved in the browser, an edited twin) is overwritten without <code>--force</code>, which keeps a
-    <code>&lt;file&gt;~</code> backup.</p>
+    <code>&lt;file&gt;~</code> backup — unless what it replaces is a <strong>known earlier state</strong>: what the CLI
+    itself last wrote or read for that pair, or a committed version of the twin in git. The robust way for scripts and
+    agents: pass the <code>sha256</code> the last command printed as <code>--replaces &lt;sha256&gt;</code>; the file is
+    replaced only while it still holds that text. Exit status: 0 done, 1 refused or failed, 2 usage error.</p>
     <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine, Paged.js and the print
     themes are inside the file (about 1.7&nbsp;MB). <code>--cdn</code> writes a small file for pages you publish on the
     web; it loads the engine from jsDelivr,
-    <code>https://cdn.jsdelivr.net/npm/orz-paged-browser@1.0.0/orz-paged.browser.js</code> (the file's own version).
+    <code>https://cdn.jsdelivr.net/npm/orz-paged-browser@&lt;version&gt;/orz-paged.browser.js</code> (the file's own
+    version, e.g. <code>@1.0.0</code>).
     The print themes ship inside the engine, so a <code>--cdn</code> file styles exactly like an inline one. Either
     way, webfonts, KaTeX, the content libraries and the editor load from CDNs the first time; a slow CDN never holds
     the page blank (pages are laid out after at most 2&nbsp;s, then once more when everything has arrived).</p>
@@ -139,14 +150,16 @@ npx orz-paged@1 report.paged.md                                                #
       <div class="card"><h3 style="margin-top:0">Edit, Print, Save</h3><p><strong>Edit</strong>
       (<span class="kbd">Ctrl/⌘ E</span>) opens CodeMirror beside a live preview of the pages (split, editor or
       preview); the preview lays out again from the page your edit changed and never blocks typing.
-      <strong>Print</strong> prints the read view once its layout has settled — choose <em>Save as PDF</em> in the
-      dialog. <strong>Save</strong> (<span class="kbd">Ctrl/⌘ S</span>) writes <code>assemble(text)</code> back to the
+      <strong>Print</strong> (or <span class="kbd">Ctrl/⌘ P</span>) prints the read view once its layout has settled —
+      choose <em>Save as PDF</em> in the dialog (Chrome and Edge give the most faithful PDF). <strong>Save</strong> (<span class="kbd">Ctrl/⌘ S</span>) writes <code>assemble(text)</code> back to the
       file, and asks before it overwrites a file that changed on disk. Also: <em>Download a copy</em>, <em>New
       document</em>, <em>Save as new copy</em>.</p></div>
       <div class="card"><h3 style="margin-top:0">Settings are the document's</h3><p><strong>Theme, Page size,
       Template, Page numbers, Number style</strong> and <strong>Version</strong> in the pencil's list (or the editor's
       bar) write the text's header — one undoable edit, unsaved until you Save — and the pages follow. Margins, fonts,
-      running headers and custom CSS stay in the header text.</p></div>
+      running headers and custom CSS stay in the header text. <strong>Template</strong> here changes only the
+      <code>template:</code> key — the layout defaults (page size, furniture, front matter) — and never the content, so
+      the change can be small; to start a letter, a CV or an exam, use <em>New document from template…</em>.</p></div>
       <div class="card"><h3 style="margin-top:0">Templates</h3><p><strong>New document from template…</strong> lists
       the twelve templates and saves a fresh file of the chosen one (its starter text, a new <code>uid</code>). The
       open document is never replaced; copy content across yourself.</p></div>
@@ -173,18 +186,31 @@ carrier: paged
 uid: doc-7kq2m9x4p1r8s3t5
 title: Quarterly Report
 author: Platform Team
-template: report-page    # layout defaults (page size, furniture, front matter)
-theme: light-academic-1  # the look (fonts, accent, element styling)
-page_size: Letter        # A3 · A4 · A5 · Letter · Legal · or "210mm 297mm"
-margin_top: 20           # margin_top/bottom/left/right, in mm
+template: report-page
+theme: light-academic-1
+page_size: Letter
+margin_top: 20
 header_center: Quarterly Report
 footer_left: Confidential
-page_number_position: footer-right   # header/footer-left|center|right · none
-page_number_style: page-n-of-N       # simple · page-n · page-n-of-N · n-of-N · n-slash-N · dash-n-dash · brackets · parentheses
-front_matter: clean      # title/abstract/contents pages without furniture; body numbered from 1
-dynamic_choices: |       # versions (below)
+page_number_position: footer-right
+page_number_style: page-n-of-N
+front_matter: clean
+dynamic_choices: |
   answer-key: hide
 }}</pre>
+    <table>
+      <tr><th>Key</th><th>Values</th></tr>
+      <tr><td><code>template</code></td><td>layout defaults: page size, furniture, front matter (<a href="#templates">below</a>)</td></tr>
+      <tr><td><code>theme</code></td><td>the look: fonts, accent, element styling (<a href="#templates">below</a>)</td></tr>
+      <tr><td><code>page_size</code></td><td><code>A3</code> · <code>A4</code> · <code>A5</code> · <code>Letter</code> · <code>Legal</code> · or two lengths, <code>210mm 297mm</code></td></tr>
+      <tr><td><code>margin_top</code> · <code>_bottom</code> · <code>_left</code> · <code>_right</code></td><td>in mm</td></tr>
+      <tr><td><code>header_left/center/right</code> · <code>footer_left/center/right</code></td><td>running text in the page margins</td></tr>
+      <tr><td><code>page_number_position</code></td><td><code>header-</code> or <code>footer-left</code> / <code>-center</code> / <code>-right</code>, or <code>none</code></td></tr>
+      <tr><td><code>page_number_style</code></td><td><code>simple</code> · <code>page-n</code> · <code>page-n-of-N</code> · <code>n-of-N</code> · <code>n-slash-N</code> · <code>dash-n-dash</code> · <code>brackets</code> · <code>parentheses</code></td></tr>
+      <tr><td><code>front_matter</code></td><td><code>clean</code>: title, abstract and contents pages without furniture, the body numbered from 1</td></tr>
+      <tr><td><code>dynamic_choices</code></td><td>one <code>key: value</code> per indented line: the versions (<a href="#versions">below</a>)</td></tr>
+    </table>
+    <p>Write each value alone after its key: a header has no comments (text after a value becomes part of it).</p>
     <p>Also: <code>font_preset</code> (serif <code>system-serif</code>, <code>source-serif-4</code>,
     <code>lora</code>, <code>crimson-pro</code>, <code>noto-serif</code> · sans <code>inter</code>,
     <code>ibm-plex-sans</code>, <code>roboto</code>, <code>raleway</code>, <code>noto-sans</code> · mono
@@ -195,7 +221,7 @@ dynamic_choices: |       # versions (below)
   </section>
 
   <!-- TEMPLATES & THEMES -->
-  <section class="section" style="margin-top:34px">
+  <section class="section" id="templates" style="margin-top:34px">
     <h2>Templates &amp; print themes</h2>
     <p><strong>A template owns layout</strong> (page size, furniture, which elements appear and where) and supplies a
     starter text. <strong>A theme owns the look</strong> — so the same theme renders the same across every template.
@@ -212,8 +238,10 @@ dynamic_choices: |       # versions (below)
     </table>
     <p style="margin-top:12px"><strong>Nine print themes</strong>, one derived from each light
     <a href="./features.html">orz-markdown theme</a>, keeping its typefaces and decoration wherever they suit paper:
-    <code>light-neat-1/2/3</code>, <code>light-academic-1/2</code>, <code>beige-decent-1/2</code>,
-    <code>light-playful-1/2</code> — plus <code>none</code> (plain). The default is <code>light-academic-1</code>.
+    Orchard <code>light-neat-3</code>, Neat <code>light-neat-1</code>, Neat 2 <code>light-neat-2</code>, Academic
+    <code>light-academic-1</code> (the default), Academic 2 <code>light-academic-2</code>, Beige
+    <code>beige-decent-1</code>, Beige 2 <code>beige-decent-2</code>, Playful <code>light-playful-1</code>, Playful 2
+    <code>light-playful-2</code> — plus <code>none</code> (plain).
     <code>light-playful-1</code> is a <strong>ruled notebook</strong>: text, headings and formulas sit on the lines;
     tables, code, callouts and figures are sheets pasted on top. Light only, by design.</p>
   </section>
@@ -247,12 +275,14 @@ dynamic_choices: |       # versions (below)
     curated set:</p>
     <table>
       <tr><th>Element</th><th>Key fields</th></tr>
-      <tr><td><code>article-title</code> / <code>report-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>authors</code> (or <code>author</code>), <code>affiliations</code>, <code>notes</code>, <code>date</code>, <code>placement</code></td></tr>
-      <tr><td><code>exam-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>author</code>, <code>course</code>, <code>duration</code>, <code>total_points</code>, <code>student_fields</code>, <code>instructions</code>, <code>placement</code></td></tr>
+      <tr><td><code>article-title</code> / <code>report-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>authors</code> (or <code>author</code>), <code>affiliations</code>, <code>notes</code>, <code>date</code>, <code>doi</code>, <code>placement</code></td></tr>
+      <tr><td><code>exam-title</code></td><td><code>title</code>, <code>subtitle</code>, <code>author</code>, <code>course</code>, <code>instructor</code>, <code>duration</code>, <code>total_points</code>, <code>date</code>, <code>student_fields</code>, <code>instructions</code>, <code>placement</code></td></tr>
       <tr><td><code>abstract</code></td><td><code>text</code>, <code>keywords</code>, <code>placement</code></td></tr>
       <tr><td><code>toc</code></td><td><code>title</code>, <code>max_level</code>, <code>placement</code></td></tr>
-      <tr><td><code>letterhead</code> · <code>letter-inside-address</code> · <code>letter-signature</code></td><td><code>organization</code>/<code>address</code>/<code>email</code>/<code>phone</code> · <code>to</code> · <code>from</code>/<code>closing</code></td></tr>
-      <tr><td><code>cv-header</code></td><td><code>full_name</code>, <code>title</code>, <code>contacts</code></td></tr>
+      <tr><td><code>letterhead</code></td><td><code>organization</code>, <code>tagline</code>, <code>address</code>, <code>email</code>, <code>phone</code>, <code>website</code>, <code>border</code></td></tr>
+      <tr><td><code>letter-inside-address</code></td><td><code>to</code>, <code>title</code>, <code>organization</code>, <code>address</code>, <code>align</code></td></tr>
+      <tr><td><code>letter-signature</code></td><td><code>closing</code>, <code>from</code>, <code>title</code>, <code>organization</code>, <code>signature_space</code></td></tr>
+      <tr><td><code>cv-header</code></td><td><code>full_name</code>, <code>title</code>, <code>contacts</code>, <code>photo</code>, <code>summary</code>, <code>border</code></td></tr>
       <tr><td><code>question-mc</code> · <code>question-open</code></td><td><code>n</code>, <code>pts</code>, <code>body</code>, <code>options</code>/<code>space</code>, <code>answer</code></td></tr>
       <tr><td><code>timestamp</code></td><td><code>label</code>, <code>date</code></td></tr>
     </table>
@@ -278,7 +308,7 @@ placement: page
   </section>
 
   <!-- VERSIONS -->
-  <section class="section" style="margin-top:34px">
+  <section class="section" id="versions" style="margin-top:34px">
     <h2>Versions — one source, several printouts</h2>
     <p><code>dynamic_choices</code> in the header decides what the pages show: content tagged
     <code>data-show-when="key=value"</code> is kept only when the choice matches, <code>data-hide-when</code> removes
@@ -309,8 +339,11 @@ answer: B, D
     bottom (column 1 continues in column 1). Tables in a column split between rows with their header repeated.</p>
     <div class="callout amber" style="margin-top:6px"><strong>Limits:</strong> a lone long column stays narrow;
     paragraphs, list items, blockquotes, plain blocks and tables split, while images, figures, code, math and headings
-    move whole; a block taller than a column page is laid out as plain flow; a one-line widow is possible. Keep each
-    column's blocks short, or avoid columns for long material.</div>
+    move whole; a block that no cut can place (a table row or code taller than a column page) is laid out as plain
+    flow; a table wider than its column overflows it; a block taller than a page is clipped at the bottom; a one-line
+    widow is possible. Keep each column's blocks short, or avoid columns for long material.</div>
+    <p style="margin-top:10px"><strong>Nesting:</strong> a container inside a column needs more colons on every outer
+    level — <code>::::: cols</code> › <code>:::: col</code> › <code>::: info</code>.</p>
   </section>
 
   <!-- BEYOND -->
@@ -324,7 +357,9 @@ answer: B, D
       <div class="card"><h3 style="margin-top:0">Full orz-markdown</h3><p>Between the elements, write normal
       <a href="./features.html">orz-markdown</a>: headings, lists, tables, code, footnotes, math, Mermaid,
       <code>{{smiles}}</code>, <code>{{chart}}</code>, <code>{{qr}}</code> (a printed QR is genuinely useful),
-      callouts, columns, includes — all styled for print.</p></div>
+      callouts, columns, includes — all styled for print. A file include (<code>{{md part.md}}</code>) is read when you
+      assemble with <code>--resolve-includes</code> and stored in the file; one it does not hold shows a quiet
+      "Included file not available" note.</p></div>
     </div>
   </section>
 
@@ -370,7 +405,7 @@ kind: document
 carrier: paged
 template: exam-page
 dynamic_choices: |
-  answer-key: hide      # ← Version: show for the key
+  answer-key: hide
 }}
 
 {{nyml
@@ -391,6 +426,8 @@ answer: B
 }}</pre>
       <div class="pgmock"><div class="t">Physics — Exam 1</div><div style="font-size:.62rem">Name ___  ID ___  Score __/100</div><div class="rule"></div><div>1. SI unit of force?</div><div class="ln" style="width:60%"></div><div class="ln" style="width:50%"></div><div class="ft"><span>—</span><span>1</span></div></div>
     </div>
+    <p style="margin-top:6px">For the instructor's key, switch <strong>Version</strong> to show in the pencil's list
+    (or write <code>answer-key: show</code>).</p>
 
     <p style="margin-top:16px">For the full vocabulary — every header key, element field and theme — read the
     <strong>agent skill</strong>
@@ -402,11 +439,16 @@ answer: B
   <section class="section" style="margin-top:34px">
     <h2>Older files and web apps</h2>
     <div class="grid c2">
-      <div class="card"><h3 style="margin-top:0">0.x files: inspect, then upgrade</h3><p>A file made by orz-paged
-      0.7 or earlier keeps its source, but 1.0 does not open it as it is. <code>npx orz-paged@1 inspect
-      old.paged.html</code> says what it is; <code>npx orz-paged@1 upgrade old.paged.html</code> rewrites it as a 1.0
-      file and writes its text twin <code>old.paged.md</code> — the old settings block and metadata become one header
-      at the top, and the settings mean what they meant.</p></div>
+      <div class="card" id="upgrading"><h3 style="margin-top:0">0.x files: inspect, then upgrade</h3><p>A file made by
+      orz-paged 0.7 or earlier still opens as it was, but the 1.0 tools and editor work on it only after a one-time
+      upgrade. <code>npx orz-paged@1 inspect old.paged.html</code> says what it is; <code>npx orz-paged@1 upgrade
+      old.paged.html</code> rewrites it as a 1.0 file and writes its text twin <code>old.paged.md</code> — the old
+      settings block and metadata become one header at the top, and the settings mean what they meant. When
+      <code>old.paged.md</code> already exists, add <code>--text old.browser.paged.md</code> and merge. The 0.x
+      commands (<code>--template</code>, <code>--new</code>, <code>--list-templates</code>, <code>--title</code> /
+      <code>--theme</code> when building) are refused with the 1.0 command that does the same, and the 0.x API
+      (<code>buildPagedHtml</code> and friends) is gone: <code>assemble</code>, <code>newDocument</code>,
+      <code>inspect</code>, <code>upgrade</code>.</p></div>
       <div class="card"><h3 style="margin-top:0">In a web app</h3><p>The editor is a component:
       <code>npm i orz-paged-browser@1</code>, then <code>mountEditor(element, { text, hooks })</code> (ES module, or
       <code>globalThis.OrzCarrier</code> from the IIFE); its preview lays out Paged.js pages in a sandboxed frame.
@@ -419,8 +461,17 @@ answer: B
   <section class="section" style="margin-top:40px">
     <div class="callout amber"><strong>In-place Save needs a Chromium-based browser</strong> (Chrome or
     Edge); elsewhere, save downloads a copy. Reading, editing, and printing work in any modern browser.</div>
+    <div class="callout" style="margin-top:14px"><strong>These files are programs.</strong> Opening a
+    <code>.paged.html</code> runs the engine inside it and anything in its content; open and edit files only from
+    sources you trust — a file cannot prove its own integrity (the <a href="./verify.html">verifier</a> helps). The
+    quiet update only fetches this engine's own jsDelivr package, checks its SHA-384, and changes nothing until you
+    click <em>Update now</em>. A platform that shows files in an iframe can take their saves, AI requests and includes
+    through the host protocols (<code>orz-host-save@1</code>, <code>orz-host-ai@1</code>,
+    <code>orz-host-include@1</code>).</div>
     <footer><div class="row">
       <a href="./family.html#paged">← The family</a>
+      <a href="./mdhtml.html">Documents (orz-mdhtml)</a>
+      <a href="./slides.html">Slides (orz-slides)</a>
       <a href="https://github.com/wangyu16/orz-paged">orz-paged on GitHub</a>
       <a href="https://www.npmjs.com/package/orz-paged">orz-paged on npm</a>
       <a href="./guide.html">Guide</a>

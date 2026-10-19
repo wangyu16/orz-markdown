@@ -44,7 +44,10 @@
   <span class="links">
     <a href="./">Home</a>
     <a href="./features.html">Features</a>
-    <a href="./family.html" class="here">The family</a>
+    <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)" class="here">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
     <a href="./guide.html">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -56,10 +59,13 @@
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.slides.html</span>
     <h1 style="margin:.3em 0 .15em">orz-slides — decks &amp; layouts</h1>
+    <p class="stamp">This page describes orz-slides 1.0 (orz-slides-browser 1.0), on orz-markdown 2.4</p>
     <p class="lead" style="max-width:730px">Markdown that edits itself, as a slide deck. This page describes
     <strong>orz-slides 1.0</strong>: the text twin and its file, presenting, the two ways to edit, the header, the
     layout grammar, template pages, themes, fit, printing and the CLI. Part of
-    <a href="./family.html#slides">the orz editable-document family</a>.</p>
+    <a href="./family.html#slides">the orz editable-document family</a>, with
+    <a href="./mdhtml.html">orz-mdhtml</a> (documents) and <a href="./paged.html">orz-paged</a> (print). New to the
+    words "text twin", "assemble" or "shell"? See <a href="./guide.html#words">the guide's short glossary</a>.</p>
   </div></section>
 
   <div class="wide">
@@ -97,12 +103,13 @@
       pages, floats — shrinks its content to fit, down to 60&nbsp;%. Past that it is marked clipped, and the editor and
       <code>orz-slides inspect --layout</code> say so.</p></div>
       <div class="card"><h3 style="margin-top:0">One family</h3><p>The same text twin, pencil, editor, saving, quiet
-      update, host protocols and CLI as <a href="./family.html#mdhtml">orz-mdhtml</a> and
+      update, host protocols and CLI as <a href="./mdhtml.html">orz-mdhtml</a> and
       <a href="./paged.html">orz-paged</a> 1.0 — built on the orz-markdown carrier kit (text format 1). What slides
       adds is slides.</p></div>
     </div>
     <p style="opacity:.75;font-size:.95em;margin-top:14px">Published on npm as <code>orz-slides</code> (CLI and Node
-    library) and <code>orz-slides-browser</code> (engine and editor component), always the same version. Try the
+    library: <code>import { assemble, extract, inspect, newDocument, upgrade } from 'orz-slides'</code>) and
+    <code>orz-slides-browser</code> (engine and editor component), always the same version. Try the
     official blank <a href="./starters/new-slides.slides.html?v=1.0.0" target="_blank" rel="noopener">.slides.html
     starter</a>.</p>
   </section>
@@ -117,10 +124,10 @@ npx orz-slides@1 inspect talk.slides.md --layout                                
 npx orz-slides@1 talk.slides.md                                                                     # → talk.slides.html</pre>
     <table>
       <tr><th>Command</th><th>What it does</th></tr>
-      <tr><td><code>orz-slides new [x.slides.md] [--template id] [--title T] [--theme id] [--ratio 16:9|4:3] [--html] [--cdn]</code></td><td>writes a new text twin from a deck template (default <code>starter</code>): its header with <code>carrier: slides</code> and a fresh <code>uid</code>, then the template's slides; <code>--html</code> also assembles it</td></tr>
-      <tr><td><code>orz-slides assemble x.slides.md [-o out] [--cdn]</code></td><td>writes <code>x.slides.html</code> from the text — the same bytes every time (also: <code>orz-slides x.slides.md</code>; a plain Markdown deck <code>x.md</code> assembles to <code>x.slides.html</code>)</td></tr>
-      <tr><td><code>orz-slides extract x.slides.html</code></td><td>writes the exact text twin back out of a file — also of a page the browser saved</td></tr>
-      <tr><td><code>orz-slides upgrade old.slides.html</code> · <code>orz-slides upgrade deck.md</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin; a 0.x deck source into a format-1 text — with a report of what changed</td></tr>
+      <tr><td><code>orz-slides new [x.slides.md] [--template id] [--title T] [--theme id] [--ratio 16:9|4:3] [--html] [--cdn]</code></td><td>writes a new text twin from a deck template (default <code>starter</code>): its header with <code>carrier: slides</code> and a fresh <code>uid</code>, then the template's slides; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
+      <tr><td><code>orz-slides assemble x.slides.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.slides.html</code> from the text — the same bytes every time (also: <code>orz-slides x.slides.md</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it), and an include left out shows an "Included file not available" note. Every slide needs a <code>&lt;!-- slide --&gt;</code> line: Markdown without one assembles to a blank deck, with a warning</td></tr>
+      <tr><td><code>orz-slides extract x.slides.html [-o out] [--replaces sha256]</code></td><td>writes the exact text twin back out of a file — also of a page the browser saved</td></tr>
+      <tr><td><code>orz-slides upgrade old.slides.html [--text t | --no-text] [--cdn | --inline]</code> · <code>orz-slides upgrade deck.md</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin; a 0.x deck source into a format-1 text — with a report of what changed</td></tr>
       <tr><td><code>orz-slides inspect &lt;file&gt; [--layout [--offline]]</code></td><td>says what any text or file is — version, settings, slides, lint, whether its twin matches — and what to do next; <code>--layout</code> renders the deck in your installed Chrome and reports, per slide and box, the fit scale and whether anything is cut</td></tr>
       <tr><td><code>orz-slides themes</code> · <code>orz-slides templates</code></td><td>list the slide themes and the deck templates</td></tr>
     </table>
@@ -128,11 +135,16 @@ npx orz-slides@1 talk.slides.md                                                 
     <code>assemble</code> has no content options. Every command takes <code>--json</code> (one object with a stable
     <code>reason</code> and a <code>next</code> step on refusals), and nothing that could hold other work (a file saved
     in the browser, an edited twin) is overwritten without <code>--force</code>, which keeps a <code>&lt;file&gt;~</code>
-    backup.</p>
+    backup — unless what it replaces is a <strong>known earlier state</strong>: what the CLI itself last wrote or read
+    for that pair, or a committed version of the twin in git. The robust way for scripts and agents: every command
+    prints the <code>sha256</code> of the text it wrote or read; pass it back as <code>--replaces &lt;sha256&gt;</code>
+    and the file is replaced only while it still holds that text. Exit status: 0 done, 1 refused or failed, 2 usage
+    error.</p>
     <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine, reveal.js and the 14 themes
     are inside the file (about 2.2&nbsp;MB), so it opens and presents without fetching the engine. <code>--cdn</code>
     writes a small file for decks you publish on the web; it loads the engine from jsDelivr,
-    <code>https://cdn.jsdelivr.net/npm/orz-slides-browser@1.0.0/orz-slides.browser.js</code> (the file's own version).
+    <code>https://cdn.jsdelivr.net/npm/orz-slides-browser@&lt;version&gt;/orz-slides.browser.js</code> (the file's own
+    version, e.g. <code>@1.0.0</code>).
     The themes ship inside the engine, so a <code>--cdn</code> file styles exactly like an inline one. Either way, the
     themes' webfonts, KaTeX, the content libraries (Mermaid, SMILES, Chart.js) and the editor load from CDNs the first
     time; without a network the deck still presents, in system fonts.</p>
@@ -142,16 +154,22 @@ npx orz-slides@1 talk.slides.md                                                 
   <section class="section" style="margin-top:34px">
     <h2>In the file: present, and one quiet pencil</h2>
     <p>A <code>.slides.html</code> opens as its deck. <span class="kbd">→</span> <span class="kbd">↓</span>
-    <span class="kbd">Space</span> <span class="kbd">PageDown</span> go forward, <span class="kbd">←</span>
-    <span class="kbd">↑</span> <span class="kbd">PageUp</span> back, <span class="kbd">Home</span> /
-    <span class="kbd">End</span> to the ends. A small pencil sits at the bottom-left: click it to edit; hover it (tap
-    on a touch screen) for everything else. A dot on the pencil means unsaved changes.</p>
+    <span class="kbd">Space</span> <span class="kbd">PageDown</span> <span class="kbd">N</span> go forward,
+    <span class="kbd">←</span> <span class="kbd">↑</span> <span class="kbd">PageUp</span>
+    <span class="kbd">Shift Space</span> <span class="kbd">P</span> <span class="kbd">Backspace</span> back,
+    <span class="kbd">Home</span> / <span class="kbd">End</span> to the ends. A small pencil sits at the bottom-left:
+    click it to edit; hover it (tap on a touch screen) for everything else — <strong>Present</strong>,
+    <strong>Overview</strong>, <strong>Speaker view</strong>, <strong>Print</strong>, Save and the deck's settings are
+    all in its list. A dot on the pencil means unsaved changes.</p>
     <div class="grid c2">
       <div class="card"><h3 style="margin-top:0">Present</h3><p><strong>Present</strong>
-      (<span class="kbd">F</span>) shows the deck alone, full screen; <strong>Overview</strong>
-      (<span class="kbd">O</span>) shows every slide; <strong>Speaker view</strong> (<span class="kbd">S</span>) opens
-      its own window with the current and next slide, the notes, a clock and a timer; <span class="kbd">T</span>
-      toggles the timer. A slide's <code>step</code> option reveals its points one at a time.</p></div>
+      (<span class="kbd">F</span>, from the pencil's list) shows the deck alone, full screen; <strong>Overview</strong>
+      (<span class="kbd">O</span>) shows every slide — <span class="kbd">Enter</span> or <span class="kbd">Esc</span>
+      closes it; <span class="kbd">Esc</span> also leaves Present, and otherwise opens the overview.
+      <strong>Speaker view</strong> (<span class="kbd">S</span>) opens its own window with the current and next slide,
+      the notes, a clock and a timer with <em>Pause</em> and <em>Reset</em> (if the browser blocks the pop-up, allow
+      pop-ups for the page and press <span class="kbd">S</span> again); <span class="kbd">T</span> toggles the timer. A
+      slide's <code>step</code> option reveals its points one at a time.</p></div>
       <div class="card"><h3 style="margin-top:0">Settings are the deck's</h3><p><strong>Theme, Ratio, Slide numbers,
       Progress bar</strong> and <strong>Section numbers</strong> in the pencil's list (or the editor's bar) write the
       text's header — one undoable edit, unsaved until you Save — and the deck follows.</p></div>
@@ -200,20 +218,32 @@ npx orz-slides@1 talk.slides.md                                                 
     <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text is the deck's config
     — and the only one. <code>new</code> writes <code>carrier</code> and a <code>uid</code>; leave the
     <code>uid</code> as it is.</p>
+    <div class="lzrow" style="grid-template-columns:minmax(0,1fr)">
 <pre>{{nyml
 kind: document
 carrier: slides
 uid: doc-7kq2m9x4p1r8s3t5
 title: Controlled Radical Polymerization
 author: Yu Wang
-theme: orchard           # one of the 14 themes (below); default orchard
-ratio: 16:9              # or 4:3
-footer: CHEM 512 · RAFT  # on every normal slide (title pages show none)
-transition: fade         # none · fade · slide · convex · concave · zoom (default none)
-slide_numbers: yes       # yes / no (default yes)
-progress: yes            # yes / no (default yes)
-section_numbers: roman   # plain · roman · 01 · none (default: the theme's)
+theme: orchard
+ratio: 16:9
+footer: CHEM 512 · RAFT
+transition: fade
+slide_numbers: yes
+progress: yes
+section_numbers: roman
 }}</pre>
+    </div>
+    <table>
+      <tr><th>Key</th><th>Values</th></tr>
+      <tr><td><code>theme</code></td><td>one of the 14 theme ids (<a href="#themes">below</a>); default <code>orchard</code></td></tr>
+      <tr><td><code>ratio</code></td><td><code>16:9</code> (default) or <code>4:3</code></td></tr>
+      <tr><td><code>footer</code></td><td>a line on every normal slide; template pages (title, section, outline, closing) show none</td></tr>
+      <tr><td><code>transition</code></td><td><code>none</code> (default) · <code>fade</code> · <code>slide</code> · <code>convex</code> · <code>concave</code> · <code>zoom</code></td></tr>
+      <tr><td><code>slide_numbers</code> · <code>progress</code></td><td><code>yes</code> (default) or <code>no</code></td></tr>
+      <tr><td><code>section_numbers</code></td><td><code>plain</code> · <code>roman</code> · <code>01</code> · <code>none</code> (default: the theme's)</td></tr>
+    </table>
+    <p>Write each value alone after its key: a header has no comments (text after a value becomes part of it).</p>
     <p>Also the common metadata keys (<code>description</code>, <code>date</code>, <code>keywords</code>,
     <code>source</code>, <code>license</code>, <code>lang</code>, …) that the file writes into its HTML head. Unknown
     keys are kept. A 0.x <code>&lt;!-- deck … --&gt;</code> block is no longer a config: it renders nothing and is
@@ -355,7 +385,7 @@ Yu Wang · October 2026
     <p>Add these to any <code>&lt;!-- slide … --&gt;</code> marker; an unknown option is reported.</p>
     <table>
       <tr><th>Option</th><th>Meaning</th></tr>
-      <tr><td><code>step</code></td><td>reveal the slide's blocks one at a time (each item of a top-level list)</td></tr>
+      <tr><td><code>step</code></td><td>reveal the slide's blocks one at a time — each item of a top-level list and every other top-level block, in order across boxes</td></tr>
       <tr><td><code>fit=fit</code> · <code>fit=scroll</code> · <code>fit=off</code></td><td>shrink to fit (default) · scroll on screen, fitted on paper · no fitting, cut when too long</td></tr>
       <tr><td><code>bg=#0b3d2e</code></td><td>the slide's background: a colour or an image URL</td></tr>
       <tr><td><code>t=fade</code></td><td>this slide's transition</td></tr>
@@ -367,16 +397,20 @@ Yu Wang · October 2026
   </section>
 
   <!-- THEMES -->
-  <section class="section" style="margin-top:34px">
+  <section class="section" id="themes" style="margin-top:34px">
     <h2>Fourteen themes</h2>
     <p>Each theme carries the parts only decks have — title band, title, section, outline and closing pages, slide
     number, progress, footer, fragments, boxes, floats. Ten are derived from
-    <a href="./features.html">orz-markdown's themes</a>: <strong>Orchard</strong> (the default), <strong>Sky</strong>,
-    <strong>Stationery</strong>, <strong>Preprint</strong>, <strong>Small Press</strong>, <strong>Notebook</strong> (a
-    ruled exercise book), <strong>Sticker</strong>, and the dark <strong>Inscription</strong>,
-    <strong>Copper</strong> and <strong>Nocturne</strong>. Four come from 0.x, updated: <strong>Architect</strong> (a
-    drafting sheet), <strong>Chalk</strong> (a chalkboard, dark), <strong>Neon</strong> (an instrument panel, dark) and
-    <strong>Paper</strong> (a finely printed book). Dark themes draw charts and diagrams on dark. The orz-markdown theme
+    <a href="./features.html#themes">orz-markdown's themes</a>: <strong>Orchard</strong> <code>orchard</code> (the
+    default), <strong>Sky</strong> <code>sky</code>, <strong>Stationery</strong> <code>stationery</code>,
+    <strong>Preprint</strong> <code>preprint</code>, <strong>Small Press</strong> <code>small-press</code>,
+    <strong>Notebook</strong> <code>notebook</code> (a ruled exercise book), <strong>Sticker</strong>
+    <code>sticker</code>, and the dark <strong>Inscription</strong> <code>inscription</code>, <strong>Copper</strong>
+    <code>copper</code> and <strong>Nocturne</strong> <code>nocturne</code>. Four come from 0.x, updated:
+    <strong>Architect</strong> <code>architect</code> (a drafting sheet), <strong>Chalk</strong> <code>chalk</code> (a
+    chalkboard, dark), <strong>Neon</strong> <code>neon</code> (an instrument panel, dark) and <strong>Paper</strong>
+    <code>paper</code> (a finely printed book). The id is what the header's <code>theme:</code> takes;
+    <code>orz-slides themes</code> lists them. Dark themes draw charts and diagrams on dark. The orz-markdown theme
     ids (<code>light-neat-3</code>, …) are accepted as aliases.</p>
   </section>
 
@@ -391,7 +425,7 @@ Yu Wang · October 2026
     a <code>quad</code> cell, and a title of about 6 words on one line. Prefer two slides over one crowded one.</p>
 <pre>npx orz-slides@1 inspect talk.slides.md --layout --json   # per slide and box: scale (1 = unscaled, 0.6 = the floor) and clipped</pre>
     <p><code>--layout</code> renders the deck in the installed Chrome (headless; <code>--offline</code> blocks the
-    network). Aim for no clipped box and no scale below about 0.85. The agent skill lists the full budgets, for 16:9
+    network; <code>ORZ_SLIDES_CHROME</code> names a Chrome when it is not found). Aim for no clipped box and no scale below about 0.85. The agent skill lists the full budgets, for 16:9
     and 4:3.</p>
   </section>
 
@@ -403,7 +437,7 @@ Yu Wang · October 2026
     <table>
       <tr><th>Write</th><th>Get</th></tr>
       <tr><td><code>{{mermaid …}}</code></td><td>Mermaid flowcharts &amp; sequence diagrams</td></tr>
-      <tr><td><code>{{chart …}}</code></td><td>bar / line / pie / doughnut charts</td></tr>
+      <tr><td><code>{{chart …}}</code></td><td>bar / line / pie / doughnut / radar / polarArea charts</td></tr>
       <tr><td><code>{{smiles …}}</code></td><td>chemical structures (SMILES)</td></tr>
       <tr><td><code>{{qr …}}</code></td><td>QR codes</td></tr>
       <tr><td><code>$…$</code> · <code>$$…$$</code> · <code>\ce{…}</code></td><td>KaTeX math and chemical equations</td></tr>
@@ -415,8 +449,9 @@ Yu Wang · October 2026
   <section class="section" style="margin-top:34px">
     <h2>Older decks and web apps</h2>
     <div class="grid c2">
-      <div class="card"><h3 style="margin-top:0">0.x decks: inspect, then upgrade</h3><p>A file or deck source made by
-      orz-slides 0.8.5 or earlier keeps its source, but 1.0 does not open it as it is. Upgrade each once:</p>
+      <div class="card" id="upgrading"><h3 style="margin-top:0">0.x decks: inspect, then upgrade</h3><p>A file or deck
+      source made by orz-slides 0.8.5 or earlier still opens and presents as it was, but the 1.0 tools and editor work
+      on it only after a one-time upgrade:</p>
 <pre>npx orz-slides@1 inspect old.slides.html   # what it is, what upgrade changes
 npx orz-slides@1 upgrade old.slides.html   # → 1.0 file + old.slides.md
 npx orz-slides@1 upgrade deck.md           # a 0.x source → deck.slides.md</pre>
@@ -425,7 +460,9 @@ npx orz-slides@1 upgrade deck.md           # a 0.x source → deck.slides.md</pr
       <code>sky</code>, <code>sticker</code> and <code>orchard</code>), and a report lists every difference against
       what 0.8.5 showed. Slides are now 1280&nbsp;×&nbsp;720, so content sized for 0.x has more room. A 0.x file's own
       &ldquo;Framework 1.0.0 available&rdquo; offer cannot make that move — dismiss it and run
-      <code>upgrade</code>.</p></div>
+      <code>upgrade</code>. The old <code>deck.md</code> stays as it was: once <code>deck.slides.md</code> is right,
+      delete it or keep it as a record (the 1.0 tools do not use it). 0.x's presentation-only <em>Export</em> is gone:
+      use <em>Download a copy</em>, or <em>Print</em> → <em>Save as PDF</em>.</p></div>
       <div class="card"><h3 style="margin-top:0">In a web app</h3><p>The editor is a component:
       <code>npm i orz-slides-browser@1</code>, then <code>mountEditor(element, { text, hooks })</code> (ES module, or
       <code>globalThis.OrzCarrier</code> from the IIFE) — the flattened preview, the live slide card and single-slide
@@ -444,8 +481,15 @@ npx orz-slides@1 upgrade deck.md           # a 0.x source → deck.slides.md</pr
     <div class="callout amber"><strong>In-place Save needs a Chromium-based browser</strong> (Chrome or
     Edge); elsewhere, save downloads a copy. Presenting, editing (both ways), and printing work in any modern
     browser.</div>
+    <div class="callout" style="margin-top:14px"><strong>These files are programs.</strong> Opening a
+    <code>.slides.html</code> runs the engine inside it and anything in its content; open and edit files only from
+    sources you trust — a file cannot prove its own integrity (the <a href="./verify.html">verifier</a> helps). The
+    quiet update only fetches this engine's own jsDelivr package, checks its SHA-384, and changes nothing until you
+    click <em>Update now</em>. In the editor, the deck's own scripts run only in the sandboxed preview.</div>
     <footer><div class="row">
       <a href="./family.html#slides">← The family</a>
+      <a href="./mdhtml.html">Documents (orz-mdhtml)</a>
+      <a href="./paged.html">Print (orz-paged)</a>
       <a href="https://github.com/wangyu16/orz-slides">orz-slides on GitHub</a>
       <a href="https://www.npmjs.com/package/orz-slides">orz-slides on npm</a>
       <a href="./guide.html">Guide</a>

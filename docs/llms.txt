@@ -11,11 +11,12 @@
 - [Homepage](https://markdown.orz.how/): product overview and live demo
 - [The editable document family](https://markdown.orz.how/family.html): choose mdhtml, slides, or paged
 - [Feature showcase](https://markdown.orz.how/features.html): math, diagrams, themes, rich formatting, and copy as Markdown
-- [Guide](https://markdown.orz.how/guide.html): browser, CLI, and parser workflows
+- [Guide](https://markdown.orz.how/guide.html): browser, CLI, and parser workflows, a glossary, and [upgrading 0.x files](https://markdown.orz.how/guide.html#upgrading)
 - [Live editor](https://markdown.orz.how/editor.html): try orz-markdown without installing anything
 
 ## Product references
 
+- [orz-mdhtml documents](https://markdown.orz.how/mdhtml.html): orz-mdhtml 1.0, text twin, header, themes, delivery, browser support, CLI, upgrading 0.x, embedding
 - [orz-slides decks and layouts](https://markdown.orz.how/slides.html): orz-slides 1.0, text twin, layout grammar, themes, CLI
 - [orz-paged documents and layout](https://markdown.orz.how/paged.html): orz-paged 1.0, templates, print themes, CLI
 - [Document verifier](https://markdown.orz.how/verify.html)
@@ -38,3 +39,9 @@
 - [orz-mdhtml on npm](https://www.npmjs.com/package/orz-mdhtml)
 - [orz-slides on npm](https://www.npmjs.com/package/orz-slides)
 - [orz-paged on npm](https://www.npmjs.com/package/orz-paged)
+
+## Embedding the editors in web apps
+
+- orz-mdhtml-browser ([npm](https://www.npmjs.com/package/orz-mdhtml-browser)): [embedding guide](https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md)
+- orz-slides-browser ([npm](https://www.npmjs.com/package/orz-slides-browser)): [embedding guide](https://github.com/wangyu16/orz-slides/blob/main/docs/embedding.md)
+- orz-paged-browser ([npm](https://www.npmjs.com/package/orz-paged-browser)): [embedding guide](https://github.com/wangyu16/orz-paged/blob/main/docs/embedding.md)

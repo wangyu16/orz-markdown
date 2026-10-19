@@ -27,6 +27,9 @@
     <a href="./" class="here">Home</a>
     <a href="./features.html">Features</a>
     <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
     <a href="./guide.html">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -39,6 +42,7 @@
   <section class="hero"><div class="wide hero-grid">
     <div>
       <h1>Markdown that edits itself</h1>
+      <p class="stamp">This site describes orz-markdown 2.4 · orz-mdhtml 1.0 · orz-slides 1.0 · orz-paged 1.0</p>
       <p class="lead">A customized Markdown parser, plus a family of <strong>self-editing</strong>
       HTML documents that carry their own source. Write in Markdown; get one <code>.html</code> that renders anywhere, edits and saves
       in place, and copies back to clean Markdown.</p>
@@ -72,15 +76,16 @@ Ships **Friday**. Mass-energy: $E = mc^2$.
   <section class="wide section home-showcase-section">
     <p class="eyebrow">See the workflow</p>
     <h2 style="margin-top:.1em">Write, render, edit — without leaving the file</h2>
-    <p class="lead" style="max-width:680px">An orz-mdhtml document carries its Markdown source, renderer, themes,
-      and editor together. Open one file, read it, edit it in place, and save the Markdown back.</p>
+    <p class="lead" style="max-width:680px">An orz-mdhtml document carries its Markdown source and the engine
+      that renders and edits it. Open one file, read it, edit it in place, and save the Markdown back.
+      (Its themes, math styles and the editor load from CDNs, so it needs a network connection the first time.)</p>
     <figure class="feature-showcase home-showcase">
-      <a href="./family.html#mdhtml" aria-label="Learn more about orz-mdhtml">
+      <a href="./mdhtml.html" aria-label="Learn more about orz-mdhtml">
         <img src="./media/orz-mdhtml-demo.gif" width="820" height="513" loading="lazy" decoding="async"
           alt="An orz-mdhtml document switching from rendered reading view to its built-in Markdown editor, updating the preview live, and changing themes.">
       </a>
       <figcaption>One <code>.md.html</code> file: reading view, live editing, theme switching, and
-        clean Markdown round-tripping. <a href="./family.html#mdhtml">Explore orz-mdhtml →</a></figcaption>
+        clean Markdown round-tripping. <a href="./mdhtml.html">Explore orz-mdhtml →</a></figcaption>
     </figure>
   </section>
 
@@ -101,7 +106,7 @@ Ships **Friday**. Mass-energy: $E = mc^2$.
         <div class="chd"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 4h14"/><path d="M7 4l6 8-6 8h10"/></svg></span><h3>KaTeX math</h3></div><p>Inline and display math, with mhchem for chemistry, rendered at parse time.</p>
         <span class="more">See it live →</span></a>
       <a class="card link" href="./features.html#diagrams">
-        <div class="chd"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l8 0M7 8l4 8M17 8l-4 8"/></svg></span><h3>Diagrams</h3></div><p>Flowcharts, charts, and chemical structures from plain text in the page.</p>
+        <div class="chd"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l8 0M7 8l4 8M17 8l-4 8"/></svg></span><h3>Diagrams</h3></div><p>Mermaid flowcharts, six chart types, and chemical structures from plain text, in the theme's colours.</p>
         <span class="more">See them live →</span></a>
       <a class="card link" href="./features.html#themes">
         <div class="chd"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="9.5" r="1.3"/><circle cx="15.5" cy="9.5" r="1.3"/><circle cx="9" cy="15" r="1.3"/></svg></span><h3>Twelve themes</h3></div><p>Light and dark, academic to playful, styling the full rendered output.</p>
@@ -117,14 +122,15 @@ Ships **Friday**. Mass-energy: $E = mc^2$.
     <p class="eyebrow">One engine, three shapes</p>
     <h2 style="margin-top:.1em">The editable document family</h2>
     <p class="lead" style="max-width:640px">Each tool turns your Markdown into a single, self-editing
-    HTML file you save in place. Pick the shape your document needs.</p>
+    HTML file you save in place. Pick the shape your document needs. Have a file from an older (0.x) release?
+    <a href="./guide.html#upgrading">Upgrade it in one command</a>.</p>
     <div class="grid c3" style="margin-top:6px">
       <div class="card">
         <span class="ext">.md.html</span><h3 style="margin-top:.5em">orz-mdhtml</h3>
         <p>A continuous document (articles, notes, READMEs) with live side-by-side editing.</p>
         <div class="card-actions">
           <a class="btn" href="./starters/new-mdhtml.md.html?v=1.0.1" target="_blank" rel="noopener">New document</a>
-          <a class="btn ghost" href="./family.html#mdhtml">Learn more</a>
+          <a class="btn ghost" href="./mdhtml.html">Learn more</a>
         </div>
       </div>
       <div class="card">
@@ -132,7 +138,7 @@ Ships **Friday**. Mass-energy: $E = mc^2$.
         <p>A slide deck you present and edit from one file: 14 themes, layouts, speaker view.</p>
         <div class="card-actions">
           <a class="btn" href="./starters/new-slides.slides.html?v=1.0.0" target="_blank" rel="noopener">New deck</a>
-          <a class="btn ghost" href="./family.html#slides">Learn more</a>
+          <a class="btn ghost" href="./slides.html">Learn more</a>
         </div>
       </div>
       <div class="card">
@@ -140,7 +146,7 @@ Ships **Friday**. Mass-energy: $E = mc^2$.
         <p>A paginated print document. Export to a perfect PDF by printing, no server.</p>
         <div class="card-actions">
           <a class="btn" href="./starters/new-paged.paged.html?v=1.0.0" target="_blank" rel="noopener">New print doc</a>
-          <a class="btn ghost" href="./family.html#paged">Learn more</a>
+          <a class="btn ghost" href="./paged.html">Learn more</a>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ const pages = [
   { file: 'agents.html', url: `${origin}/agents.html` },
   { file: 'verify.html', url: `${origin}/verify.html` },
   { file: 'editor.html', url: `${origin}/editor.html` },
+  { file: 'mdhtml.html', url: `${origin}/mdhtml.html` },
   { file: 'slides.html', url: `${origin}/slides.html` },
   { file: 'paged.html', url: `${origin}/paged.html` },
 ] as const;

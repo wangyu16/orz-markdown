@@ -27,6 +27,9 @@
     <a href="./">Home</a>
     <a href="./features.html" class="here">Features</a>
     <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
     <a href="./guide.html">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -37,6 +40,7 @@
 <main>
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <h1>Everything below is real output</h1>
+    <p class="stamp">This page describes orz-markdown 2.4, the syntax every orz document uses</p>
     <p class="lead" style="max-width:660px">Each example is rendered in your browser by orz-markdown itself,
     right now. Source on the left, the actual result on the right. Want to play? Drop any of it into
     <a href="./editor.html">the editor</a>.</p>
@@ -61,13 +65,17 @@ Reactions {{emoji tada}} {{emoji rocket}} and
 {{sp[yellow] gold}} or {{sp[blue] blue}} text.
       </script>
     </div>
+    <div class="callout amber" style="margin-top:14px"><strong>Common mistake:</strong> a fenced code block named after a
+    plugin renders as plain code, with no warning. Write <code>{{mermaid</code> … <code>}}</code>, not
+    <code>```mermaid</code> … <code>```</code> — and the same for <code>{{chart …}}</code>, <code>{{smiles …}}</code> and
+    <code>{{qr …}}</code>. There is no closing tag: every directive ends with <code>}}</code>.</div>
     <details class="reveal"><summary>Full plugin reference</summary><div class="body">
       <table>
         <tr><th>Plugin</th><th>Example</th><th>Result</th></tr>
-        <tr><td><code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>inline QR (scannable, click to enlarge)</td></tr>
-        <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed (an id or a YouTube URL; <code>?t=42</code> sets the start)</td></tr>
+        <tr><td><code>qrcode</code> / <code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>inline QR (scannable, click to enlarge; full size when alone in its paragraph)</td></tr>
+        <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed (an id or a YouTube URL; <code>?t=42</code> sets the start); prints as its address</td></tr>
         <tr><td><code>mermaid</code> / <code>mm</code></td><td><code>{{mm⏎graph LR⏎A--&gt;B⏎}}</code></td><td>a diagram</td></tr>
-        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie / doughnut charts</td></tr>
+        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie / doughnut / radar / polarArea charts in the theme's colours (no size or axis-title keys)</td></tr>
         <tr><td><code>smiles</code> / <code>sm</code></td><td><code>{{sm C1=CC=CC=C1}}</code></td><td>a chemical structure</td></tr>
         <tr><td><code>emoji</code> / <code>em</code></td><td><code>{{emoji wave}}</code></td><td>emoji by name</td></tr>
         <tr><td><code>span</code> / <code>sp</code></td><td><code>{{sp[red] text}}</code></td><td>colored / badged spans</td></tr>
@@ -110,7 +118,9 @@ Right column
       <p>Callouts: <code>info</code>, <code>success</code>, <code>warning</code>, <code>danger</code>.
       Layout: <code>left</code> / <code>right</code> / <code>center</code>, <code>cols</code>, <code>tabs</code>,
       <code>spoil</code> (spoiler). Any other <code>::: ClassName</code> becomes a
-      <code>&lt;div class="ClassName"&gt;</code>, so you can style your own.</p>
+      <code>&lt;div class="ClassName"&gt;</code>, so you can style your own. Printed, every tab shows under its label.</p>
+      <p><strong>Nesting:</strong> every level that holds another container needs more colons than what it holds — a
+      callout inside a column is <code>::::: cols</code> › <code>:::: col</code> › <code>::: info</code>.</p>
       <pre><code>::: info        ::::  cols 1 2        :::: tabs
 …content…       ::: col              ::: tab One
 :::             …                    …
@@ -143,7 +153,8 @@ A reaction: $\ce{CO2 + H2O -> H2CO3}$
   <section class="section" id="diagrams" style="margin-top:30px">
     <h2>Diagrams &amp; charts</h2>
     <p class="lead" style="font-size:1.12rem;max-width:680px">Flowcharts, data charts, and chemistry, all from
-    plain text. (These libraries load on demand.)</p>
+    plain text, drawn in the theme's colours. (These libraries load on demand, and draw only once their part
+    of the page is visible.)</p>
     <div class="demo split" data-demo>
       <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
       <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
@@ -182,7 +193,31 @@ data: 3, 7, 5
         <div style="height:64px;background:linear-gradient(135deg,#fff7ef,#fde9e3)"></div>
         <div style="padding:13px 16px"><strong>Playful</strong><p style="margin:.2em 0 0">Hand-drawn: a ruled notebook and a sketchbook.</p></div></div>
     </div>
+    <p style="margin-top:14px">The twelve, by name and id (the id is what a header's <code>theme:</code> takes):
+    Orchard <code>light-neat-3</code> (the default for documents), Neat <code>light-neat-1</code>, Neat 2
+    <code>light-neat-2</code>, Academic <code>light-academic-1</code>, Academic 2 <code>light-academic-2</code>, Beige
+    <code>beige-decent-1</code>, Beige 2 <code>beige-decent-2</code>, Playful <code>light-playful-1</code> (a ruled
+    notebook), Playful 2 <code>light-playful-2</code> (a sketchbook), Dark Elegant <code>dark-elegant-1</code>, Dark
+    Elegant 2 <code>dark-elegant-2</code>, Nocturne <code>dark-elegant-3</code>.</p>
+    <p><strong>Line length is the reader's choice:</strong> every theme reads at about 70 characters a line;
+    <code>measure-wide</code> gives about 90 (tables, code, dense notes) and <code>measure-full</code> the whole width —
+    in an <code>.md.html</code>, the header's <code>measure: wide</code> or <code>full</code>.</p>
     <p style="margin-top:16px"><a class="btn ghost" href="./editor.html">Try every theme in the editor →</a></p>
+  </section>
+
+  <!-- EXTRAS -->
+  <section class="section" id="extras" style="margin-top:30px">
+    <h2>Markdown extras that are always on</h2>
+    <table>
+      <tr><th>Write</th><th>Get</th></tr>
+      <tr><td><code>Text[^1]</code> · <code>[^1]: The note.</code> · <code>^[inline note]</code></td><td>footnotes, numbered in one list at the end</td></tr>
+      <tr><td><code>- [x] done</code> · <code>- [ ] to do</code></td><td>task lists</td></tr>
+      <tr><td><code>![alt](pic.png =400x)</code></td><td>an image 400 px wide (<code>=WxH</code>, either side optional)</td></tr>
+      <tr><td><code>==mark==</code> · <code>++inserted++</code> · <code>~~deleted~~</code> · <code>H~2~O</code> · <code>x^2^</code></td><td>highlight, insert, strike, sub- and superscript</td></tr>
+      <tr><td><code>https://orz.how</code> · <code>www.orz.how</code></td><td>bare addresses become links</td></tr>
+      <tr><td><code>--</code> · <code>---</code> · <code>...</code> · <code>"quotes"</code></td><td>– · — · … · “curly quotes” (write a code span for the literal text)</td></tr>
+      <tr><td><code>![…](fig.png)</code> then <code>*Figure 1.* …</code> · <code>**Table 1.** …</code> then a table</td><td>captions: a figure's after it, a table's before it (a convention; Markdown has no caption syntax)</td></tr>
+    </table>
   </section>
 
   <!-- CJK -->

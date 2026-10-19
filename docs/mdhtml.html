@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orz-mdhtml — documents · orz-markdown</title>
+<meta name="description" content="orz-mdhtml 1.0: Markdown that edits itself as a continuous, themed web document. A .md text twin and its self-editing .md.html file, twelve themes, three line lengths, the pencil and the editor, saving in place, the quiet update, delivery and browser support, upgrading 0.x files, embedding the editor, and the orz-mdhtml CLI (new, assemble, extract, upgrade, inspect, themes).">
+<link rel="canonical" href="https://markdown.orz.how/mdhtml.html">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="orz-markdown">
+<meta property="og:title" content="orz-mdhtml documents">
+<meta property="og:description" content="Editable Markdown documents in one file: a text twin, a themed read view, an editor beside a live preview, save in place.">
+<meta property="og:url" content="https://markdown.orz.how/mdhtml.html">
+<meta property="og:image" content="https://markdown.orz.how/media/orz-markdown-social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./site.css">
+<style>
+  .grid > .card { min-width:0; }
+  .card pre { overflow-x:auto; }
+</style>
+</head>
+<body>
+<nav class="top"><div class="bar">
+  <a class="brand" href="./"><img src="./orz.svg" alt=""> orz-markdown</a>
+  <input class="nav-toggle" id="site-nav-toggle" type="checkbox" aria-label="Toggle navigation">
+  <label class="nav-toggle-label" for="site-nav-toggle">Menu</label>
+  <span class="links">
+    <a href="./">Home</a>
+    <a href="./features.html">Features</a>
+    <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)" class="here">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
+    <a href="./guide.html">Guide</a>
+    <a href="./verify.html">Verify</a>
+    <a href="./agents.html">For agents</a>
+    <a class="cta" href="./editor.html">Open editor</a>
+  </span>
+</div></nav>
+
+<main>
+  <section class="hero" style="padding:52px 0 14px"><div class="wide">
+    <span class="ext">.md.html</span>
+    <h1 style="margin:.3em 0 .15em">orz-mdhtml — documents</h1>
+    <p class="stamp">This page describes orz-mdhtml 1.0 (orz-mdhtml-browser 1.0), on orz-markdown 2.4</p>
+    <p class="lead" style="max-width:730px">Markdown that edits itself, as a continuous document that reads like a
+    themed web page: notes, handouts, articles, READMEs. This page covers the text and its file, reading, editing and
+    saving, the header, themes and line length, delivery and browsers, the CLI, older files and web apps. Part of
+    <a href="./family.html#mdhtml">the orz editable-document family</a>, with <a href="./slides.html">orz-slides</a>
+    (decks) and <a href="./paged.html">orz-paged</a> (print). New to the words "text twin", "assemble" or "shell"? See
+    <a href="./guide.html#words">the guide's short glossary</a>.</p>
+  </div></section>
+
+  <div class="wide">
+
+  <!-- AI-FIRST NOTE -->
+  <section class="section" style="margin-top:8px">
+    <div class="callout">
+      <strong>You don't have to learn any of this.</strong> Start from the
+      <a href="./starters/new-mdhtml.md.html?v=1.0.1" target="_blank" rel="noopener">blank .md.html starter</a> (or
+      <code>npx orz-mdhtml@1 new notes.md</code>) and write. For anything beyond that, <strong>ask an AI agent</strong>:
+      point it at the <strong>orz-mdhtml agent skill</strong>
+      (<a href="https://cdn.jsdelivr.net/npm/orz-mdhtml@1/orz-mdhtml-skills/SKILL.md"><code>orz-mdhtml-skills/SKILL.md</code></a>)
+      and say what you want — &ldquo;turn these notes into a handout,&rdquo; &ldquo;check this file and bring it up to
+      date.&rdquo; This page is the reference the agent (and curious humans) can draw on.
+    </div>
+  </section>
+
+  <!-- WHAT IT IS -->
+  <section class="section" style="margin-top:34px">
+    <h2>A text twin and a self-editing file</h2>
+    <p>A document is its <strong>text twin</strong> — <code>notes.md</code>, plain Markdown with a small header at the
+    top — and its <strong>self-editing file</strong> <code>notes.md.html</code>, one HTML page that reads like a themed
+    website, edits itself in the browser and saves back in place. The file is always built from the text
+    (<code>orz-mdhtml assemble</code>): the exact text rides inside it (byte for byte, line endings kept), everything
+    else is a shell that can be rebuilt, and <code>orz-mdhtml extract</code> gives the text back. Keep the
+    <code>.md</code> in your repository or hand it to an agent; make the <code>.md.html</code> whenever someone needs a
+    file. A relative link to another text (<code>[Week 2](week2.md)</code>) becomes a link to its
+    <code>.md.html</code> in the file.</p>
+    <div class="grid c3">
+      <div class="card"><h3 style="margin-top:0">A quiet read view</h3><p>The document is rendered in the page with the
+      header's theme and line length; math, code highlighting, diagrams, chemistry and charts are drawn once their
+      libraries arrive. Copying rendered content copies Markdown.</p></div>
+      <div class="card"><h3 style="margin-top:0">One pencil</h3><p>The page shows one control, a small pencil at the
+      bottom-left. Click it to edit; hover it (tap it on a touch screen, or Tab to it and press
+      <span class="kbd">↑</span>) for everything else.</p></div>
+      <div class="card"><h3 style="margin-top:0">One family</h3><p>The same text twin, pencil, editor, saving, quiet
+      update, host protocols and CLI as <a href="./slides.html">orz-slides</a> and
+      <a href="./paged.html">orz-paged</a> 1.0 — built on the orz-markdown carrier kit. The content is full
+      <a href="./features.html">orz-markdown</a>.</p></div>
+    </div>
+    <p style="opacity:.75;font-size:.95em;margin-top:14px">Published on npm as <code>orz-mdhtml</code> (CLI and Node
+    library) and <code>orz-mdhtml-browser</code> (engine and editor component), always the same version.</p>
+  </section>
+
+  <!-- IN THE FILE -->
+  <section class="section" style="margin-top:34px">
+    <h2>In the file: read, edit, save</h2>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">The pencil's list</h3><p><strong>Edit</strong>, <strong>Save</strong>,
+      <em>Download a copy</em>, <em>New document</em>, <em>Save as new copy</em> (the same text with a new
+      <code>uid</code>), <strong>Theme</strong>, <strong>Width</strong>, <strong>Text size</strong> and, when there is
+      one, the update. A dot on the pencil means unsaved changes; the page asks before it closes with unsaved
+      changes.</p></div>
+      <div class="card"><h3 style="margin-top:0">Edit</h3><p>The pencil (or <span class="kbd">Ctrl/⌘ E</span>) opens
+      the editor: CodeMirror beside a live preview — split, editor only or preview only — with Theme and Width pickers
+      that edit the header, and undo per document. <strong>Done</strong> goes back to the read view;
+      <strong>More</strong> has <em>Download a copy</em>, <em>New document</em> and <em>Save as new copy</em>. The bar
+      ends with the orz seal (this site) and the GitHub link.</p></div>
+      <div class="card"><h3 style="margin-top:0">Theme and width are the document's</h3><p>They live in the header, so
+      choosing one — in the editor or from the read view — changes the document: it is unsaved until you Save, and
+      <span class="kbd">Ctrl/⌘ Z</span> undoes it. <strong>Text size</strong> (80–160&nbsp;%) is yours, not the
+      document's: kept in this browser for this document, never saved into the file.</p></div>
+      <div class="card"><h3 style="margin-top:0">Save</h3><p><strong>Save</strong> (<span class="kbd">Ctrl/⌘ S</span>)
+      writes the file again from the text — never the live page — back in place (Chromium), or downloads it. If the
+      file changed on disk since the page opened it (another program, an agent, an <code>orz-mdhtml assemble</code>),
+      Save asks: <em>Replace it</em> or <em>Download a copy instead</em>. A page opened from a website cannot be saved
+      over: use <em>Download a copy</em>.</p></div>
+    </div>
+    <p style="margin-top:12px"><strong>Keys.</strong> <span class="kbd">Ctrl/⌘ E</span> edit / done ·
+    <span class="kbd">Ctrl/⌘ S</span> save · <span class="kbd">Ctrl/⌘ Z</span> undo,
+    <span class="kbd">Shift Ctrl/⌘ Z</span> redo · in the editor <span class="kbd">Ctrl/⌘ \</span> cycles split / editor /
+    preview and <span class="kbd">Esc</span> leaves the text for the toolbar · <span class="kbd">Ctrl/⌘ P</span> in the
+    editor's preview prints the page (in the read view it is the browser's own print).</p>
+    <p><strong>A quiet update.</strong> A local file checks at most once a day whether a newer release of its engine
+    exists; the pencil then gets a small dot and its list offers <em>Update to x.y.z</em> (in the editor, an "Update
+    available" chip). <em>Update now</em> rebuilds the file from the same text with the new release (its bundle checked
+    by SHA-384) and saves it; nothing changes until you ask. Served pages, framed pages and pages with a host never
+    check.</p>
+  </section>
+
+  <!-- HEADER -->
+  <section class="section" style="margin-top:34px">
+    <h2>The header</h2>
+    <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text holds the
+    document's metadata and settings. <code>new</code> writes <code>carrier</code> and a <code>uid</code>; leave the
+    <code>uid</code> as it is.</p>
+<pre>{{nyml
+kind: document
+carrier: md
+uid: doc-7kq2m9x4p1r8s3t5
+title: Cell Biology — Week 3
+author: Yu Wang
+lang: en
+theme: light-academic-1
+measure: wide
+license: CC-BY-4.0
+}}
+
+# Cell Biology — Week 3</pre>
+    <table>
+      <tr><th>Key</th><th>Values</th></tr>
+      <tr><td><code>theme</code></td><td>a theme id (<a href="#themes">below</a>); default <code>light-neat-3</code> (Orchard)</td></tr>
+      <tr><td><code>measure</code></td><td>the line length: <code>normal</code> (about 70 characters, the default), <code>wide</code> (about 90), <code>full</code> (the whole window) — <em>Width</em> in the pencil's list</td></tr>
+      <tr><td><code>lang</code></td><td>the language (BCP 47), default <code>en</code></td></tr>
+      <tr><td><code>title</code>, <code>author</code>, <code>description</code>, <code>date</code>, <code>keywords</code>, <code>source</code>, <code>license</code> / <code>license_name</code> / <code>license_url</code></td><td>metadata, written into the file's HTML head; no <code>title</code>? the first heading is the title</td></tr>
+      <tr><td><code>carrier</code>, <code>uid</code></td><td>written by <code>new</code>: <code>md</code> and the document's id</td></tr>
+    </table>
+    <p>One <code>key: value</code> per line (<code>key: |</code> for several lines), no comments (text after a value
+    becomes part of it). Unknown keys are kept; your own tool's keys start with <code>x_&lt;tool&gt;_</code>. A Markdown
+    file with no header is fine too — the tool treats it as a document without a <code>uid</code>; to give it one, run
+    <code>npx orz-mdhtml@1 new</code> with no file name and paste the header it prints at the top.</p>
+  </section>
+
+  <!-- THEMES -->
+  <section class="section" id="themes" style="margin-top:34px">
+    <h2>Twelve themes</h2>
+    <p>The <a href="./features.html#themes">orz-markdown themes</a>, by name and id (<code>orz-mdhtml themes</code> lists
+    them): Orchard <code>light-neat-3</code> (the default), Neat <code>light-neat-1</code>, Neat 2
+    <code>light-neat-2</code>, Academic <code>light-academic-1</code>, Academic 2 <code>light-academic-2</code>, Beige
+    <code>beige-decent-1</code>, Beige 2 <code>beige-decent-2</code>, Playful <code>light-playful-1</code> (a ruled
+    notebook on screen: text on the lines, tables and code pasted on as sheets), Playful 2 <code>light-playful-2</code>,
+    and the dark Dark Elegant <code>dark-elegant-1</code>, Dark Elegant 2 <code>dark-elegant-2</code> and Nocturne
+    <code>dark-elegant-3</code>.</p>
+  </section>
+
+  <!-- CLI -->
+  <section class="section" style="margin-top:34px">
+    <h2>Create and build with the CLI</h2>
+    <p>Node 20.16 or newer; nothing to install with <code>npx</code> (or <code>npm i -g orz-mdhtml@1</code>):</p>
+<pre>npx orz-mdhtml@1 new notes.md --title "Field notes"   # a new text twin
+# edit notes.md (by hand or with an agent), then:
+npx orz-mdhtml@1 notes.md                             # → notes.md.html</pre>
+    <table>
+      <tr><th>Command</th><th>What it does</th></tr>
+      <tr><td><code>orz-mdhtml new [x.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn]</code></td><td>writes a new text twin: a header with <code>carrier: md</code>, a fresh <code>uid</code> and the given keys, then a starter body; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
+      <tr><td><code>orz-mdhtml assemble x.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.md.html</code> from the text — the same bytes every time (also: <code>orz-mdhtml x.md</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it). An include left out shows an "Included file not available" note and is reported once with why (<code>unresolved</code> in <code>--json</code>; <code>stale</code> when its file changed since); the CLI fetches no URL includes</td></tr>
+      <tr><td><code>orz-mdhtml extract x.md.html [-o out] [--replaces sha256]</code></td><td>writes the exact text twin back out of a file (<code>-o -</code>: to stdout)</td></tr>
+      <tr><td><code>orz-mdhtml upgrade old.md.html [-o out] [--text t | --no-text] [--cdn | --inline]</code></td><td>turns a 0.x file (or an older 1.x shell) into a file of this version, in place by default, and writes its text twin; also repairs a damaged engine</td></tr>
+      <tr><td><code>orz-mdhtml inspect &lt;file&gt; [--json]</code></td><td>says what any text or file is — version, delivery, <code>uid</code>, header, lint, whether the file is intact, whether its twin holds the same text and which is newer — and what to do next, naming your files</td></tr>
+      <tr><td><code>orz-mdhtml themes</code></td><td>lists the theme ids a header may name</td></tr>
+    </table>
+    <p style="margin-top:12px">Content — title, theme, width, language, metadata — comes only from the text's header;
+    <code>assemble</code> has no content options (<code>--title</code>, <code>--theme</code> are refused with a pointer
+    to the header). Nothing that could hold other work (a file saved in the browser, an edited twin, another document)
+    is overwritten without <code>--force</code>, which keeps a <code>&lt;file&gt;~</code> backup — unless what it replaces
+    is a <strong>known earlier state</strong>: what the CLI itself last wrote or read for that pair, or a committed
+    version of the twin in git (a shallow clone knows only its last commit).</p>
+    <p><strong>For scripts and agents.</strong> Every command takes <code>--json</code>: one object on stdout, and on a
+    refusal <code>{ "ok": false, "error", "reason", "next" }</code> — <code>reason</code> is a stable code
+    (<code>twin-differs</code>, <code>replaces-mismatch</code>, <code>legacy-file</code>, <code>output-differs</code>,
+    <code>newer-shell</code>, …) and <code>next</code> the one command that resolves it, built from your own arguments
+    and safe to run as it is. Every command prints the <code>sha256</code> of the text it wrote or read; pass it back as
+    <code>--replaces &lt;sha256&gt;</code> and the file is replaced only while it still holds that text — it works with
+    no cache, no git, in a fresh sandbox. Exit status: 0 done, 1 refused or failed, 2 usage error. Before editing
+    <code>x.md</code>, <code>inspect x.md</code> says whether <code>x.md.html</code> holds work saved in the browser;
+    <code>extract x.md.html -o x.browser.md</code> brings it out for a merge.</p>
+  </section>
+
+  <!-- DELIVERY & BROWSERS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Delivery, browsers and limits</h2>
+    <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine is inside the file (about
+    1&nbsp;MB), so it opens without fetching it. <code>--cdn</code> writes a small file for pages you publish on the
+    web; it loads the engine from jsDelivr,
+    <code>https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@&lt;version&gt;/orz-mdhtml.browser.js</code> (the file's own
+    version, e.g. <code>@1.0.1</code>). <strong>Either way</strong> — an inline file too — the theme stylesheets, KaTeX's
+    and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js) and the editor (CodeMirror) load from
+    CDNs: reading styled content and editing need a network connection the first time. A slow or unreachable CDN never
+    holds the page blank: the document shows at once, unstyled, and takes its theme when the stylesheets arrive.</p>
+    <table>
+      <tr><th></th><th>Chromium (Chrome, Edge, …)</th><th>Firefox, Safari</th></tr>
+      <tr><td>Read, themes, copy as Markdown</td><td>yes</td><td>yes</td></tr>
+      <tr><td>Edit (editor, live preview, header pickers)</td><td>yes</td><td>yes</td></tr>
+      <tr><td>Save in place</td><td>yes</td><td>— Save downloads the file instead</td></tr>
+      <tr><td>New document, Save as new copy</td><td>file picker</td><td>download</td></tr>
+      <tr><td>Quiet update</td><td>saved in place</td><td>downloaded</td></tr>
+    </table>
+    <div class="callout amber" style="margin-top:14px"><strong>Limits:</strong> save in place needs Chromium (File
+    System Access); a page served over http(s) is never saved in place. Themes, math styles, diagram libraries and the
+    editor need the network the first time, also in an inline file. A file shows only the includes it recorded when it
+    was assembled. A file is a program and cannot prove its own integrity (below).</div>
+  </section>
+
+  <!-- OLD FILES & APPS -->
+  <section class="section" style="margin-top:34px">
+    <h2>Older files, web apps and agents</h2>
+    <div class="grid c2">
+      <div class="card" id="upgrading"><h3 style="margin-top:0">0.x files: inspect, then upgrade</h3><p>A file made by
+      orz-mdhtml 0.9.3 or earlier still opens as it was, but the 1.0 tools and editor work on it only after a one-time
+      upgrade:</p>
+<pre>npx orz-mdhtml@1 inspect old.md.html
+npx orz-mdhtml@1 upgrade old.md.html</pre>
+      <p><code>inspect</code> says what the file is and what to do; <code>upgrade</code> rewrites it as a 1.0 file and
+      writes its text <code>old.md</code> (when <code>old.md</code> already exists, add
+      <code>--text old.browser.md</code> and merge the two). It keeps the source exactly, moves the metadata, the saved theme and the title into the
+      header, keeps the file's delivery and gives it a <code>uid</code>. A 0.9.x file's own "Framework 1.0.0 available"
+      banner cannot make this move (it ends with "check your connection" and changes nothing) — use
+      <code>upgrade</code>. The 0.9 API (<code>buildMdHtml</code> and friends) and <code>--theme</code> /
+      <code>--title</code> on generation are gone: content lives in the header.</p></div>
+      <div class="card"><h3 style="margin-top:0">In a web app</h3><p>The editor is a component:
+      <code>npm i orz-mdhtml-browser@1</code>, then <code>mountEditor(element, { text, hooks, nonce })</code> (ES module,
+      or <code>globalThis.OrzCarrier</code> from a plain <code>&lt;script&gt;</code>). Any number of editors per page;
+      your hooks keep the text wherever you like (save, AI with a review step, includes, assets, links, ids); it works
+      under a nonce Content-Security-Policy. Store the text; call <code>assemble(text)</code> only when a file is needed.
+      See <a href="https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md">docs/embedding.md</a> (shipped
+      in both packages). A platform that shows assembled files in an iframe speaks the host protocols
+      (<code>orz-host-save@1</code>, <code>orz-host-ai@1</code>, <code>orz-host-include@1</code>).</p></div>
+      <div class="card"><h3 style="margin-top:0">In Node</h3><p><code>import { assemble, extract, readDocument,
+      newDocument, inspect, upgrade, THEMES } from 'orz-mdhtml'</code> — the same operations as the CLI, as functions.
+      <code>assemble(text, { delivery: 'cdn', includes })</code>; <code>extract(html)?.text</code> gives the exact text
+      back.</p></div>
+      <div class="card"><h3 style="margin-top:0">With an AI agent</h3><p>Every file starts with a short note for agents
+      (where the text is and how to read it, a link to the skill). The rule: edit the text, never the HTML, then
+      <code>assemble</code> again; when unsure what a file is, <code>inspect --json</code> and follow its advice. The
+      <a href="https://cdn.jsdelivr.net/npm/orz-mdhtml@1/orz-mdhtml-skills/SKILL.md">skill</a> has the full procedures and
+      every <code>reason</code> code.</p></div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <section class="section" style="margin-top:40px">
+    <div class="callout amber"><strong>In-place Save needs a Chromium-based browser</strong> (Chrome or
+    Edge); elsewhere, save downloads a copy. Reading and editing work in any modern browser.</div>
+    <div class="callout" style="margin-top:14px"><strong>These files are programs.</strong> Opening a
+    <code>.md.html</code> runs the engine inside it and, because Markdown may contain raw HTML, anything in its content;
+    open and edit files only from sources you trust — appearance proves nothing, and a file cannot prove its own
+    integrity (the <a href="./verify.html">verifier</a> helps). The quiet update only fetches this engine's own jsDelivr
+    package, checks its SHA-384, and changes nothing until you click <em>Update now</em>.</div>
+    <footer><div class="row">
+      <a href="./family.html#mdhtml">← The family</a>
+      <a href="./slides.html">Slides (orz-slides)</a>
+      <a href="./paged.html">Print (orz-paged)</a>
+      <a href="https://github.com/wangyu16/orz-mdhtml">orz-mdhtml on GitHub</a>
+      <a href="https://www.npmjs.com/package/orz-mdhtml">orz-mdhtml on npm</a>
+      <a href="./guide.html">Guide</a>
+      <a href="./">Home</a>
+    </div></footer>
+  </section>
+
+  </div>
+</main>
+</body>
+</html>

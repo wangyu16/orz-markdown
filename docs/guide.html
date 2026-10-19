@@ -34,6 +34,9 @@
     <a href="./">Home</a>
     <a href="./features.html">Features</a>
     <a href="./family.html">The family</a>
+    <a href="./mdhtml.html" title="orz-mdhtml: continuous documents (.md.html)">Documents</a>
+    <a href="./slides.html" title="orz-slides: slide decks (.slides.html)">Slides</a>
+    <a href="./paged.html" title="orz-paged: print and PDF documents (.paged.html)">Print</a>
     <a href="./guide.html" class="here">Guide</a>
     <a href="./verify.html">Verify</a>
     <a href="./agents.html">For agents</a>
@@ -44,6 +47,7 @@
 <main>
   <section class="hero" style="padding:52px 0 14px"><div class="wrap">
     <h1>Three ways to use it</h1>
+    <p class="stamp">This page describes orz-markdown 2.4 · orz-mdhtml 1.0 · orz-slides 1.0 · orz-paged 1.0</p>
     <p class="lead">Pick what fits: write in the browser editor, generate a single-file document with a CLI,
     or render with the parser in your own code.</p>
   </div></section>
@@ -70,8 +74,9 @@
               <code>.md</code></strong> to edit it; <span class="kbd">Ctrl/⌘ S</span> saves back to the same file.</li>
             <li>Switch the preview theme and toggle dark mode from the toolbar.</li>
           </ul>
-          <p class="callout amber" style="margin-top:14px">File association and in-place Save use Chromium-only APIs.
-          In other browsers the editor still runs; use <em>Open</em> and <em>Save as</em>.</p>
+          <p class="callout amber" style="margin-top:14px">Open, file association and in-place Save use Chromium-only
+          APIs (Chrome, Edge). In other browsers the editor still renders and edits what you type or paste, and
+          <em>Save</em> / <em>Save as</em> download a <code>.md</code> file.</p>
           <h3>Start from an authentic blank editable file</h3>
           <p>For <code>.md.html</code>, <code>.slides.html</code>, and <code>.paged.html</code>, use the official
           starter buttons on this website. Each button opens a genuine editable file in a new tab; click the pencil
@@ -88,25 +93,29 @@
         <!-- CLI -->
         <div class="panel p-cli">
           <h2 style="margin-top:.2em">Generate a single-file document</h2>
-          <p>Install a family tool, then turn a Markdown file into one portable, editable <code>.html</code>:</p>
+          <p>Each tool (Node 20.16 or newer; nothing to install with <code>npx</code>) starts a text, then builds one
+          portable, editable <code>.html</code> from it:</p>
           <pre><code># a continuous document
-npx orz-mdhtml  notes.md       # -> notes.md.html
+npx orz-mdhtml@1 new notes.md --title "Field notes"
+npx orz-mdhtml@1 notes.md                        # -> notes.md.html
 
-# a slide deck
-npx orz-slides talk.slides.md  # -> talk.slides.html
+# a slide deck (from a deck template: slides need slide markers)
+npx orz-slides@1 new talk.slides.md --template talk
+npx orz-slides@1 talk.slides.md                  # -> talk.slides.html
 
 # a print / PDF document
-npx orz-paged paper.md       # -> paper.paged.html</code></pre>
-          <p>Each writes one portable, self-editing HTML file. Open it to read, present, or print; click the edit affordance
-          to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
-          jsDelivr; <code>--inline</code> (the default) embeds the engine. <code>orz-mdhtml</code> and
-          <code>orz-paged</code> 1.0 and <code>orz-slides</code> 1.0 also keep the text as a twin:
-          <code>npx orz-mdhtml new notes.md</code> /
-          <code>npx orz-paged new paper.paged.md --template article-page</code> /
-          <code>npx orz-slides new talk.slides.md --template talk</code> start one, and
-          <code>extract</code>, <code>upgrade</code> and <code>inspect</code> work on any file
-          (<code>orz-slides inspect --layout</code> also checks that every box of a deck fits).</p>
-          <p><a href="./family.html">More about the three document types →</a></p>
+npx orz-paged@1 new paper.paged.md --template article-page
+npx orz-paged@1 paper.paged.md                   # -> paper.paged.html</code></pre>
+          <p>Edit the text (by hand or with an AI agent) between the two commands. An existing Markdown file works too:
+          <code>npx orz-mdhtml@1 notes.md</code> and <code>npx orz-paged@1 paper.md</code> take it as it is, while a deck
+          needs a <code>&lt;!-- slide --&gt;</code> line before each slide (without one, the deck is blank and the CLI warns).
+          Open the <code>.html</code> to read, present, or print; click the pencil to change it and Save in place. Files
+          carry their engine by default; <code>--cdn</code> makes a small file that loads it from jsDelivr. Every tool
+          also has <code>extract</code> (the text back out of a file), <code>upgrade</code> (an older file) and
+          <code>inspect</code> (what a file is and what to do next; <code>orz-slides inspect --layout</code> also checks
+          that every box of a deck fits).</p>
+          <p>References: <a href="./mdhtml.html">documents (orz-mdhtml)</a> · <a href="./slides.html">slides
+          (orz-slides)</a> · <a href="./paged.html">print (orz-paged)</a> · <a href="./family.html">which one?</a></p>
         </div>
         <!-- PARSER -->
         <div class="panel p-parser">
@@ -120,26 +129,66 @@ const html = md.render('# Hello {{emoji wave}}');
 // with one of the bundled themes</code></pre>
           <p>The parser emits raw HTML as written, so sanitize untrusted input. File includes
           (<code>{{md ./file}}</code>) stay off unless you pass <code>markdownBasePath</code> or
-          <code>readFile</code> in the render env (confine them with <code>markdownIncludeRoot</code>). URL includes
-          are resolved beforehand with <code>prepareSources()</code>; outside a browser it fetches only from the
-          <code>allowedHosts</code> you name (or through your own <code>fetcher</code>).</p>
-          <p>See the <a href="./features.html">features</a> for the full syntax, and the
-          <a href="https://github.com/wangyu16/orz-markdown">README</a> for themes and the agent skill.</p>
+          <code>readFile</code> in the render env (confine them with <code>markdownIncludeRoot</code>; changed in 2.0 —
+          1.x read from the working directory). URL includes are resolved beforehand with
+          <code>prepareSources()</code>; outside a browser it fetches only from the <code>allowedHosts</code> you name
+          (or through your own <code>fetcher</code>).</p>
+          <p>To show the output in a page, wrap it in <code>&lt;article class="markdown-body"&gt;</code> with a theme and
+          call <code>enhanceDocument(article)</code> from <code>orz-markdown/preview-frame</code>: it loads only the
+          libraries the content needs (highlighting, Mermaid, SMILES, charts) and the copy-as-Markdown runtime.
+          Add <code>measure-wide</code> or <code>measure-full</code> to the article for longer lines.</p>
+          <h3>Entry points and the carrier kit</h3>
+          <p>Besides the parser, the package has the browser runtime (<code>orz-markdown/runtime</code>), the preview
+          helpers (<code>orz-markdown/preview-frame</code>), the theme list (<code>orz-markdown/themes</code>), document
+          metadata (<code>orz-markdown/doc-meta</code>) and the <strong>carrier kit</strong>
+          (<code>orz-markdown/carrier…</code>) that orz-mdhtml, orz-slides and orz-paged are built on — the text form,
+          the editor component, saving, the quiet update and the shared CLI core. The
+          <a href="https://github.com/wangyu16/orz-markdown#package-entry-points">README's entry-point table</a> lists
+          them all; their specifications ship in the package (<code>node_modules/orz-markdown/spec/</code>,
+          <a href="https://github.com/wangyu16/orz-markdown/tree/main/spec">on GitHub</a>).</p>
+          <p>See the <a href="./features.html">features</a> for the full syntax, the
+          <a href="https://github.com/wangyu16/orz-markdown">README</a> for themes and the API, and the
+          <a href="./agents.html">agent skill</a> for using it with an AI agent. Upgrading from orz-markdown 1.x: the
+          <a href="https://github.com/wangyu16/orz-markdown#upgrading-from-1x">README's upgrade notes</a> and the
+          <a href="https://github.com/wangyu16/orz-markdown/blob/main/CHANGELOG.md#200---2026-10-03">CHANGELOG for 2.0.0</a>.</p>
         </div>
       </div>
     </div>
 
+    <section class="section" style="margin-top:40px" id="words">
+      <h2>Words you will meet</h2>
+      <table>
+        <tr><th>Word</th><th>Plain meaning</th></tr>
+        <tr><td><strong>text</strong>, <strong>text twin</strong></td><td>The document itself, as a plain Markdown file:
+        <code>notes.md</code>, <code>talk.slides.md</code>, <code>report.paged.md</code>. You (or an agent) edit it; it
+        works in git and on GitHub. "Twin" because it sits beside the <code>.html</code> file made from it.</td></tr>
+        <tr><td><strong>file</strong>, <strong>self-editing file</strong></td><td>The <code>.md.html</code> /
+        <code>.slides.html</code> / <code>.paged.html</code> you open, share and save. It carries the exact text inside
+        it, and can edit itself in the browser.</td></tr>
+        <tr><td><strong>assemble</strong></td><td>Make the file from the text (<code>npx orz-mdhtml@1 notes.md</code>).
+        The same text always gives the same file; <code>extract</code> gives the text back.</td></tr>
+        <tr><td><strong>header</strong></td><td>The <code>{{nyml kind: document … }}</code> block at the very top of the
+        text: title, author, theme and the other settings.</td></tr>
+        <tr><td><strong>shell</strong></td><td>Everything in a file except the text: the engine that renders, edits and
+        saves it. It can be rebuilt at any time (<code>upgrade</code>, or the file's own <em>Update</em>), and the text
+        stays exactly as it was.</td></tr>
+        <tr><td><strong>format 1</strong> (text format 1)</td><td>The shared shape of the text and the file used by every
+        1.0 tool. Files from the 0.x releases predate it and need <a href="#upgrading">upgrading</a> once.</td></tr>
+        <tr><td><strong>inline</strong> / <strong>cdn</strong></td><td>Whether the engine is inside the file (inline, the
+        default) or loaded from jsDelivr (<code>--cdn</code>, a small file for the web).</td></tr>
+      </table>
+    </section>
+
     <section class="section" style="margin-top:40px">
       <h2>Portable authorship and license metadata</h2>
-      <p>In a <code>.md.html</code>, <code>.paged.html</code> or <code>.slides.html</code> text (orz-mdhtml /
-      orz-paged / orz-slides 1.0), put the title,
-      author, license, canonical source, date, description, and keywords in the header — the
-      <code>{{nyml kind: document}}</code> block at the top of the text (older files used a separate
-      <code>{{nyml kind: meta}}</code> block, shown below; <code>upgrade</code> moves it, and a 0.x deck's
-      <code>&lt;!-- deck --&gt;</code> block, into the header). The builders write standard HTML head tags and a machine-readable
-      <code>#orz-meta</code> record that remains in the portable file after browser edits.</p>
+      <p>Put the title, author, license, canonical source, date, description and keywords in the
+      <strong>header</strong>, the <code>{{nyml kind: document}}</code> block at the very top of the text — the same
+      for a document, a deck and a print document. The tool's <code>new</code> command writes the header with
+      <code>carrier</code> and a <code>uid</code>; add the rest, one <code>key: value</code> per line (no comments):</p>
       <pre><code>{{nyml
-kind: meta
+kind: document
+carrier: md
+uid: doc-7kq2m9x4p1r8s3t5
 title: Field Notes
 author: Your Name
 license: CC-BY-4.0
@@ -147,9 +196,35 @@ license_url: https://creativecommons.org/licenses/by/4.0/
 source: https://example.org/field-notes
 date: 2026-07-11
 }}</code></pre>
-      <p>In a 1.0 file the header stays in the text, so edits in the browser keep the head tags current; an older
-      file's metadata block was consumed during generation (update the source and regenerate). Host applications can inject authoritative metadata programmatically; host values
-      take precedence field by field (blank host values are ignored).</p>
+      <p>The file writes them into standard HTML head tags and a machine-readable <code>#orz-meta</code> record. The
+      header stays in the text, so edits in the browser keep the head tags current. Files from the 0.x releases kept
+      metadata in a separate <code>{{nyml kind: meta}}</code> block (or, for decks, a <code>&lt;!-- deck --&gt;</code>
+      block); <code>upgrade</code> moves it into the header.</p>
+    </section>
+
+    <section class="section" style="margin-top:40px" id="upgrading">
+      <h2>Upgrading from 0.x</h2>
+      <p>Files made by orz-mdhtml 0.9.3, orz-slides 0.8.5, orz-paged 0.7 or earlier still open as they were, but the 1.0
+      tools read them only after a one-time upgrade. For each file, ask what it is, then upgrade it:</p>
+      <pre><code>npx orz-mdhtml@1 inspect old.md.html       # what it is, what upgrade changes
+npx orz-mdhtml@1 upgrade old.md.html       # -> a 1.0 old.md.html + its text old.md
+
+npx orz-slides@1 inspect old.slides.html
+npx orz-slides@1 upgrade old.slides.html   # -> a 1.0 file + old.slides.md
+npx orz-slides@1 upgrade deck.md           # a 0.x deck source -> deck.slides.md
+
+npx orz-paged@1 inspect old.paged.html
+npx orz-paged@1 upgrade old.paged.html     # -> a 1.0 file + old.paged.md</code></pre>
+      <p>The source is kept exactly; the old metadata and settings become the header, and the file gets a
+      <code>uid</code>. If a text with the twin's name already exists (often the 0.x source), <code>upgrade</code> will not
+      overwrite it: add <code>--text old.browser.md</code> (or <code>.browser.slides.md</code> /
+      <code>.browser.paged.md</code>) and merge the two. A 0.x file's own "Framework 1.0.0 available" offer cannot make
+      this move — dismiss it and run <code>upgrade</code>. Details per tool: <a href="./mdhtml.html#upgrading">documents</a> ·
+      <a href="./slides.html#upgrading">slides</a> · <a href="./paged.html#upgrading">print</a>.</p>
+      <p><strong>orz-markdown 1.x → 2.x</strong> (the parser, for developers): file includes became opt-in and URL
+      includes outside a browser need an allow-list; rendered output and the themes changed. See the
+      <a href="https://github.com/wangyu16/orz-markdown#upgrading-from-1x">README's upgrade notes</a> and the
+      <a href="https://github.com/wangyu16/orz-markdown/blob/main/CHANGELOG.md#200---2026-10-03">CHANGELOG for 2.0.0</a>.</p>
     </section>
 
     <!-- VERIFY -->
