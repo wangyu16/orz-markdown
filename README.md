@@ -320,7 +320,7 @@ above; everything else is for carrier and host builders.
   theme imports; a custom theme should start from
   `orz-markdown-skills/assets/minimal.css`.
 
-The full list is in the [CHANGELOG, 2.0.0](CHANGELOG.md#200---2026-10-03).
+The full list is in the [CHANGELOG, 2.0.0](https://github.com/wangyu16/orz-markdown/blob/main/CHANGELOG.md#200---2026-10-03).
 
 ## Packaging
 

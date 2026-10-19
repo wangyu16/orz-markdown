@@ -9,8 +9,8 @@
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (in the orz-markdown repository,
-   tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)

@@ -348,7 +348,9 @@ series: OD600 = 0.1, 0.8, 1.6
 *Figure 2.* Optical density over time.
 ```
 
-A figure's caption is a paragraph **after** it starting `*Figure N.*`; a
+A figure's caption is a paragraph **after** it starting `*Figure N.*`, with
+a blank line between them (without one the caption line joins the image's
+paragraph); a
 table's is a paragraph **before** it starting `**Table N.**`; a chart (or
 diagram) gets a figure caption after it — `{{chart}}` has no caption key
 (`title:` draws a title inside the chart). Keep the alt text a description

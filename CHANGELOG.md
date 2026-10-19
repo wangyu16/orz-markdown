@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Skill: a figure's caption paragraph needs a blank line after the image
+  (a caption line directly under it joins the image's paragraph).
+- The installed skill's assets say where their two source-repository
+  references live (`assets/common.css`: the theme test; `assets/template.html`:
+  `npm run build`), so nobody looks for them in the package. The comment in
+  `themes/common.css` changed with it (no rule changed).
+- README: the "CHANGELOG, 2.0.0" link is an absolute GitHub URL (it was dead
+  in an installed package).
+
 ## [2.4.0] - 2026-10-17
 
 The carrier-kit gaps of the orz-slides 1.0 rebuild (family plan REBUILD

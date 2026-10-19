@@ -571,6 +571,6 @@ data: 92, 71, 40
 *Figure 2.* Yield by catalyst.
 ```
 
-- Figures (images, diagrams, charts, structures): a paragraph **after** them, starting `*Figure N.*`.
+- Figures (images, diagrams, charts, structures): a paragraph **after** them, starting `*Figure N.*`, separated by a blank line (a caption line directly under an image joins the image's paragraph).
 - Tables: a paragraph **before** them, starting `**Table N.**`.
 - `{{chart}}` and `{{mermaid}}` have no caption key; `title:` in a chart draws a title inside it, which is not a caption.
