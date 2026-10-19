@@ -1,9 +1,11 @@
-<!-- deck
+{{nyml
+kind: document
+carrier: slides
 title: Untitled deck
-theme: paper
-ratio: 16:9
 footer: Draft deck
--->
+ratio: 16:9
+theme: paper
+}}
 
 <!-- slide template=title -->
 # Untitled deck

@@ -58,9 +58,10 @@
   <p class="sub">Check whether a <code>.md.html</code> / <code>.slides.html</code> / <code>.paged.html</code> file
   carries the <strong>genuine, unmodified</strong> orz framework, and scans its content for embedded code.
   Everything runs in <strong>your browser</strong>; the file is parsed inertly and never executed.</p>
-  <p class="sub" style="font-size:.92em;opacity:.8">Note: authenticity checks compare the embedded engine against the
-  matching published browser package: <code>orz-mdhtml-browser</code>, <code>orz-slides-browser</code>, or
-  <code>orz-paged-browser</code>.</p>
+  <p class="sub" style="font-size:.92em;opacity:.8">Note: authenticity checks compare the file against the matching
+  published browser package: <code>orz-mdhtml-browser</code>, <code>orz-slides-browser</code>, or
+  <code>orz-paged-browser</code>. A 1.0 file (text format 1) is re-assembled from the text it carries by the
+  published package of its own version and must come out <strong>byte for byte</strong> the same.</p>
 
   <div class="card">
     <div id="drop" tabindex="0">
@@ -78,8 +79,13 @@
   <details class="about">
     <summary>What this can and can't tell you</summary>
     <div class="note" style="margin-top:8px">
-      <p><strong>Strong:</strong> it hashes the embedded engine bundle and editor and compares them byte-for-byte to
-      the canonical packages published on jsDelivr — so a swapped or tampered framework is caught.</p>
+      <p><strong>Strong:</strong> for a 1.0 file (orz-mdhtml, orz-slides or orz-paged 1.0 and later; text format 1) it
+      downloads the engine of the file's own version from jsDelivr, checks it against the SHA-384 in that release's
+      <code>release.json</code>, compares the file's engine (inline) or engine URL (<code>--cdn</code>) with it, and
+      then lets that published engine — in a sandboxed frame that cannot reach this page — assemble the text the file
+      carries. A genuine file comes out <strong>byte for byte</strong> the same, so anything added to or changed in the
+      shell is caught. For an older (0.x) file it hashes the embedded engine bundle and editor and compares them
+      byte-for-byte to the canonical packages.</p>
       <p><strong>Heuristic:</strong> it lists every inline script and flags raw <code>&lt;script&gt;</code> /
       <code>on…=</code> handlers and off-CDN loads in the content (the <code>html:true</code> vector). It can surface
       red flags but <strong>cannot prove</strong> arbitrary content is benign.</p>
@@ -109,14 +115,179 @@ async function sha256(str){
 function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
 function esc(s){ return String(s).replace(/[&<>]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
 
+// ---- text format 1 (orz-mdhtml / orz-slides / orz-paged 1.0 and later) ----
+// The kind -> package map is hardcoded (the trust anchor); nothing is taken from the file but its version.
+var KIND_PACKAGE = { md:'orz-mdhtml', slides:'orz-slides', paged:'orz-paged' };
+var SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
+var BUNDLE_PATH = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+
+function readShell(doc){
+  var el = doc.getElementById('orz-shell');
+  if (!el || (el.getAttribute('type') || '').toLowerCase() !== 'application/json') return null;
+  try { var j = JSON.parse(el.textContent); return (j && typeof j === 'object' && !Array.isArray(j)) ? j : null; }
+  catch(e){ return null; }
+}
+async function sha384b64(bytes){
+  var buf = new Uint8Array(await crypto.subtle.digest('SHA-384', bytes));
+  var bin = ''; for (var i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return btoa(bin);
+}
+// The text island, unescaped (one backslash after "<" before backslashes + "script"); for the content scan only.
+function islandText(doc){
+  var el = doc.getElementById('orz-src');
+  return el ? el.textContent.replace(/<\\(\\*\/?script)/gi, '<$1') : '';
+}
+function firstDifference(a, b){
+  var n = Math.min(a.length, b.length), i = 0;
+  while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
+function around(s, i){ return s.slice(Math.max(0, i - 40), i + 40); }
+
+// Runs inside the sandbox after the published bundle: extract the file's text with the package's own extract,
+// assemble it again with the file's delivery and includes, post the html back. ES5; answers only its parent.
+var REPRO_BOOT = [
+  '(function(){var P=parent;addEventListener("message",function(e){if(e.source!==P)return;var d=e.data;',
+  'if(!d||d.type!=="orz-verify")return;var C=self.OrzCarrier;',
+  'function reply(m){m.type="orz-verified";m.id=d.id;P.postMessage(m,"*");}',
+  'new Promise(function(ok){if(!C||typeof C.extract!=="function"||typeof C.assemble!=="function")throw new Error("the bundle did not set OrzCarrier.extract/assemble");',
+  'var x=C.extract(d.html);if(!x)throw new Error("the package found no text in the file");',
+  'var o={delivery:x.delivery,engineSource:d.engineSource};if(x.includes)o.includes=x.includes;',
+  'ok(Promise.resolve(C.assemble(x.text,o)).then(function(h){return{html:h,kind:String(C.kind),version:String(C.version)};}));',
+  '}).then(function(r){reply({ok:typeof r.html==="string",html:r.html,kind:r.kind,version:r.version});},',
+  'function(err){reply({ok:false,error:String(err&&err.message||err)});});});',
+  'P.postMessage({type:"orz-verify-ready"},"*");})();'
+].join('');
+
+function reassembleInSandbox(bundle, html){
+  return new Promise(function(resolve, reject){
+    var frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts'); // opaque origin: no access to this page, its storage or cookies
+    frame.setAttribute('aria-hidden', 'true');
+    frame.setAttribute('tabindex', '-1');
+    frame.setAttribute('title', 'orz verifier sandbox');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+    // The bundle obeys the bundle rule (no "<script", no CR), so it is inlined as is.
+    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><title>orz verify</title></head><body><script>' +
+      bundle + '<\/script><script>' + REPRO_BOOT + '<\/script></body></html>';
+    var id = 'v' + Date.now(), done = false;
+    function finish(err, res){
+      if (done) return; done = true; clearTimeout(timer);
+      window.removeEventListener('message', onMessage); frame.remove();
+      if (err) reject(err); else resolve(res);
+    }
+    function onMessage(e){
+      if (e.source !== frame.contentWindow) return;
+      var d = e.data; if (!d || typeof d !== 'object') return;
+      if (d.type === 'orz-verify-ready'){
+        frame.contentWindow.postMessage({ type:'orz-verify', id:id, html:html, engineSource:bundle }, '*'); return;
+      }
+      if (d.type !== 'orz-verified' || d.id !== id) return;
+      if (d.ok) finish(null, d); else finish(new Error(d.error || 'unknown error'));
+    }
+    var timer = setTimeout(function(){ finish(new Error('timed out')); }, 60000);
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(frame);
+  });
+}
+
+async function verifyFormat1(text, doc, shell, add){
+  var res = { frameworkOk:true, frameworkUnknown:false, extraScripts:0, externalBad:0, md:'' };
+  var kind = shell.kind, version = shell.shell, delivery = shell.delivery;
+  var pkg = KIND_PACKAGE.hasOwnProperty(kind) ? KIND_PACKAGE[kind] : null;
+  if (!pkg){ add('bad', 'Unknown document kind', 'The file says kind "' + esc(String(kind)) + '".'); res.frameworkOk = false; return res; }
+  if (typeof version !== 'string' || !SEMVER.test(version)){ add('bad', 'No valid shell version', 'The file’s #orz-shell names no version that could be checked.'); res.frameworkOk = false; return res; }
+  if (delivery !== 'inline' && delivery !== 'cdn'){ add('bad', 'Unknown delivery', 'The file says delivery "' + esc(String(delivery)) + '".'); res.frameworkOk = false; return res; }
+  var browserPkg = pkg + '-browser', base = CDN + browserPkg + '@' + version + '/';
+  add('info', pkg + ' v' + version + ' · text format ' + esc(String(shell.format)) + ' · ' + delivery + ' delivery',
+    'Declared in the file’s #orz-shell; checked against ' + browserPkg + '@' + version + '.');
+  res.md = islandText(doc);
+
+  // Executable scripts: a format-1 shell has exactly one, #orz-engine; every other <script> is a data island.
+  var DATA = { 'orz-shell':1, 'orz-src':1, 'orz-includes':1, 'orz-meta':1 };
+  Array.prototype.forEach.call(doc.querySelectorAll('script'), function(sc){
+    if (sc.id === 'orz-engine') return;
+    var type = (sc.getAttribute('type') || '').toLowerCase();
+    if (DATA[sc.id] && /^(application\/json|text\/markdown|application\/orz-meta\+json)$/.test(type)) return;
+    var src = sc.getAttribute('src');
+    if (src && !(src.indexOf(CDN) === 0 || src.indexOf('https://cdnjs.cloudflare.com/') === 0)) res.externalBad++;
+    res.extraScripts++;
+  });
+
+  // 1. the release manifest and the published engine
+  var manifest, bundleBytes;
+  try {
+    var r = await fetch(base + 'release.json', { credentials:'omit', cache:'no-cache' }); if (!r.ok) throw 0;
+    manifest = await r.json();
+    if (!manifest || manifest.kind !== kind || manifest.version !== version || !manifest.bundle ||
+        !BUNDLE_PATH.test(String(manifest.bundle.path)) || !/^sha384-[A-Za-z0-9+/]{64}$/.test(String(manifest.bundle.integrity))) throw 1;
+  } catch(e){
+    add('warn', 'Couldn’t fetch the release manifest', 'Tried ' + base + 'release.json — the version may not be published (yet), or the network blocked it.');
+    res.frameworkUnknown = true; return res;
+  }
+  var bundleUrl = base + manifest.bundle.path;
+  try { var rb = await fetch(bundleUrl, { credentials:'omit' }); if (!rb.ok) throw 0; bundleBytes = new Uint8Array(await rb.arrayBuffer()); }
+  catch(e){ add('warn', 'Couldn’t fetch the published engine', 'Tried ' + bundleUrl + '.'); res.frameworkUnknown = true; return res; }
+  if ('sha384-' + (await sha384b64(bundleBytes)) !== manifest.bundle.integrity){
+    add('bad', 'The published engine does not match its release manifest', bundleUrl + ' does not have the SHA-384 in release.json. Do not trust this check; try again later.');
+    res.frameworkOk = false; return res;
+  }
+  var bundle = new TextDecoder('utf-8').decode(bundleBytes);
+  add('ok', 'Published engine fetched and fingerprinted', browserPkg + '@' + version + ' — SHA-384 matches its release.json.');
+
+  // 2. the file's engine
+  var engineEl = doc.getElementById('orz-engine');
+  if (!engineEl){ add('bad', 'Engine: not found', 'A format-1 file carries a #orz-engine script.'); res.frameworkOk = false; }
+  else if (delivery === 'cdn'){
+    if (engineEl.getAttribute('src') === bundleUrl && !engineEl.textContent) add('ok', 'Engine: loads the canonical package and version', bundleUrl);
+    else { add('bad', 'Engine: URL does not match the declared version', 'Expected ' + bundleUrl + '; found ' + esc(String(engineEl.getAttribute('src')))); res.frameworkOk = false; }
+  } else {
+    if (!engineEl.hasAttribute('src') && engineEl.textContent === bundle) add('ok', 'Engine: genuine and unmodified', 'Byte-identical to ' + browserPkg + '@' + version + '.');
+    else { add('bad', 'Engine: MODIFIED or not the published release', 'Does not match ' + browserPkg + '@' + version + '.'); res.frameworkOk = false; }
+  }
+
+  // 3. reproduce the whole file from its text with the published engine
+  try {
+    var out = await reassembleInSandbox(bundle, text);
+    if (out.html === text){
+      res.reproduced = true;
+      add('ok', 'Reproduced byte for byte', 'The published ' + browserPkg + '@' + version + ' assembles the text this file carries into exactly this file (' + text.length.toLocaleString('en') + ' characters) — nothing in the shell was added or changed.');
+    } else if (out.html === text.replace(/\r\n?/g, '\n')){
+      add('warn', 'Reproduced, except for line endings', 'The file is identical to what ' + browserPkg + '@' + version + ' assembles once its line breaks are turned back into LF (a tool such as git may have converted them).');
+      res.frameworkUnknown = true;
+    } else {
+      var i = firstDifference(text, out.html);
+      add('bad', 'Not what the published package assembles', 'The file differs from ' + browserPkg + '@' + version + '’s output for its own text, first at character ' + i.toLocaleString('en') +
+        ': file “' + esc(around(text, i)) + '”, expected “' + esc(around(out.html, i)) + '”.');
+      res.frameworkOk = false;
+    }
+  } catch(e){
+    add('warn', 'Couldn’t re-assemble the file', 'The published engine could not run in the sandbox: ' + esc(String(e && e.message || e)) + '.');
+    res.frameworkUnknown = true;
+  }
+  return res;
+}
+
+// ---- 0.x files ----
 function detect(doc){
   var cfg = doc.querySelector('script[data-orz-asset="config"]');
   var text = cfg ? cfg.textContent : (doc.documentElement.innerHTML || '');
   for (var fam in FAMILIES){ if (text.indexOf(FAMILIES[fam].cfg) >= 0) {
     var m = text.match(/"(?:rendererVersion|version)"\s*:\s*"([^"]+)"/);
-    return { family: fam, def: FAMILIES[fam], version: m ? m[1] : null };
+    return { family: fam, def: FAMILIES[fam], version: m && SEMVER.test(m[1]) ? m[1] : null };
   }}
   return null;
+}
+
+function contentScan(md, add){
+  var contentFlags = [];
+  if (/<script[\s>]/i.test(md)) contentFlags.push('a raw &lt;script&gt; tag');
+  if (/\son\w+\s*=/i.test(md)) contentFlags.push('an inline event handler (on…=)');
+  if (/javascript:/i.test(md)) contentFlags.push('a javascript: URL');
+  if (/<iframe[\s>]/i.test(md)) contentFlags.push('an &lt;iframe&gt;');
+  if (contentFlags.length) add('warn', 'Content contains raw HTML that runs as code', 'Found ' + contentFlags.join(', ') + '. orz-markdown passes raw HTML through, so this executes when opened.');
+  else add('ok', 'Content has no embedded scripts or handlers', 'The Markdown source contains no raw &lt;script&gt;, on…= handlers, javascript: URLs, or iframes.');
+  return contentFlags;
 }
 
 async function verify(text){
@@ -127,12 +298,28 @@ async function verify(text){
   function add(level, title, detail){ findings.push({ level:level, title:title, detail:detail||'' }); }
 
   var doc = new DOMParser().parseFromString(text, 'text/html'); // INERT — scripts do not run
+
+  var shell = readShell(doc);
+  if (shell && doc.getElementById('orz-src')){
+    var r1 = await verifyFormat1(text, doc, shell, add);
+    if (r1.extraScripts) add('bad', r1.extraScripts + ' unexpected script(s) in the shell', 'A format-1 file runs one script, #orz-engine; anything else was added to the file.');
+    else add('info', 'No other executable script', 'The only script that runs is the engine (#orz-engine); the rest are data islands.');
+    var flags1 = contentScan(r1.md, add);
+    var level1, title1;
+    if (!r1.frameworkOk || r1.extraScripts){ level1='bad'; title1='⚠ Not the genuine published file — do not trust'; }
+    else if (r1.frameworkUnknown){ level1='warn'; title1='Framework could not be fully verified'; }
+    else if (flags1.length){ level1='warn'; title1='Genuine file, but the content carries code — review'; }
+    else { level1='ok'; title1='✓ Genuine — reproduced byte for byte by the published package; no embedded code in content'; }
+    render(level1, title1, findings);
+    return;
+  }
+
   var info = detect(doc);
   if (!info){
     render('bad', 'Not a recognized orz document', [{level:'bad',title:'No orz framework signature found',detail:'This file does not look like an orz .md.html / .slides.html / .paged.html. Be cautious — it could be anything.'}]);
     return;
   }
-  add('info', info.family + (info.version ? ' v'+info.version : ''), 'Declared framework family' + (info.version ? ' and version.' : ' (version not declared).'));
+  add('info', info.family + (info.version ? ' v'+info.version : '') + ' (0.x file)', 'Declared framework family' + (info.version ? ' and version.' : ' (version not declared).'));
 
   // ---- framework integrity: engine + app ----
   var engineEl = doc.querySelector('script[data-orz-asset="engine"]');
@@ -144,15 +331,15 @@ async function verify(text){
     var srcAttr = elm.getAttribute('src');
     if (srcAttr){
       var expected = CDN + pkg + '@' + (info.version||'') + '/' + path;
-      if (info.version && srcAttr === expected) add('ok', label + ': canonical package and version', srcAttr);
-      else { add('bad', label + ': URL does not match the declared framework', 'Expected ' + expected + '; found ' + srcAttr); frameworkOk=false; }
+      if (info.version && srcAttr === expected) add('ok', label + ': canonical package and version', esc(srcAttr));
+      else { add('bad', label + ': URL does not match the declared framework', 'Expected ' + esc(expected) + '; found ' + esc(srcAttr)); frameworkOk=false; }
       return;
     }
     if (!info.version){ add('warn', label + ': cannot verify (no version declared)', ''); frameworkUnknown=true; return; }
     var url = CDN + pkg + '@' + info.version + '/' + path;
     var canon;
     try { var r = await fetch(url); if (!r.ok) throw 0; canon = await r.text(); }
-    catch(e){ add('warn', label + ': couldn’t fetch the canonical version', 'Tried ' + url + ' — the package/version may not be published yet, or the network blocked it.'); frameworkUnknown=true; return; }
+    catch(e){ add('warn', label + ': couldn’t fetch the canonical version', 'Tried ' + esc(url) + ' — the package/version may not be published yet, or the network blocked it.'); frameworkUnknown=true; return; }
     var embedded = elm.textContent;
     var match = (await sha256(embedded)) === (await sha256(escapeForScript(canon))) ||
                 (await sha256(reverseEscape(embedded))) === (await sha256(canon));
@@ -171,7 +358,7 @@ async function verify(text){
     var type = (s.getAttribute('type') || '').toLowerCase();
     if (src){
       if (src.indexOf(CDN) === 0 || src.indexOf('https://cdnjs.cloudflare.com/') === 0 || src.indexOf('https://unpkg.com/') === 0) { /* expected CDN */ }
-      else if (src.indexOf('http') === 0) { externalBad++; add('bad', 'Loads a script from an unexpected domain', src); }
+      else if (src.indexOf('http') === 0) { externalBad++; add('bad', 'Loads a script from an unexpected domain', esc(src)); }
       return;
     }
     var inert = type === 'text/markdown' || type === 'text/orz-slides' ||
@@ -185,14 +372,7 @@ async function verify(text){
 
   // ---- content scan: raw HTML / handlers in the embedded Markdown source ----
   var srcScript = doc.getElementById(info.def.srcId);
-  var md = srcScript ? srcScript.textContent : '';
-  var contentFlags = [];
-  if (/<script[\s>]/i.test(md)) contentFlags.push('a raw &lt;script&gt; tag');
-  if (/\son\w+\s*=/i.test(md)) contentFlags.push('an inline event handler (on…=)');
-  if (/javascript:/i.test(md)) contentFlags.push('a javascript: URL');
-  if (/<iframe[\s>]/i.test(md)) contentFlags.push('an &lt;iframe&gt;');
-  if (contentFlags.length) add('warn', 'Content contains raw HTML that runs as code', 'Found ' + contentFlags.join(', ') + '. orz-markdown passes raw HTML through, so this executes when opened.');
-  else add('ok', 'Content has no embedded scripts or handlers', 'The Markdown source contains no raw &lt;script&gt;, on…= handlers, javascript: URLs, or iframes.');
+  var contentFlags = contentScan(srcScript ? srcScript.textContent : '', add);
 
   // ---- overall verdict ----
   var level, title;

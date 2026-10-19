@@ -79,7 +79,7 @@
           HTML from an unknown source.</p>
           <div class="btns">
             <a class="btn" href="./starters/new-mdhtml.md.html?v=1.0.1" target="_blank" rel="noopener">Create .md.html</a>
-            <a class="btn" href="./starters/new-slides.slides.html?v=0.8.5" target="_blank" rel="noopener">Create .slides.html</a>
+            <a class="btn" href="./starters/new-slides.slides.html?v=1.0.0" target="_blank" rel="noopener">Create .slides.html</a>
             <a class="btn" href="./starters/new-paged.paged.html?v=1.0.0" target="_blank" rel="noopener">Create .paged.html</a>
           </div>
           <p><a href="./family.html">See the document family guide →</a></p>
@@ -93,16 +93,19 @@
 npx orz-mdhtml  notes.md       # -> notes.md.html
 
 # a slide deck
-npx orz-slides  deck.md        # -> deck.slides.html
+npx orz-slides talk.slides.md  # -> talk.slides.html
 
 # a print / PDF document
 npx orz-paged paper.md       # -> paper.paged.html</code></pre>
           <p>Each writes one portable, self-editing HTML file. Open it to read, present, or print; click the edit affordance
           to change it and Save in place. <code>--cdn</code> makes a smaller file that loads the engine from
           jsDelivr; <code>--inline</code> (the default) embeds the engine. <code>orz-mdhtml</code> and
-          <code>orz-paged</code> 1.0 also keep the text as a twin: <code>npx orz-mdhtml new notes.md</code> /
-          <code>npx orz-paged new paper.paged.md --template article-page</code> start one, and
-          <code>extract</code>, <code>upgrade</code> and <code>inspect</code> work on any file.</p>
+          <code>orz-paged</code> 1.0 and <code>orz-slides</code> 1.0 also keep the text as a twin:
+          <code>npx orz-mdhtml new notes.md</code> /
+          <code>npx orz-paged new paper.paged.md --template article-page</code> /
+          <code>npx orz-slides new talk.slides.md --template talk</code> start one, and
+          <code>extract</code>, <code>upgrade</code> and <code>inspect</code> work on any file
+          (<code>orz-slides inspect --layout</code> also checks that every box of a deck fits).</p>
           <p><a href="./family.html">More about the three document types →</a></p>
         </div>
         <!-- PARSER -->
@@ -128,11 +131,12 @@ const html = md.render('# Hello {{emoji wave}}');
 
     <section class="section" style="margin-top:40px">
       <h2>Portable authorship and license metadata</h2>
-      <p>In a <code>.md.html</code> or <code>.paged.html</code> text (orz-mdhtml / orz-paged 1.0), put the title,
+      <p>In a <code>.md.html</code>, <code>.paged.html</code> or <code>.slides.html</code> text (orz-mdhtml /
+      orz-paged / orz-slides 1.0), put the title,
       author, license, canonical source, date, description, and keywords in the header — the
       <code>{{nyml kind: document}}</code> block at the top of the text (older files used a separate
-      <code>{{nyml kind: meta}}</code> block, shown below; <code>upgrade</code> moves it into the header). For slides,
-      the deck config's <code>title:</code> and <code>author:</code> seed the same metadata. The builders write standard HTML head tags and a machine-readable
+      <code>{{nyml kind: meta}}</code> block, shown below; <code>upgrade</code> moves it, and a 0.x deck's
+      <code>&lt;!-- deck --&gt;</code> block, into the header). The builders write standard HTML head tags and a machine-readable
       <code>#orz-meta</code> record that remains in the portable file after browser edits.</p>
       <pre><code>{{nyml
 kind: meta
@@ -152,8 +156,9 @@ date: 2026-07-11
     <section class="section" style="margin-top:40px">
       <h2>Verifying a file someone sent you</h2>
       <p>These documents are <strong>programs</strong>: opening one runs its embedded code. Before trusting a file
-      from an untrusted source, run it through <a href="./verify.html">the verifier</a>. It hashes the embedded
-      framework against the genuine published packages and scans the content for embedded scripts, entirely in your
+      from an untrusted source, run it through <a href="./verify.html">the verifier</a>. It checks the embedded
+      framework against the genuine published packages (a 1.0 file must be reproduced byte for byte, from the text it
+      carries, by the published package of its version) and scans the content for embedded scripts, entirely in your
       browser. Treat anything it cannot confirm like a downloaded app.</p>
       <p style="margin-top:14px"><a class="btn ghost" href="./verify.html">Open the verifier →</a></p>
     </section>

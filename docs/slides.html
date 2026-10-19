@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>orz-slides — layouts &amp; syntax · orz-markdown</title>
-<meta name="description" content="Reference for orz-slides .slides.html decks: structure templates, the column/row layout grammar, regions, floats, per-slide options, and deck settings. Ask an AI agent with the orz-slides skill for advanced editing.">
+<title>orz-slides — decks &amp; layouts · orz-markdown</title>
+<meta name="description" content="orz-slides 1.0: Markdown that edits itself as a slide deck. A .slides.md text twin and its self-editing .slides.html file, 14 themes, 16:9 or 4:3, the layout grammar (presets, splits, regions, floats), template pages and deck templates, the live slide card and single-slide editing, print one slide per page, inspect --layout, upgrading 0.x decks, and the orz-slides CLI (new, assemble, extract, upgrade, inspect, themes, templates).">
 <link rel="canonical" href="https://markdown.orz.how/slides.html">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="orz-markdown">
-<meta property="og:title" content="orz-slides layouts and syntax">
-<meta property="og:description" content="Build editable Markdown slide decks with regions, columns, templates, themes, and presenter tools.">
+<meta property="og:title" content="orz-slides decks and layouts">
+<meta property="og:description" content="Editable Markdown slide decks in one file: a text twin, 14 themes, a layout grammar, a live slide card and a layout editor, presenter tools.">
 <meta property="og:url" content="https://markdown.orz.how/slides.html">
 <meta property="og:image" content="https://markdown.orz.how/media/orz-markdown-social.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./site.css">
 <style>
-  /* layout-showcase diagrams (page-local): a CSS grid that mirrors a slide's regions */
+  /* layout-showcase diagrams (page-local): a CSS grid that mirrors a slide's boxes */
   .lzrow { display:grid; gap:18px; align-items:start; margin:12px 0 6px; }
   @media (min-width:720px){ .lzrow { grid-template-columns:minmax(0,260px) 1fr; } }
   .lzrow pre { margin:0; align-self:start; }
@@ -31,6 +31,9 @@
   .lzfloat { position:absolute; display:flex; align-items:center; justify-content:center; text-align:center;
     background:#fdf6e3; border:1px solid #efe2bf; border-radius:6px;
     font:600 .7rem ui-monospace,monospace; color:#7a5d00; }
+  /* a code block inside a card scrolls instead of widening the grid on a narrow screen */
+  .grid > .card { min-width:0; }
+  .card pre { overflow-x:auto; }
 </style>
 </head>
 <body>
@@ -52,9 +55,10 @@
 <main>
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.slides.html</span>
-    <h1 style="margin:.3em 0 .15em">orz-slides — layouts &amp; syntax</h1>
-    <p class="lead" style="max-width:720px">A reference for the deck format: structure templates, a small
-    column/row layout grammar, regions, floats, and per-slide options. Part of
+    <h1 style="margin:.3em 0 .15em">orz-slides — decks &amp; layouts</h1>
+    <p class="lead" style="max-width:730px">Markdown that edits itself, as a slide deck. This page describes
+    <strong>orz-slides 1.0</strong>: the text twin and its file, presenting, the two ways to edit, the header, the
+    layout grammar, template pages, themes, fit, printing and the CLI. Part of
     <a href="./family.html#slides">the orz editable-document family</a>.</p>
   </div></section>
 
@@ -63,134 +67,212 @@
   <!-- AI-FIRST NOTE -->
   <section class="section" style="margin-top:8px">
     <div class="callout">
-      <strong>You don't have to learn any of this.</strong> The editor's <strong>layout picker</strong> covers the
-      common cases with one click, and for anything beyond that the fastest path is to <strong>ask an AI agent to
-      build or restructure your deck</strong>. Point it at the bundled <strong>orz-slides agent skill</strong>
-      (<code>orz-slides-skills/SKILL.md</code>) and describe what you want — &ldquo;make this a two-column slide with a
-      figure on the right,&rdquo; &ldquo;turn these notes into a section divider then three bullet slides.&rdquo; This
-      page is the reference the agent (and curious humans) can draw on; skim it, don't memorize it.
+      <strong>You don't have to learn any of this.</strong> Start from a deck template (<code>orz-slides new
+      --template talk</code>, or <em>New document</em> in the file), shape slides with the layout editor, and for
+      anything beyond that <strong>ask an AI agent to write or restructure the text</strong>. Point it at the
+      <strong>orz-slides agent skill</strong>
+      (<a href="https://cdn.jsdelivr.net/npm/orz-slides@1/orz-slides-skills/SKILL.md"><code>orz-slides-skills/SKILL.md</code></a>)
+      and describe what you want — &ldquo;turn these notes into a ten-slide talk,&rdquo; &ldquo;make this a
+      two-column slide with the chart on the right,&rdquo; &ldquo;check that every slide fits.&rdquo; This page is the
+      reference the agent (and curious humans) can draw on; skim it, don't memorize it.
     </div>
   </section>
 
-  <!-- QUICK WAY -->
+  <!-- WHAT IT IS -->
   <section class="section" style="margin-top:34px">
-    <h2>The quick way: the layout picker</h2>
-    <p>In the editor, open the <strong>layout</strong> button (the grid icon) and pick a layout. On a blank slide it
-    drops the skeleton straight in; on a slide that already has content it inserts the new layout and tucks your old
-    content into a comment so you can copy-paste it into place. The picker offers the most common layouts:</p>
+    <h2>A text twin and a self-editing file</h2>
+    <p>A deck is its <strong>text twin</strong> — <code>talk.slides.md</code>, Markdown with a small header and comment
+    markers that start slides and split them into boxes — and its <strong>self-editing file</strong>
+    <code>talk.slides.html</code>, one HTML page that <strong>presents</strong> the deck in any browser (keys, overview,
+    speaker view, timer, full screen), <strong>edits itself</strong> — the whole deck as text beside a live preview, or
+    one slide at a time with a layout editor — saves back in place and <strong>prints one slide per page</strong>. The
+    file is always <code>assemble(text)</code>: the exact text rides inside it, everything else is a shell that can be
+    regenerated, and <code>orz-slides extract</code> gives the text back byte for byte. Keep the
+    <code>.slides.md</code> in your repository; make the <code>.slides.html</code> whenever someone needs a file.</p>
     <div class="grid c3">
-      <div class="card"><h3 style="margin-top:0">Title · Section · Closing</h3><p>Cover, divider, and thank-you
-      slides — large centered or left-aligned type, no regions to fill.</p></div>
-      <div class="card"><h3 style="margin-top:0">Bullets · Outline</h3><p>A titled slide with a list, or an
-      agenda. The everyday content slide.</p></div>
-      <div class="card"><h3 style="margin-top:0">Two columns · Main + side · Three columns · Two rows · Quad</h3>
-      <p>Multi-region layouts. Each region is filled with a <code>&lt;!-- @name --&gt;</code> marker.</p></div>
+      <div class="card"><h3 style="margin-top:0">The deck in the page</h3><p>Every slide at its logical size —
+      1280&nbsp;×&nbsp;720 (16:9) or 960&nbsp;×&nbsp;720 (4:3) — scaled to the window, on the theme's surround.
+      <a href="https://revealjs.com">reveal.js</a> 5.2.1 does the deck mechanics.</p></div>
+      <div class="card"><h3 style="margin-top:0">Nothing is cut silently</h3><p>Every box — layout boxes, titles, template
+      pages, floats — shrinks its content to fit, down to 60&nbsp;%. Past that it is marked clipped, and the editor and
+      <code>orz-slides inspect --layout</code> say so.</p></div>
+      <div class="card"><h3 style="margin-top:0">One family</h3><p>The same text twin, pencil, editor, saving, quiet
+      update, host protocols and CLI as <a href="./family.html#mdhtml">orz-mdhtml</a> and
+      <a href="./paged.html">orz-paged</a> 1.0 — built on the orz-markdown carrier kit (text format 1). What slides
+      adds is slides.</p></div>
     </div>
-    <p style="margin-top:14px">Everything below is what those skeletons expand to — reach for it when you want a
-    custom split, a floating figure, a background colour, or a template variant.</p>
+    <p style="opacity:.75;font-size:.95em;margin-top:14px">Published on npm as <code>orz-slides</code> (CLI and Node
+    library) and <code>orz-slides-browser</code> (engine and editor component), always the same version. Try the
+    official blank <a href="./starters/new-slides.slides.html?v=1.0.0" target="_blank" rel="noopener">.slides.html
+    starter</a>.</p>
   </section>
 
-  <!-- DECK SETTINGS -->
+  <!-- CLI -->
   <section class="section" style="margin-top:34px">
-    <h2>Deck settings</h2>
-    <p>One <code>&lt;!-- deck --&gt;</code> block at the very top sets defaults for the whole deck.</p>
-<pre>&lt;!-- deck
-title: My presentation
-theme: paper            # paper · executive · chalk · sage · neon · poppy · architect …
-ratio: 16:9             # or 4:3
-author: Dr. Yu Wang
-footer: My talk · 2026  # shown on normal slides (not title/closing)
-transition: fade        # reveal.js transition: none · fade · slide · convex …
---&gt;</pre>
-  </section>
-
-  <!-- STRUCTURE TEMPLATES -->
-  <section class="section" style="margin-top:34px">
-    <h2>Structure templates</h2>
-    <p>Templates are ready-made slides with fixed structure and several visual <strong>variants</strong> (add
-    <code>v=2</code>, <code>v=3</code>, …). The first <code>#</code> heading is the main line, <code>##</code> the
-    subtitle, and any remaining text is the meta line.</p>
+    <h2>Create and build with the CLI</h2>
+    <p>Node 20.16 or newer; nothing to install with <code>npx</code>:</p>
+<pre>npx orz-slides@1 new talk.slides.md --template talk --title "RAFT in five minutes" --theme nocturne   # a new text twin
+# edit talk.slides.md (by hand or with an agent), then:
+npx orz-slides@1 inspect talk.slides.md --layout                                                    # does every box fit?
+npx orz-slides@1 talk.slides.md                                                                     # → talk.slides.html</pre>
     <table>
-      <tr><th>Template</th><th>Variants</th><th>For</th></tr>
-      <tr><td><code>title</code></td><td>v=1–6</td><td>Cover / title slide</td></tr>
-      <tr><td><code>section</code></td><td>v=1–4</td><td>Section divider</td></tr>
-      <tr><td><code>outline</code></td><td>v=1–3</td><td>Agenda / table of contents (a list)</td></tr>
-      <tr><td><code>closing</code></td><td>v=1–3</td><td>Thank-you / questions</td></tr>
+      <tr><th>Command</th><th>What it does</th></tr>
+      <tr><td><code>orz-slides new [x.slides.md] [--template id] [--title T] [--theme id] [--ratio 16:9|4:3] [--html] [--cdn]</code></td><td>writes a new text twin from a deck template (default <code>starter</code>): its header with <code>carrier: slides</code> and a fresh <code>uid</code>, then the template's slides; <code>--html</code> also assembles it</td></tr>
+      <tr><td><code>orz-slides assemble x.slides.md [-o out] [--cdn]</code></td><td>writes <code>x.slides.html</code> from the text — the same bytes every time (also: <code>orz-slides x.slides.md</code>; a plain Markdown deck <code>x.md</code> assembles to <code>x.slides.html</code>)</td></tr>
+      <tr><td><code>orz-slides extract x.slides.html</code></td><td>writes the exact text twin back out of a file — also of a page the browser saved</td></tr>
+      <tr><td><code>orz-slides upgrade old.slides.html</code> · <code>orz-slides upgrade deck.md</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin; a 0.x deck source into a format-1 text — with a report of what changed</td></tr>
+      <tr><td><code>orz-slides inspect &lt;file&gt; [--layout [--offline]]</code></td><td>says what any text or file is — version, settings, slides, lint, whether its twin matches — and what to do next; <code>--layout</code> renders the deck in your installed Chrome and reports, per slide and box, the fit scale and whether anything is cut</td></tr>
+      <tr><td><code>orz-slides themes</code> · <code>orz-slides templates</code></td><td>list the slide themes and the deck templates</td></tr>
     </table>
-<pre>&lt;!-- slide template=title v=2 --&gt;
-# Controlled Polymerization
-## RAFT vs ATRP
-**Dr. Yu Wang** · 2026
-
-&lt;!-- slide template=section --&gt;
-# Part II — Methods
-
-&lt;!-- slide template=outline --&gt;
-## Outline
-1. Introduction
-2. Methods
-3. Results</pre>
+    <p style="margin-top:12px">Content — title, theme, ratio, footer — comes only from the text's header;
+    <code>assemble</code> has no content options. Every command takes <code>--json</code> (one object with a stable
+    <code>reason</code> and a <code>next</code> step on refusals), and nothing that could hold other work (a file saved
+    in the browser, an edited twin) is overwritten without <code>--force</code>, which keeps a <code>&lt;file&gt;~</code>
+    backup.</p>
+    <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine, reveal.js and the 14 themes
+    are inside the file (about 2.2&nbsp;MB), so it opens and presents without fetching the engine. <code>--cdn</code>
+    writes a small file for decks you publish on the web; it loads the engine from jsDelivr,
+    <code>https://cdn.jsdelivr.net/npm/orz-slides-browser@1.0.0/orz-slides.browser.js</code> (the file's own version).
+    The themes ship inside the engine, so a <code>--cdn</code> file styles exactly like an inline one. Either way, the
+    themes' webfonts, KaTeX, the content libraries (Mermaid, SMILES, Chart.js) and the editor load from CDNs the first
+    time; without a network the deck still presents, in system fonts.</p>
   </section>
 
-  <!-- LAYOUT GRAMMAR -->
+  <!-- IN THE FILE -->
   <section class="section" style="margin-top:34px">
-    <h2>Layout presets &amp; regions</h2>
-    <p>A normal slide&rsquo;s first <code>##</code> heading becomes its title. Add a preset to split the body into
-    named <strong>regions</strong>; fill each region with a <code>&lt;!-- @name --&gt;</code> marker. Text before the
-    first marker goes into the primary region.</p>
+    <h2>In the file: present, and one quiet pencil</h2>
+    <p>A <code>.slides.html</code> opens as its deck. <span class="kbd">→</span> <span class="kbd">↓</span>
+    <span class="kbd">Space</span> <span class="kbd">PageDown</span> go forward, <span class="kbd">←</span>
+    <span class="kbd">↑</span> <span class="kbd">PageUp</span> back, <span class="kbd">Home</span> /
+    <span class="kbd">End</span> to the ends. A small pencil sits at the bottom-left: click it to edit; hover it (tap
+    on a touch screen) for everything else. A dot on the pencil means unsaved changes.</p>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">Present</h3><p><strong>Present</strong>
+      (<span class="kbd">F</span>) shows the deck alone, full screen; <strong>Overview</strong>
+      (<span class="kbd">O</span>) shows every slide; <strong>Speaker view</strong> (<span class="kbd">S</span>) opens
+      its own window with the current and next slide, the notes, a clock and a timer; <span class="kbd">T</span>
+      toggles the timer. A slide's <code>step</code> option reveals its points one at a time.</p></div>
+      <div class="card"><h3 style="margin-top:0">Settings are the deck's</h3><p><strong>Theme, Ratio, Slide numbers,
+      Progress bar</strong> and <strong>Section numbers</strong> in the pencil's list (or the editor's bar) write the
+      text's header — one undoable edit, unsaved until you Save — and the deck follows.</p></div>
+      <div class="card"><h3 style="margin-top:0">Print</h3><p><strong>Print</strong> prints one slide per page at the
+      slide's size, every step shown; <strong>Print with notes</strong> puts each slide over its speaker notes. Choose
+      <em>Save as PDF</em> in the dialog for a PDF. What does not fit on paper is marked on its page and said.</p></div>
+      <div class="card"><h3 style="margin-top:0">Save, New, Copy</h3><p><strong>Save</strong>
+      (<span class="kbd">Ctrl/⌘ S</span>) writes <code>assemble(text)</code> — never the rendered deck — back to the
+      file, and asks before it overwrites a file that changed on disk. Also: <em>Download a copy</em>, <em>New
+      document</em> (from the <code>minimal</code> deck template) and <em>Save as new copy</em>, both with this
+      version's shell.</p></div>
+    </div>
+    <p style="margin-top:12px">A local file checks at most once a day for a newer engine; the pencil then offers
+    <em>Update to x.y.z</em>, which re-assembles the same text with the new release (verified by SHA-384). Nothing
+    changes until the reader asks.</p>
+  </section>
+
+  <!-- EDITING -->
+  <section class="section" style="margin-top:34px">
+    <h2>Two ways to edit</h2>
+    <p>The pencil (or <span class="kbd">Ctrl/⌘ E</span>) opens the editor. Both ways edit the one text, with one undo
+    history.</p>
+    <div class="grid c2">
+      <div class="card"><h3 style="margin-top:0">The whole deck, with the live card</h3><p>CodeMirror beside a
+      <strong>flattened</strong> preview: every slide's content in order, a thin divider per slide with its number,
+      title and layout, boxes labelled, notes and footers set apart. In its corner, the <strong>live slide
+      card</strong> shows the slide under the caret as it presents, with a badge — <em>fits</em>, <em>shrunk to
+      80%</em>, <em>footer cut</em>, <em>cut on paper</em>. <strong>Issues</strong> lists the deck's lints with quick
+      fixes. Fold the card to a tab when it is in the way.</p></div>
+      <div class="card"><h3 style="margin-top:0">One slide at a time</h3><p>The card's <strong>Edit</strong>
+      (<span class="kbd">Ctrl/⌘ ⇧ Enter</span>) enlarges it into the <strong>layout editor</strong> over the slide:
+      split a box into rows or columns, delete a box (its content moves to the neighbour), drag a divider (it snaps to
+      simple ratios), choose a preset, rename or swap boxes, add, move, resize and layer floats, choose a template
+      page's look, set the slide's options, notes and footer. A filmstrip adds, duplicates, deletes and reorders
+      slides (drag, or <span class="kbd">Alt ↑/↓</span>). Click a box to edit its Markdown; <span class="kbd">?</span>
+      lists the keys. <strong>Done</strong> goes back to the deck, on the slide you were editing.</p></div>
+    </div>
+    <p style="margin-top:12px">Every change in the layout editor rewrites <strong>only the marker lines</strong> of the
+    text — one undo step each, no hidden layout data — so a deck shaped by clicking is still a clean text for you and
+    your agent.</p>
+  </section>
+
+  <!-- HEADER -->
+  <section class="section" style="margin-top:34px">
+    <h2>The header</h2>
+    <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text is the deck's config
+    — and the only one. <code>new</code> writes <code>carrier</code> and a <code>uid</code>; leave the
+    <code>uid</code> as it is.</p>
+<pre>{{nyml
+kind: document
+carrier: slides
+uid: doc-7kq2m9x4p1r8s3t5
+title: Controlled Radical Polymerization
+author: Yu Wang
+theme: orchard           # one of the 14 themes (below); default orchard
+ratio: 16:9              # or 4:3
+footer: CHEM 512 · RAFT  # on every normal slide (title pages show none)
+transition: fade         # none · fade · slide · convex · concave · zoom (default none)
+slide_numbers: yes       # yes / no (default yes)
+progress: yes            # yes / no (default yes)
+section_numbers: roman   # plain · roman · 01 · none (default: the theme's)
+}}</pre>
+    <p>Also the common metadata keys (<code>description</code>, <code>date</code>, <code>keywords</code>,
+    <code>source</code>, <code>license</code>, <code>lang</code>, …) that the file writes into its HTML head. Unknown
+    keys are kept. A 0.x <code>&lt;!-- deck … --&gt;</code> block is no longer a config: it renders nothing and is
+    reported, and <code>orz-slides upgrade</code> moves it into the header.</p>
+  </section>
+
+  <!-- SLIDES & LAYOUT GRAMMAR -->
+  <section class="section" style="margin-top:34px">
+    <h2>Slides, boxes and the layout grammar</h2>
+    <p>Every slide starts with a <code>&lt;!-- slide … --&gt;</code> line: an optional layout, a template page, and
+    options. A normal slide begins with <strong>one <code>##</code> title</strong>, lifted into the slide's title band.
+    <code>&lt;!-- @name --&gt;</code> fills a box; text right after the title fills the layout's first box, so a
+    one-box slide needs no box marker. Markers count only as <strong>top-level lines</strong>: one inside a code fence
+    or a list is text.</p>
     <table>
-      <tr><th>Preset</th><th>Regions</th><th>Default ratio</th></tr>
-      <tr><td><em>(none)</em></td><td>single body</td><td>—</td></tr>
+      <tr><th>Preset</th><th>Boxes</th><th>Default ratio</th></tr>
+      <tr><td><em>(none)</em></td><td><code>body</code></td><td>—</td></tr>
       <tr><td><code>2col</code></td><td><code>left</code> <code>right</code></td><td>1/1</td></tr>
       <tr><td><code>3col</code></td><td><code>left</code> <code>mid</code> <code>right</code></td><td>1/1/1</td></tr>
       <tr><td><code>2row</code></td><td><code>top</code> <code>bottom</code></td><td>1/1</td></tr>
       <tr><td><code>main-side</code></td><td><code>main</code> <code>side</code></td><td>2/1</td></tr>
-      <tr><td><code>quad</code></td><td><code>tl</code> <code>tr</code> <code>bl</code> <code>br</code></td><td>2×2</td></tr>
+      <tr><td><code>quad</code></td><td><code>tl</code> <code>tr</code> <code>bl</code> <code>br</code></td><td>— (no ratio)</td></tr>
     </table>
     <p style="margin-top:12px">Add a ratio after the preset, e.g. <code>2col 3/2</code> or <code>main-side 1/2</code>.</p>
 <pre>&lt;!-- slide 2col 3/2 --&gt;
-## Results
-
+## Results at a glance
 &lt;!-- @left --&gt;
-- Accuracy 92%
-- Precision 88%
-
+- Dispersity below **1.2** in every run
+- Molecular weight grows linearly with conversion
 &lt;!-- @right --&gt;
-{{smiles C(=S)(SC)SC}}</pre>
-  </section>
-
-  <!-- RAW SPLITS -->
-  <section class="section" style="margin-top:34px">
-    <h2>Custom splits (advanced)</h2>
-    <p>For anything the presets don&rsquo;t cover, write the split directly. <code>col</code> and <code>row</code> take a
-    track list (numbers become <code>fr</code> units; <code>auto</code>, <code>%</code>, and <code>px</code> also work)
-    and a <code>{ … }</code> list of regions or nested splits — to any depth.</p>
-<pre>&lt;!-- slide row auto/1 { header; col 1/1 { a; b } } --&gt;
-## Dashboard
-
-&lt;!-- @header --&gt;
-Top banner across the full width.
-
-&lt;!-- @a --&gt;
-Left metric.
-
-&lt;!-- @b --&gt;
-Right metric.</pre>
-    <p style="margin-top:14px"><strong>Floats</strong> place a free box anywhere over the slide (outside the grid):</p>
-<pre>&lt;!-- @float left=58% top=22% w=36% h=44% z=2 --&gt;
-&gt; **Key takeaway:** narrow PDI across all methods.</pre>
-    <p style="margin-top:14px"><strong>Speaker notes</strong> never appear on the slide:</p>
-<pre>&lt;!-- @notes --&gt;
-Remember to mention the control experiment.</pre>
+{{chart
+type: line
+labels: 10, 30, 50, 70
+series: Mn = 4, 11, 19, 27
+}}
+&lt;!-- @notes --&gt;
+Lead with dispersity; the linear growth is the point.</pre>
+    <p style="margin-top:14px"><strong>Splits of your own.</strong> One rule, applied recursively: split a box into
+    <code>row</code>s or <code>col</code>umns; each cell is a named box or another split. Tracks are fractions
+    (<code>1</code>, <code>2</code>), <code>auto</code>, <code>%</code> or <code>px</code>, one per item. Reach for a
+    preset first; a split only for nesting.</p>
+<pre>split  := ("row" | "col") tracks "{" item (";" item)* "}"
+item   := name | split
+tracks := track ("/" track)*        e.g. 2/1 · auto/1 · 30%/1 · 200px/1 · 1/2/1</pre>
+    <p style="margin-top:14px"><strong>Reserved markers</strong>, on every slide:</p>
+    <table>
+      <tr><th>Marker</th><th>What</th></tr>
+      <tr><td><code>&lt;!-- @notes --&gt;</code></td><td>speaker notes — never on the slide; in the speaker view and on <em>Print with notes</em></td></tr>
+      <tr><td><code>&lt;!-- @footer --&gt;</code></td><td>this slide's footer, replacing the header's <code>footer</code></td></tr>
+      <tr><td><code>&lt;!-- @float left=58% top=10% w=36% h=44% --&gt;</code></td><td>an overlay box over the layout (<code>left right top bottom w h</code>, and <code>z=</code> for stacking) — for a badge, a callout, a logo; use rarely</td></tr>
+    </table>
   </section>
 
   <!-- WORKED EXAMPLES -->
   <section class="section" style="margin-top:34px">
-    <h2>Worked examples</h2>
-    <p>Real splits and what they produce. Each box mirrors the slide&rsquo;s region grid; the source beside it is
-    exactly what you write. (Drawn from the deck&rsquo;s own layout test set.)</p>
+    <h2>Worked layouts</h2>
+    <p>Each box mirrors the slide's grid; the text beside it is exactly what you write.</p>
 
-    <h3 style="margin:18px 0 0">Header band over two columns</h3>
+    <h3 style="margin:18px 0 0">A header band over two columns</h3>
     <div class="lzrow">
       <div class="lzbox" style="grid-template-rows:auto 1fr">
         <div class="lzcell">head</div>
@@ -225,23 +307,7 @@ Middle bottom.
 Column three.</pre>
     </div>
 
-    <h3 style="margin:24px 0 0">Sidebar + a main column with its own header</h3>
-    <div class="lzrow">
-      <div class="lzbox" style="grid-template-columns:1fr 2fr">
-        <div class="lzcell">side</div>
-        <div class="lzg" style="grid-template-rows:auto 1fr"><div class="lzcell">mainHead</div><div class="lzcell">mainBody</div></div>
-      </div>
-<pre>&lt;!-- slide col 1/2 { side; row auto/1 { mainHead; mainBody } } --&gt;
-## Topic
-&lt;!-- @side --&gt;
-Nav / notes.
-&lt;!-- @mainHead --&gt;
-Main header.
-&lt;!-- @mainBody --&gt;
-Main body fills the rest.</pre>
-    </div>
-
-    <h3 style="margin:24px 0 0">A floating figure over two columns</h3>
+    <h3 style="margin:24px 0 0">A floating takeaway over two columns</h3>
     <div class="lzrow">
       <div class="lzbox rel" style="grid-template-columns:1fr 1fr">
         <div class="lzcell">left</div><div class="lzcell">right</div>
@@ -258,87 +324,130 @@ More content.
     </div>
   </section>
 
+  <!-- TEMPLATE PAGES & DECK TEMPLATES -->
+  <section class="section" style="margin-top:34px">
+    <h2>Template pages &amp; deck templates</h2>
+    <p><strong>Template pages</strong> are structure slides with their own design in every theme; <code>v=N</code>
+    picks a look. A layout on a template page is an error.</p>
+    <table>
+      <tr><th>Template</th><th>Write</th><th>Looks</th></tr>
+      <tr><td><code>title</code></td><td><code>#</code> title, <code>##</code> subtitle, then a byline</td><td><code>v=1</code>–<code>6</code></td></tr>
+      <tr><td><code>section</code></td><td><code>#</code> section title, then a line of meta; numbered automatically (<code>section_numbers</code>)</td><td><code>v=1</code>–<code>4</code></td></tr>
+      <tr><td><code>outline</code></td><td>an optional <code>##</code> heading, then a list of the sections; its current item is marked automatically, or with <code>here=N</code></td><td><code>v=1</code>–<code>3</code></td></tr>
+      <tr><td><code>closing</code></td><td><code>#</code> thanks, <code>##</code> questions?, contact lines; a lone <code>{{qr https://…}}</code> gets its own place</td><td><code>v=1</code>–<code>3</code></td></tr>
+    </table>
+<pre>&lt;!-- slide template=title v=2 --&gt;
+# Controlled Radical Polymerization
+## How RAFT keeps every chain growing together
+Yu Wang · October 2026
+
+&lt;!-- slide template=section --&gt;
+# Methods</pre>
+    <p style="margin-top:12px"><strong>Deck templates</strong> start a whole deck with <code>orz-slides new
+    --template</code>: <code>starter</code> (the default — a tour of every kind of slide), <code>talk</code> (title,
+    outline, three sections, closing) and <code>minimal</code> (a title page and one slide; the file's <em>New
+    document</em> starts from it).</p>
+  </section>
+
   <!-- PER-SLIDE OPTIONS -->
   <section class="section" style="margin-top:34px">
     <h2>Per-slide options</h2>
-    <p>Add these to any <code>&lt;!-- slide … --&gt;</code> marker.</p>
+    <p>Add these to any <code>&lt;!-- slide … --&gt;</code> marker; an unknown option is reported.</p>
     <table>
       <tr><th>Option</th><th>Meaning</th></tr>
-      <tr><td><code>bg=#0b3d2e</code></td><td>Slide background colour or gradient</td></tr>
-      <tr><td><code>t=fade</code></td><td>Transition for this slide</td></tr>
-      <tr><td><code>fit=scroll</code></td><td>Overflow handling: <code>fit</code> (default), <code>scroll</code>, <code>off</code></td></tr>
-      <tr><td><code>step</code></td><td>Reveal the slide&rsquo;s items one click at a time</td></tr>
-      <tr><td><code>class=…</code> / <code>id=…</code></td><td>Custom class or id on the slide</td></tr>
-      <tr><td><code>v=2</code></td><td>Template variant (with <code>template=</code>)</td></tr>
+      <tr><td><code>step</code></td><td>reveal the slide's blocks one at a time (each item of a top-level list)</td></tr>
+      <tr><td><code>fit=fit</code> · <code>fit=scroll</code> · <code>fit=off</code></td><td>shrink to fit (default) · scroll on screen, fitted on paper · no fitting, cut when too long</td></tr>
+      <tr><td><code>bg=#0b3d2e</code></td><td>the slide's background: a colour or an image URL</td></tr>
+      <tr><td><code>t=fade</code></td><td>this slide's transition</td></tr>
+      <tr><td><code>class=…</code> · <code>id=…</code></td><td>a class or id on the slide</td></tr>
+      <tr><td><code>template=…</code> · <code>v=N</code> · <code>here=N</code></td><td>a template page, its look, an outline's current item</td></tr>
     </table>
 <pre>&lt;!-- slide 2col bg=#0b3d2e t=fade step --&gt;</pre>
+    <p style="margin-top:12px">A single block can be a fragment with <code>{{attrs[.fragment]}}</code> after it.</p>
   </section>
 
-  <!-- FOOTERS & OVERFLOW -->
+  <!-- THEMES -->
   <section class="section" style="margin-top:34px">
-    <h2>Footers &amp; overflow</h2>
-    <p><strong>Footers.</strong> The deck&rsquo;s <code>footer:</code> setting shows at the bottom of every normal
-    slide (title, section, and closing slides have none). Override it on one slide with a
-    <code>&lt;!-- @footer --&gt;</code> region:</p>
-<pre>&lt;!-- slide --&gt;
-## A slide with its own footer
-Body content.
-&lt;!-- @footer --&gt;
-Custom footer — this slide only</pre>
-    <p style="margin-top:14px"><strong>Overflow.</strong> By default a slide&rsquo;s content
-    <strong>scales down to fit</strong> so it never spills off the edge. Change that per slide with
-    <code>fit=</code>:</p>
-    <table>
-      <tr><th>Option</th><th>Behaviour</th></tr>
-      <tr><td><code>fit=fit</code></td><td>Default — auto-scale the content down to fit the slide</td></tr>
-      <tr><td><code>fit=scroll</code></td><td>Keep full size; the slide scrolls if it overflows</td></tr>
-      <tr><td><code>fit=off</code></td><td>No scaling, no scroll — content may overflow (you size it yourself)</td></tr>
-    </table>
+    <h2>Fourteen themes</h2>
+    <p>Each theme carries the parts only decks have — title band, title, section, outline and closing pages, slide
+    number, progress, footer, fragments, boxes, floats. Ten are derived from
+    <a href="./features.html">orz-markdown's themes</a>: <strong>Orchard</strong> (the default), <strong>Sky</strong>,
+    <strong>Stationery</strong>, <strong>Preprint</strong>, <strong>Small Press</strong>, <strong>Notebook</strong> (a
+    ruled exercise book), <strong>Sticker</strong>, and the dark <strong>Inscription</strong>,
+    <strong>Copper</strong> and <strong>Nocturne</strong>. Four come from 0.x, updated: <strong>Architect</strong> (a
+    drafting sheet), <strong>Chalk</strong> (a chalkboard, dark), <strong>Neon</strong> (an instrument panel, dark) and
+    <strong>Paper</strong> (a finely printed book). Dark themes draw charts and diagrams on dark. The orz-markdown theme
+    ids (<code>light-neat-3</code>, …) are accepted as aliases.</p>
+  </section>
+
+  <!-- FIT -->
+  <section class="section" style="margin-top:34px">
+    <h2>Fit, and how much goes on a slide</h2>
+    <p>Every box shrinks its content to fit, on both axes, down to 60&nbsp;%; past that the box is
+    <strong>clipped</strong> and marked — on the live card's badge, on the printed page, and in
+    <code>orz-slides inspect --layout</code>. Shrinking is a safety net: text at 60&nbsp;% is hard to read from the back
+    of a room. As a guide, a 16:9 slide with a title holds unscaled in every theme about <strong>8 bullets</strong> of
+    ~9 words in one box, <strong>4</strong> of ~7 words in a <code>2col</code> column, <strong>3</strong> short ones in
+    a <code>quad</code> cell, and a title of about 6 words on one line. Prefer two slides over one crowded one.</p>
+<pre>npx orz-slides@1 inspect talk.slides.md --layout --json   # per slide and box: scale (1 = unscaled, 0.6 = the floor) and clipped</pre>
+    <p><code>--layout</code> renders the deck in the installed Chrome (headless; <code>--offline</code> blocks the
+    network). Aim for no clipped box and no scale below about 0.85. The agent skill lists the full budgets, for 16:9
+    and 4:3.</p>
   </section>
 
   <!-- RICH CONTENT -->
   <section class="section" style="margin-top:34px">
-    <h2>Rich content in any region</h2>
-    <p>Region content is orz-markdown, so the full plugin set works right inside a slide — diagrams, charts,
-    chemistry, QR codes, and math:</p>
+    <h2>Rich content in any box</h2>
+    <p>Everything inside a box is orz-markdown — math, code, Mermaid diagrams, chemistry, charts, QR codes, tables,
+    callouts, columns, tabs. Drawings render when their slide shows, at their box's size, in the theme's colours.</p>
     <table>
       <tr><th>Write</th><th>Get</th></tr>
       <tr><td><code>{{mermaid …}}</code></td><td>Mermaid flowcharts &amp; sequence diagrams</td></tr>
-      <tr><td><code>{{chart …}}</code></td><td>Bar / line / pie / doughnut charts</td></tr>
-      <tr><td><code>{{smiles …}}</code></td><td>Chemical structures (SMILES)</td></tr>
-      <tr><td><code>{{qr …}}</code></td><td>QR codes (click to enlarge)</td></tr>
-      <tr><td><code>$…$</code> · <code>$$…$$</code></td><td>KaTeX math (incl. <code>mhchem</code>)</td></tr>
-      <tr><td><code>{{youtube …}}</code> · <code>{{emoji …}}</code></td><td>Video embeds &amp; emoji</td></tr>
+      <tr><td><code>{{chart …}}</code></td><td>bar / line / pie / doughnut charts</td></tr>
+      <tr><td><code>{{smiles …}}</code></td><td>chemical structures (SMILES)</td></tr>
+      <tr><td><code>{{qr …}}</code></td><td>QR codes</td></tr>
+      <tr><td><code>$…$</code> · <code>$$…$$</code> · <code>\ce{…}</code></td><td>KaTeX math and chemical equations</td></tr>
+      <tr><td><code>{{youtube …}}</code> · images</td><td>video embeds; images relative to the deck</td></tr>
     </table>
-    <p style="margin-top:12px">On dark themes (chalk, neon) diagrams and charts sit on a soft light panel so
-    they stay legible.</p>
   </section>
 
-  <!-- PRESENTING -->
+  <!-- OLD FILES & APPS -->
   <section class="section" style="margin-top:34px">
-    <h2>Presenting</h2>
+    <h2>Older decks and web apps</h2>
     <div class="grid c2">
-      <div class="card"><h3 style="margin-top:0">Speaker view — <span class="kbd">S</span></h3>
-        <p>A second window with the current and next slide, your <code>&lt;!-- @notes --&gt;</code> speaker notes,
-        and a clock.</p></div>
-      <div class="card"><h3 style="margin-top:0">Timer — <span class="kbd">T</span></h3>
-        <p>An on-deck elapsed-time timer to keep pace, toggled right on the deck.</p></div>
-      <div class="card"><h3 style="margin-top:0">Step-reveal &amp; fragments</h3>
-        <p>Add <code>step</code> to a slide marker to reveal its items one click at a time, or mark any element
-        with <code>{{attrs[.fragment]}}</code> for manual fragments.</p></div>
-      <div class="card"><h3 style="margin-top:0">Notes, numbers &amp; ratio</h3>
-        <p><code>&lt;!-- @notes --&gt;</code> never shows on the slide; slide numbers appear while presenting; set
-        <code>ratio: 16:9</code> or <code>4:3</code> in the deck block.</p></div>
+      <div class="card"><h3 style="margin-top:0">0.x decks: inspect, then upgrade</h3><p>A file or deck source made by
+      orz-slides 0.8.5 or earlier keeps its source, but 1.0 does not open it as it is. Upgrade each once:</p>
+<pre>npx orz-slides@1 inspect old.slides.html   # what it is, what upgrade changes
+npx orz-slides@1 upgrade old.slides.html   # → 1.0 file + old.slides.md
+npx orz-slides@1 upgrade deck.md           # a 0.x source → deck.slides.md</pre>
+      <p>The <code>&lt;!-- deck … --&gt;</code> block and metadata become one header at the top, the theme the deck
+      showed is written explicitly (<code>executive</code>, <code>poppy</code> and <code>sage</code> become
+      <code>sky</code>, <code>sticker</code> and <code>orchard</code>), and a report lists every difference against
+      what 0.8.5 showed. Slides are now 1280&nbsp;×&nbsp;720, so content sized for 0.x has more room. A 0.x file's own
+      &ldquo;Framework 1.0.0 available&rdquo; offer cannot make that move — dismiss it and run
+      <code>upgrade</code>.</p></div>
+      <div class="card"><h3 style="margin-top:0">In a web app</h3><p>The editor is a component:
+      <code>npm i orz-slides-browser@1</code>, then <code>mountEditor(element, { text, hooks })</code> (ES module, or
+      <code>globalThis.OrzCarrier</code> from the IIFE) — the flattened preview, the live slide card and single-slide
+      editing in a sandboxed frame. The layout operations are pure functions an app can run itself
+      (<code>applyOp</code>). Store the text; call <code>assemble(text)</code> only when a file is needed. See
+      <a href="https://github.com/wangyu16/orz-slides/blob/main/docs/embedding.md">docs/embedding.md</a>.</p></div>
     </div>
+    <p style="margin-top:16px">For the full vocabulary — every header key, option, theme and capacity budget — read the
+    <strong>agent skill</strong>
+    (<a href="https://github.com/wangyu16/orz-slides/tree/main/orz-slides-skills">orz-slides-skills/SKILL.md</a>) or
+    just ask an agent.</p>
   </section>
 
   <!-- FOOTER -->
   <section class="section" style="margin-top:40px">
     <div class="callout amber"><strong>In-place Save needs a Chromium-based browser</strong> (Chrome or
-    Edge); elsewhere, save downloads a copy. Editing and presenting work in any modern browser.</div>
+    Edge); elsewhere, save downloads a copy. Presenting, editing (both ways), and printing work in any modern
+    browser.</div>
     <footer><div class="row">
       <a href="./family.html#slides">← The family</a>
       <a href="https://github.com/wangyu16/orz-slides">orz-slides on GitHub</a>
+      <a href="https://www.npmjs.com/package/orz-slides">orz-slides on npm</a>
       <a href="./guide.html">Guide</a>
       <a href="./">Home</a>
     </div></footer>

@@ -2,8 +2,9 @@
 
 > orz-markdown is a Markdown renderer and a family of single-file, self-editing
 > HTML tools. A `.md.html` document reads like a webpage, a `.slides.html` file
-> presents as a reveal.js deck, and a `.paged.html` file lays Markdown out as
-> printable pages. Every format keeps editable Markdown source inside the file.
+> presents as a slide deck, and a `.paged.html` file lays Markdown out as
+> printable pages. Every format keeps editable Markdown source inside the file,
+> with a Markdown text twin beside it (`x.md`, `x.slides.md`, `x.paged.md`).
 
 ## Start here
 
@@ -15,8 +16,8 @@
 
 ## Product references
 
-- [orz-slides layouts and syntax](https://markdown.orz.how/slides.html)
-- [orz-paged documents and layout](https://markdown.orz.how/paged.html)
+- [orz-slides decks and layouts](https://markdown.orz.how/slides.html): orz-slides 1.0, text twin, layout grammar, themes, CLI
+- [orz-paged documents and layout](https://markdown.orz.how/paged.html): orz-paged 1.0, templates, print themes, CLI
 - [Document verifier](https://markdown.orz.how/verify.html)
 
 ## Agent skills
