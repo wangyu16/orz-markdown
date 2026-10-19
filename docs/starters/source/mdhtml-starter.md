@@ -11,8 +11,9 @@ for notes, handouts, articles, and web-style reading.
 
 ::: info
 Click the pencil at the bottom-left to edit. This page was opened from a
-website, so Save cannot write over it: choose *Download a copy* from the
-pencil's list to keep the file on your computer, then open and save that copy.
+website, so Save cannot write over it. To keep the file, hover over the
+pencil (tap it on a phone) and choose *Download a copy* from its list (in the
+editor, it is under ···), then open and save that copy.
 :::
 
 ## A section
