@@ -2,7 +2,7 @@
 kind: document
 template: report-section
 theme: light-academic-1
-header_center: Untitled report
+header_center: Untitled Report
 page_number_position: footer-center
 page_number_style: page-n-of-N
 carrier: paged
