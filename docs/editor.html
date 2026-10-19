@@ -92,7 +92,9 @@
     padding:8px 15px; border-radius:9px; font-size:13px; opacity:0; transition:opacity .2s,transform .2s; pointer-events:none; z-index:9; }
   #toast.show { opacity:.96; transform:translateX(-50%) translateY(0); }
   @media (max-width:680px){ #main{grid-template-columns:1fr!important;} #split{display:none;}
-    html:not([data-view="preview"]) #pv{display:none;} html[data-view="preview"] #ed{display:none;} .fname{display:none;} }
+    html:not([data-view="preview"]) #pv{display:none;} html[data-view="preview"] #ed{display:none;} .fname{display:none;}
+    /* a phone: the toolbar wraps onto a second row instead of scrolling the page sideways */
+    #bar{flex-wrap:wrap; row-gap:4px; padding:6px 8px;} #bar .sep{display:none;} }
 </style>
 </head>
 <body>

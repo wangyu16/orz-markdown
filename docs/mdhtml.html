@@ -44,7 +44,7 @@
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.md.html</span>
     <h1 style="margin:.3em 0 .15em">orz-mdhtml — documents</h1>
-    <p class="stamp">This page describes orz-mdhtml 1.0 (orz-mdhtml-browser 1.0), on orz-markdown 2.4</p>
+    <p class="stamp">This page describes orz-mdhtml 1.0 (orz-mdhtml-browser 1.0), which embeds orz-markdown 2.3</p>
     <p class="lead" style="max-width:730px">Markdown that edits itself, as a continuous document that reads like a
     themed web page: notes, handouts, articles, READMEs. This page covers the text and its file, reading, editing and
     saving, the header, themes and line length, delivery and browsers, the CLI, older files and web apps. Part of
@@ -82,7 +82,9 @@
     <div class="grid c3">
       <div class="card"><h3 style="margin-top:0">A quiet read view</h3><p>The document is rendered in the page with the
       header's theme and line length; math, code highlighting, diagrams, chemistry and charts are drawn once their
-      libraries arrive. Copying rendered content copies Markdown.</p></div>
+      libraries arrive. Copying rendered content copies Markdown. (orz-mdhtml 1.0 embeds orz-markdown 2.3: charts
+      and Mermaid diagrams use the libraries' own colours, on a light panel in a dark theme. The theme-coloured charts
+      and diagrams of orz-markdown 2.4 reach <code>.md.html</code> files when orz-mdhtml moves to that kit.)</p></div>
       <div class="card"><h3 style="margin-top:0">One pencil</h3><p>The page shows one control, a small pencil at the
       bottom-left. Click it to edit; hover it (tap it on a touch screen, or Tab to it and press
       <span class="kbd">↑</span>) for everything else.</p></div>
@@ -99,7 +101,8 @@
   <section class="section" style="margin-top:34px">
     <h2>In the file: read, edit, save</h2>
     <div class="grid c2">
-      <div class="card"><h3 style="margin-top:0">The pencil's list</h3><p><strong>Edit</strong>, <strong>Save</strong>,
+      <div class="card"><h3 style="margin-top:0">The pencil's list</h3><p>Hover over the pencil (tap it on a touch
+      screen) to open its list: <strong>Edit</strong>, <strong>Save</strong>,
       <em>Download a copy</em>, <em>New document</em>, <em>Save as new copy</em> (the same text with a new
       <code>uid</code>), <strong>Theme</strong>, <strong>Width</strong>, <strong>Text size</strong> and, when there is
       one, the update. A dot on the pencil means unsaved changes; the page asks before it closes with unsaved
@@ -135,8 +138,7 @@
   <section class="section" style="margin-top:34px">
     <h2>The header</h2>
     <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text holds the
-    document's metadata and settings. <code>new</code> writes <code>carrier</code> and a <code>uid</code>; leave the
-    <code>uid</code> as it is.</p>
+    document's metadata and settings. <code>new</code> writes <code>carrier</code> and a <code>uid</code> (the document's id; <code>upgrade</code>, <em>New document</em> and <em>Save as new copy</em> write one too, Save does not — a starter file has none, which is fine); once there is one, leave it as it is.</p>
 <pre>{{nyml
 kind: document
 carrier: md
@@ -202,7 +204,9 @@ npx orz-mdhtml@1 notes.md                             # → notes.md.html</pre>
     refusal <code>{ "ok": false, "error", "reason", "next" }</code> — <code>reason</code> is a stable code
     (<code>twin-differs</code>, <code>replaces-mismatch</code>, <code>legacy-file</code>, <code>output-differs</code>,
     <code>newer-shell</code>, …) and <code>next</code> the one command that resolves it, built from your own arguments
-    and safe to run as it is. Every command prints the <code>sha256</code> of the text it wrote or read; pass it back as
+    and safe to run as it is. <code>assemble</code>, <code>extract</code> (to a file), <code>inspect</code> and
+    <code>upgrade</code> print the <code>sha256</code> of the text they wrote or read (and every <code>--json</code>
+    result that wrote a text carries it; <code>new</code> prints it only with <code>--json</code>); pass it back as
     <code>--replaces &lt;sha256&gt;</code> and the file is replaced only while it still holds that text — it works with
     no cache, no git, in a fresh sandbox. Exit status: 0 done, 1 refused or failed, 2 usage error. Before editing
     <code>x.md</code>, <code>inspect x.md</code> says whether <code>x.md.html</code> holds work saved in the browser;
@@ -245,8 +249,9 @@ npx orz-mdhtml@1 notes.md                             # → notes.md.html</pre>
 npx orz-mdhtml@1 upgrade old.md.html</pre>
       <p><code>inspect</code> says what the file is and what to do; <code>upgrade</code> rewrites it as a 1.0 file and
       writes its text <code>old.md</code> (when <code>old.md</code> already exists, add
-      <code>--text old.browser.md</code> and merge the two). It keeps the source exactly, moves the metadata, the saved theme and the title into the
-      header, keeps the file's delivery and gives it a <code>uid</code>. A 0.9.x file's own "Framework 1.0.0 available"
+      <code>--text old.browser.md</code> and merge the two). It keeps the source exactly, moves the metadata and the saved theme into the header (the
+      0.x <code>&lt;title&gt;</code> too, but only when the text has no heading of its own to give the title — otherwise
+      it is left out, with a warning), keeps the file's delivery and gives it a <code>uid</code>. A 0.9.x file's own "Framework 1.0.0 available"
       banner cannot make this move (it ends with "check your connection" and changes nothing) — use
       <code>upgrade</code>. The 0.9 API (<code>buildMdHtml</code> and friends) and <code>--theme</code> /
       <code>--title</code> on generation are gone: content lives in the header.</p></div>

@@ -75,7 +75,7 @@ Reactions {{emoji tada}} {{emoji rocket}} and
         <tr><td><code>qrcode</code> / <code>qr</code></td><td><code>{{qr https://orz.how}}</code></td><td>inline QR (scannable, click to enlarge; full size when alone in its paragraph)</td></tr>
         <tr><td><code>youtube</code> / <code>yt</code></td><td><code>{{yt dQw4w9WgXcQ}}</code></td><td>a responsive video embed (an id or a YouTube URL; <code>?t=42</code> sets the start); prints as its address</td></tr>
         <tr><td><code>mermaid</code> / <code>mm</code></td><td><code>{{mm⏎graph LR⏎A--&gt;B⏎}}</code></td><td>a diagram</td></tr>
-        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie / doughnut / radar / polarArea charts in the theme's colours (no size or axis-title keys)</td></tr>
+        <tr><td><code>chart</code></td><td><code>{{chart⏎type: bar⏎…}}</code></td><td>bar / line / pie / doughnut / radar / polarArea charts in the theme's colours (2.4; no size or axis-title keys)</td></tr>
         <tr><td><code>smiles</code> / <code>sm</code></td><td><code>{{sm C1=CC=CC=C1}}</code></td><td>a chemical structure</td></tr>
         <tr><td><code>emoji</code> / <code>em</code></td><td><code>{{emoji wave}}</code></td><td>emoji by name</td></tr>
         <tr><td><code>span</code> / <code>sp</code></td><td><code>{{sp[red] text}}</code></td><td>colored / badged spans</td></tr>
@@ -154,7 +154,10 @@ A reaction: $\ce{CO2 + H2O -> H2CO3}$
     <h2>Diagrams &amp; charts</h2>
     <p class="lead" style="font-size:1.12rem;max-width:680px">Flowcharts, data charts, and chemistry, all from
     plain text, drawn in the theme's colours. (These libraries load on demand, and draw only once their part
-    of the page is visible.)</p>
+    of the page is visible.) Theme colours for charts and diagrams are new in orz-markdown 2.4: they apply to pages
+    rendered with orz-markdown 2.4 and to orz-slides 1.0 decks, and reach <code>.md.html</code> and
+    <code>.paged.html</code> files when orz-mdhtml and orz-paged move to kit 2.4 (their 1.0 releases embed 2.3 and
+    draw charts in Chart.js's default colours).</p>
     <div class="demo split" data-demo>
       <div class="src"><span class="cap">Markdown</span><code class="srctext"></code></div>
       <div class="out"><span class="cap">Renders to</span><div class="render"></div></div>
@@ -216,7 +219,7 @@ data: 3, 7, 5
       <tr><td><code>==mark==</code> · <code>++inserted++</code> · <code>~~deleted~~</code> · <code>H~2~O</code> · <code>x^2^</code></td><td>highlight, insert, strike, sub- and superscript</td></tr>
       <tr><td><code>https://orz.how</code> · <code>www.orz.how</code></td><td>bare addresses become links</td></tr>
       <tr><td><code>--</code> · <code>---</code> · <code>...</code> · <code>"quotes"</code></td><td>– · — · … · “curly quotes” (write a code span for the literal text)</td></tr>
-      <tr><td><code>![…](fig.png)</code> then <code>*Figure 1.* …</code> · <code>**Table 1.** …</code> then a table</td><td>captions: a figure's after it, a table's before it (a convention; Markdown has no caption syntax)</td></tr>
+      <tr><td><code>![…](fig.png)</code> then <code>*Figure 1.* …</code> · <code>**Table 1.** …</code> then a table</td><td>captions: a figure's after it, after a blank line (without one it joins the image's paragraph); a table's before it (a convention; Markdown has no caption syntax)</td></tr>
     </table>
   </section>
 

@@ -54,7 +54,7 @@
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.paged.html</span>
     <h1 style="margin:.3em 0 .15em">orz-paged — documents &amp; layout</h1>
-    <p class="stamp">This page describes orz-paged 1.0 (orz-paged-browser 1.0), on orz-markdown 2.4</p>
+    <p class="stamp">This page describes orz-paged 1.0 (orz-paged-browser 1.0), which embeds orz-markdown 2.3</p>
     <p class="lead" style="max-width:730px">Markdown that edits itself, laid out as print-ready pages. This page
     describes <strong>orz-paged 1.0</strong>: the text twin and its file, the header, templates and print themes,
     page furniture, versions, columns, printing and the CLI. Part of
@@ -69,7 +69,9 @@
   <section class="section" style="margin-top:8px">
     <div class="callout">
       <strong>You don't have to learn any of this.</strong> Start from a template (<em>New document from
-      template…</em> in the file, or <code>orz-paged new --template</code>), and for anything beyond that
+      template…</em> in the file, or <code>orz-paged new --template</code>) — the pencil's <strong>Template</strong>
+      item is different: it only changes the open document's <code>template:</code> key (which sets just the page
+      size) and adds no title page or content. For anything beyond that
       <strong>ask an AI agent to write or restructure the text</strong>. Point it at the
       <strong>orz-paged agent skill</strong>
       (<a href="https://cdn.jsdelivr.net/npm/orz-paged@1/orz-paged-skills/SKILL.md"><code>orz-paged-skills/SKILL.md</code></a>)
@@ -116,7 +118,7 @@
 npx orz-paged@1 report.paged.md                                                # → report.paged.html</pre>
     <table>
       <tr><th>Command</th><th>What it does</th></tr>
-      <tr><td><code>orz-paged new [x.paged.md] [--template id] [--title T] [--theme id] [--html] [--cdn]</code></td><td>writes a new text twin from a template (default <code>note</code>): its header with <code>carrier: paged</code>, a fresh <code>uid</code> and the template's settings (the <code>-page</code> templates add <code>front_matter: clean</code>), then the template's skeleton; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
+      <tr><td><code>orz-paged new [x.paged.md] [--template id] [--title T] [--theme id] [--html] [--cdn]</code></td><td>writes a new text twin from a template (default <code>note</code>): its header with <code>carrier: paged</code>, a fresh <code>uid</code> and the template's settings (<code>article-page</code> and <code>report-page</code> also write <code>front_matter: clean</code>; no other template does), then the template's skeleton; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
       <tr><td><code>orz-paged assemble x.paged.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.paged.html</code> from the text — the same bytes every time (also: <code>orz-paged x.paged.md</code>; a plain <code>x.md</code> assembles to <code>x.paged.html</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it); an include left out shows an "Included file not available" note and is reported (<code>unresolved</code>, or <code>stale</code> when its file changed since)</td></tr>
       <tr><td><code>orz-paged extract x.paged.html [-o out] [--replaces sha256]</code></td><td>writes the exact text twin back out of a file</td></tr>
       <tr><td><code>orz-paged upgrade old.paged.html [--text t | --no-text] [--cdn | --inline]</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin</td></tr>
@@ -128,8 +130,10 @@ npx orz-paged@1 report.paged.md                                                #
     stable <code>reason</code> and a <code>next</code> step on refusals), and nothing that could hold other work (a file
     saved in the browser, an edited twin) is overwritten without <code>--force</code>, which keeps a
     <code>&lt;file&gt;~</code> backup — unless what it replaces is a <strong>known earlier state</strong>: what the CLI
-    itself last wrote or read for that pair, or a committed version of the twin in git. The robust way for scripts and
-    agents: pass the <code>sha256</code> the last command printed as <code>--replaces &lt;sha256&gt;</code>; the file is
+    itself last wrote or read for that pair, or a committed version of the twin in git
+    (<a href="./guide.html#words">glossary</a>). The robust way for scripts and agents: <code>assemble</code>, <code>extract</code> (to a file), <code>inspect</code> and <code>upgrade</code> print the
+    <code>sha256</code> of the text they wrote or read (so does every <code>--json</code> result that wrote a text;
+    <code>new</code> only with <code>--json</code>); pass it back as <code>--replaces &lt;sha256&gt;</code>; the file is
     replaced only while it still holds that text. Exit status: 0 done, 1 refused or failed, 2 usage error.</p>
     <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine, Paged.js and the print
     themes are inside the file (about 1.7&nbsp;MB). <code>--cdn</code> writes a small file for pages you publish on the
@@ -158,8 +162,10 @@ npx orz-paged@1 report.paged.md                                                #
       Template, Page numbers, Number style</strong> and <strong>Version</strong> in the pencil's list (or the editor's
       bar) write the text's header — one undoable edit, unsaved until you Save — and the pages follow. Margins, fonts,
       running headers and custom CSS stay in the header text. <strong>Template</strong> here changes only the
-      <code>template:</code> key — the layout defaults (page size, furniture, front matter) — and never the content, so
-      the change can be small; to start a letter, a CV or an exam, use <em>New document from template…</em>.</p></div>
+      <code>template:</code> key, whose one layout default is the page size (Letter; A4 for <code>note</code>; a
+      <code>page_size</code> in the header wins). It never adds a title page, clean front matter or content, so the
+      change can be small, even none; to start a letter, a CV or an exam, use <em>New document from
+      template…</em>.</p></div>
       <div class="card"><h3 style="margin-top:0">Templates</h3><p><strong>New document from template…</strong> lists
       the twelve templates and saves a fresh file of the chosen one (its starter text, a new <code>uid</code>). The
       open document is never replaced; copy content across yourself.</p></div>
@@ -177,9 +183,10 @@ npx orz-paged@1 report.paged.md                                                #
   <section class="section" style="margin-top:34px">
     <h2>The header</h2>
     <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text configures the
-    whole document. <strong>Template-first:</strong> most documents set only <code>template:</code> (and maybe
-    <code>theme:</code>); the rest are optional overrides. <code>new</code> writes <code>carrier</code> and a
-    <code>uid</code> — leave the <code>uid</code> as it is.</p>
+    whole document. Most documents need few keys: the <code>template:</code> the text started from (maybe
+    <code>theme:</code>, and <code>front_matter: clean</code> from the <code>-page</code> article and report starters);
+    the rest are optional overrides. <code>new</code> writes <code>carrier</code> and a
+    <code>uid</code> (the document's id; <code>upgrade</code>, <em>New document</em> and <em>Save as new copy</em> write one too, Save does not — a starter file has none, which is fine); once there is one, leave it as it is.</p>
 <pre>{{nyml
 kind: document
 carrier: paged
@@ -200,14 +207,14 @@ dynamic_choices: |
 }}</pre>
     <table>
       <tr><th>Key</th><th>Values</th></tr>
-      <tr><td><code>template</code></td><td>layout defaults: page size, furniture, front matter (<a href="#templates">below</a>)</td></tr>
+      <tr><td><code>template</code></td><td>which template the text started from; its one layout default is the page size (Letter; A4 for <code>note</code>) — the title page, front matter and furniture are in the text itself (<a href="#templates">below</a>). The 0.x names <code>article</code>, <code>report</code>, <code>exam</code> mean the <code>-section</code> variants</td></tr>
       <tr><td><code>theme</code></td><td>the look: fonts, accent, element styling (<a href="#templates">below</a>)</td></tr>
       <tr><td><code>page_size</code></td><td><code>A3</code> · <code>A4</code> · <code>A5</code> · <code>Letter</code> · <code>Legal</code> · or two lengths, <code>210mm 297mm</code></td></tr>
       <tr><td><code>margin_top</code> · <code>_bottom</code> · <code>_left</code> · <code>_right</code></td><td>in mm</td></tr>
       <tr><td><code>header_left/center/right</code> · <code>footer_left/center/right</code></td><td>running text in the page margins</td></tr>
       <tr><td><code>page_number_position</code></td><td><code>header-</code> or <code>footer-left</code> / <code>-center</code> / <code>-right</code>, or <code>none</code></td></tr>
       <tr><td><code>page_number_style</code></td><td><code>simple</code> · <code>page-n</code> · <code>page-n-of-N</code> · <code>n-of-N</code> · <code>n-slash-N</code> · <code>dash-n-dash</code> · <code>brackets</code> · <code>parentheses</code></td></tr>
-      <tr><td><code>front_matter</code></td><td><code>clean</code>: title, abstract and contents pages without furniture, the body numbered from 1</td></tr>
+      <tr><td><code>front_matter</code></td><td><code>clean</code>: title, abstract and contents pages without furniture, the body numbered from 1 (written by <code>new --template article-page</code> / <code>report-page</code>; <code>front_matter_clean: yes</code> is an older spelling of the same)</td></tr>
       <tr><td><code>dynamic_choices</code></td><td>one <code>key: value</code> per indented line: the versions (<a href="#versions">below</a>)</td></tr>
     </table>
     <p>Write each value alone after its key: a header has no comments (text after a value becomes part of it).</p>
@@ -223,10 +230,12 @@ dynamic_choices: |
   <!-- TEMPLATES & THEMES -->
   <section class="section" id="templates" style="margin-top:34px">
     <h2>Templates &amp; print themes</h2>
-    <p><strong>A template owns layout</strong> (page size, furniture, which elements appear and where) and supplies a
-    starter text. <strong>A theme owns the look</strong> — so the same theme renders the same across every template.
+    <p><strong>A template is a starter text</strong> (its header and a skeleton of elements: where the title,
+    contents and furniture go) that <code>new --template</code> and <em>New document from template…</em> write; the
+    header's <code>template:</code> key alone sets only the page size. <strong>A theme owns the look</strong> — so the same theme renders the same across every template.
     <code>article</code>/<code>report</code>/<code>exam</code> each come in a <code>-page</code> (title on its own page)
-    and a <code>-section</code> (inline title) variant.</p>
+    and a <code>-section</code> (inline title) variant; the 0.x names <code>article</code>, <code>report</code> and
+    <code>exam</code> still work and mean the <code>-section</code> variant.</p>
     <table>
       <tr><th>Template</th><th>For</th></tr>
       <tr><td><code>article-page</code> / <code>article-section</code></td><td>academic paper — title, authors, abstract, body</td></tr>
@@ -355,10 +364,12 @@ answer: B, D
       <code>var(--surface-2)</code>, …). The <code>cv-modern</code> and <code>cv-elegant</code> templates are built this
       way — copy one as a starting point.</p></div>
       <div class="card"><h3 style="margin-top:0">Full orz-markdown</h3><p>Between the elements, write normal
-      <a href="./features.html">orz-markdown</a>: headings, lists, tables, code, footnotes, math, Mermaid,
+      <a href="./features.html">orz-markdown</a> (orz-paged 1.0 embeds orz-markdown 2.3, so charts and Mermaid diagrams
+      print in the libraries' own colours, not the theme's): headings, lists, tables, code, footnotes, math, Mermaid,
       <code>{{smiles}}</code>, <code>{{chart}}</code>, <code>{{qr}}</code> (a printed QR is genuinely useful),
       callouts, columns, includes — all styled for print. A file include (<code>{{md part.md}}</code>) is read when you
-      assemble with <code>--resolve-includes</code> and stored in the file; one it does not hold shows a quiet
+      assemble with <code>--resolve-includes</code> and stored in the file (its <code>#orz-includes</code> record, which
+    the file reads offline; a later <code>assemble</code> keeps it, <code>--no-includes</code> drops it); one it does not hold shows a quiet
       "Included file not available" note.</p></div>
     </div>
   </section>
@@ -440,7 +451,7 @@ answer: B
     <h2>Older files and web apps</h2>
     <div class="grid c2">
       <div class="card" id="upgrading"><h3 style="margin-top:0">0.x files: inspect, then upgrade</h3><p>A file made by
-      orz-paged 0.7 or earlier still opens as it was, but the 1.0 tools and editor work on it only after a one-time
+      orz-paged 0.7.x or earlier still opens as it was, but the 1.0 tools and editor work on it only after a one-time
       upgrade. <code>npx orz-paged@1 inspect old.paged.html</code> says what it is; <code>npx orz-paged@1 upgrade
       old.paged.html</code> rewrites it as a 1.0 file and writes its text twin <code>old.paged.md</code> — the old
       settings block and metadata become one header at the top, and the settings mean what they meant. When

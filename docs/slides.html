@@ -59,7 +59,7 @@
   <section class="hero" style="padding:52px 0 14px"><div class="wide">
     <span class="ext">.slides.html</span>
     <h1 style="margin:.3em 0 .15em">orz-slides — decks &amp; layouts</h1>
-    <p class="stamp">This page describes orz-slides 1.0 (orz-slides-browser 1.0), on orz-markdown 2.4</p>
+    <p class="stamp">This page describes orz-slides 1.0 (orz-slides-browser 1.0), which embeds orz-markdown 2.4</p>
     <p class="lead" style="max-width:730px">Markdown that edits itself, as a slide deck. This page describes
     <strong>orz-slides 1.0</strong>: the text twin and its file, presenting, the two ways to edit, the header, the
     layout grammar, template pages, themes, fit, printing and the CLI. Part of
@@ -125,7 +125,7 @@ npx orz-slides@1 talk.slides.md                                                 
     <table>
       <tr><th>Command</th><th>What it does</th></tr>
       <tr><td><code>orz-slides new [x.slides.md] [--template id] [--title T] [--theme id] [--ratio 16:9|4:3] [--html] [--cdn]</code></td><td>writes a new text twin from a deck template (default <code>starter</code>): its header with <code>carrier: slides</code> and a fresh <code>uid</code>, then the template's slides; <code>--html</code> also assembles it; without a file name the text goes to stdout</td></tr>
-      <tr><td><code>orz-slides assemble x.slides.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.slides.html</code> from the text — the same bytes every time (also: <code>orz-slides x.slides.md</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it), and an include left out shows an "Included file not available" note. Every slide needs a <code>&lt;!-- slide --&gt;</code> line: Markdown without one assembles to a blank deck, with a warning</td></tr>
+      <tr><td><code>orz-slides assemble x.slides.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]</code></td><td>writes <code>x.slides.html</code> from the text — the same bytes every time (also: <code>orz-slides x.slides.md</code>). Keeps the existing file's delivery and the includes it recorded; <code>--resolve-includes</code> reads <code>{{md part.md}}</code> files from the text's folder (never outside it), and an include left out shows an "Included file not available" note. Every slide needs a <code>&lt;!-- slide --&gt;</code> line: a <code>x.slides.md</code> without one assembles, with a warning, into a deck with no slides; a plain <code>x.md</code> without one (and without <code>carrier: slides</code> in a header) is refused as an orz-mdhtml document — <code>--force</code> makes a deck of it as it is</td></tr>
       <tr><td><code>orz-slides extract x.slides.html [-o out] [--replaces sha256]</code></td><td>writes the exact text twin back out of a file — also of a page the browser saved</td></tr>
       <tr><td><code>orz-slides upgrade old.slides.html [--text t | --no-text] [--cdn | --inline]</code> · <code>orz-slides upgrade deck.md</code></td><td>turns a 0.x file (or an older 1.x shell) into a 1.0 file and writes its text twin; a 0.x deck source into a format-1 text — with a report of what changed</td></tr>
       <tr><td><code>orz-slides inspect &lt;file&gt; [--layout [--offline]]</code></td><td>says what any text or file is — version, settings, slides, lint, whether its twin matches — and what to do next; <code>--layout</code> renders the deck in your installed Chrome and reports, per slide and box, the fit scale and whether anything is cut</td></tr>
@@ -136,8 +136,10 @@ npx orz-slides@1 talk.slides.md                                                 
     <code>reason</code> and a <code>next</code> step on refusals), and nothing that could hold other work (a file saved
     in the browser, an edited twin) is overwritten without <code>--force</code>, which keeps a <code>&lt;file&gt;~</code>
     backup — unless what it replaces is a <strong>known earlier state</strong>: what the CLI itself last wrote or read
-    for that pair, or a committed version of the twin in git. The robust way for scripts and agents: every command
-    prints the <code>sha256</code> of the text it wrote or read; pass it back as <code>--replaces &lt;sha256&gt;</code>
+    for that pair, or a committed version of the twin in git (<a href="./guide.html#words">glossary</a>). The robust
+    way for scripts and agents: <code>assemble</code>, <code>extract</code> (to a file), <code>inspect</code> and <code>upgrade</code> print the
+    <code>sha256</code> of the text they wrote or read (so does every <code>--json</code> result that wrote a text;
+    <code>new</code> only with <code>--json</code>); pass it back as <code>--replaces &lt;sha256&gt;</code>
     and the file is replaced only while it still holds that text. Exit status: 0 done, 1 refused or failed, 2 usage
     error.</p>
     <p><strong>Delivery.</strong> Files are <strong>inline</strong> by default: the engine, reveal.js and the 14 themes
@@ -216,8 +218,7 @@ npx orz-slides@1 talk.slides.md                                                 
   <section class="section" style="margin-top:34px">
     <h2>The header</h2>
     <p>One <code>{{nyml kind: document}}</code> block at the <strong>very top</strong> of the text is the deck's config
-    — and the only one. <code>new</code> writes <code>carrier</code> and a <code>uid</code>; leave the
-    <code>uid</code> as it is.</p>
+    — and the only one. <code>new</code> writes <code>carrier</code> and a <code>uid</code> (the document's id; <code>upgrade</code>, <em>New document</em> and <em>Save as new copy</em> write one too, Save does not — a starter file has none, which is fine); once there is one, leave it as it is.</p>
     <div class="lzrow" style="grid-template-columns:minmax(0,1fr)">
 <pre>{{nyml
 kind: document
@@ -238,7 +239,7 @@ section_numbers: roman
       <tr><th>Key</th><th>Values</th></tr>
       <tr><td><code>theme</code></td><td>one of the 14 theme ids (<a href="#themes">below</a>); default <code>orchard</code></td></tr>
       <tr><td><code>ratio</code></td><td><code>16:9</code> (default) or <code>4:3</code></td></tr>
-      <tr><td><code>footer</code></td><td>a line on every normal slide; template pages (title, section, outline, closing) show none</td></tr>
+      <tr><td><code>footer</code></td><td>a line on every slide except the title page (section, outline and closing pages show it too); a slide's own <code>&lt;!-- @footer --&gt;</code> replaces it on that slide</td></tr>
       <tr><td><code>transition</code></td><td><code>none</code> (default) · <code>fade</code> · <code>slide</code> · <code>convex</code> · <code>concave</code> · <code>zoom</code></td></tr>
       <tr><td><code>slide_numbers</code> · <code>progress</code></td><td><code>yes</code> (default) or <code>no</code></td></tr>
       <tr><td><code>section_numbers</code></td><td><code>plain</code> · <code>roman</code> · <code>01</code> · <code>none</code> (default: the theme's)</td></tr>

@@ -107,8 +107,11 @@ npx orz-slides@1 talk.slides.md                  # -> talk.slides.html
 npx orz-paged@1 new paper.paged.md --template article-page
 npx orz-paged@1 paper.paged.md                   # -> paper.paged.html</code></pre>
           <p>Edit the text (by hand or with an AI agent) between the two commands. An existing Markdown file works too:
-          <code>npx orz-mdhtml@1 notes.md</code> and <code>npx orz-paged@1 paper.md</code> take it as it is, while a deck
-          needs a <code>&lt;!-- slide --&gt;</code> line before each slide (without one, the deck is blank and the CLI warns).
+          <code>npx orz-mdhtml@1 notes.md</code> and <code>npx orz-paged@1 report.md</code> (→ <code>report.paged.html</code>)
+          take it as it is. A deck needs a <code>&lt;!-- slide --&gt;</code> line before each slide: orz-slides refuses a
+          plain <code>x.md</code> without one (it says the text is an orz-mdhtml document; <code>--force</code> makes a
+          deck of it as it is), and a <code>x.slides.md</code> without one assembles, with a warning, into a deck with no
+          slides.
           Open the <code>.html</code> to read, present, or print; click the pencil to change it and Save in place. Files
           carry their engine by default; <code>--cdn</code> makes a small file that loads it from jsDelivr. Every tool
           also has <code>extract</code> (the text back out of a file), <code>upgrade</code> (an older file) and
@@ -169,6 +172,13 @@ const html = md.render('# Hello {{emoji wave}}');
         The same text always gives the same file; <code>extract</code> gives the text back.</td></tr>
         <tr><td><strong>header</strong></td><td>The <code>{{nyml kind: document … }}</code> block at the very top of the
         text: title, author, theme and the other settings.</td></tr>
+        <tr><td><strong>nyml</strong></td><td>The header's small syntax: <code>{{nyml</code> on its own line, then one
+        <code>key: value</code> per line, then <code>}}</code>. Everything after the colon is the value — a
+        <code># note</code> on the line becomes part of it, so keep notes out of the header.</td></tr>
+        <tr><td><strong>uid</strong></td><td>The document's id in the header (<code>uid: doc-…</code>). <code>new</code>,
+        <code>upgrade</code>, <em>New document</em> and <em>Save as new copy</em> write one; Save keeps it. A text without
+        one (a starter, your own Markdown) is fine. Once a document has one, keep it: it tells the tools that a text and a
+        file are the same document.</td></tr>
         <tr><td><strong>shell</strong></td><td>Everything in a file except the text: the engine that renders, edits and
         saves it. It can be rebuilt at any time (<code>upgrade</code>, or the file's own <em>Update</em>), and the text
         stays exactly as it was.</td></tr>
@@ -176,6 +186,20 @@ const html = md.render('# Hello {{emoji wave}}');
         1.0 tool. Files from the 0.x releases predate it and need <a href="#upgrading">upgrading</a> once.</td></tr>
         <tr><td><strong>inline</strong> / <strong>cdn</strong></td><td>Whether the engine is inside the file (inline, the
         default) or loaded from jsDelivr (<code>--cdn</code>, a small file for the web).</td></tr>
+        <tr><td><strong>island</strong></td><td>A block of data inside the file, such as
+        <code>&lt;script type="text/markdown" id="orz-src"&gt;</code>, which holds the exact text. It is data, not a
+        program: the file's only running script is its engine.</td></tr>
+        <tr><td><strong>known state</strong></td><td>A text the CLI itself last wrote or read for a text/file pair, or a
+        version of the text committed in git. The CLI replaces a known state without asking; anything else (an edit
+        made since, a file saved in the browser) needs <code>--force</code>, which keeps a <code>~</code> backup.</td></tr>
+        <tr><td><code>--replaces &lt;sha256&gt;</code></td><td>"Replace the file only if it still holds this text." The
+        <code>sha256</code> is the fingerprint of a text that <code>assemble</code>, <code>extract</code> (to a file),
+        <code>inspect</code> and <code>upgrade</code> print, and every <code>--json</code> result that wrote a text
+        carries. Pass it back and the replace works with no cache and no git, but never over newer work.</td></tr>
+        <tr><td><strong>flattened preview</strong></td><td>The slides editor's preview: every slide's content in one
+        scrolling column, a thin divider per slide, instead of slide-sized pages. The <strong>live slide card</strong> in
+        its corner shows the slide under the caret as it presents; its <em>Edit</em> opens the <strong>layout
+        editor</strong> for that slide.</td></tr>
       </table>
     </section>
 
@@ -204,7 +228,7 @@ date: 2026-07-11
 
     <section class="section" style="margin-top:40px" id="upgrading">
       <h2>Upgrading from 0.x</h2>
-      <p>Files made by orz-mdhtml 0.9.3, orz-slides 0.8.5, orz-paged 0.7 or earlier still open as they were, but the 1.0
+      <p>Files made by orz-mdhtml 0.9.3, orz-slides 0.8.5, orz-paged 0.7.x or earlier still open as they were, but the 1.0
       tools read them only after a one-time upgrade. For each file, ask what it is, then upgrade it:</p>
       <pre><code>npx orz-mdhtml@1 inspect old.md.html       # what it is, what upgrade changes
 npx orz-mdhtml@1 upgrade old.md.html       # -> a 1.0 old.md.html + its text old.md
