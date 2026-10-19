@@ -6,6 +6,11 @@ A deeply customized markdown-it parser configured with several official plugins 
 
 Rendered HTML is intended to live inside a `.markdown-body` container and be paired with one of the bundled themes.
 
+This README describes **orz-markdown 2.4**. Try the syntax live at
+[markdown.orz.how/features.html](https://markdown.orz.how/features.html) or in
+the [browser editor](https://markdown.orz.how/editor.html); upgrading from 1.x:
+[below](#upgrading-from-1x).
+
 ## Showcase
 
 ![orz-mdhtml showcase: a rendered Markdown document opens its built-in editor, updates the preview live, and switches themes](docs/media/orz-mdhtml-demo.gif)
@@ -74,21 +79,30 @@ It only transforms selections inside an element with class `markdown-body` (wrap
 
 Generated constructs that lose their source after rendering — `mermaid`, `smiles`, `qrcode`, `youtube`, `chart`, `toc`, emoji, `nyml`/`yaml` islands, footnote references — carry a `data-md` attribute that the walker emits verbatim; `::: cols`, `::: left`, `::: spoil` and custom containers carry `data-orz-container`, and footnotes `data-footnote-label`. As a result a copied table of contents yields `{{toc 2,3}}` (not its heading links) and a copied QR code yields `{{qr ...}}` (not its SVG). **Do not strip `data-md`, `data-orz-container` or `data-footnote-label` attributes** if you post-process the HTML.
 
-You can also convert a node programmatically:
+You can also convert a node's **contents** programmatically:
 
 ```javascript
 const markdown = window.OrzMarkdownRuntime.elementToMarkdown(someElement);
 ```
 
-## Portable Document Metadata
+It walks the element's children, not the element itself: to get a generated
+construct's directive back (a `.mermaid`, a `span.qrcode`, a `.toc-list`),
+pass its parent. Passed itself, such a node yields its rendered contents (an
+SVG, a list of links), and a `::: info` box loses its fence.
 
-The editable document builders share one metadata model from
-`orz-markdown/doc-meta`. An mdhtml or paged source can declare metadata in a
-leading block that is consumed during generation:
+## Document metadata: the header
+
+The family's single-file tools — orz-mdhtml (`.md.html`), orz-slides
+(`.slides.html`) and orz-paged (`.paged.html`) — keep every document as plain
+text (`name.md`, `name.slides.md`, `name.paged.md`, its "text twin") and build
+the self-editing file from it. A document's metadata and settings live in
+**one header at the very top of the text** — a nyml block whose first key is
+`kind: document` (FC-18 §5, [`spec/FC-18-text-format-1.md`](spec/FC-18-text-format-1.md),
+shipped in the package):
 
 ```markdown
 {{nyml
-kind: meta
+kind: document
 title: Field Notes
 author: Your Name
 description: Notes from the field course
@@ -98,45 +112,41 @@ license_url: https://creativecommons.org/licenses/by/4.0/
 source: https://example.org/field-notes
 date: 2026-07-10
 keywords: notes, fieldwork, markdown
+theme: light-neat-3
 }}
+
+# Field Notes
 ```
 
-The generated file stores normalized metadata in standard `<head>` tags and an
-`#orz-meta` JSON island. Those records survive in-browser edits and framework
-updates. Host applications can instead pass a `DocMeta` object to the family
-builders; host values win field by field. Slides seed `title` and `author` from
-their native deck config and accept the same programmatic override.
+One `key: value` per line and no comments (everything after `key:` is the
+value). The tools add `carrier` and a `uid` when they create a document; keep
+the `uid` as it is. Each kind adds its own settings (`measure` for md;
+`ratio`, `footer`, `transition`, `slide_numbers`, `progress`,
+`section_numbers` for slides; the page settings for paged — see each tool's
+README). The file the tool assembles writes the metadata into standard
+`<head>` tags and an `#orz-meta` JSON island, and keeps them current when the
+file is edited and saved in the browser.
+
+The parser renders nothing for a `kind: document` block (and gives it no
+`nyml-data` number); the carriers read it. A plain Markdown file with no
+header is a valid document too. Files from the 0.x tools used a separate
+`{{nyml kind: meta}}` block (still read as the header) or, in orz-slides, a
+`<!-- deck … -->` block (now the `deck-block` lint); each tool's `upgrade`
+command moves them into the header. Relative links to a text twin
+(`[Week 2](week2.slides.md)`) stay `.md` links in the text, so they work on
+GitHub, and point to the assembled twin (`week2.slides.html`) in an assembled
+file. In your own render that needs the env flag `orzTwinLinks: true` and the
+rule, which `import 'orz-markdown/carrier'` registers on the shared `md`
+(`registerTwinLinks(yourMd)` for another markdown-it instance).
+
+Host applications that read or write metadata use one model,
+`orz-markdown/doc-meta` (`DocMeta`; `extractDocMeta`, `mergeDocMeta` — host
+values win field by field, blank host values never overwrite the author's —
+`renderDocMetaHead`, `renderDocMetaIsland`, `parseDocMetaIsland`):
 
 ```javascript
 import { extractDocMeta, parseDocMetaIsland } from 'orz-markdown/doc-meta';
 ```
-
-### The document header (text format 1, ≥ 2.1.0)
-
-The rebuilt carriers keep every document as plain text (`name.md`,
-`name.slides.md`, `name.paged.md`) beside its assembled file (`name.md.html`,
-…). Its metadata and settings live in one leading header — a nyml block whose
-first key is `kind: document` ([FC-18 §5](spec/FC-18-text-format-1.md)):
-
-```markdown
-{{nyml
-kind: document
-title: Cell Biology — Week 3
-author: Your Name
-license: CC-BY-4.0
-theme: light-neat-3
-}}
-
-# Cell Biology …
-```
-
-The parser renders nothing for a `kind: document` block (and gives it no
-`nyml-data` number); the carriers read it. A plain Markdown file with no
-header is a valid document too, and a leading `kind: meta` block is still
-read as a legacy header. Relative links to a text twin
-(`[Week 2](week2.slides.md)`) stay `.md` links in the text, so they work on
-GitHub, and point to the assembled twin (`week2.slides.html`) in an assembled
-file (the render env's `orzTwinLinks: true`).
 
 What authors see in a carrier (≥ 2.2.0): a md `theme` that is not one of the
 bundled themes is flagged by the header lint (`unknown-theme`) and the default
@@ -166,6 +176,9 @@ The bundled themes cover the parser's custom output, including:
 - Mermaid placeholders
 - SMILES canvases
 - clickable QR codes with overlay expansion hooks
+
+Images inside a link, a list item or a table cell stay in their line (≥ 2.4.0),
+so a linked icon or a row of badges keeps its sentence together.
 
 **Line length is the reader's choice.** Each theme defaults to a comfortable
 reading measure (about 70 characters). Add `measure-wide` to the article for
@@ -204,9 +217,9 @@ preview identically instead of re-deriving it.
 | `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint (≥ 2.3.0: `normalizeHeader`, `lintHeader(text, { kind, themes })`), `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser); ≥ 2.3.0 also the helpers carriers shared: a synchronous `sha256`, the legacy 0.x island reader (`readLegacyIsland`) and the kind-independent core of `inspect` (`assembledStructure`, `twinCheck`, `storedText`, …); ≥ 2.4.0 the slides keys `slide_numbers` / `progress` / `section_numbers` and the `deck-block` lint (`next: 'upgrade'`; `Lint.next`), `kitParser()` (its tokens are `KitToken[]`, markdown-it's fields), `readDocument(text, { tokens, lint })` and `readLegacyIsland(…, { island })` |
 | `orz-markdown/carrier/read` | `extract`, `readIslandFromDom`, `decodeText`, escape helpers — reads assembled files without the parser |
 | `orz-markdown/carrier/shell` | the browser runtime of every assembled file: save, reader preferences, host protocols, quiet update, chrome (parser-free, Node-safe to import) |
-| `orz-markdown/carrier/editor` | the editor shell every carrier's `mountEditor` wraps (FC-19 §8), with the pinned CodeMirror 6 bundle `vendor/codemirror6.js`; ≥ 2.3.0: the reader's Cmd/Ctrl+P (also from the preview) as the editor's `print` event, `printDocument(html)` to print a whole document from a sandboxed hidden frame instead of the app's page, `preview.maxWaitMs` / `preview.firstAckWaitMs` for kinds whose render is slow |
+| `orz-markdown/carrier/editor` | the editor shell every carrier's `mountEditor` wraps (FC-19 §8), with the pinned CodeMirror 6 bundle `vendor/codemirror6.js`; ≥ 2.3.0: the reader's Cmd/Ctrl+P (also from the preview) as the editor's `print` event, `printDocument(html)` to print a whole document from a sandboxed hidden frame instead of the app's page, `preview.maxWaitMs` / `preview.firstAckWaitMs` for kinds whose render is slow; ≥ 2.4.0: `applyEdits(edits, { label })` (several exact-offset edits as one undo step), `select(from, to)`, `setFocusRange(from, to, { mode: 'dim' \| 'fold' })`, `flash(ranges)`, `getSelection()`, and on `shell.preview` the render `context` (one include cache), `resolveAsset` / `resolveAssets` and `shareAssets(html, surface)`; for a hash-based CSP, `PREVIEW_BRIDGE_HASH` and `previewScriptHashes(options)` |
 | `orz-markdown/carrier/app` | (≥ 2.2.0) the standalone assembled file's runtime every carrier bundle runs — `startCarrier(kind)`: read view with one quiet handle (a pencil whose list holds every operation, reader controls such as text size), edit mode (with the orz seal and the kind's GitHub link), saves, New document / Save as new copy, unsaved-changes warning, host connection with the AI review flow, quiet update — behind one seam, `StandaloneKind` ([spec/carrier-app.md](spec/carrier-app.md)); ≥ 2.3.0: action submenus and conditional actions, settings that write block values or appear only when the document offers them, reader controls with named choices (a page zoom), `app.newDocument({ text, name })` |
-| `orz-markdown/carrier/node` | (≥ 2.3.0, Node only) the core every carrier's CLI shares — `carrierNode(tool)`: the overwrite guards (known earlier states from git and the CLI's pair records, `--replaces` tokens, the uid-identity gate), backups, atomic writes, includes from the text's folder, the shared reason codes and `next` commands ([spec/carrier-node.md](spec/carrier-node.md)) |
+| `orz-markdown/carrier/node` | (≥ 2.3.0, Node only) the core every carrier's CLI shares — `carrierNode(tool)`: the overwrite guards (known earlier states from git and the CLI's pair records, `--replaces` tokens, the uid-identity gate), backups, atomic writes, includes from the text's folder, the shared reason codes and `next` commands ([spec/carrier-node.md](spec/carrier-node.md)); ≥ 2.4.0: the reason `no-browser`, `cutOff(html)` and the `fileHtml` input that keep a cut-off file's text from replacing a complete one |
 | `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`), and its page helpers for a carrier's own tests (OPFS picker, `readOpfs`, `writeOpfs`) |
 | `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
 | `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes), `DEFAULT_THEME`, `isThemeId`, `themeInfo` — also on the main entry |
@@ -226,7 +239,7 @@ component (FC-19), the host protocols, the shell runtime, the carrier app
 supplying its kind — renderer, editor, read view, settings — to
 `startCarrier`), and the conformance harness; the golden corpus is
 [`tests/carrier-corpus/`](tests/carrier-corpus/) (shipped in the package).
-Authors only need the [document header](#the-document-header-text-format-1--210)
+Authors only need the [document header](#document-metadata-the-header)
 above; everything else is for carrier and host builders.
 
 ### Security notes
@@ -249,9 +262,10 @@ above; everything else is for carrier and host builders.
   `timeoutMs`. The checks below are defence in depth against accidents and a
   compromised trusted host, not a sandbox for hostile text. Fetched text is placed as block content and
   can never change the host document around it: an include that would (an
-  open fence or comment, a list item swallowing what follows, a redefined link
+  open comment, a list item swallowing what follows, a redefined link
   reference) is left as the directive. Raw HTML in fetched text is limited to
-  simple layout and text elements with no `class` or `style`; a block holding
+  simple layout and text elements with no `class` or `style`; an unclosed code
+  fence at the end of fetched text is closed for it; a block holding
   anything else (`<script>`, `<style>`, `<svg>`, an event handler, …) is
   dropped and the rest of the include renders. Fetched text may not use
   undocumented containers or span classes, and fetched math may not lap, smash
@@ -262,9 +276,55 @@ above; everything else is for carrier and host builders.
   unless you pass the render's file settings as `includeEnv`, so the check can
   see the file-included text too.
 
+## Delivery, browser support and limits
+
+- **Delivery.** `md.render` itself needs no network. A page that shows the
+  output loads at view time: KaTeX's stylesheet and Mermaid and Chart.js from
+  jsDelivr, highlight.js from cdnjs, SmilesDrawer from unpkg (the pinned URLs
+  in `PREVIEW_CDN`), and the bundled themes' webfonts from Google Fonts.
+  Without a network the text, tables and math render (math unstyled, its
+  plain-text copy showing beside it), code is unhighlighted, Mermaid shows
+  its source text and charts and structures stay empty. There is no offline bundle of these
+  libraries; `enhanceDocument(root, { assets: false })` loads none of them
+  (bring your own).
+- **Browsers.** The rendered HTML, the themes and the runtime (tabs, QR,
+  copy as Markdown) work in current Chrome, Edge, Firefox and Safari. The
+  package bundles for the browser with no shims (esbuild, Vite, …). The
+  editable files built on the carrier kit save in place only in Chromium
+  (File System Access); elsewhere they download — see each tool's README.
+- **Limits.** Raw HTML is emitted as written (sanitize untrusted input);
+  `\def` / `\newcommand` and formulas over 10,000 characters render as their
+  source; per-document caps (TOC 20,000 entries, 8 MB of QR SVG, 5,000,000
+  included characters, math budgets) are listed in the
+  [syntax reference](orz-markdown-skills/references/syntax.md); `{{chart}}`
+  has no size, axis-title or colour keys; file includes need the host's
+  permission (below); one level of file includes.
+
+## Upgrading from 1.x
+
+2.0.0 is the major step (2026-10-03); 2.1–2.4 only add. When you move a
+`^1.x` dependency to `^2`:
+
+- **File includes are opt-in.** `{{md ./part.md}}` resolves only when the
+  render env passes `markdownBasePath` (or `readFile`); a caller that relied
+  on the implicit `process.cwd()` must pass `{ markdownBasePath: dir }` (add
+  `markdownIncludeRoot` for untrusted text).
+- **URL includes outside a browser** are fetched only from the
+  `allowedHosts` you name (or through your own `fetcher`); in a page nothing
+  changed.
+- **Rendered output changed** (copy breadcrumbs, CJK text, escaping, YouTube
+  URLs, QR sizing, per-render bounds, heading ids next to `{{attrs[#…]}}`):
+  refresh output snapshots, and diff a representative document before relying
+  on byte equality.
+- **Themes were revised**: `common.css` is the shared structure layer each
+  theme imports; a custom theme should start from
+  `orz-markdown-skills/assets/minimal.css`.
+
+The full list is in the [CHANGELOG, 2.0.0](CHANGELOG.md#200---2026-10-03).
+
 ## Packaging
 
-To rebuild distributable assets locally:
+In a checkout of this repository, to rebuild distributable assets locally:
 
 ```sh
 npm run build
@@ -272,7 +332,7 @@ npm test
 npm pack
 ```
 
-The generated tarball is written to the repository root and includes `dist/`, `themes/`, `vendor/` (the pinned CodeMirror 6 bundle), `orz-markdown-skills/`, and `tests/carrier-corpus/` (the conformance corpus).
+The generated tarball is written to the repository root and includes `dist/`, `themes/`, `vendor/` (the pinned CodeMirror 6 bundle), `orz-markdown-skills/`, `spec/` (the carrier specifications), and `tests/carrier-corpus/` (the conformance corpus).
 
 ## Agent Skill
 
@@ -315,6 +375,10 @@ This project builds upon `markdown-it` and pre-configures a curated selection of
 - **markdown-it-task-lists**: GitHub-style task lists (`- [x] Task`)
 - **@traptitech/markdown-it-katex**: Math rendering, capable of rendering block math (`$$E=mc^2$$`), inline math (`$E=mc^2$`), and built-in `mhchem` chemistry extension.
 
+The parser also runs with markdown-it's `linkify` (bare `https://…` and
+`www.…` become links) and `typographer` (`--` → –, `---` → —, `...` → …,
+`(c)` → ©, straight quotes → curly) on; write a code span for literal text.
+
 ## Custom Plugin Syntax Reference
 
 We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom plugins. Single-line: `{{name body}}`. Multi-line: `{{name\nbody\n}}`. Both forms close with `}}` — there is no `{{/name}}` closing tag.
@@ -328,17 +392,16 @@ We utilize a generalized and uniform `{{plugin_name ...}}` syntax for all custom
 | **Space** | N/A | `{{space 4}}` | Inserts inline horizontal whitespace — an empty `inline-block` span sized in `rem` (`{{space 4}}` → 4rem wide). Capped at 100rem. |
 | **YouTube** | `yt` | `{{youtube dQw4w9WgXcQ}}` | A responsive YouTube embed for a video id or a full YouTube URL (`watch?v=`, `youtu.be/`, `/embed/`, `/shorts/`; a `t=` time becomes the start). A body that is no video id shows as its directive text. In print it shows its address (`YouTube video: https://youtu.be/…`, ≥ 2.3.0). |
 | **Markdown Source**| `md` | `{{md path/to/file.md}}` | Embeds another Markdown file. **Opt-in:** resolves only when the render env passes `markdownBasePath` (or a `readFile` hook); add `markdownIncludeRoot` to confine it. URL includes are resolved beforehand by `prepareSources()`. |
-| **QR Code** | `qr` | `{{qr https://example.com}}` | An SVG QR code. Alone in its paragraph it is full size for scanning; inside a sentence it is drawn at text size and expands on tap; print draws both large enough to scan. Past a QR code's capacity it renders as its text. |
+| **QR Code** (`qrcode`) | `qr` | `{{qr https://example.com}}` / `{{qrcode …}}` | An SVG QR code. Alone in its paragraph it is full size for scanning; inside a sentence it is drawn at text size and expands on tap; print draws both large enough to scan. Past a QR code's capacity it renders as its text. |
 | **Mermaid** | `mm` | `{{mermaid\ngraph LR\nA-->B\n}}` | Compiles logic into a specific preconfigured payload targeted for Mermaid client-side rendering. |
 | **SMILES Chemistry**| `sm` | `{{smiles C1=CC=CC=C1}}` | Embeds SMILES chemical formulas parsed specifically for `smilesDrawer` visualization. |
-| **Chart** | N/A | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` | Declarative bar/line/pie/doughnut charts from a small line-based config (`type`, `labels`, `series: Name = …` or `data: …`, optional `title`). Rendered client-side with Chart.js. |
+| **Chart** | N/A | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` | Declarative charts from a small line-based config (`type`: `bar`, `line`, `pie`, `doughnut`, `radar`, `polarArea` — `scatter` and `bubble` are accepted but need x/y points this syntax cannot give; `labels`, `series: Name = …` or `data: …`, optional `title`). Rendered client-side with Chart.js, in the theme's colours (≥ 2.4.0); a chart Chart.js refuses gets `data-chart-error`. No size, axis-title or colour keys. |
 | **YAML Objects** | `yml` | `{{yaml\ntitle: Doc\n}}` | Embeds the multiline YAML configuration blindly into an invisible `<script type="application/yaml">` block. |
 | **NYML Parser** | N/A | `{{nyml\nkey: value\n}}` | NYML-specific parser logic. Evaluates and injects the resulting properties as an invisible `<script type="application/json">` block. A block whose `kind` is `document` (the document header) renders nothing. |
-| **Test** | N/A | `{{test-block}}` | Reserved testing elements for structural plugin resolution constraints. |
 
 > **📝 Escaping Plugins:**
 > If you wish to display the literal plugin text `{{` instead of parsing it, you can escape the starting braces by putting a backslash in front: `\{{emoji smile}}`.
 
 ## Environment Requirement
 
-Node.js ≥ 20.16 (file includes use `process.getBuiltinModule`); any modern browser via a bundler.
+Node.js ≥ 20.16 (file includes use `process.getBuiltinModule`); in the browser, any current Chrome, Edge, Firefox or Safari via a bundler (see [Delivery, browser support and limits](#delivery-browser-support-and-limits)).
