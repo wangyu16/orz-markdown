@@ -14,8 +14,9 @@ Every page that shows orz-markdown output gets its CSS in two layers.
 | **Decoration** | one theme file (`light-neat-1.css`, …) | How things *look*: palette, typography, borders, backgrounds, radii, shadows, ornaments, and spacing rhythm (padding, margins, gaps) | any mechanism listed in the left column |
 
 Because the structure lives in one place, a layout fix reaches every theme at
-once, and a new theme cannot get layout subtly wrong. `tests/themes.test.ts`
-enforces the split for every bundled theme and for the starter.
+once, and a new theme cannot get layout subtly wrong. In the orz-markdown
+repository, `tests/themes.test.ts` enforces the split for every bundled theme
+and for the starter.
 
 ## What a new theme needs
 
@@ -59,9 +60,13 @@ enforces the split for every bundled theme and for the starter.
 
    If a mechanism seems wrong for your theme, fix it in `common.css` for
    everyone, or add a token.
-7. **Check it.** Run `npm test`, and render `tests/example.html` (`npm run
-   render`; `npm run render:minimal` renders the starter to
-   `tests/example-minimal.html`) at desktop and phone widths in a real browser.
+7. **Check it.** Put `md.render()` output of a document that uses every
+   construct (the examples in `references/syntax.md`) into a copy of
+   `assets/template.html` linked to your theme, and look at it at desktop
+   and phone widths in a real browser, light and print preview. (In the
+   orz-markdown repository itself: `npm test`, and `npm run render` /
+   `npm run render:minimal` write `tests/example.html` /
+   `tests/example-minimal.html`.)
 
 ## The baseline grid (opt-in, ≥ 2.3.0)
 
@@ -93,7 +98,7 @@ article's size changes or webfonts load. Without `--orz-grid` it does nothing,
 and it never runs in print (`@media screen`; orz-paged drops every `@media`
 block of a theme and rules its pages itself). Margins, paddings, line-height
 and backgrounds are decoration, so the contract above is unchanged; the
-opt-in is checked by `tests/themes.test.ts` (M.31).
+opt-in is checked by the repository's `tests/themes.test.ts` (M.31).
 
 ## Chart and diagram tokens (≥ 2.4.0)
 
@@ -386,9 +391,9 @@ Highlight.js injects its own colors into `<code>` tokens. Set `pre code { color:
 
 Avoid "AI tells": no gradients on every element, no excessive border-radius, no layout that relies on 15+ custom properties for a single component. Two to four accent colors with consistent usage throughout is more human than a rainbow.
 
-### 10. Test with `tests/example.html`
+### 10. Test with a page that uses every element
 
-After writing your theme, run `npm run render` from the project root to regenerate the example page and visually verify every element type. The example page includes all containers, all custom plugins, math, chemistry, mermaid, code blocks, tables, and footnotes.
+After writing your theme, render a document that uses every construct (all containers, all custom plugins, math, chemistry, Mermaid, code blocks, tables, footnotes — the examples in `references/syntax.md` cover them) into `assets/template.html` and verify every element type visually. (In the orz-markdown repository, `npm run render` regenerates such a page, `tests/example.html`.)
 
 ### 11. CJK font stacks
 
@@ -445,7 +450,7 @@ Use this when auditing an existing theme or reviewing a new one:
 - [ ] All four semantic containers (`success/info/warning/danger`) are visually distinct
 - [ ] Badge spans (`span.success/info/warning/danger`) stay single-line — no pseudo-label text injected
 - [ ] QR code: `span.qrcode` has explicit `background: #fff` (the SVG has no quiet zone)
-- [ ] No structure re-declared: no `float`/`width` on `.left`, no `display` on `.tab`, no YouTube ratio hack, no narrow-screen `.left`/`.cols` layout (common.css owns them; `tests/themes.test.ts` enforces it)
+- [ ] No structure re-declared: no `float`/`width` on `.left`, no `display` on `.tab`, no YouTube ratio hack, no narrow-screen `.left`/`.cols` layout (common.css owns them; the repository's `tests/themes.test.ts` enforces it)
 - [ ] Spoiler open/close marker (`summary::before`) communicates state clearly
 - [ ] SMILES container is visually neutral — no decorative box styling
 - [ ] Print rules are decoration only (strip outer body framing, ink-friendly colours); pagination, `thead` repeat and printing every tab come from common.css

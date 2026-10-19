@@ -167,7 +167,7 @@ common.css trims the first child's top margin and the last child's bottom margin
 |---|---|---|
 | `.qrcode` | `<span>` | Inline wrapper around the SVG (black modules on a white rect, no quiet zone). The theme **must** set `background: #fff`; common.css supplies the padding (4px standalone, 0.12em inline), which becomes the quiet zone. |
 | `.qrcode.qrcode--standalone` | `<span>` | A code alone in its paragraph: drawn full size (6rem) by `common.css`. Without it, a code inside a sentence is drawn at text size (1.3em) and expands on tap; print draws both large enough to scan (2cm / 3cm). |
-| `.qrcode__icon` | `<span>` | Expand icon shown on hover. Structural rules in `common.css`. (standalone codes only) |
+| `.qrcode__icon` | `<span>` | Expand icon shown on hover. Emitted for every code; `common.css` hides it on a code inside a sentence and in print. |
 | `.qrcode.is-expanded` | `<span>` | Added while expanded. `common.css` hides the source with `visibility: hidden`. |
 | `.qrcode-overlay` | `<span>` (cloned) | Fixed-position overlay appended to `<body>`. Geometry and backdrop come from `common.css` (`!important`); themes leave it alone. |
 

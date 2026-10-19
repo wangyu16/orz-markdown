@@ -1,14 +1,30 @@
 ---
 name: orz-markdown
 description: "orz-markdown usage skill. Use this skill whenever you need to render markdown with this parser, write markdown that uses {{...}} custom plugin syntax (mermaid, chart, qrcode, youtube, smiles, toc, span, emoji, attrs, space, yaml, nyml, markdown/md file or URL includes, or their aliases mm/qr/yt/sm/sp/em/yml/md-include), use :::container syntax (success/info/warning/danger/spoil/tabs/tab/cols/col/left/right/center), set up a complete HTML page to display parser output, choose or import one of the 12 bundled CSS themes, or create a custom theme stylesheet. Also invoke when asked about .markdown-body class, prepareSources, browser runtime scripts for QR codes or tabs, any KaTeX math syntax in this project, or the {{nyml kind: document}} document header of a text-format-1 document (.md / .slides.md / .paged.md beside its assembled .html twin). ALWAYS invoke before editing documents whose headings carry stable block IDs ({{attrs[#blk-...]}})."
-compatibility:
-  runtime: "Node.js >= 20.16; CommonJS package, named imports work from ESM"
-  package: "orz-markdown"
+compatibility: "Needs the npm package orz-markdown (Node.js >= 20.16; a CommonJS package whose named imports work from ESM). Rendered pages load KaTeX CSS, highlight.js, Mermaid, SmilesDrawer and Chart.js from CDNs."
 ---
 
 # orz-markdown
 
-A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`.
+A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`. This skill describes orz-markdown 2.4.
+
+> **Common mistakes — check every document you write for these.**
+>
+> | Wrong (renders as a plain code block, silently) | Right |
+> |---|---|
+> | ` ```mermaid ` … ` ``` ` | `{{mermaid` … `}}` (alias `{{mm` … `}}`) |
+> | ` ```chart ` … ` ``` ` | `{{chart` … `}}` |
+> | ` ```smiles ` … ` ``` ` | `{{smiles C1=CC=CC=C1}}` |
+> | ` ```qr ` … ` ``` ` | `{{qr https://example.com}}` |
+>
+> Other frequent slips: `{{/mermaid}}` (there is no closing tag — every
+> directive ends with `}}`); a block directive (`{{mermaid}}`, `{{chart}}`,
+> `{{toc}}`, …) in the middle of a sentence (it must start a line); a
+> container inside a `::: col` without adding colons to the outer levels
+> (`::::: cols` › `:::: col` › `::: info`, see "Containers"); Pandoc `{#id}`
+> on headings (use `{{attrs[#id]}}`); a `# comment` inside a `{{nyml}}`
+> header (it becomes part of the value); a second document header, or one
+> that is not the very first block.
 
 ## Rendering (Node.js / ESM)
 
@@ -65,7 +81,9 @@ the paragraph there; one in a quote or list item stays inside it. Raw HTML
 outside the allowlist (`<script>`, `<style>`, `<svg>`, a `class` or `style`
 attribute, …) is **dropped** block by block and the rest renders. The include
 is still **refused** (directive stays) if it would change how the host
-document around it parses, uses an undocumented `::: name` container or a
+document around it parses (an unclosed comment, a list item swallowing what
+follows, a redefined link reference; an unclosed code fence at its end is
+simply closed), uses an undocumented `::: name` container or a
 `{{sp[…]}}` class other than the eight documented ones, has math that paints
 outside its box, or sets attributes outside the allowlist (e.g. an
 `{{attrs[#fn1]}}` claiming a render-time id).
@@ -109,33 +127,25 @@ document.body.appendChild(script);
 // or call directly: window.OrzMarkdownRuntime.init(rootElement)
 ```
 
-The runtime also provides **copy-as-Markdown**: with it loaded, copying a selection inside `.markdown-body` puts Markdown source on the clipboard, not HTML, and the copy round-trips — rendering it gives back the same output (tables, lists, math, footnotes, containers, generated constructs; Chinese and English). A selection covering a whole block copies the block; a partial one copies just what is selected; text inside code copies verbatim. It skips selections inside `<input>`/`<textarea>`/`contenteditable` and selections that reach outside the copy root. Convert a node directly with `window.OrzMarkdownRuntime.elementToMarkdown(node)`. Guarantees: `notes/CLAIMS.md` in the [repository](https://github.com/wangyu16/orz-markdown/blob/main/notes/CLAIMS.md).
+The runtime also provides **copy-as-Markdown**: with it loaded, copying a selection inside `.markdown-body` puts Markdown source on the clipboard, not HTML, and the copy round-trips — rendering it gives back the same output (tables, lists, math, footnotes, containers, generated constructs; Chinese and English). A selection covering a whole block copies the block; a partial one copies just what is selected; text inside code copies verbatim. It skips selections inside `<input>`/`<textarea>`/`contenteditable` and selections that reach outside the copy root. `window.OrzMarkdownRuntime.elementToMarkdown(node)` converts a node's **contents** (its children, not the node itself: pass the parent of a generated construct such as a `.mermaid` or a `span.qrcode` to get its `{{…}}` directive back). The guarantees are listed in `notes/CLAIMS.md` in the orz-markdown repository (<https://github.com/wangyu16/orz-markdown/blob/main/notes/CLAIMS.md>; not in the installed package).
 
 > **Chinese text.** Emphasis works next to CJK punctuation (`**注意：**请`), a line wrap between Chinese characters adds no space, bare URLs stop at Chinese text, and nyml metadata accepts `：` and `，、；` separators.
 
 > **Do not strip the copy breadcrumbs.** `data-md` on `mermaid`, `smiles`, `qrcode`, `youtube`, `chart`, `emoji`, `toc`, `yaml` and `nyml` output and on footnote references (`[^n]` / `^[…]`) lets copy recover the source after rendering (a copied QR yields `{{qr ...}}`, not its SVG). `data-orz-container` (cols ratios, `left` width, spoil label, custom `::: name` args) and `data-footnote-label` (footnote definitions) do the same for containers and notes. Preserve all three if you post-process the HTML.
 
-### Portable document metadata
+### Document metadata: the header
 
-The single-file, self-editing family shares `DocMeta` from `orz-markdown/doc-meta`:
-`title`, `author`, `description`, `license` (`spdx`, `name`, `url`), `source`,
-`date`, `keywords`, and `uid` (≥ 1.6.0; an opaque, host-assigned document id —
-never read from source — that survives in-file saves, e.g. a durable permalink). In mdhtml and paged source, authors may provide a
-`{{nyml kind: meta ...}}` block. The builder consumes that block and emits
-standard `<head>` metadata plus a machine-readable `#orz-meta` JSON island;
-those emitted records survive later in-browser saves and framework updates.
-Host-injected metadata wins field by field. Slides use deck `title:` and
-`author:` as their source metadata and accept the same host override.
-
-Use `extractDocMeta`, `mergeDocMeta`, `renderDocMetaHead`,
-`renderDocMetaIsland`, and `parseDocMetaIsland` from
-`orz-markdown/doc-meta`; do not create a second metadata grammar in a host app.
-Blank host values (empty strings/arrays) never overwrite the author's values.
-
-**Document header (text format 1, ≥ 2.1.0).** The rebuilt carriers keep each
-document as a text twin (`name.md`, `name.slides.md`, `name.paged.md`) beside
-its assembled file (`name.md.html`, …). Its metadata and settings go in ONE
-leading header, a nyml block whose first key is `kind: document`:
+**Metadata and settings go in the document header** — ONE nyml block at the
+very top of the text whose first key is `kind: document`. This is the same
+for every kind: a continuous document (`name.md` → `name.md.html`, orz-mdhtml),
+a deck (`name.slides.md` → `name.slides.html`, orz-slides) and a print
+document (`name.paged.md` → `name.paged.html`, orz-paged). The `.md`,
+`.slides.md` or `.paged.md` text is the document (its "text twin"); the
+`.html` file is built from it by the tool's `assemble` command and carries
+the exact text inside. The tools write the header's metadata into the file's
+`<head>` (title, author, description, keywords, licence, canonical source)
+and into a machine-readable `#orz-meta` record, and keep them current when
+the file is edited and saved in the browser.
 
 ```markdown
 {{nyml
@@ -149,21 +159,43 @@ theme: light-neat-3
 
 `{{nyml` alone on the first line, `kind: document` next, `}}` alone on the
 last; one `key: value` per line (`key: |` for a multi-line value); no `}}`
-inside a value. Keys: the DocMeta fields above plus `format`, `carrier`,
-`uid` (keep it exactly; never invent or change one), `lang`, `theme`, and the
-kind's own (`measure` for md; `ratio`, `footer`, `transition` for slides;
-the page settings for paged); host keys start with `x_<host>_`. Unknown keys
-are kept. The parser renders nothing for this block. A file with no header is
-still a valid `md` document; an old leading `kind: meta` block is read as a
-legacy header. **Twin links:** link to the text twin
-(`[Week 2](week2.slides.md)`); it works on GitHub and becomes a link to
-`week2.slides.html` inside an assembled file. **In a carrier (≥ 2.2.0)** a md
+inside a value, and **no comments**: everything after `key:` is the value
+(`theme: orchard  # default` names a theme called `orchard  # default`).
+Keys: `title`, `author`, `description`, `date`, `keywords` (comma-separated),
+`source`, `license` / `license_name` / `license_url`, `format` (only `1`;
+omit it), `carrier` (`md`, `slides` or `paged`), `uid` (keep it exactly;
+never invent or change one — the tool's `new` command mints it), `lang`,
+`theme`, and the kind's own: `measure` (`normal` · `wide` · `full`) for md;
+`ratio` (`16:9` · `4:3`), `footer`, `transition`, `slide_numbers` and
+`progress` (`yes` · `no`), `section_numbers` (`plain` · `roman` · `01` ·
+`none`) for slides; the page settings for paged (its skill lists them). Host
+keys start with `x_<host>_`. Unknown keys are kept. The parser renders
+nothing for this block. A file with no header is still a valid `md`
+document (with no `uid`: give it the header `orz-mdhtml new` prints to
+stdout when run without a file). Older files used a separate
+`{{nyml kind: meta}}` block (orz-mdhtml/orz-paged 0.x; still read as the
+header) or a `<!-- deck … -->` block (orz-slides 0.x, now a `deck-block`
+lint error); the tool's `upgrade` command moves either into the header.
+**Twin links:** link to the text twin (`[Week 2](week2.slides.md)`); it
+works on GitHub and becomes a link to `week2.slides.html` inside an
+assembled file (in your own render: `env.orzTwinLinks: true`, with
+`orz-markdown/carrier` imported, or `registerTwinLinks(yourMd)` for another
+markdown-it instance). **In a carrier (≥ 2.2.0)** a md
 `theme` outside the 12 bundled ids is flagged (`unknown-theme` lint) and the
 default theme is shown; a file include the carrier cannot resolve shows
 "Included file not available: part.md" (`p.orz-include-missing`, dimmed,
 hidden in print) in the preview and read view — check the path or ask the
-host to supply the file. Full rules:
-[FC-18](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md).
+host to supply the file. Full rules: the text-format spec,
+`node_modules/orz-markdown/spec/FC-18-text-format-1.md` (shipped in the
+package; also on
+[GitHub](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md)).
+
+**Host apps** reading or writing metadata use `orz-markdown/doc-meta`
+(`DocMeta`: `title`, `author`, `description`, `license` {`spdx`, `name`,
+`url`}, `source`, `date`, `keywords`, `uid`): `extractDocMeta`,
+`mergeDocMeta` (host values win field by field; blank host values never
+overwrite the author's), `renderDocMetaHead`, `renderDocMetaIsland`,
+`parseDocMetaIsland`. Do not create a second metadata grammar.
 
 ### Building a carrier or host (≥ 2.0.0)
 
@@ -196,8 +228,8 @@ runs the kind's Print action), `orz-markdown/carrier/node` (≥ 2.3.0, Node
 only: the CLI core carriers share — overwrite guards, backups, atomic writes,
 includes) and `orz-markdown/carrier/conformance` (test harness). `orz-markdown/themes` (≥ 2.2.0; also on the main entry) lists the
 bundled themes: `THEMES` (id, name, light/dark), `DEFAULT_THEME`, `isThemeId`,
-`themeInfo`. They are for carrier and host builders; their binding specs are in
-the repository's [`spec/`](https://github.com/wangyu16/orz-markdown/tree/main/spec) folder.
+`themeInfo`. They are for carrier and host builders; their binding specs ship
+in the package, `node_modules/orz-markdown/spec/` (its README.md lists them).
 
 ---
 
@@ -250,11 +282,11 @@ Each plugin is **block** or **inline**, not both. Block (`youtube`, `mermaid`, `
 | **span** | `sp` | `{{sp[red] colored}}` · `{{sp[success] ✓ Done}}` |
 | **emoji** | `em` | `{{emoji wave}}` · `{{em tada}}` |
 | **space** | — | `{{space 4}}` → 4rem-wide inline-block spacer |
-| **qrcode** | `qr` | `{{qr https://example.com}}` (click-to-expand SVG) |
+| **qrcode** | `qr` | `{{qr https://example.com}}` · `{{qrcode https://example.com}}` (click-to-expand SVG) |
 | **youtube** | `yt` | `{{youtube dQw4w9WgXcQ}}` (responsive iframe; prints as its address ≥ 2.3.0) |
 | **mermaid** | `mm` | `{{mm\ngraph LR\nA-->B\n}}` |
 | **smiles** | `sm` | `{{smiles C1=CC=CC=C1}}` (chemical structure) |
-| **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (any Chart.js type; default bar; ≥ 2.4.0 coloured by the theme's `--chart-*` tokens) |
+| **chart** | — | `{{chart\ntype: bar\nlabels: A, B\ndata: 1, 2\n}}` (`bar` default, `line`, `pie`, `doughnut`, `radar`, `polarArea`; ≥ 2.4.0 coloured by the theme's `--chart-*` tokens; no size or axis-title keys) |
 | **toc** | — | `{{toc}}` or `{{toc 2,3}}` (heading levels) |
 | **attrs** | — | `# Title{{attrs[id="hero"]}}` |
 | **markdown** | `md`, `md-include` | `{{md ./path/to/file.md}}` |
@@ -263,7 +295,7 @@ Each plugin is **block** or **inline**, not both. Block (`youtube`, `mermaid`, `
 
 ### Containers — `::: name ... :::`
 
-Write a space between `:::` and the name (conventional; `:::name` also parses). Nesting uses more colons on the outer level.
+Write a space between `:::` and the name (conventional; `:::name` also parses). Nesting uses more colons on the outer level: **every** level that holds another container needs more colons than what it holds. A callout inside a column is three levels — `::::: cols` › `:::: col` › `::: info` — and `:::: cols` › `::: col` › `::: info` is wrong (the fences pair up wrongly: the column ends early and a stray `:::` shows as text).
 
 ```markdown
 ::: success          ::: info         ::: warning      ::: danger
@@ -290,6 +322,37 @@ Write a space between `:::` and the name (conventional; `:::name` also parses). 
 :::
 ::::
 ```
+
+### Captions for figures, tables and charts
+
+Markdown has no caption syntax; use this one convention so every theme and
+every carrier shows captions the same way:
+
+```markdown
+![Growth of the culture over 48 h](growth.png)
+
+*Figure 1.* Growth of the culture over 48 h.
+
+**Table 1.** Yield by catalyst.
+
+| Catalyst | Yield |
+|---|---:|
+| Pd | 92 % |
+
+{{chart
+type: line
+labels: 0 h, 24 h, 48 h
+series: OD600 = 0.1, 0.8, 1.6
+}}
+
+*Figure 2.* Optical density over time.
+```
+
+A figure's caption is a paragraph **after** it starting `*Figure N.*`; a
+table's is a paragraph **before** it starting `**Table N.**`; a chart (or
+diagram) gets a figure caption after it — `{{chart}}` has no caption key
+(`title:` draws a title inside the chart). Keep the alt text a description
+of the picture, not a copy of the caption.
 
 ---
 

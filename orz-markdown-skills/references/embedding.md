@@ -190,7 +190,7 @@ tab init, use the **same** `data-js="1"` marker so the two don't both build a ba
 ### 2b. The runtime does **not** draw diagrams/charts — you do
 
 mermaid, smiles, and chart canvases are placeholders. Load the libraries and draw
-them (the bundled themes/`tests/example.html` show the calls):
+them (`assets/template.html` shows the calls; `getPreviewFrameAssets().bodyScripts()` does them for you):
 
 | Construct | You must load | Then |
 |---|---|---|
@@ -232,7 +232,11 @@ A container (`::: center`, `:::: cols`, spoiler, tabs) is recovered when the
 selection covers all of its text (or the element itself); a selection of only
 some of the words inside copies just those words, without the container.
 
-Convert a node directly: `OrzMarkdownRuntime.elementToMarkdown(node)`.
+Convert a node's contents directly: `OrzMarkdownRuntime.elementToMarkdown(node)`
+walks the node's **children**, not the node itself — to get a generated
+construct's `{{…}}` back (a `.mermaid`, a `span.qrcode`, a `.toc-list`), pass
+its parent; passed itself it yields its rendered contents (an SVG, links), and
+a `::: info` box passed itself loses its fence.
 
 ---
 
@@ -266,9 +270,13 @@ When your app mounts a carrier's editor (`mountEditor`, built on
   open links or scroll the editor; the bridge captures every built-in it
   uses before the document runs, so a document script that overrides them
   gets nothing. That protects your app's actions, not the document: for
-  content you do not trust, also use the nonce CSP (FC-19 §8.4 recipe: the
-  `nonce` option, no `'unsafe-inline'` scripts), so the document's own
-  scripts do not run at all.
+  content you do not trust, also use the nonce CSP (the recipe in FC-19 §8.4,
+  `node_modules/orz-markdown/spec/FC-19-editor-component.md`: the `nonce`
+  option, no `'unsafe-inline'` scripts), so the document's own scripts do not
+  run at all. A **hash-based** policy instead allows the frame's own inline
+  scripts by hash: `await previewScriptHashes(options)` lists every inline
+  script of a frame built with those options (`PREVIEW_BRIDGE_HASH` is the
+  bridge's alone), both from `orz-markdown/carrier/editor`.
 
 ---
 

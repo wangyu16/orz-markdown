@@ -1,6 +1,22 @@
 # Syntax Reference — orz-markdown
 
-Complete syntax reference for all features. Covers standard markdown, official plugin extensions, containers, and all custom `{{...}}` plugins.
+Complete syntax reference for all features (orz-markdown 2.4). Covers standard markdown, official plugin extensions, containers, and all custom `{{...}}` plugins.
+
+> **Common mistakes.** A fenced code block with a plugin's name renders as a
+> plain code block — no diagram, no warning:
+>
+> | Wrong | Right |
+> |---|---|
+> | ` ```mermaid ` · `graph LR` · `A-->B` · ` ``` ` | `{{mermaid` · `graph LR` · `A-->B` · `}}` |
+> | ` ```chart ` · `type: bar` · … · ` ``` ` | `{{chart` · `type: bar` · … · `}}` |
+> | ` ```smiles ` · `CCO` · ` ``` ` | `{{smiles CCO}}` |
+> | ` ```qr ` · `https://…` · ` ``` ` | `{{qr https://…}}` |
+>
+> (`·` separates lines.) Also: there is no closing tag (`{{/mermaid}}`) — a
+> directive ends at `}}`; block directives must start a line; a container
+> inside a container needs more colons on **every** outer level
+> ([Nesting containers](#nesting-containers)); `{#id}` is not supported
+> (use `{{attrs[#id]}}`).
 
 ---
 
@@ -204,7 +220,27 @@ Equal-width column two.
 ::::
 ```
 
-Without arguments, all `col` children share equal width. Pass space-separated values to set column widths:
+Without arguments, all `col` children share equal width.
+
+> **Anything inside a column that is itself a container** (a callout, tabs,
+> a spoiler) needs one more colon on each outer level: `::::: cols` ›
+> `:::: col` › `::: info`. With `:::: cols` › `::: col` › `::: info`, the
+> closing fences pair up wrongly: the column ends early and a stray `:::`
+> shows as text.
+
+```markdown
+::::: cols
+:::: col
+::: info
+A callout in the left column.
+:::
+::::
+:::: col
+Plain text on the right.
+::::
+:::::
+```
+ Pass space-separated values to set column widths:
 
 - **Plain numbers** → become `fr` units: `:::: cols 1 2` → `grid-template-columns: 1fr 2fr`
 - **CSS track sizes** → pass through as-is: lengths (`30%`, `200px`, `1fr`), `auto`, `min-content`, `max-content`, `minmax(10rem, 1fr)`, `repeat(3, 1fr)`
@@ -418,7 +454,7 @@ data: 30, 50, 20
 }}
 ```
 
-One `key: value` per line. `type` is any Chart.js type (`bar`, `line`, `pie`, `doughnut`, `radar`, …; default `bar`); `title` is optional; `labels` are comma-separated. `data: …` is a single unnamed series (its legend is hidden); `series: Name = …` adds a named series and may repeat. A value that is not a number becomes a gap; unknown keys are ignored. Renders `<canvas class="orz-chart" data-chart="…">` with the Chart.js config as JSON; Chart.js draws it client-side (`window.__orzEnhance()`), so `chart.umd.min.js` must be in the page.
+One `key: value` per line. `type` is `bar` (default), `line`, `pie`, `doughnut`, `radar` or `polarArea` (Chart.js's names, any case; `scatter` and `bubble` are accepted names too, but they need x/y points this syntax cannot give, so they draw an empty chart); `title` is optional (drawn inside the chart); `labels` are comma-separated. `data: …` is a single unnamed series (its legend is hidden); `series: Name = …` adds a named series and may repeat. A value that is not a number becomes a gap; unknown keys are ignored. Renders `<canvas class="orz-chart" data-chart="…">` with the Chart.js config as JSON; Chart.js draws it client-side (`window.__orzEnhance()`), so `chart.umd.min.js` must be in the page. A chart Chart.js refuses carries `data-chart-error` on its canvas (≥ 2.4.0). **Limits:** there are no keys for the size, axis titles, stacking, colours or options — the chart is as wide as its frame allows (440px by default, `--chart-max-width`) at the theme's `--chart-aspect`, and takes its colours from the theme's `--chart-*` tokens (≥ 2.4.0). For a caption, write a paragraph after it (see [Captions](#captions-for-figures-tables-and-charts)); for anything Chart.js can do beyond this, draw it yourself (an image, or your own canvas code in a host).
 
 ---
 
@@ -430,7 +466,7 @@ One `key: value` per line. `type` is any Chart.js type (`bar`, `line`, `pie`, `d
 {{toc 1,4}}
 ```
 
-Auto-generates a `<ul class="toc-list">` of heading links (each `<li>` indented by depth). Optional argument is a comma-separated level range `min,max` — both bounds required (`{{toc 2}}` falls back to the default `1,3`). The placement in the source does not matter — a core rule scans the whole document, so `{{toc}}` works at the top or bottom, and headings from file includes are listed. Past 20,000 entries or ~8 MB of TOC output in one document, further TOCs render empty.
+Auto-generates a `<ul class="toc-list">` of heading links (each `<li>` indented by depth). Optional argument is a comma-separated level range `min,max` — both bounds required (`{{toc 2}}` falls back to the default `1,3`). The placement in the source does not matter — a core rule scans the whole document, so `{{toc}}` works at the top or bottom, and headings from file includes are listed. Past 20,000 entries or ~8 MB of TOC output in one document, a TOC renders as an empty list — a single `{{toc}}` over a document with more than 20,000 matching headings too.
 
 ---
 
@@ -507,4 +543,34 @@ Emitted as `<script type="application/json" id="nyml-data">` (later blocks: `nym
 
 Read it with `JSON.parse(document.getElementById('nyml-data').textContent)`. If the body cannot be parsed, the island holds `{"error":"Failed to parse NYML"}`.
 
-A block whose `kind` is `document` (`{{nyml\nkind: document\n…\n}}`) is the **document header** of text format 1 (≥ 2.1.0): it renders nothing and takes no `nyml-data` number; carriers read it for the document's metadata and settings. Write it first in the file, `kind: document` as its first key. See "Document header" in `SKILL.md` and [FC-18 §5](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md).
+A block whose `kind` is `document` (`{{nyml\nkind: document\n…\n}}`) is the **document header** of text format 1 (≥ 2.1.0): it renders nothing and takes no `nyml-data` number; carriers read it for the document's metadata and settings. Write it first in the file, `kind: document` as its first key. See "Document metadata: the header" in `SKILL.md` and FC-18 §5, `node_modules/orz-markdown/spec/FC-18-text-format-1.md` (also on [GitHub](https://github.com/wangyu16/orz-markdown/blob/main/spec/FC-18-text-format-1.md)).
+
+---
+
+## Captions for figures, tables and charts
+
+Markdown has no caption syntax. Use this convention (it renders well in every theme and carrier):
+
+```markdown
+![Growth of the culture over 48 h](growth.png)
+
+*Figure 1.* Growth of the culture over 48 h.
+
+**Table 1.** Yield by catalyst.
+
+| Catalyst | Yield |
+|---|---:|
+| Pd | 92 % |
+
+{{chart
+type: bar
+labels: Pd, Ni, Cu
+data: 92, 71, 40
+}}
+
+*Figure 2.* Yield by catalyst.
+```
+
+- Figures (images, diagrams, charts, structures): a paragraph **after** them, starting `*Figure N.*`.
+- Tables: a paragraph **before** them, starting `**Table N.**`.
+- `{{chart}}` and `{{mermaid}}` have no caption key; `title:` in a chart draws a title inside it, which is not a caption.
