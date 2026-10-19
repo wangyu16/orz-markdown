@@ -13,7 +13,7 @@ the [browser editor](https://markdown.orz.how/editor.html); upgrading from 1.x:
 
 ## Showcase
 
-![orz-mdhtml demo: a self-contained .md.html lesson opens like a web page; the pencil opens a split editor where typed Markdown and math render live in the preview, then the theme switches to dark Nocturne, the file saves itself, and the read view shows the result.](docs/media/orz-mdhtml-demo.gif)
+![orz-mdhtml demo: a single self-editing .md.html lesson opens like a web page; the pencil opens a split editor where typed Markdown and math render live in the preview, then the theme switches to dark Nocturne, the file saves itself, and the read view shows the result.](docs/media/orz-mdhtml-demo.gif)
 
 The same portable file is both the rendered document and its Markdown editor. See the full
 [orz-markdown family](https://markdown.orz.how/family.html).
