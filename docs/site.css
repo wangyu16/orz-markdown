@@ -146,7 +146,13 @@ p { margin:.7em 0; }
 .family-showcase img { display:block; width:100%; height:auto; }
 
 /* ---- rendered orz-markdown output (curated, on-brand, no full theme) ---- */
-.render { font-size:.96rem; }
+.render { font-size:.96rem;
+  /* chart and diagram tokens of the default theme, Neat (themes/light-neat-1.css, 2.4.0):
+     the kit's enhanceDocument (demos.js) draws Chart.js and Mermaid with them */
+  --chart-text:#587085; --chart-grid:rgba(34,49,63,.12);
+  --chart-1:#2e8bcf; --chart-2:#48b7a8; --chart-3:#f0a33b; --chart-4:#e0607e; --chart-5:#5b6fc8; --chart-6:#8fb33c;
+  --mm-text:#22313f; --mm-line:#587085; --mm-node:#eef4fa; --mm-border:#2e8bcf; --mm-accent:#48b7a8; --mm-note:#fff4d6; }
+.render canvas.orz-chart { max-width:100%; }
 .render > :first-child { margin-top:0; } .render > :last-child { margin-bottom:0; }
 .render h1,.render h2,.render h3 { font-family:inherit; margin:.9em 0 .35em; line-height:1.25; letter-spacing:-.01em; font-weight:700; }
 .render h1 { font-size:1.5rem; } .render h2 { font-size:1.22rem; border:0; padding:0; } .render h3 { font-size:1.05rem; }
