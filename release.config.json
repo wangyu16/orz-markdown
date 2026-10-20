@@ -1,0 +1,46 @@
+{
+  "$comment": "Release facts of this package, read by scripts/release-check.ts and scripts/test-release.ts (the family tooling, identical in every orz package; family root notes/PHASE4-CLAIMS.md).",
+  "browser": null,
+  "kit": null,
+  "manifest": null,
+  "bundles": [
+    "dist"
+  ],
+  "checks": [
+    [
+      "node",
+      "build/web-bundle.mjs",
+      "--check"
+    ]
+  ],
+  "build": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "changelog": "CHANGELOG.md",
+  "test": {
+    "fast": [
+      "--project",
+      "unit",
+      "--project",
+      "cli"
+    ],
+    "changedAll": [
+      "package.json",
+      "package-lock.json",
+      "vitest.config.ts",
+      "release.config.json",
+      "tests/setup.ts",
+      "build/",
+      "vendor/",
+      "themes/",
+      "src/carrier/app/",
+      "src/carrier/shell/",
+      "src/runtime.ts"
+    ],
+    "chrome": true,
+    "retries": 2,
+    "base": "origin/main"
+  }
+}

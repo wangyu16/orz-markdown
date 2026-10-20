@@ -9,3 +9,4 @@ node_modules/
 archive/ideas/
 .claude/
 .preview/
+.release/

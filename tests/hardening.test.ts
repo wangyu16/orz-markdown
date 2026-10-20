@@ -261,4 +261,22 @@ describe('browser bundle needs no Node shims', () => {
     expect(html).toContain('width="10"');
     expect(html).not.toContain('localhost');
   }, 60_000);
+
+  it('[M.43] prepublishOnly builds, runs the family release gate and the stamp check, never the suite; the tiers are scripts; the tooling is not shipped (family Phase 4)', async () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string>; files: string[] };
+    expect(pkg.scripts['prepublishOnly']).toBe('npm run build && tsx scripts/release-check.ts --after-build && tsx scripts/test-release.ts --check');
+    expect(pkg.scripts['release:check']).toBe('tsx scripts/release-check.ts');
+    expect(pkg.scripts['test:release']).toBe('tsx scripts/test-release.ts');
+    expect(pkg.scripts['test:fast']).toBe('tsx scripts/test-release.ts --fast');
+    expect(pkg.scripts['test:changed']).toBe('tsx scripts/test-release.ts --changed');
+    expect(readFileSync('.gitignore', 'utf8').split('\n')).toContain('.release/');
+    for (const f of pkg.files) expect(f, 'the release tooling is never shipped').not.toMatch(/^(scripts|\.release|release\.config\.json)/);
+    const config = JSON.parse(readFileSync('release.config.json', 'utf8')) as Record<string, unknown>;
+    expect(config).toMatchObject({ browser: null, kit: null, bundles: ['dist'], checks: [['node', 'build/web-bundle.mjs', '--check']] });
+    const { releaseProblems } = await import('../scripts/release-check');
+    const ok = { name: 'orz-markdown', version: '2.4.0', browserVersion: null, kitRange: null, kitLinked: false, kitInstalled: null, kitLocked: null, bundledKit: [], manifestKit: null, changelog: '## [2.4.0] - 2026-10-17\n', head: 'abc', clean: true, dirty: [], checkFailures: [] };
+    const cfg = { browser: null, kit: null, manifest: null, bundles: ['dist'], checks: [], build: ['npm', 'run', 'build'], changelog: 'CHANGELOG.md' };
+    expect(releaseProblems(ok, cfg)).toEqual([]);
+    expect(releaseProblems({ ...ok, clean: false, dirty: [' M dist/index.js'] }, cfg, { afterBuild: true })[0]).toMatch(/build changed tracked files/);
+  });
 });

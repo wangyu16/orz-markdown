@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Release tooling
+
+- Publishing no longer re-runs the suite: `npm run test:release` runs it once
+  on the release commit and writes a green-run stamp (`.release/green.json`,
+  git-ignored); `prepublishOnly` builds, then runs the family release gate
+  (`scripts/release-check.ts`, shared by every orz package, facts in
+  `release.config.json`: dated entry, clean tree after the build, the site
+  bundle check) and the stamp check, in seconds. New scripts `release:check`,
+  `test:fast`, `test:changed`, `test:release`. Development tooling only;
+  nothing shipped changes.
+
 ### Documentation
 
 - Skill: a figure's caption paragraph needs a blank line after the image

@@ -16,6 +16,8 @@ a browser runtime, and an agent skill. Current version: see `package.json`.
 ```bash
 npm run build      # prebuild (src/version.ts + skill template.html) → tsc → dist/ (dist is committed AND published)
 npm test           # vitest run
+npm run test:fast  # projects unit + cli only (no Chrome); test:changed adds the Chrome files that import what changed
+npm run test:release # the green-run stamp (.release/green.json) that prepublishOnly checks — "Releasing"
 npm run test:watch # vitest watch
 npm run render     # tsx scripts/render.ts → tests/example.html (standalone themed demo; diff it to catch output changes)
 npm run build:web  # docs/orzmd.browser.js (site editor bundle) + sync docs/themes from themes/
@@ -270,7 +272,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   per-render budgets shared with the document. Never pass the document env or
   a fresh `{}` (that would reset the QR/TeX caps).
 - **`dist/` is tracked and published.** After changing `src/`, run `npm run build`
-  and commit `dist/`. `prepublishOnly` also builds+tests.
+  and commit `dist/`. `prepublishOnly` also builds and refuses a `dist/` the build changes.
 - **`src/runtime.ts` is a `String.raw` template** of vanilla ES5 JS. Do **not**
   use template literals, backticks, or `${...}` inside it (use
   `String.fromCharCode(96)` for a backtick). It must stay dependency-free.
@@ -308,15 +310,48 @@ then also need `markdown-it-cjk-breaks` installed).
 
 ## Releasing
 
-- Bump `package.json`, move CHANGELOG `[Unreleased]` → the new version, build
-  (regenerates `src/version.ts` and the skill template), `npm run build:web`
-  if the parser/themes changed (and bump the `docs/sw.js` CACHE name), commit,
-  push, then `npm publish`.
-- Publishing needs an npm token (granular, **bypass-2FA**) written to a temporary
-  `.npmrc` (untracked) and **deleted immediately after**. Never commit it.
-- **Network note for this machine**: IPv6 is unreliable here — prefix npm/git
-  network commands with
-  `NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"`.
+The family release pipeline (Phase 4): `scripts/release-check.ts` (the gate)
+and `scripts/test-release.ts` (the green-run stamp and the test tiers) are
+the family's shared tooling — **identical in every orz package**, canonical
+in the family root's `scripts/release-tooling/` (change it there, then
+`node --experimental-strip-types scripts/tooling-sync.ts --write` in the
+family root; never edit the copy here alone). This package's facts are in
+`release.config.json` (no browser package, no kit dependency; bundle `dist`;
+manifest check `build/web-bundle.mjs --check`; fast lane `unit` + `cli`).
+
+1. Bump `package.json`, move CHANGELOG `[Unreleased]` → the new version
+   (`## [x.y.z] - YYYY-MM-DD`), build (regenerates `src/version.ts` and the
+   skill template), `npm run build:web` if the parser/themes changed (and
+   bump the `docs/sw.js` CACHE name), commit, push.
+2. **`npm run test:release`** on that commit (clean tree; the stamp records
+   the duration): it builds (the build must leave the tree clean — `dist/` is
+   committed), runs the full suite once, re-runs a failing file alone (up to
+   2 tries, each recorded — a timing file that fails under the full load and
+   passes alone is fine), and when all is green writes `.release/green.json`
+   (git-ignored: commit, tree, Node and Chrome versions, per-file counts,
+   re-runs, version, the hash of `dist/`). A file red in every try is a real
+   failure: no stamp.
+3. `npm publish`. Its `prepublishOnly` takes seconds: `npm run build`, the
+   gate (`--after-build`: dated entry, clean tree after the build, the site
+   bundle check) and the stamp check (commit = HEAD, clean tree, `dist/` =
+   the stamped hash). It never re-runs the suite; any new commit needs a new
+   `npm run test:release`. Check it first with `npm run prepublishOnly`.
+4. Publishing needs an npm token (granular, **bypass-2FA**) in a file
+   **outside the repo** — `~/.orz-npmrc` (`chmod 600`), `export
+   NPM_CONFIG_USERCONFIG="$HOME/.orz-npmrc"` in that terminal — deleted right
+   after. Never commit it; a `.npmrc` inside the repo makes the tree dirty,
+   so the gate refuses. The owner's runbook: family `docs/publish.html`.
+5. **Network note for this machine**: IPv6 is unreliable here — prefix
+   npm/git network commands with
+   `NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"`.
+
+Test tiers while working: `npm run test:fast` (projects `unit` and `cli`),
+`npm run test:changed [-- --base <ref>]` (the fast lane plus the Chrome,
+screen and conformance files whose imports reach a file changed against
+`origin/main`; `-- --list` shows the selection; changes under `build/`,
+`vendor/`, `themes/`, `src/carrier/app/`, `src/carrier/shell/`,
+`src/runtime.ts` or the package/test config select them all), `npm test`
+(everything, no stamp), `npm run test:release` (the stamp).
 
 ## After each major revision
 

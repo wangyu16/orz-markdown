@@ -39,9 +39,13 @@
     "visibility:baseline": "tsx scripts/visibility-baseline.ts",
     "render": "tsx scripts/render.ts",
     "render:minimal": "tsx scripts/render-minimal.ts",
-    "prepublishOnly": "npm run build && node build/web-bundle.mjs --check && npm run test",
+    "prepublishOnly": "npm run build && tsx scripts/release-check.ts --after-build && tsx scripts/test-release.ts --check",
     "build:web": "node build/web-bundle.mjs",
-    "build:codemirror": "tsx scripts/build-codemirror.ts"
+    "build:codemirror": "tsx scripts/build-codemirror.ts",
+    "release:check": "tsx scripts/release-check.ts",
+    "test:fast": "tsx scripts/test-release.ts --fast",
+    "test:changed": "tsx scripts/test-release.ts --changed",
+    "test:release": "tsx scripts/test-release.ts"
   },
   "keywords": [
     "markdown",
