@@ -3,7 +3,9 @@
 Complete syntax reference for all features (orz-markdown 2.4). Covers standard markdown, official plugin extensions, containers, and all custom `{{...}}` plugins.
 
 > **Common mistakes.** A fenced code block with a plugin's name renders as a
-> plain code block — no diagram, no warning:
+> plain code block — no diagram, no warning. That is right only when you mean to
+> *show* the source as code (e.g. teaching Mermaid syntax); to draw it, use the
+> directive:
 >
 > | Wrong | Right |
 > |---|---|

@@ -17,6 +17,9 @@ A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official 
 > | ` ```smiles ` … ` ``` ` | `{{smiles C1=CC=CC=C1}}` |
 > | ` ```qr ` … ` ``` ` | `{{qr https://example.com}}` |
 >
+> A fence is right only when you mean to *show* the source as code (e.g. teaching
+> Mermaid syntax); to draw it, use the directive.
+>
 > Other frequent slips: `{{/mermaid}}` (there is no closing tag — every
 > directive ends with `}}`); a block directive (`{{mermaid}}`, `{{chart}}`,
 > `{{toc}}`, …) in the middle of a sentence (it must start a line); a
