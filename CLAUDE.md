@@ -330,8 +330,9 @@ manifest check `build/web-bundle.mjs --check`; fast lane `unit` + `cli`).
 2. **`npm run test:release`** on that commit (clean tree; the stamp records
    the duration): it builds (the build must leave the tree clean — `dist/` is
    committed), runs the full suite once, re-runs a failing file alone (up to
-   2 tries, each recorded — a timing file that fails under the full load and
-   passes alone is fine), and when all is green writes `.release/green.json`
+   2 tries, each recorded; only its failed tests, `vitest -t`, unless a
+   hook or the file itself failed — then the whole file — a timing file
+   that fails under the full load and passes alone is fine), and when all is green writes `.release/green.json`
    (git-ignored: commit, tree, Node and Chrome versions, per-file counts,
    re-runs, version, the hash of `dist/`). A file red in every try is a real
    failure: no stamp.
