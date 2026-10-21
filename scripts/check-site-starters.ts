@@ -1,12 +1,23 @@
+/**
+ * The website's starters and their links (`npm run check:starters`, part of `npm run check:site`):
+ * each starter embeds the pinned carrier version, and every `starters/new-<kind>…?v=` link in the
+ * top-level pages names it. `--live` (`npm run check:site -- --live`) also requires that pinned
+ * version to be the carrier's npm `latest` — after a carrier release the family's after-release
+ * pipeline regenerates the starter (`npm run starters -- <kind> <version>`) and this turns green.
+ */
 import { readFileSync, readdirSync } from 'node:fs';
+import dns from 'node:dns';
+import net from 'node:net';
+
+const live = process.argv.includes('--live');
 
 const docsDir = new URL('../docs/', import.meta.url);
 const startersDir = new URL('../docs/starters/', import.meta.url);
 
 const starters = [
-  { file: 'new-mdhtml.md.html', version: '1.0.2' },
-  { file: 'new-slides.slides.html', version: '1.0.0' },
-  { file: 'new-paged.paged.html', version: '1.0.0' },
+  { file: 'new-mdhtml.md.html', version: '1.0.2', pkg: 'orz-mdhtml' },
+  { file: 'new-slides.slides.html', version: '1.0.0', pkg: 'orz-slides' },
+  { file: 'new-paged.paged.html', version: '1.0.0', pkg: 'orz-paged' },
 ] as const;
 
 const failures: string[] = [];
@@ -58,9 +69,37 @@ for (const starter of starters) {
   }
 }
 
+async function latest(pkg: string): Promise<string> {
+  // IPv6 is unreliable on the maintainer's machine
+  try { dns.setDefaultResultOrder('ipv4first'); net.setDefaultAutoSelectFamily(false); } catch { /* older Node */ }
+  const r = await fetch(`https://registry.npmjs.org/${pkg}/latest`, { signal: AbortSignal.timeout(30_000) });
+  if (!r.ok) throw new Error(`registry HTTP ${r.status}`);
+  return String(((await r.json()) as { version?: string }).version);
+}
+
+async function main(): Promise<void> {
+  if (live) {
+    for (const starter of starters) {
+      try {
+        const v = await latest(starter.pkg);
+        if (v !== starter.version) {
+          failures.push(`${starter.file} and its ?v= links are ${starter.pkg} ${starter.version}, npm latest is ${v}: \`npm run starters -- ${starter.pkg.replace('orz-', '')} ${v}\``);
+        }
+      } catch (e) {
+        failures.push(`${starter.pkg}: could not ask the registry for latest (${(e as Error).message})`);
+      }
+    }
+  }
+  report();
+}
+
+function report(): void {
 if (failures.length > 0) {
   console.error(`Starter consistency check failed:\n- ${failures.join('\n- ')}`);
   process.exitCode = 1;
 } else {
-  console.log('Starter consistency check passed.');
+  console.log(`Starter consistency check passed${live ? ' (live: every starter is its carrier\'s npm latest)' : ''}.`);
 }
+}
+
+void main();

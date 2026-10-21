@@ -21,7 +21,8 @@ npm run test:release # the green-run stamp (.release/green.json) that prepublish
 npm run test:watch # vitest watch
 npm run render     # tsx scripts/render.ts → tests/example.html (standalone themed demo; diff it to catch output changes)
 npm run build:web  # docs/orzmd.browser.js (site editor bundle) + sync docs/themes from themes/
-npm run check:site # website starter versions + discovery metadata
+npm run check:site # website starter versions + discovery metadata + site bundle; `-- --live`: each starter is its carrier's npm latest
+npm run starters -- <mdhtml|slides|paged> <version> # regenerate a website starter with the PUBLISHED carrier CLI, move its ?v= links, the check's pin and the sw cache (the family's after-release.ts runs it)
 npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror 6 bundle) + src/carrier/editor/codemirror-pin.ts
 ```
 
@@ -243,7 +244,10 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
 - `scripts/` — `sync-version.ts` and `build-skill-template.ts` (prebuild),
   `render.ts`, the site checks.
 - `docs/` — the markdown.orz.how website (GitHub Pages); `build/web-bundle.mjs`
-  builds its editor bundle. Starters live in `docs/starters/`.
+  builds its editor bundle. Starters live in `docs/starters/` (texts in
+  `docs/starters/source/`); after a carrier release the family root's
+  `scripts/after-release.ts` regenerates them (`npm run starters`) — never by
+  hand with a local build.
 - `themes/` — CSS themes (shipped in npm and served via jsDelivr): `common.css`
   is the only structure layer; the 12 theme files are decoration only
   (`tests/themes.test.ts` enforces it; contract in
