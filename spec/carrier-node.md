@@ -107,7 +107,9 @@ nothing proved.
 
 `includeTargets(text, directives?)` lists a text's include directives as the
 renderer finds them (the kit's parser: not in code or other bodies;
-directives default to the kit's `md`, `markdown`, `md-include`).
+directives default to the kit's `md`, `markdown`, `md-include`). Since 2.5.0
+it lives in the browser-safe `orz-markdown/carrier` (with `linkTargets`); this
+entry re-exports the same function.
 `resolveFileIncludes(text, folder)` reads file includes from the twin's folder
 only (a target leaving it, after symbolic links, is `outside-folder`).
 `includePlan(text, { folder, held, keep, resolve, outName, resolveCommand })`

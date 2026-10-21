@@ -60,7 +60,7 @@ to the kind), `checkTimeoutMs` (default 120 s; `C.save.conflict`, which walks a 
 |---|---|
 | `kind`, `version` | the carrier kind and its shell version |
 | `bundle`, `release` | paths of the browser bundle and its `release.json` |
-| `assemble(text, { delivery?, engineSource?, includes? })` | the Node `assemble`; with no `engineSource` an inline file carries this release's bundle; `includes` are written to `#orz-includes` as given (FC-19 §2) |
+| `assemble(text, { delivery?, engineSource?, includes?, twinLinks? })` | the Node `assemble`; with no `engineSource` an inline file carries this release's bundle; `includes` are written to `#orz-includes` as given (FC-19 §2); (2.5.0) `twinLinks` is the twin-link naming (FC-18 §8.2) |
 | `create()` | a new document text, as "New document" makes it |
 | `samples?` | extra texts (kind-specific constructs) for the law checks |
 | `protocols?` | `{ ai?, include? }`: which optional host protocols the file speaks (default both); a declined one must never be answered |
@@ -68,6 +68,7 @@ to the kind), `checkTimeoutMs` (default 120 s; `C.save.conflict`, which walks a 
 | `next?` | a release of the same carrier with a higher version — usually this build again with the patch number bumped. Without it the update checks are skipped |
 | `previous?` | an older release whose files must update to this one exactly |
 | `firstRelease?` | `true` for a carrier's first release: there is no `previous`, and `C.update.from-previous` is `not-applicable` (without it, a missing `previous` is a skip) |
+| `twinLinks?` | (2.5.0) `true`: the carrier takes `assemble(text, { twinLinks })` (FC-18 §8.2). The twin-link checks (`C.links.*`, `C.save.keeps-links`, `C.update.keeps-links`) run whenever the Node `assemble` stores a naming; one that ignores the option (a carrier built before 2.5.0) gets them `not-applicable` — unless it declares `twinLinks: true`, when they fail |
 
 ### Page helpers for a carrier's own tests (2.2.0)
 
@@ -89,9 +90,11 @@ type?)`, `callPage`, the page-side sources (`OPFS_FOLDER`, `READ_OPFS`,
 was left out. A run with `only` or `skip` is `partial: true` and never
 conformant, whatever its results; a run without Chrome or without `next` is
 not a conformance result either (the Node checks still report).
-`not-applicable` exists for exactly one declared case today:
-`C.update.from-previous` when the target says `firstRelease: true`; it counts
-as satisfied only then. A carrier's own claims cite check ids; a Phase 3
+`not-applicable` exists for two cases: `C.update.from-previous` when the
+target says `firstRelease: true`, and (2.5.0) the four twin-link checks when
+the carrier's `assemble` does not take `twinLinks` and the target does not
+declare `twinLinks: true` (a carrier built before 2.5.0 has no file with a
+naming to keep); they count as satisfied only then. A carrier's own claims cite check ids; a Phase 3
 release requires a conformant run (REBUILD.md Phase 3 exit), i.e. a green
 final `[conformant]` test without `allowSkips`.
 
@@ -195,6 +198,10 @@ final `[conformant]` test without `allowSkips`.
 | `C.update.hosted` | Chrome | a file in a host page that completed `orz-host-save@1`, `next` advertised: no manifest request, no indicator in the frame |
 | `C.update.cdn-delivery` | Chrome | a `cdn`-delivery file (its bundle from the jsDelivr URL): Update now writes exactly `next`'s Chrome `assemble(text, { delivery: 'cdn' })` — delivery `cdn`, shell `next.version`, exact text |
 | `C.update.keeps-includes` | Chrome | a file assembled with includes (`INCLUDE_TEXT`, `INCLUDES`; the corpus file `md/includes.md`): Update now writes exactly `next`'s Chrome `assemble(text, { includes })` — exact text, shell `next.version`, the file's `#orz-includes` exactly |
+| `C.links.assemble` | Node + Chrome | (2.5.0) `assemble(text, { twinLinks })` with a naming other than the family's stores it in `#orz-shell` `"links"` (extract gives it back, normalized: the key order does not matter); the family naming (`{}`, its own templates) gives exactly `assemble(text)`, which has no `"links"`; `assemble(extract(F).text, { twinLinks })` === F; an invalid naming (`x.html`, `{stem}/index.html`, an unknown kind) is refused; the bundle's `assemble` in Chrome gives the Node bytes |
+| `C.links.read-view` | Chrome | (2.5.0) a file with the naming `{ md: "{stem}.html", slides: "{stem}.deck.html" }`, opened under the name it gives the kind (`links.html`, `links.deck.html`, `links.paged.html`): its read view (the document and open shadow roots) links `week2.deck.html#s3`, `../notes.html?v=1`, `handout.paged.html` (paged left out: family), `https://example.org/x.md`, `data.csv`, `#twin-links`, and never the family or `.md` forms |
+| `C.save.keeps-links` | Chrome | (2.5.0) that file, opened under that name, edited and saved: it writes exactly Node `assemble(text, { twinLinks })` with the file's naming, and the save offers the dual name (`links.md.html`) |
+| `C.update.keeps-links` | Chrome | (2.5.0) a file with that naming: Update now writes exactly `next`'s Chrome `assemble(text, { twinLinks })` — exact text, shell `next.version`, the file's naming exactly |
 | `C.host.save` | Chrome | cross-origin `orz-host-save@1` (the host side written from host-protocols.md, not the kit's): ready with the kind; dirty `true` after an edit; the save goes to the host first (picker present but unused) with `source` = exact text, `html` = Node `assemble(source)`; no served-page notice; clean and dirty `false` after the ack |
 | `C.host.ai` | Chrome | `orz-host-ai-ready` version 1 when offered, no answer when declined; nothing else posted |
 | `C.host.include` | Chrome | `orz-host-include-ready` with the kind when offered, no answer when declined; nothing else posted |

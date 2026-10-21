@@ -53,8 +53,9 @@ markup, FC-18 §8.1):
 | `uid`, `format` | the header (`uid` only when well-formed; `format` default 1) |
 | `delivery` | `#orz-shell` (`inline` unless it says `cdn`) — kept by every save (B#7) |
 | `includes` | `#orz-includes` (own string values) — a page cannot resolve them again (D4) |
+| `twinLinks` | (2.5.0) `#orz-shell` `"links"`, read as `extract` reads it (normalized; absent for the family naming or an invalid value) — kept by every save, Download a copy, Save as new copy and the quiet update; New document has none (FC-18 §8.2) |
 | `engine` | `#orz-engine` without `src`: the inline bundle's exact text (null for `cdn`) |
-| `fileName` | the page path's last segment when it ends in the kind's extension, decoded; else `document` + the extension |
+| `fileName` | the page path's last segment when it ends in the kind's extension, decoded; (2.5.0) else, for a page published under the file's naming (`week1.html` with `{ md: "{stem}.html" }`), its dual name (`week1.md.html`) — a saved or downloaded copy keeps a name that says its kind; else `document` + the extension |
 
 A page whose `#orz-src` is not a `<script type="text/markdown">` is not a
 file (null).
@@ -72,7 +73,7 @@ Everything kind-specific is behind this interface; the app names no kind
 | `brand?` | the tool's name in the chrome's labels (edit mode's "<brand> on GitHub"; default: the repo's name, else `orz`) |
 | `repo?` | (2.2.0) the kind's repository, an `https://github.com/<owner>/<repo>` URL: edit mode links to it with the GitHub mark (§4.2); anything else shows no link |
 | `readerControls?` | (2.2.0) reader-side controls (§4.10): `{ fontScale?: { min, max, step } }` in percent; (2.3.0) `choices?: ReaderChoiceControl[]`, reader controls with named choices |
-| `assemble(text, { delivery?, engineSource?, includes? })` | the isomorphic assemble (FC-19 §2); string or promise |
+| `assemble(text, { delivery?, engineSource?, includes?, twinLinks? })` | the isomorphic assemble (FC-19 §2); string or promise. (2.5.0) A kind must store `twinLinks` (FC-18 §8.2): when the file has a naming, the app checks that the assembled file holds exactly it and refuses the save otherwise ("this version of the carrier cannot keep the page's link names"; nothing is written) |
 | `newDocument()` | the creation tool's new text (header with `carrier` and a fresh `uid`); a kind's own creation choices (paged's templates) call `app.newDocument({ text, name })` (§4.5, 2.3.0) |
 | `mountEditor(element, options, ctx?)` | FC-19 `mountEditor`: the kit's editor shell with the kind's renderer, preview and tools; `ctx` when mounted on the file (§3.2) |
 | `createReadView(document)` | the page's read view (§3.3) |
@@ -114,14 +115,16 @@ A carrier written with the DOM lib's types (`HTMLElement`, `Document`,
 ### 3.2 `StandaloneContext` — what the file gives an editor mounted on it
 
 `{ fileName, assemble(text, { includes? }), saver, host?, includes?,
-openedHtml?, standalone, ai?, fetchInclude?, preferences?, adapter? }`. The
-kind's `mountEditor` passes them to `createEditorShell`: `assemble`,
-`fileName`, `saver`, `host`, `includes`, `openedHtml`, `standalone`;
+twinLinks?, openedHtml?, standalone, ai?, fetchInclude?, preferences?,
+adapter? }`. The kind's `mountEditor` passes them to `createEditorShell`:
+`assemble`, `fileName`, `saver`, `host`, `includes`, (2.5.0) `twinLinks`
+(the file's naming: the preview names twin links so), `openedHtml`,
+`standalone`;
 `hooks.ai` = `ai` (the host's operations), `hooks.fetchInclude` =
 `fetchInclude`; `preferences` (the document's reader preferences by `uid`);
 `adapter` (tests). `assemble` keeps the file's delivery and engine
 (`engineSource` = the opened file's own inline engine), and passes the given
-includes. Rules for a kind's `mountEditor`:
+includes; (2.5.0) it keeps the file's twin-link naming whatever it is given. Rules for a kind's `mountEditor`:
 
 - **Settings** in the toolbar: `attachSettings(shell, settings)` (FC-19 §1:
   the same tools for every host).
@@ -141,7 +144,7 @@ includes. Rules for a kind's `mountEditor`:
 
 | Member | |
 |---|---|
-| `render(text, { includes?, fetchInclude? })` | render into the page (presentation follows the header); resolves when it shows; a newer call supersedes an older one |
+| `render(text, { includes?, fetchInclude?, twinLinks? })` | render into the page (presentation follows the header); resolves when it shows; a newer call supersedes an older one. (2.5.0) `twinLinks`: the file's naming — render twin links with it (`orzTwinLinks: ctx.twinLinks ?? true`; the md renderer takes `twinLinks`) |
 | `present(text) → { scheme }` | apply the presentation without re-rendering (theme stylesheet, measure, page size); the chrome follows `scheme` |
 | `element?` / `setVisible?(visible)` | the view's root (hidden while editing) or the kind's own show/hide |
 | `onKey?(event) → boolean` | keys of the read view the app's keymap did not take (§4.8) |

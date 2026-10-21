@@ -458,7 +458,7 @@ skipVersion(kind, version, storage?): boolean
 ### 7.2 Re-assembly (transactional)
 
 ```ts
-reassemble({ text, kind, release, delivery?, includes?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
+reassemble({ text, kind, release, delivery?, includes?, twinLinks?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
 ```
 
 1. **Download and verify.** Fetch the bundle URL (§6; `credentials: omit`),
@@ -475,8 +475,10 @@ reassemble({ text, kind, release, delivery?, includes?, fetch?, document?, windo
    fixed listener. When the
    iframe's own window posts `orz-reassemble-ready`, the page posts
    `{ type: 'orz-reassemble', id, text, delivery, engineSource: bundle,
-   includes? }`; the listener calls `OrzCarrier.assemble(text, { delivery,
-   engineSource, includes? })` (`includes` only when given)
+   includes?, twinLinks? }`; the listener calls `OrzCarrier.assemble(text, {
+   delivery, engineSource, includes?, twinLinks? })` (`includes` and
+   `twinLinks` only when given; 2.5.0: `twinLinks` only when it is not the
+   family naming)
    and posts back `orz-reassembled` with the html. The page reads **only
    messages whose `source` is that iframe's `contentWindow`**. Default timeout
    30 s.
@@ -487,16 +489,21 @@ reassemble({ text, kind, release, delivery?, includes?, fetch?, document?, windo
    new file's `#orz-includes` holds exactly the `includes` given (keep the
    file's own, `extract(currentHtml).includes`; absent or empty = none: a
    page cannot resolve local includes again, FC-18 §8.3 D4 — before closed
-   loop 2 round 3 every update dropped them, and the check passed). Anything
-   else rejects with a clear message ("…nothing was changed").
+   loop 2 round 3 every update dropped them, and the check passed), and
+   (2.5.0) `extract(html).twinLinks` is exactly the `twinLinks` given (keep
+   the file's own, `extract(currentHtml).twinLinks`, FC-18 §8.2; absent or
+   the family naming = none: a release that drops, changes or adds a naming
+   is refused, code `links`). Anything else rejects with a clear message
+   ("…nothing was changed").
 4. **Clean up.** The iframe and the message listener are removed in every
    outcome. Nothing else in the page is touched.
 
 Failures reject with `UpdateError` and a `code`: `manifest`, `download`,
 `too-large`, `integrity`, `no-crypto`, `encoding`, `unsafe-bundle`,
 `no-document`, `timeout`, `bundle`, `roundtrip`, `kind`, `version`,
-`delivery`, `includes`; `performUpdate` adds `changed` and `hosted` (below).
-`performUpdate` passes `delivery` and `includes` on to `reassemble`.
+`delivery`, `includes`, (2.5.0) `links`; `performUpdate` adds `changed` and
+`hosted` (below). `performUpdate` passes `delivery`, `includes` and
+`twinLinks` on to `reassemble`.
 
 The **caller** then saves the returned html through `createSaver` (§1) and
 reloads the page so the new shell runs — but only when that is safe.

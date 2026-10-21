@@ -17,7 +17,10 @@ The shared test corpus is in [`../tests/carrier-corpus/`](../tests/carrier-corpu
 Implementation: `src/carrier/` — `header.ts` (`readHeader`, `editHeader`,
 `setHeaderValue`, `removeHeaderKey`, `withoutHeader`, `lintHeader`),
 `document.ts` (`readDocument`, `kindFromFilename`, `twinName`; `mintUid` from
-`uid.ts`), `links.ts` (`twinHref` and the `env.orzTwinLinks` render rule),
+`uid.ts`), `links.ts` (the `env.orzTwinLinks` render rule), `naming.ts` (2.5.0:
+the twin-link naming — `TwinNaming`, `twinNaming`, `twinHref(href, naming?)`,
+`twinFileName`, `textNameOf`; parser-free), `targets.ts` (2.5.0:
+`includeTargets`, `linkTargets`),
 `envelope.ts` (`assembleEnvelope`), `read.ts` (`extract`, `readIslandFromDom`,
 `decodeText`; parser-free), `text.ts` (line-ending, surrogate and decoding
 helpers), `sha256.ts` (2.3.0: synchronous `sha256`), `legacy.ts` (2.3.0: the
@@ -26,7 +29,7 @@ kind-independent core of a carrier's `inspect`), `parser.ts` (the kit's
 private parser), `index.ts`. Exported as
 `orz-markdown/carrier` (`src/carrier.ts`) and, for readers that need no parser,
 `orz-markdown/carrier/read`; never imported by the parser entry. Shared reader:
-`src/nyml-body.ts`. Claims K.1–K.32 (and M.22, M.23) in `notes/CLAIMS.md`,
+`src/nyml-body.ts`. Claims K.1–K.36 (and M.22, M.23) in `notes/CLAIMS.md`,
 tests in `tests/carrier-kit.test.ts`.
 
 The shell runtime is `src/carrier/shell/` — `save.ts` (`createSaver`, the

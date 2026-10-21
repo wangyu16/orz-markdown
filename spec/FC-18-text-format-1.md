@@ -3,6 +3,13 @@
 **Status:** binding — approved by the owner on 2026-10-05 (orz family decisions
 FD-05/FD-06, contract FC-18). Changes follow the family's contract-change rules.
 
+**Minor revision, orz-markdown 2.5.0 (additive; owner decision FD-08 of
+2026-10-21, K1 of the orz-site design):** the assembly option `twinLinks`, a
+twin-link naming stored in `#orz-shell` as `"links"` only when it is not the
+family naming (§8.1, §8.2, §8.3). A file assembled without it — every file
+made before — is byte-identical to before; a shell that does not know it reads
+such a file as the family naming.
+
 **Owner decisions are collected in §12 (all taken 2026-10-05).**
 
 ## 1. Purpose
@@ -290,6 +297,7 @@ FC-01 unchanged.
   … head metadata derived from the header (FC-03) …
   <script type="application/orz-meta+json" id="orz-meta">…</script>
   <script type="application/json" id="orz-shell">{"kind":"…","format":1,"shell":"…","delivery":"inline"}</script>
+  <!-- 2.5.0: with a naming other than the family's, #orz-shell ends …,"delivery":"…","links":{"md":"{stem}.html"}} -->
   … shell assets …
 </head>
 <body>
@@ -333,17 +341,52 @@ id="orz-src">` (slides' `#orz-deck` / `text/orz-slides` retires).
   templates carry a `title` key in their header so new documents start titled; head metadata and `#orz-meta` (from
   the header; nothing else), `lang`. Theme presentation (classes, styles) is
   applied by the shell parts, not by the envelope.
-- **Markers:** `#orz-shell` (kind, format, shell version, delivery) and the
-  `generator` meta. They are the only version information in the file.
+- **Markers:** `#orz-shell` (kind, format, shell version, delivery; since
+  2.5.0 also `links`, the twin-link naming, when it is not the family's —
+  §8.2) and the `generator` meta. They are the only version information in
+  the file.
 - **No user state in the shell** (§6): no `docId`, no filename, no saved theme
   outside the text.
 
 ### 8.2 Options
 
-`assemble(text, { delivery: "inline" | "cdn", includes? })`. Inline is the
-default (FD-02). `includes` (added 2026-10-06, closed loop 2 round 3;
-additive) are resolved includes to store in `#orz-includes` as given instead
-of resolving the text's directives (§8.3). Nothing else changes the output.
+`assemble(text, { delivery: "inline" | "cdn", includes?, twinLinks? })`.
+Inline is the default (FD-02). `includes` (added 2026-10-06, closed loop 2
+round 3; additive) are resolved includes to store in `#orz-includes` as given
+instead of resolving the text's directives (§8.3). Nothing else changes the
+output.
+
+`twinLinks` (orz-markdown 2.5.0, additive) is the **twin-link naming**: the
+file names under which the host publishes the assembled twins of texts, so
+the file's twin links (§8.3) point at pages that exist. Its value
+(`TwinNaming`):
+
+- the **family naming** — absent, `"family"`, `{}`, or only the family
+  templates below: `x.md` → `x.md.html`, `x.slides.md` → `x.slides.html`,
+  `x.paged.md` → `x.paged.html`;
+- or an object of per-kind **file-name templates**, `{ md?, slides?, paged? }`
+  — a kind left out keeps its family name. A template holds `{stem}` exactly
+  once (the file name without its text extension: `week1` for
+  `week1.slides.md`), otherwise only `A-Z a-z 0-9 . _ -`, ends in `.html`,
+  and has no `/`: the page stays in its text's folder, so every relative
+  asset link of the document still resolves. Example: `{ "md":
+  "{stem}.html" }`. Directory pages (`x/index.html`) and naming functions are
+  not offered (a function cannot be stored in the file, which must carry the
+  naming to its reader's browser).
+
+An invalid naming is refused (`assemble` throws). The naming is
+**normalized** — only the kinds whose template differs from the family's, in
+the order `md`, `slides`, `paged` — and written into `#orz-shell` as
+`"links"` (after `delivery`) **only when it is not the family naming**: a file
+without a naming is byte for byte what a shell before 2.5.0 writes. It is
+part of the options `o` of the laws (§2): `assemble(T, s, o)` stays
+deterministic (two namings give two files that differ only in `#orz-shell`),
+and law 3 holds for `o` = the file's own naming. `extract` returns it as
+`twinLinks` (normalized; absent for the family naming, or when `"links"` is
+not a valid naming). Every re-assembly in the browser carries the file's
+naming over exactly, as it carries `includes` (§8.3): the in-file save, the
+quiet update (spec/shell-runtime.md §7.2, which refuses a new file that does
+not hold it exactly) and the website's verify.html.
 
 ### 8.3 Links, assets, includes
 
@@ -357,6 +400,19 @@ of resolving the text's directives (§8.3). Nothing else changes the output.
   `//host/…` and fragment- or query-only hrefs are not; raw-HTML `<a>` is
   untouched. orz-markdown applies the rewrite when the render's env sets
   `orzTwinLinks: true`.
+- **Named twins (2.5.0).** With a twin-link naming (§8.2) the same links
+  render as the naming's names instead (`{ "md": "{stem}.html" }`:
+  `notes.md#part` → `notes.html#part`; `week2.slides.md` keeps
+  `week2.slides.html` when the naming leaves slides out); the text still
+  keeps its `.md` links. The render's env carries the naming,
+  `orzTwinLinks: <naming>`; the kit's `twinHref(href, naming?)` is the one
+  mapping, used by the file's read view, every editor preview, an app's
+  preview (FC-19 §3 `twinLinks`) and a site builder's link check. An
+  assembled file renders with its own naming (`extract(html).twinLinks`), so
+  preview and published page agree by construction. A page published under a
+  non-dual name (`week1.html`) is identified by its `#orz-shell` /
+  `data-orz-kind` (FC-08); when it is saved or downloaded the reader is
+  offered its dual name (`week1.md.html`, spec/carrier-app.md §2).
 - Assets are relative paths, untouched.
 - **Includes (D4).** A standalone file cannot read local files. At
   assembly, file and URL includes are resolved under the 2.0.0 trust model and

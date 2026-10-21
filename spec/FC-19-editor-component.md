@@ -3,6 +3,11 @@
 **Status:** binding — approved by the owner on 2026-10-05 (orz family decisions
 FD-05/FD-06, contract FC-19). Changes follow the family's contract-change rules.
 
+**Minor revision, orz-markdown 2.5.0 (additive; FD-08, K1 of the orz-site
+design):** the twin-link naming `twinLinks` (FC-18 §8.2) on `assemble`,
+`extract`, `renderPreview` (§2), `EditorOptions` (§3) and the editor shell
+(§8.1, §8.5, §8.8). Carriers adopt it in a minor release (§7).
+
 ## 1. One editor, two kinds of host
 
 Each `orz-<x>-browser` package exports the editor for its kind. The assembled
@@ -15,8 +20,8 @@ wants (FD-06).
 
 ```ts
 mountEditor(element: HTMLElement, options: EditorOptions): Editor
-assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string; includes?: Record<string, string> }): Promise<string>
-extract(html: string): { text: string; kind: Kind; format: number; shell: string; delivery: string; includes?: Record<string, string> } | null
+assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string; includes?: Record<string, string>; twinLinks?: TwinNaming }): Promise<string>
+extract(html: string): { text: string; kind: Kind; format: number; shell: string; delivery: string; includes?: Record<string, string>; twinLinks?: TwinNaming } | null
 readDocument(text: string): DocumentInfo        // header + derived facts, no rendering
 renderPreview(text: string, options?): Promise<string>  // sandboxable HTML for thumbnails / read-only views
 version: string                                  // the shell version
@@ -38,6 +43,19 @@ local files, so the browser's re-assemblies pass the opened file's
 quiet update, which refuses a new file that does not hold them exactly
 (spec/shell-runtime.md §7.2). Absent or empty: no `#orz-includes`. A bundle
 that ignores the option loses the includes and cannot update such a file.
+
+`twinLinks` (optional; orz-markdown 2.5.0, additive, a minor release of each
+carrier) is the twin-link naming of FC-18 §8.2 (`TwinNaming`: per-kind
+file-name templates such as `{ md: "{stem}.html" }`; the family naming is
+none): stored in `#orz-shell` as `"links"` when it is not the family's,
+returned by `extract` as `twinLinks`, and used for every render of the file's
+twin links (FC-18 §8.3). Like `includes`, every browser re-assembly passes the
+opened file's (`extract(html).twinLinks`): the standalone save (§8.5) and the
+quiet update, which refuses a new file that does not hold it exactly
+(spec/shell-runtime.md §7.2). `renderPreview(text, { twinLinks })` renders
+with it. A carrier from before 2.5.0 ignores the option (its files never
+carry a naming), so a host that publishes under other names needs a carrier
+that takes it.
 
 **The standard bundle global** (binding addition, 2026-10-05). Every carrier
 browser bundle (`orz-<x>.browser.js`, the file named by `bundle.path` in its
@@ -74,6 +92,8 @@ interface EditorOptions {
   nonce?: string;                     // added 2.2.0: an app's CSP nonce (§8.4) for the preview and the editor's scripts and styles
   includes?: Record<string, string>;  // added 2.2.0: resolved includes for the renderer (target as written → text), like a file's #orz-includes
   fileName?: string;                  // added 2.2.0 (round 2): the suggested name of the standalone save of an app's editor without hooks.save (picker and download)
+  twinLinks?: TwinNaming;             // added 2.5.0: the host's twin-link naming (FC-18 §8.2): the preview renders links to text twins with its names
+                                      //   (hooks.resolveLink, when given, still gets the source href); an app's standalone save passes it to assemble
 }
 
 interface EditorHooks {
@@ -364,13 +384,14 @@ Claims E.1–E.25 (`notes/CLAIMS.md`), tests `tests/carrier-editor.test.ts`.
 const shell = createEditorShell(element, {
   text,                              // exact (FC-18)
   render(text, ctx) { return html; },// the kind's preview renderer; md: renderMarkdownPreview or renderMarkdownPreviewWithIncludes
-                                     //   (ctx: { fetchInclude?, resolveAsset?, twinLinks?, cache? })
+                                     //   (ctx: { fetchInclude?, resolveAsset?, twinLinks?, cache?, includes? }; twinLinks: false | TwinNaming)
   adapter?,                          // default codemirror6Adapter()
   mode?, readOnly?, chrome?,         // as FC-19 §3
   formats?,                          // text formats it reads and writes (default [1]; the carrier's OrzCarrier.formats)
   hooks?,                            // FC-19 §3 EditorHooks: save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid
   assemble?, fileName?, kind?, host?, saver?,   // standalone host: assemble(text, { includes }?) → html, then createSaver
   includes?,                         // the opened file's #orz-includes, passed to every assemble (§8.5); default none
+  twinLinks?,                        // (2.5.0) the twin-link naming: render's ctx.twinLinks, and passed to every assemble (§8.5); default the family's
   openedHtml?,                       // the opened file's bytes for the saver (§8.5); default assemble(text), once, at idle
   standalone?,                       // the assembled file's own boot passes true (§8.4 sandbox)
   uid?, preferences?, storage?,      // reader preferences (default store namespaced by the header uid)
@@ -783,7 +804,10 @@ shell.preview.context / resolveAsset(ref) / resolveAssets(html) / shareAssets(ht
   (`#orz-shell` `delivery`: a `cdn` file stays `cdn`, B#7), and the shell
   passes the `includes` option — the opened file's `#orz-includes` — as
   `assemble(text, { includes })` (FC-18 §8.3, D4; without includes the
-  call is `assemble(text)`). `openedHtml` — the bytes of the file the page
+  call is `assemble(text)`); (2.5.0) with the `twinLinks` option (not the
+  family naming) the call carries `{ twinLinks }` too. In an assembled file
+  the carrier app's `assemble` keeps the file's own naming whatever it is
+  given (carrier-app §3.2). `openedHtml` — the bytes of the file the page
   was opened from, which prove that a remembered file handle still points at
   that file (shell-runtime §1, steps 3.1–3.3) — is the `openedHtml` option
   (a string or a function; the assembled file's own HTML as loaded), else
@@ -913,7 +937,9 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   shell through `ctx.cache`, a per-shell map; anchors before the first
   include and after the last stay exact, included text anchors at the
   include). `ctx.twinLinks` is `false` when `hooks.resolveLink` is given
-  (links rendered as written). The shell itself sends the rendered HTML through
+  (links rendered as written); (2.5.0) otherwise the shell's `twinLinks`
+  naming when it is not the family's (`renderMarkdownPreview` renders twin
+  links with it), else absent. The shell itself sends the rendered HTML through
   `resolveAsset` before it enters the frame (`rewriteAssetUrls`): relative
   `src`, `poster`, every `srcset` URL and `href` on elements other than `<a>`
   / `<area>`; absolute, root (`/…`), fragment and `data:` references stay; a
@@ -1009,6 +1035,13 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   option `missingIncludes: false` turns it off); `SaveOutcome.conflict` and
   the conflict question (§8.5); no served notice for an app's page (§8.5);
   the syntax highlighter (`ORZ_HIGHLIGHTER`, §8.6).
+- 2.5.0 (additive; K1 and K2 of the orz-site design, FD-08): the twin-link
+  naming — `assemble`'s and `renderPreview`'s `twinLinks`, `extract`'s
+  `twinLinks` (§2), `EditorOptions.twinLinks` (§3), the shell option
+  `twinLinks` (render context, saves; §8.1, §8.5, above), `MarkdownPreviewOptions.twinLinks`
+  accepting a naming; from `orz-markdown/carrier`: `TwinNaming`,
+  `twinNaming`, `twinHref(href, naming?)`, `twinFileName`, `textNameOf`,
+  `includeTargets` (browser-safe) and `linkTargets`.
 - 2.4.0 (additive; the kit gaps of orz-slides 1.0, REBUILD §3c): `Editor`
   `applyEdits`, `select`, `setFocusRange`, `flash`, `getSelection` and the `change` event's
   `label` (§4); adapters may implement `applyChanges`, `setFocusRange` and
