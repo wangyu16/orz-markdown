@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bundle check) and the stamp check, in seconds. New scripts `release:check`,
   `test:fast`, `test:changed`, `test:release`. Development tooling only;
   nothing shipped changes.
+- A file that fails in the stamp run is re-run alone with only its failed
+  tests (`vitest -t` on their exact names; up to 2 tries); a suite-level
+  failure (a hook, the file itself, a failed suite no failed test explains)
+  re-runs the whole file. The stamp records which, per try.
 
 ### Documentation
 
