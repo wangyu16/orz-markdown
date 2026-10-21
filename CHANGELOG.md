@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Twin-link naming** (FC-18 §8.2/§8.3 and FC-19 minor revision; K1 of the
+  orz-site design, family FD-08; closes the kit half of STATUS D-113). A host
+  that publishes pages under other names than the family's (`x.md` →
+  `x.html`) passes a naming — per-kind file-name templates such as
+  `{ md: '{stem}.html' }` (`{stem}` once, then only `A-Z a-z 0-9 . _ -`,
+  ending in `.html`, same folder) — and every surface names twin links with
+  it: `twinHref(href, naming?)`, `env.orzTwinLinks: naming` in a render,
+  `renderMarkdownPreview(…, { twinLinks })`, the editor shell's and FC-19's
+  `twinLinks` option. `assembleEnvelope(text, { twinLinks })` stores it in
+  `#orz-shell` as `"links"` only when it is not the family naming, so every
+  existing file's bytes are unchanged; `extract(html).twinLinks` reads it.
+  The carrier app reads it from the opened file and keeps it in every save,
+  Download a copy, Save as new copy and the quiet update (`reassemble`
+  refuses a release that drops it: code `links`), renders the read view with
+  it (`ReadViewContext.twinLinks`), gives a page published under it
+  (`week1.html`) its dual name for saves (`week1.md.html`), and refuses to
+  save through a kind that drops it. New in `orz-markdown/carrier`:
+  `TwinNaming`, `twinNaming`, `readTwinNaming`, `sameTwinNaming`,
+  `isTwinTemplate`, `twinFileName`, `textNameOf`, `FAMILY_NAMING`,
+  `envTwinNaming` (the parser-free helpers also in `carrier/read`).
+  Carriers take it in their next minor release (each must pass
+  `twinLinks` through `assemble`, `renderPreview`, `mountEditor` and its own
+  renders).
+- **Browser-safe targets of a text** (K2): `includeTargets(text)` moves from
+  the Node-only `orz-markdown/carrier/node` (which still exports it) to
+  `orz-markdown/carrier`, and `linkTargets(text)` lists every Markdown link,
+  image and raw `<a href>` as the kit's parser reads them, with its line and
+  `kind` (`twin` / `asset` / `other`) — for a site builder's link check.
+- Conformance: `C.links.assemble`, `C.links.read-view`, `C.save.keeps-links`,
+  `C.update.keeps-links` (not applicable to a carrier whose `assemble` does
+  not take `twinLinks`, unless the target declares `twinLinks: true`).
+
+### Changed
+
+- The website's verify.html re-assembles a file with the link naming the
+  published package's `extract` reads, so a file with `"links"` reproduces
+  byte for byte; a file whose `"links"` names a release from before the
+  naming is reported as not made by it.
+
 ### Release tooling
 
 - Publishing no longer re-runs the suite: `npm run test:release` runs it once

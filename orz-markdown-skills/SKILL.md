@@ -183,7 +183,10 @@ lint error); the tool's `upgrade` command moves either into the header.
 works on GitHub and becomes a link to `week2.slides.html` inside an
 assembled file (in your own render: `env.orzTwinLinks: true`, with
 `orz-markdown/carrier` imported, or `registerTwinLinks(yourMd)` for another
-markdown-it instance). **In a carrier (≥ 2.2.0)** a md
+markdown-it instance). A site that publishes pages under other names (≥ 2.5.0)
+assembles with a naming such as `{ md: '{stem}.html' }`, which the file keeps
+in `#orz-shell` (`"links"`); keep writing `.md` links in the text either way.
+**In a carrier (≥ 2.2.0)** a md
 `theme` outside the 12 bundled ids is flagged (`unknown-theme` lint) and the
 default theme is shown; a file include the carrier cannot resolve shows
 "Included file not available: part.md" (`p.orz-include-missing`, dimmed,
