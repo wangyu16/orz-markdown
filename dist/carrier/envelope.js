@@ -29,6 +29,7 @@ const html_js_1 = require("../html.js");
 const doc_meta_js_1 = require("../doc-meta.js");
 const document_js_1 = require("./document.js");
 const text_js_1 = require("./text.js");
+const naming_js_1 = require("./naming.js");
 const read_js_1 = require("./read.js");
 var read_js_2 = require("./read.js");
 Object.defineProperty(exports, "extract", { enumerable: true, get: function () { return read_js_2.extract; } });
@@ -68,7 +69,8 @@ function sortedJson(record) {
  * Assemble the HTML file for a text (FC-18 §8.1): doctype; `<html lang
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
- * DocMeta; `#orz-shell` `{kind, format, shell, delivery}`; the shell's head;
+ * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
+ * twin-link naming, when it is not the family's; 2.5.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.
@@ -89,6 +91,7 @@ function assembleEnvelope(text, parts) {
         if (bad)
             throw new Error(`orz carrier: parts.${name} holds an element with id "${bad}", which the envelope reserves`);
     }
+    const links = (0, naming_js_1.twinNaming)(parts.twinLinks ?? null);
     const doc = (0, document_js_1.readDocument)(text, { kind: parts.kind });
     if (doc.format > 1)
         throw new Error(`orz carrier: the text is format ${doc.format}; this shell writes format 1 only`);
@@ -96,7 +99,7 @@ function assembleEnvelope(text, parts) {
     const bom = text.charCodeAt(0) === 0xfeff;
     const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
     const eol = (0, text_js_1.eolStyle)(bom ? text.slice(1) : text);
-    const shell = (0, html_js_1.jsonForScript)({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline' });
+    const shell = (0, html_js_1.jsonForScript)({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}) });
     const out = [
         '<!doctype html>',
         `<html lang="${(0, html_js_1.escapeAttr)(doc.lang)}" data-orz-kind="${(0, html_js_1.escapeAttr)(kind)}">`,

@@ -89,7 +89,7 @@ function corpusOf(target, options) {
     };
 }
 function implementations(corpus) {
-    return { ...(0, checks_js_1.lawChecks)(corpus), ...checks_js_1.bundleChecks, ...checks_js_1.createChecks, ...checks_js_1.editChecks, ...checks_js_1.saveChecks, ...checks_js_1.updateChecks, ...checks_js_1.hostChecks, ...checks_js_1.prefChecks };
+    return { ...(0, checks_js_1.lawChecks)(corpus), ...checks_js_1.bundleChecks, ...checks_js_1.createChecks, ...checks_js_1.editChecks, ...checks_js_1.saveChecks, ...checks_js_1.updateChecks, ...checks_js_1.linkChecks, ...checks_js_1.hostChecks, ...checks_js_1.prefChecks };
 }
 /** @internal The ids that have an implementation (equal to `CHECK_IDS`; tested). */
 function implementedChecks() {

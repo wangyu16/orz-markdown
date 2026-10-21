@@ -43,6 +43,7 @@ const prepare_sources_js_1 = require("../../prepare-sources.js");
 const markdown_include_js_1 = require("../../plugins/markdown-include.js");
 const header_js_1 = require("../header.js");
 const links_js_1 = require("../links.js");
+const naming_js_1 = require("../naming.js");
 const isUrl = (t) => /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
 /** A relative include target on the virtual root `/` (POSIX; a Windows drive and backslashes read as `/`). */
 function rootPath(target) {
@@ -244,7 +245,9 @@ function linesIn(s) {
 }
 function renderBody(body, lineOffset, baseEnv, options, mapLine) {
     (0, links_js_1.registerTwinLinks)(index_js_1.md); // idempotent; links.ts registers it on load as well
-    const env = { ...(baseEnv ?? {}), orzTwinLinks: options.twinLinks !== false };
+    const t = options.twinLinks;
+    const naming = t && typeof t === 'object' ? (0, naming_js_1.readTwinNaming)(t) : null;
+    const env = { ...(baseEnv ?? {}), orzTwinLinks: t === false ? false : naming ?? true };
     const tokens = index_js_1.md.parse(body, env);
     for (const t of tokens) {
         if (options.missingIncludes !== false && t.type === 'plugin_block' && INCLUDE_ALIASES.has(t.info)) {

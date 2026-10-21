@@ -207,6 +207,7 @@ export function stubBugs(variant: StubVariant, version: string): StubBugs {
   }
   if (v === 'cdn-to-inline') services.performUpdate = (o) => performUpdate({ ...o, delivery: 'inline' }); // BUG (mutation): a cdn file updates to an inline one
   if (v === 'update-drops-includes') services.performUpdate = (o) => { const { includes: _i, ...rest } = o; void _i; return performUpdate(rest); }; // BUG (mutation)
+  if (v === 'update-drops-links') services.performUpdate = (o) => { const { twinLinks: _l, ...rest } = o; void _l; return performUpdate(rest); }; // BUG (mutation, 2.5.0)
   if (v === 'any-source') {
     // BUG (mutation): the file side reads every message as if its parent had sent it
     services.connectHost = (o) => {

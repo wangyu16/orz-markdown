@@ -487,6 +487,69 @@ describe('saving from the page', () => {
     s.app.dispose();
   });
 
+  it('[A.32] (2.5.0, FC-18 §8.2) a file with a twin-link naming (#orz-shell "links"): readOpenedFile reads it (normalized) and, for a page published under it (week1.html), gives the dual name (week1.md.html; a page that is neither stays document.md.html); the read view, the file\'s editor context, every save, Download a copy, Save as new copy and the update get it, New document does not; a kind whose assemble drops it is refused: nothing is written', async () => {
+    const SITE = { md: '{stem}.html' };
+    const linked = (text: string, links: Record<string, string> | undefined, o: { includes?: Record<string, string> } = {}) => assembleEnvelope(text, {
+      kind: 'md', shellVersion: '1.0.0', delivery: 'inline', ...(o.includes ? { includes: o.includes } : {}), ...(links ? { twinLinks: links } : {}),
+      headHtml: '', bodyHtml: `<main id="orz-app"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`,
+    });
+    const html = linked(TEXT, { md: '{stem}.html', paged: '{stem}.paged.html' }, { includes: INCLUDES });
+    const f = readOpenedFile(filePage(html, 'https://site.test/course/week1.html').doc as unknown as AppDocument, 'md')!;
+    expect(f.twinLinks).toEqual(SITE);
+    expect(f.fileName).toBe('week1.md.html');
+    expect(readOpenedFile(filePage(html, 'file:///x/week1.md.html').doc as unknown as AppDocument, 'md')!.fileName).toBe('week1.md.html');
+    expect(readOpenedFile(filePage(html, 'file:///x/week1.htm').doc as unknown as AppDocument, 'md')!.fileName).toBe('document.md.html');
+    expect(readOpenedFile(filePage(fileHtml(TEXT), 'file:///x/week1.html').doc as unknown as AppDocument, 'md')!).not.toHaveProperty('twinLinks');
+    expect(readOpenedFile(filePage(fileHtml(TEXT), 'file:///x/week1.html').doc as unknown as AppDocument, 'md')!.fileName).toBe('document.md.html');
+    expect(openedFileName({ pathname: '/a/%E6%BC%A2.html' }, 'md', SITE)).toBe('漢.md.html');
+    const kind = (rec: Recorder, drop = false): Partial<StandaloneKind> => ({
+      assemble: (text, o = {}) => { rec.assembled.push({ text, ...o }); return linked(text, drop ? undefined : (o as { twinLinks?: Record<string, string> }).twinLinks, { ...(o.includes ? { includes: o.includes } : {}) }); },
+    });
+    const holder: { rec?: Recorder } = {};
+    const b = boot(html, { url: 'https://site.test/course/week1.html', kind: { assemble: (t, o) => kind(holder.rec!).assemble!(t, o) } });
+    holder.rec = b.rec;
+    await b.app.ready;
+    expect(b.rec.rendered[0].ctx).toEqual({ includes: INCLUDES, twinLinks: SITE });
+    expect(b.rec.savers[0]).toMatchObject({ suggestedName: 'week1.md.html' });
+    expect(await (b.rec.savers[0].openedHtml as () => Promise<string>)()).toBe(html.replace('"links":{"md":"{stem}.html","paged":"{stem}.paged.html"}', '"links":{"md":"{stem}.html"}'));
+    b.app.setSetting({ theme: 'light-academic-1' });
+    expect(await b.app.save()).toMatchObject({ ok: true });
+    const t = editHeader(TEXT, { theme: 'light-academic-1' });
+    expect(b.rec.saves.at(-1)!.html).toBe(linked(t, SITE, { includes: INCLUDES }));
+    expect(extract(b.rec.saves.at(-1)!.html)!.twinLinks).toEqual(SITE);
+    await b.app.download();
+    expect(extract(b.rec.downloads.at(-1)!.html)!.twinLinks).toEqual(SITE);
+    await b.app.saveAsCopy();
+    expect(extract(b.rec.saves.at(-1)!.html)!.twinLinks).toEqual(SITE);
+    expect(b.rec.saves.at(-1)!.suggestedName).toBe('week1 copy.md.html');
+    await b.app.newDocument();
+    expect(extract(b.rec.saves.at(-1)!.html)!.twinLinks).toBeUndefined();
+    expect(b.rec.assembled.at(-1)).not.toHaveProperty('twinLinks');
+    // the file's editor gets the naming in its context
+    b.click('Edit');
+    expect(b.rec.mounted.at(-1)!.ctx).toMatchObject({ fileName: 'week1.md.html', twinLinks: SITE });
+    b.app.dispose();
+    // the update carries it
+    const performed: unknown[] = [];
+    let handlers: { onUpdate(i: UpdateInfo): unknown } | null = null;
+    const u = boot(html, { services: { checkForUpdate: async () => INFO, mountUpdateIndicator: (a, _i, h) => { handlers = h; return { host: a, root: a, open() {}, close() {}, isOpen: () => false, dispose() {} } as never; }, performUpdate: async (o) => { performed.push(o.twinLinks); return { status: 'up-to-date' }; } } });
+    await tick(10);
+    await handlers!.onUpdate(INFO);
+    expect(performed).toEqual([SITE]);
+    u.app.dispose();
+    // a kind that drops the naming: refused, nothing written
+    const holder2: { rec?: Recorder } = {};
+    const d = boot(html, { kind: { assemble: (t, o) => kind(holder2.rec!, true).assemble!(t, o) } });
+    holder2.rec = d.rec;
+    await d.app.ready;
+    d.app.setSetting({ theme: 'light-academic-1' });
+    const r = await d.app.save();
+    expect(r).toMatchObject({ ok: false });
+    expect(d.rec.saves).toEqual([]);
+    expect(d.toasts().join(' ')).toContain('cannot keep the page\'s link names');
+    d.app.dispose();
+  });
+
   it('[A.5] New document saves the kind\'s new text as a new file (its own uid, Untitled + the extension, the file\'s delivery, no includes) and Save as new copy the current text with a NEW uid (copy name, the file\'s includes) — each through a saver of its own (never the file\'s handle, never the host: a served page or a host gets a download) — leaving the document as it is', async () => {
     const b = boot();
     await b.app.ready;

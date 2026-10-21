@@ -13,7 +13,7 @@
  * are compile-time constants. Variants other than `good` are deliberate bugs
  * for the harness's mutation tests (mutants.ts).
  */
-import { readDocument, readHeader } from '../../src/carrier';
+import { readDocument, readHeader, type TwinNaming } from '../../src/carrier';
 import { createEditorShell, renderMarkdownPreview, renderMarkdownPreviewWithIncludes, type EditorShell, type EditorShellOptions } from '../../src/carrier/editor';
 import {
   attachAiMenu, attachSettings, captureEngineSource, followPresentation, startCarrier,
@@ -37,7 +37,7 @@ const engine = captureEngineSource();
 
 function assemble(text: string, o: AppAssembleOptions = {}): Promise<string> {
   try {
-    return Promise.resolve(stubAssemble(text, { version: bugs.shellVersion(VERSION), variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? engine.inline, ...(o.includes ? { includes: o.includes } : {}) }));
+    return Promise.resolve(stubAssemble(text, { version: bugs.shellVersion(VERSION), variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? engine.inline, ...(o.includes ? { includes: o.includes } : {}), ...(o.twinLinks && VARIANT !== 'save-drops-links' ? { twinLinks: o.twinLinks } : {}) })); // BUG (mutation) save-drops-links
   } catch (e) {
     return bugs.refused(text, e, VERSION);
   }
@@ -134,7 +134,7 @@ function createReadView(doc: AppDocument): CarrierReadView {
     async render(text, ctx) {
       const mine = ++generation;
       present(text);
-      const html = await renderMarkdownPreviewWithIncludes(text, { ...(ctx.includes ? { includes: ctx.includes } : {}), ...(ctx.fetchInclude ? { fetchInclude: ctx.fetchInclude } : {}) });
+      const html = await renderMarkdownPreviewWithIncludes(text, { ...(ctx.includes ? { includes: ctx.includes } : {}), ...(ctx.fetchInclude ? { fetchInclude: ctx.fetchInclude } : {}), ...(ctx.twinLinks ? { twinLinks: ctx.twinLinks } : {}) });
       if (mine === generation) body.innerHTML = changedRender(html);
     },
   };
@@ -163,6 +163,8 @@ function mountEditor(element: AppElement, options: KindEditorOptions, ctx?: Stan
     ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
     // FC-19 §3 includes (an app's resolved includes); a file's own record (ctx) wins below
     ...(options.includes ? { includes: options.includes } : {}),
+    // FC-19 §3 twinLinks (2.5.0): the app's naming, or the file's own (ctx)
+    ...(ctx?.twinLinks ?? options.twinLinks ? { twinLinks: ctx?.twinLinks ?? options.twinLinks } : {}),
     hooks: appHost ? options.hooks! : { ...otherHooks, ...(ctx?.ai ? { ai: ctx.ai } : {}), ...(ctx?.fetchInclude ? { fetchInclude: ctx.fetchInclude } : {}) },
     ...(appHost ? {} : ctx ? {
       // the standalone file's context: its saver, host, delivery, includes and opened bytes (FC-19 §4)
@@ -176,7 +178,7 @@ function mountEditor(element: AppElement, options: KindEditorOptions, ctx?: Stan
     } : {
       // an app page without hooks.save: a file of the text, through the picker or a download — inline when
       // the page holds the engine, else cdn (the stub does not fetch its own bundle, as a carrier would)
-      assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(engine.inline ? {} : { delivery: 'cdn' as const }), ...(o?.includes ? { includes: o.includes } : {}) }),
+      assemble: (t: string, o?: { includes?: Record<string, string>; twinLinks?: TwinNaming }) => assemble(t, { ...(engine.inline ? {} : { delivery: 'cdn' as const }), ...(o?.includes ? { includes: o.includes } : {}), ...(o?.twinLinks ? { twinLinks: o.twinLinks } : {}) }),
       ...(options.fileName ? { fileName: options.fileName } : {}),
     }),
     preview: { assets: false, head: themeLink(options.text), scheme: themeOf(options.text).scheme },
@@ -210,7 +212,7 @@ const STUB_KIND: StandaloneKind = {
   extract: (html) => bugs.extract(html),
   readDocument: (text) => readDocument(text, { kind: 'md' }),
   // 'render-changed' (2.4.0, D-60) is a release whose parser output differs (not a bug): its preview and read view render differently
-  renderPreview: (text) => Promise.resolve(changedRender(renderMarkdownPreview(text))),
+  renderPreview: (text, o) => Promise.resolve(changedRender(renderMarkdownPreview(text, o && o['twinLinks'] && typeof o['twinLinks'] === 'object' ? { twinLinks: o['twinLinks'] as TwinNaming } : {}))),
 };
 
 const { app } = startCarrier(STUB_KIND, { services: bugs.services });

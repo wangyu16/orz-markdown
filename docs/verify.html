@@ -149,7 +149,9 @@ function firstDifference(a, b){
 function around(s, i){ return s.slice(Math.max(0, i - 40), i + 40); }
 
 // Runs inside the sandbox after the published bundle: extract the file's text with the package's own extract,
-// assemble it again with the file's delivery and includes, post the html back. ES5; answers only its parent.
+// assemble it again with the file's delivery, includes and link naming (#orz-shell "links", orz-markdown 2.5.0:
+// the package's extract gives it as twinLinks; a release from before it gives none and writes none, so a file
+// with "links" is then reported as not that release's), post the html back. ES5; answers only its parent.
 var REPRO_BOOT = [
   '(function(){var P=parent;addEventListener("message",function(e){if(e.source!==P)return;var d=e.data;',
   'if(!d||d.type!=="orz-verify")return;var C=self.OrzCarrier;',
@@ -157,6 +159,7 @@ var REPRO_BOOT = [
   'new Promise(function(ok){if(!C||typeof C.extract!=="function"||typeof C.assemble!=="function")throw new Error("the bundle did not set OrzCarrier.extract/assemble");',
   'var x=C.extract(d.html);if(!x)throw new Error("the package found no text in the file");',
   'var o={delivery:x.delivery,engineSource:d.engineSource};if(x.includes)o.includes=x.includes;',
+  'if(x.twinLinks)o.twinLinks=x.twinLinks;',
   'ok(Promise.resolve(C.assemble(x.text,o)).then(function(h){return{html:h,kind:String(C.kind),version:String(C.version)};}));',
   '}).then(function(r){reply({ok:typeof r.html==="string",html:r.html,kind:r.kind,version:r.version});},',
   'function(err){reply({ok:false,error:String(err&&err.message||err)});});});',
@@ -252,13 +255,18 @@ async function verifyFormat1(text, doc, shell, add){
 
   // 3. reproduce the whole file from its text with the published engine
   try {
+    var links = (shell.links && typeof shell.links === 'object' && !Array.isArray(shell.links)) ? shell.links : null;
     var out = await reassembleInSandbox(bundle, text);
     if (out.html === text){
       res.reproduced = true;
       add('ok', 'Reproduced byte for byte', 'The published ' + browserPkg + '@' + version + ' assembles the text this file carries into exactly this file (' + text.length.toLocaleString('en') + ' characters) — nothing in the shell was added or changed.');
+      if (links) add('info', 'Links to other documents use the site’s names', 'The file names the pages it links to as its publisher does (#orz-shell “links”: ' + esc(Object.keys(links).map(function(k){ return k + ' → ' + links[k]; }).join(', ')) + '); the published package writes and reads exactly this.');
     } else if (out.html === text.replace(/\r\n?/g, '\n')){
       add('warn', 'Reproduced, except for line endings', 'The file is identical to what ' + browserPkg + '@' + version + ' assembles once its line breaks are turned back into LF (a tool such as git may have converted them).');
       res.frameworkUnknown = true;
+    } else if (links && !/"links":/.test((/id="orz-shell">([^<]*)</.exec(out.html) || [])[1] || '')){
+      add('bad', 'Not what the published package assembles', 'The file names its links to other documents (#orz-shell “links”), but ' + browserPkg + '@' + version + ' does not write such a name list — that release did not make this file.');
+      res.frameworkOk = false;
     } else {
       var i = firstDifference(text, out.html);
       add('bad', 'Not what the published package assembles', 'The file differs from ' + browserPkg + '@' + version + '’s output for its own text, first at character ' + i.toLocaleString('en') +

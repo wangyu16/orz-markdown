@@ -628,7 +628,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'node', 'parser.ts', 'read.ts', 'sha256.ts', 'shell', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'naming.ts', 'node', 'parser.ts', 'read.ts', 'sha256.ts', 'shell', 'targets.ts', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {
@@ -1170,7 +1170,8 @@ describe('round 2: reading files', () => {
   it('[K.20] orz-markdown/carrier/read is parser-free: its import graph has no parser module, it bundles under 30 KB minified, and the package exports it', async () => {
     // Value imports only (`import type` is erased at build time).
     const graph = importGraph('src/carrier/read.ts', (f, spec) => resolveRelative(f, spec, ['.ts']), /^\s*(?:import|export)\s+(?!type\b)[^'";]*?from\s*['"]([^'"]+)['"]/gm);
-    expect([...graph].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts']);
+    // naming.ts (2.5.0): the twin-link naming `extract` reads from #orz-shell; it imports nothing
+    expect([...graph].sort()).toEqual(['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts']);
     const { build } = await import('esbuild');
     const out = await build({ stdin: { contents: "export * from './src/carrier/read';", resolveDir: '.', loader: 'ts' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
     const size = out.outputFiles[0].contents.byteLength;

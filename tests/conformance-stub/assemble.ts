@@ -13,7 +13,7 @@
  * `no-generator`, `no-eol-attr` and `meta-from-body` are assembly bugs
  * too; the other variants are bugs of the bundle (carrier.ts).
  */
-import { assembleEnvelope } from '../../src/carrier';
+import { assembleEnvelope, type TwinNaming } from '../../src/carrier';
 import { bundleUrl } from '../../src/carrier/shell/update';
 
 export type StubVariant =
@@ -42,7 +42,9 @@ export type StubVariant =
   // round 4 of the carrier-app loop: a replace after a download, a silent revert, a second question for the editor
   | 'r4-after-download' | 'r4-revert-silent' | 'r4-two-questions' | 'r4-no-app-handle'
   // 2.4.0 (STATUS D-60): NOT a bug — a release whose parser renders the same text differently (as a previous release)
-  | 'render-changed';
+  | 'render-changed'
+  // 2.5.0 (K1): a bundle whose assemble drops the twin-link naming, and an update that does
+  | 'save-drops-links' | 'update-drops-links';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 
@@ -54,6 +56,8 @@ export interface StubAssembleOptions {
   engineSource?: string | null;
   /** Resolved includes, stored in `#orz-includes` as given (FC-18 §8.3, D4). */
   includes?: Record<string, string>;
+  /** (2.5.0) The twin-link naming, stored in `#orz-shell` when it is not the family's (FC-18 §8.2). */
+  twinLinks?: TwinNaming;
 }
 
 const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}#orz-app{min-height:60vh;padding:24px}</style>';
@@ -77,6 +81,7 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
     shellVersion: o.version,
     delivery,
     ...(o.includes && Object.keys(o.includes).length > 0 ? { includes: o.includes } : {}),
+    ...(o.twinLinks ? { twinLinks: o.twinLinks } : {}),
     headHtml: HEAD,
     bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `${STUB_BODY}\n${engine}`, // BUG (mutation) date-stamp
   });

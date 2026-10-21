@@ -1,7 +1,19 @@
+/**
+ * The include directives of a text and their record, for a carrier's CLI
+ * (FC-18 §8.3; spec/carrier-node.md §5; lifted from orz-mdhtml 1.0's
+ * src/includes.ts). A file shows an include only from its `#orz-includes`
+ * record: a page reads no local files and, standalone, fetches no URLs. So
+ * the CLI lists a text's include directives exactly as the renderer finds
+ * them (the kit's parser: not in code, comments or other directives' bodies),
+ * resolves FILE includes from the text's folder (refusing a path that leaves
+ * it, symbolic links followed — the renderer's `markdownIncludeRoot` rule),
+ * keeps the record's entries the text still uses, and names what stays
+ * unresolved. One level, as the renderer.
+ */
+import { includeTargets } from '../targets.js';
 /** A URL target (`scheme://…`): never read by the CLI. */
 export declare const isUrl: (t: string) => boolean;
-/** The include targets of a text's body, as written, in order, without repeats (`directives`: the include directive names, default the kit's). */
-export declare function includeTargets(text: string, directives?: readonly string[]): string[];
+export { includeTargets };
 /** The entries of `record` the text still includes (a removed directive's entry is dropped). */
 export declare function keepReferenced(text: string, record: Readonly<Record<string, string>>, directives?: readonly string[]): Record<string, string>;
 /** The include targets of the text the record does not answer. */

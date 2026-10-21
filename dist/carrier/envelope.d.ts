@@ -1,4 +1,5 @@
 import { type Kind } from './document.js';
+import { type TwinNaming } from './naming.js';
 export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
@@ -17,6 +18,13 @@ export interface ShellParts {
     bodyHtml: string;
     /** Resolved includes (FC-18 §8.3, D4): target → text, stored in `#orz-includes` with sorted keys. */
     includes?: Record<string, string>;
+    /**
+     * (2.5.0) The twin-link naming (FC-18 §8.2): normalized with `twinNaming`
+     * and stored in `#orz-shell` as `"links"` ONLY when it is not the family
+     * naming, so a file without it is byte-identical to one assembled before
+     * 2.5.0. An invalid naming throws.
+     */
+    twinLinks?: TwinNaming | 'family' | null;
 }
 /** The agent skill URL of a kind's carrier. */
 export declare function skillUrl(kind: Kind): string;
@@ -24,7 +32,8 @@ export declare function skillUrl(kind: Kind): string;
  * Assemble the HTML file for a text (FC-18 §8.1): doctype; `<html lang
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
- * DocMeta; `#orz-shell` `{kind, format, shell, delivery}`; the shell's head;
+ * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
+ * twin-link naming, when it is not the family's; 2.5.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.

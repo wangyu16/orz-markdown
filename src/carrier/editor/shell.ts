@@ -46,6 +46,7 @@ import { assetPath, blobUrlsIn, createPreview, isRelativeAsset, lineToTop, readB
 import { EDITOR_CSS } from './styles.js';
 import { createTextModel, detachString, toEditorOffset, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
+import { readTwinNaming, type TwinNaming } from '../naming.js';
 import type { EdDataTransfer, EdDocument, EdElement, EdEvent, EdFile, EdListener, EdResizeObserver, EdView, ShadowRootLike } from './types.js';
 
 /** A text's well-formed header uid, as the editor reads its own (`readHeader`). */
@@ -120,9 +121,11 @@ export interface RenderContext {
   /**
    * `false` when the host resolves links itself (`hooks.resolveLink`): render
    * links as written (no twin rewrite), so `resolveLink` gets the source href.
-   * `renderMarkdownPreview` reads it.
+   * (2.5.0) The shell's `twinLinks` naming otherwise, when it is not the
+   * family's (FC-18 §8.2): render twin links with the host's names. Absent:
+   * the family names. `renderMarkdownPreview` reads it.
    */
-  twinLinks?: boolean;
+  twinLinks?: boolean | TwinNaming;
   /** A scratch map that lives as long as the shell (e.g. fetched includes; `renderMarkdownPreviewWithIncludes`). */
   cache?: Map<string, unknown>;
   /**
@@ -243,7 +246,7 @@ export interface EditorShellOptions {
    * `createSaver`. It must keep the opened file's delivery (FC-19 §8.5); the shell passes
    * `{ includes }` when the `includes` option holds some.
    */
-  assemble?(text: string, options?: { includes?: Record<string, string> }): string | Promise<string>;
+  assemble?(text: string, options?: { includes?: Record<string, string>; twinLinks?: TwinNaming }): string | Promise<string>;
   /**
    * The opened file's resolved includes (`extract(html).includes`, the `#orz-includes` island,
    * FC-18 §8.3 D4). A page cannot resolve local includes again, so every standalone save (and
@@ -252,6 +255,14 @@ export interface EditorShellOptions {
   includes?: Record<string, string>;
   /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
   fileName?: string;
+  /**
+   * (2.5.0, FC-19 §3) The twin-link naming (FC-18 §8.2): the preview renders
+   * links to text twins with these names (`render`'s `ctx.twinLinks`; not
+   * with `hooks.resolveLink`, which gets the source href), and a standalone
+   * save passes it to `assemble(text, { twinLinks })`. The family naming
+   * (or an invalid value) is the same as none.
+   */
+  twinLinks?: TwinNaming | null;
   /**
    * A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml,
    * servedNotice })`. The shell's own saver shows the served-page notice only for an assembled file
@@ -796,11 +807,13 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     if (typeof r === 'string' && /^blob:/i.test(r.trim())) resolvedBlobs.add(r.trim());
     return r;
   } : null;
+  /** The shell's twin-link naming (normalized; null = the family's). */
+  const naming = readTwinNaming(options.twinLinks);
   const renderCtx: RenderContext = {
     ...(hooks.fetchInclude ? { fetchInclude: (t: string) => hooks.fetchInclude!(t) } : {}),
     ...(hooks.resolveAsset ? { resolveAsset: (p: string) => resolveAssetHook!(p) } : {}),
     // B#12: with the host's own link resolution, links stay as written so resolveLink gets the source href
-    ...(hooks.resolveLink ? { twinLinks: false } : {}),
+    ...(hooks.resolveLink ? { twinLinks: false } : naming ? { twinLinks: naming } : {}),
     cache: new Map<string, unknown>(),
     ...(options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { includes: Object.freeze({ ...options.includes }) } : {}),
   };
@@ -1162,7 +1175,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   /** The includes a save writes: the opened ones, until `refreshPreview({ includes })` hands newer ones (round 3, L7). */
   let saveIncludes: Record<string, string> | null = openedIncludes;
   /** The carrier's `assemble`, with the given includes (FC-18 D4). */
-  const assembleWith = (t: string, inc: Record<string, string> | null): Promise<string> => Promise.resolve().then(() => (inc ? options.assemble!(t, { includes: { ...inc } }) : options.assemble!(t))).then(String);
+  const assembleWith = (t: string, inc: Record<string, string> | null): Promise<string> => Promise.resolve().then(() => (inc || naming ? options.assemble!(t, { ...(inc ? { includes: { ...inc } } : {}), ...(naming ? { twinLinks: { ...naming } } : {}) }) : options.assemble!(t))).then(String);
   let openedMemo: Promise<string> | null = null;
   /** `assemble` of the text the shell was mounted with — the default opened bytes — once it succeeds (a failure is tried again). */
   const openedAssembled = (): Promise<string> => {

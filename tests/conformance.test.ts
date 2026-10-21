@@ -413,14 +413,41 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['r4-revert-silent', 'C.save.conflict', /put back over the page's own save \(a revert\): the next save did not resolve[\s\S]*revert: the save wrote over the reverted file/],
     ['r4-two-questions', 'C.save.conflict', /two saves while a question is open[^\n]*: conflict questions shown[^\n]*expected 1, got 2/],
     ['r4-no-app-handle', 'C.save.conflict', /page save: no OrzCarrier\.standalone\.save/],
+    // 2.5.0 (K1): a bundle whose assemble drops the twin-link naming, an update that does
+    ['save-drops-links', 'C.links.assemble', /the browser bundle's assemble\(text, \{ twinLinks \}\) differs from Node's/],
+    ['save-drops-links', 'C.save.keeps-links', /the save of a file with a twin-link naming wrote nothing/],
+    ['update-drops-links', 'C.update.keeps-links', /lost or changed the file's twin-link naming/],
   ];
   for (const [variant, id, why] of caught) {
-    it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''} the ${variant} mutant fails ${id}`, async () => {
+    it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''}${variant.endsWith('-links') ? ' [H.10]' : ''} the ${variant} mutant fails ${id}`, async () => {
       const r = await mutant(variant, [id]);
       expect(result(r, id).status).toBe('failed');
       expect(result(r, id).message).toMatch(why);
     }, 240_000);
   }
+});
+
+// ── 2.5.0: the twin-link naming checks ───────────────────────────────────
+
+describe('the twin-link checks (2.5.0)', () => {
+  const LINK_CHECKS = ['C.links.assemble', 'C.links.read-view', 'C.save.keeps-links', 'C.update.keeps-links'];
+  it('[H.10] the C.links.* checks (and C.save.keeps-links, C.update.keeps-links) are not applicable to a carrier whose assemble does not take twinLinks (a release built before kit 2.5.0: today\'s carriers stay conformant), but fail one that declares twinLinks: true and drops it; the stub, which takes it, passes them (H.2) and its mutants that drop it fail them (H.5)', async () => {
+    const [previous, current, next] = await Promise.all([buildStub('1.0.0'), buildStub('1.1.0'), buildStub('1.2.0')]);
+    const base = stubTarget(current, { previous, next });
+    const ignoring = { ...base, assemble: (t: string, o?: Parameters<typeof base.assemble>[1]) => { const { twinLinks: _l, ...rest } = o ?? {}; void _l; return base.assemble(t, rest); } };
+    const opts = { only: LINK_CHECKS, ...(browser ? { browser } : { channel: 'no-chrome-installed' }) };
+    const na = await runConformance(ignoring, opts);
+    for (const id of LINK_CHECKS) {
+      expect(result(na, id).status, id).toBe('not-applicable');
+      expect(result(na, id).message).toMatch(/does not take twinLinks/);
+    }
+    const declared = await runConformance({ ...ignoring, twinLinks: true }, opts);
+    for (const id of LINK_CHECKS) {
+      expect(result(declared, id).status, id).toBe('failed');
+      expect(result(declared, id).message).toMatch(/declares twinLinks: true/);
+    }
+    expect(CHECK_IDS).toEqual(expect.arrayContaining(LINK_CHECKS));
+  }, 240_000);
 });
 
 // ── 2.2.0: page helpers, bundle-request counting, the dialog policy ──────

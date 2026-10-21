@@ -37,14 +37,18 @@ import { prepareSources } from '../../prepare-sources.js';
 import { INCLUDE_DIRECTIVES, type IncludeEnv } from '../../plugins/markdown-include.js';
 import { withoutHeader } from '../header.js';
 import { registerTwinLinks } from '../links.js';
+import { readTwinNaming, type TwinNaming } from '../naming.js';
 
 export interface MarkdownPreviewOptions {
   /**
    * Rewrite links to text twins (`x.md` → `x.md.html`), as an assembled file
    * does. Default `true`; the shell passes `false` when the host resolves
-   * links itself (`hooks.resolveLink` then gets the source href).
+   * links itself (`hooks.resolveLink` then gets the source href). (2.5.0) A
+   * `TwinNaming` (FC-18 §8.2 `twinLinks`) rewrites them to the host's names
+   * (`{ md: '{stem}.html' }`: `x.md` → `x.html`); an invalid one renders
+   * the family names.
    */
-  twinLinks?: boolean;
+  twinLinks?: boolean | TwinNaming | null;
   /** Extra render env (e.g. a host's include resolution). */
   env?: Record<string, unknown>;
   /**
@@ -269,7 +273,9 @@ function linesIn(s: string): number {
 
 function renderBody(body: string, lineOffset: number, baseEnv: Record<string, unknown> | undefined, options: MarkdownPreviewOptions, mapLine: ((line: number) => number) | null): string {
   registerTwinLinks(md); // idempotent; links.ts registers it on load as well
-  const env: Record<string, unknown> = { ...(baseEnv ?? {}), orzTwinLinks: options.twinLinks !== false };
+  const t = options.twinLinks;
+  const naming = t && typeof t === 'object' ? readTwinNaming(t) : null;
+  const env: Record<string, unknown> = { ...(baseEnv ?? {}), orzTwinLinks: t === false ? false : naming ?? true };
   const tokens = md.parse(body, env);
   for (const t of tokens) {
     if (options.missingIncludes !== false && t.type === 'plugin_block' && INCLUDE_ALIASES.has(t.info)) {

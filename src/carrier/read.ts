@@ -10,10 +10,13 @@
 import { asciiLower } from '../ascii.js';
 import { unescapeScriptText } from '../html.js';
 import type { Kind } from './document.js';
+import { readTwinNaming, type TwinNaming } from './naming.js';
 
 export { escapeHtml, escapeAttr, jsonForScript, escapeScriptText, unescapeScriptText } from '../html.js';
 export { decodeText, eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
+export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinHref, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
+export type { TwinNaming, TwinKind } from './naming.js';
 
 /** What {@link extract} reads back. */
 export interface Extracted {
@@ -27,6 +30,12 @@ export interface Extracted {
   delivery: string;
   /** The resolved includes stored in `#orz-includes`, when the file has them. */
   includes?: Record<string, string>;
+  /**
+   * (2.5.0) The twin-link naming stored in `#orz-shell` as `"links"` (FC-18
+   * §8.2 `twinLinks`), normalized; absent for the family naming (no `"links"`,
+   * or one that is not a valid naming).
+   */
+  twinLinks?: TwinNaming;
 }
 
 /**
@@ -225,7 +234,9 @@ function isKind(v: unknown): v is Kind {
  * skipped), unescaped with `unescapeScriptText`, its line endings and BOM
  * restored from `data-orz-eol` / `data-orz-bom`; kind, format, shell version
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
- * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`.
+ * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
+ * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
+ * other than the family's.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -258,6 +269,8 @@ export function extract(html: string): Extracted | null {
     shell: typeof shellData['shell'] === 'string' ? (shellData['shell'] as string) : '',
     delivery: typeof shellData['delivery'] === 'string' ? (shellData['delivery'] as string) : '',
   };
+  const links = readTwinNaming(shellData['links']);
+  if (links) result.twinLinks = links;
   // The includes island follows the source island (shell markup before it is not consulted).
   const inc = findScript(html, INCLUDES_ISLAND_ID, Infinity, island.content[1]);
   if (inc) {

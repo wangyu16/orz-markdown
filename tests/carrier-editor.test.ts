@@ -2722,6 +2722,42 @@ describe('sandbox, srcset, links and includes (round 2: F6, F5, B#12, B#13, B#14
     plain.shell.destroy();
   });
 
+  it('[E.49] (2.5.0, FC-19 §3) the twinLinks option: the preview renders twin links with the host\'s names (render gets ctx.twinLinks = the normalized naming; the family naming is none), hooks.resolveLink still wins (links as written), and a standalone save passes { twinLinks } to assemble (with the includes)', async () => {
+    const text = 'See [w2](week2.slides.md#s) and [n](notes.md).\n';
+    const naming = { slides: '{stem}.deck.html', md: '{stem}.html', paged: '{stem}.paged.html' };
+    const ctxs: RenderContext[] = [];
+    const assembled: unknown[] = [];
+    const saver = fakeSaver({ via: 'file', ok: true });
+    const m = mount({
+      text, twinLinks: naming, includes: { 'a.md': 'A' }, saver: saver.saver,
+      assemble: (t, o) => { assembled.push(o); return `<html>${t}</html>`; },
+      render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t, ctx); },
+    });
+    const f = frameOf(m);
+    f.say({ type: 'orz-preview-ready' });
+    await tick(30);
+    expect(ctxs[0].twinLinks).toEqual({ md: '{stem}.html', slides: '{stem}.deck.html' });
+    const html = String(f.posted.find((x) => x.type === 'orz-preview-render')!.html);
+    expect(html).toContain('href="week2.deck.html#s"');
+    expect(html).toContain('href="notes.html"');
+    expect(html.replace(/ data-src-line="\d+"/g, '')).toBe(md.render(text, { orzTwinLinks: naming }));
+    type(m, 'x');
+    expect(await m.shell.save()).toMatchObject({ ok: true });
+    expect(assembled.at(-1)).toEqual({ includes: { 'a.md': 'A' }, twinLinks: { md: '{stem}.html', slides: '{stem}.deck.html' } });
+    m.shell.destroy();
+    const linked = mount({ text, twinLinks: naming, hooks: { resolveLink: (h) => h }, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t, ctx); } });
+    await tick(30);
+    expect(ctxs.at(-1)!.twinLinks).toBe(false);
+    linked.shell.destroy();
+    const family = mount({ text, twinLinks: { md: '{stem}.md.html' }, assemble: (t, o) => { assembled.push(o ?? 'none'); return `<html>${t}</html>`; }, saver: fakeSaver({ via: 'file', ok: true }).saver, render: (t, ctx) => { ctxs.push(ctx); return renderMarkdownPreview(t, ctx); } });
+    await tick(30);
+    expect(ctxs.at(-1)!.twinLinks).toBeUndefined();
+    type(family, 'y');
+    await family.shell.save();
+    expect(assembled.at(-1)).toBe('none');
+    family.shell.destroy();
+  });
+
   it('[E.12] with only fetchInclude (no include record), a URL include next to a file include still resolves; the unreadable file include renders the missing-include note (E.30)', async () => {
     const text = '{{md parts/a.md}}\n\n{{md https://x.example/b.md}}\n';
     const fetchInclude = async (u: string) => (u.includes('b.md') ? 'URL CONTENT' : null);

@@ -10,9 +10,7 @@
  * keeps the record's entries the text still uses, and names what stays
  * unresolved. One level, as the renderer.
  */
-import { INCLUDE_DIRECTIVES } from '../../plugins/markdown-include.js';
-import { withoutHeader } from '../header.js';
-import { kitParser } from '../parser.js';
+import { includeTargets } from '../targets.js';
 import { decodeText } from '../text.js';
 import { fs, path } from './builtins.js';
 
@@ -30,18 +28,8 @@ function rootPath(target: string): string {
   return `/${out.join('/')}`;
 }
 
-/** The include targets of a text's body, as written, in order, without repeats (`directives`: the include directive names, default the kit's). */
-export function includeTargets(text: string, directives: readonly string[] = INCLUDE_DIRECTIVES): string[] {
-  const names = new Set(directives);
-  const tokens = kitParser().parse(withoutHeader(text).body, {}) as Array<{ type: string; info: string; content: string }>;
-  const seen = new Set<string>();
-  for (const t of tokens) {
-    if (t.type !== 'plugin_block' || !names.has(t.info)) continue;
-    const target = (t.content || '').trim();
-    if (target) seen.add(target);
-  }
-  return [...seen];
-}
+// `includeTargets` is browser-safe since 2.5.0 (`orz-markdown/carrier`, K2); re-exported here so nothing breaks.
+export { includeTargets };
 
 /** The record entry that answers a target (URLs exactly; files by their normalized path). */
 function entryFor(record: Readonly<Record<string, string>>, target: string): string | null {

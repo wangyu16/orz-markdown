@@ -14,7 +14,7 @@
  */
 import { VERSION } from '../../version.js';
 import { CHECKS, CHECK_IDS, checkInfo } from './catalog.js';
-import { NotApplicable, Probe, Skip, bundleChecks, createChecks, editChecks, hostChecks, lawChecks, prefChecks, saveChecks, updateChecks, type CheckFn } from './checks.js';
+import { NotApplicable, Probe, Skip, bundleChecks, createChecks, editChecks, hostChecks, lawChecks, linkChecks, prefChecks, saveChecks, updateChecks, type CheckFn } from './checks.js';
 import { loadCorpus } from './node.js';
 import { Session } from './session.js';
 import type { CarrierTarget, CheckResult, ConformanceOptions, ConformanceReport, TestApi } from './types.js';
@@ -66,7 +66,7 @@ function corpusOf(target: CarrierTarget, options: ConformanceOptions): () => Rec
 }
 
 function implementations(corpus: () => Record<string, string>): Record<string, CheckFn> {
-  return { ...lawChecks(corpus), ...bundleChecks, ...createChecks, ...editChecks, ...saveChecks, ...updateChecks, ...hostChecks, ...prefChecks };
+  return { ...lawChecks(corpus), ...bundleChecks, ...createChecks, ...editChecks, ...saveChecks, ...updateChecks, ...linkChecks, ...hostChecks, ...prefChecks };
 }
 
 /** @internal The ids that have an implementation (equal to `CHECK_IDS`; tested). */

@@ -24,6 +24,7 @@ import { escapeAttr, escapeHtml, escapeScriptText, jsonForScript } from '../html
 import { renderDocMetaHead, renderDocMetaIsland } from '../doc-meta.js';
 import { readDocument, type Kind } from './document.js';
 import { eolStyle, hasLoneSurrogate } from './text.js';
+import { twinNaming, type TwinNaming } from './naming.js';
 import { reservedIdIn, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 
 export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
@@ -46,6 +47,13 @@ export interface ShellParts {
   bodyHtml: string;
   /** Resolved includes (FC-18 §8.3, D4): target → text, stored in `#orz-includes` with sorted keys. */
   includes?: Record<string, string>;
+  /**
+   * (2.5.0) The twin-link naming (FC-18 §8.2): normalized with `twinNaming`
+   * and stored in `#orz-shell` as `"links"` ONLY when it is not the family
+   * naming, so a file without it is byte-identical to one assembled before
+   * 2.5.0. An invalid naming throws.
+   */
+  twinLinks?: TwinNaming | 'family' | null;
 }
 
 
@@ -79,7 +87,8 @@ function sortedJson(record: Record<string, string>): string {
  * Assemble the HTML file for a text (FC-18 §8.1): doctype; `<html lang
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
- * DocMeta; `#orz-shell` `{kind, format, shell, delivery}`; the shell's head;
+ * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
+ * twin-link naming, when it is not the family's; 2.5.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.
@@ -97,13 +106,14 @@ export function assembleEnvelope(text: string, parts: ShellParts): string {
     const bad = reservedIdIn(html ?? '');
     if (bad) throw new Error(`orz carrier: parts.${name} holds an element with id "${bad}", which the envelope reserves`);
   }
+  const links = twinNaming(parts.twinLinks ?? null);
   const doc = readDocument(text, { kind: parts.kind });
   if (doc.format > 1) throw new Error(`orz carrier: the text is format ${doc.format}; this shell writes format 1 only`);
   const kind = parts.kind;
   const bom = text.charCodeAt(0) === 0xfeff;
   const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
   const eol = eolStyle(bom ? text.slice(1) : text);
-  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline' });
+  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}) });
   const out: string[] = [
     '<!doctype html>',
     `<html lang="${escapeAttr(doc.lang)}" data-orz-kind="${escapeAttr(kind)}">`,

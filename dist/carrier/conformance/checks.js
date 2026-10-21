@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.prefChecks = exports.hostChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.NotApplicable = exports.Skip = void 0;
+exports.prefChecks = exports.hostChecks = exports.linkChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.NotApplicable = exports.Skip = void 0;
 exports.firstDiff = firstDiff;
 exports.sameIncludes = sameIncludes;
 exports.derivedParts = derivedParts;
@@ -16,6 +16,7 @@ const header_js_1 = require("../header.js");
 const document_js_1 = require("../document.js");
 const envelope_js_1 = require("../envelope.js");
 const read_js_1 = require("../read.js");
+const naming_js_1 = require("../naming.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const update_js_1 = require("../shell/update.js");
 const node_js_1 = require("./node.js");
@@ -1883,6 +1884,131 @@ function bumpPatch(v) {
     const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
     return m ? `${m[1]}.${m[2]}.${BigInt(m[3]) + 1n}` : v;
 }
+// ── twin-link naming (2.5.0, FC-18 §8.2) ─────────────────────────────────
+/**
+ * The target's Node file of LINKS_TEXT with LINKS_NAMING, when its `assemble` takes `twinLinks`;
+ * else `not-applicable` (a carrier built before kit 2.5.0), unless the target declares
+ * `twinLinks: true` — then the missing naming is the failure.
+ */
+async function needLinks(s, delivery = 'cdn') {
+    const html = await s.assemble(texts_js_1.LINKS_TEXT, { delivery, twinLinks: { ...texts_js_1.LINKS_NAMING } });
+    if ((0, naming_js_1.sameTwinNaming)((0, read_js_1.extract)(html)?.twinLinks, texts_js_1.LINKS_NAMING))
+        return html;
+    if (s.target.twinLinks)
+        throw new Error(`the target declares twinLinks: true, but assemble(text, { twinLinks }) does not store the naming in #orz-shell "links" (extract gives ${clip(JSON.stringify((0, read_js_1.extract)(html)?.twinLinks ?? null))})`);
+    throw new NotApplicable('the carrier\'s assemble does not take twinLinks (FC-18 §8.2, kit 2.5.0): a release built before it');
+}
+/** The name LINKS_NAMING publishes the target's kind under (`links.html`, `links.deck.html`, `links.paged.html`). */
+const publishedName = (s) => (0, naming_js_1.twinFileName)(s.target.kind === 'md' ? 'links.md' : `links.${s.target.kind}.md`, texts_js_1.LINKS_NAMING);
+/** Page-side: the href attribute of every `<a>` in the document and its open shadow roots, in order. */
+const ANCHOR_HREFS = `function () {
+  var out = [];
+  var walk = function (root) {
+    var all = root.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.tagName === 'A' && el.hasAttribute('href')) out.push(el.getAttribute('href'));
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  walk(document);
+  return out;
+}`;
+exports.linkChecks = {
+    async 'C.links.assemble'(s, p) {
+        const file = await needLinks(s);
+        const x = (0, read_js_1.extract)(file);
+        p.eq(x?.twinLinks, texts_js_1.LINKS_NAMING, 'extract(assemble(text, { twinLinks })).twinLinks');
+        p.check(x?.text === texts_js_1.LINKS_TEXT, `extract(assemble(text, { twinLinks })).text !== text — ${firstDiff(x?.text ?? '', texts_js_1.LINKS_TEXT)}`);
+        const shell = /<script type="application\/json" id="orz-shell">([^<]*)<\/script>/.exec(file)?.[1] ?? '';
+        p.check(/"links":\{/.test(shell), `#orz-shell holds no "links" for a naming other than the family's: ${clip(shell)}`);
+        // the family naming is no naming: the bytes of every file assembled without it stay as they are
+        const plain = await s.assemble(texts_js_1.LINKS_TEXT, { delivery: 'cdn' });
+        for (const family of [{}, { md: '{stem}.md.html', slides: '{stem}.slides.html', paged: '{stem}.paged.html' }]) {
+            try {
+                const same = await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), texts_js_1.LINKS_TEXT, { delivery: 'cdn', twinLinks: family });
+                p.check(same === plain, `assemble(text, { twinLinks: ${JSON.stringify(family)} }) (the family naming) is not assemble(text) — ${firstDiff(same, plain)}`);
+            }
+            catch (e) {
+                p.fail(`assemble(text, { twinLinks: ${JSON.stringify(family)} }) threw: ${msg(e)}`);
+            }
+        }
+        p.check(!/"links"/.test(/<script type="application\/json" id="orz-shell">([^<]*)<\/script>/.exec(plain)?.[1] ?? ''), 'assemble(text) without a naming writes "links" into #orz-shell');
+        // law 3 with the option, and the naming's key order does not matter (normalized)
+        const again = await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), x?.text ?? '', { delivery: 'cdn', twinLinks: { slides: texts_js_1.LINKS_NAMING.slides, md: texts_js_1.LINKS_NAMING.md } });
+        p.check(again === file, `assemble(extract(F).text, { twinLinks: extract(F).twinLinks }) !== F — ${firstDiff(again, file)}`);
+        // an invalid naming is refused, never stored
+        for (const bad of [{ md: 'x.html' }, { md: '{stem}/index.html' }, { docx: '{stem}.html' }]) {
+            let refused = false;
+            try {
+                await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), texts_js_1.LINKS_TEXT, { delivery: 'cdn', twinLinks: bad });
+            }
+            catch {
+                refused = true;
+            }
+            p.check(refused, `assemble(text, { twinLinks: ${JSON.stringify(bad)} }) did not refuse an invalid naming`);
+        }
+        // the browser bundle writes the Node bytes
+        needBrowser(s);
+        const [chrome] = await s.chromeAssemble(s.releases.target, [texts_js_1.LINKS_TEXT], 'cdn', false, undefined, { ...texts_js_1.LINKS_NAMING });
+        p.check(chrome === file, `the browser bundle's assemble(text, { twinLinks }) differs from Node's — ${firstDiff(chrome ?? '', file)}`);
+    },
+    async 'C.links.read-view'(s, p) {
+        const file = await needLinks(s, 'inline');
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'none' });
+        const page = await ctx.newPage();
+        // published under the naming's name (links.html for md), as a site would
+        await page.goto(s.writeFile(publishedName(s), file));
+        let hrefs = [];
+        await until(async () => { hrefs = await (0, session_js_1.call)(page, ANCHOR_HREFS); return hrefs.includes(texts_js_1.LINKS_HREFS[0]); }, 20000);
+        for (const want of texts_js_1.LINKS_HREFS)
+            p.check(hrefs.includes(want), `the read view has no link to "${want}" (twin links render with the file's naming; others as written): ${clip(JSON.stringify(hrefs))}`);
+        for (const family of ['week2.slides.html#s3', '../notes.md.html?v=1', 'week2.slides.md#s3', '../notes.md?v=1']) {
+            p.check(!hrefs.includes(family), `the read view links to "${family}" instead of the file's naming`);
+        }
+    },
+    async 'C.save.keeps-links'(s, p) {
+        const file = await needLinks(s, 'inline');
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'stub' });
+        const page = await ctx.newPage();
+        // a page published under the naming's name: its save offers the dual name (carrier-app §2)
+        await openEditor(s, page, s.writeFile(publishedName(s), file));
+        const edited = `${texts_js_1.LINKS_TEXT}\nEdited below the links.\n`;
+        await ed(page, `window.__orzEditor.setText(${JSON.stringify(edited)})`);
+        await ed(page, 'window.__orzEditor.save()');
+        await until(() => ctx.of('write').length > 0 || ctx.downloads.length > 0, 10000);
+        const saved = firstSaved(ctx);
+        if (!p.check(saved !== undefined, 'the save of a file with a twin-link naming wrote nothing'))
+            return;
+        const x = (0, read_js_1.extract)(saved);
+        p.check(x?.text === edited, `the saved file does not give back the edited text — ${firstDiff(x?.text ?? '', edited)}`);
+        p.check((0, naming_js_1.sameTwinNaming)(x?.twinLinks, texts_js_1.LINKS_NAMING), `the saved file lost or changed the file's twin-link naming (#orz-shell "links"): ${clip(JSON.stringify(x?.twinLinks ?? null))}`);
+        const expected = await s.assemble(edited, { delivery: 'inline', twinLinks: { ...texts_js_1.LINKS_NAMING } });
+        p.check(saved === expected, `the saved bytes are not assemble(text, { twinLinks }) — ${firstDiff(saved, expected)}`);
+        const names = [...ctx.of('picker').map((r) => r.data.suggestedName), ...ctx.downloads.map((d) => d.name)];
+        p.check(names.length > 0 && names.every((n) => n === `links${ext(s)}`), `the save of ${publishedName(s)} (published under the naming) offers ${clip(JSON.stringify(names))}, not its dual name "links${ext(s)}"`);
+    },
+    async 'C.update.keeps-links'(s, p) {
+        const next = needNext(s);
+        const file = await needLinks(s, 'inline');
+        const [expected] = await s.chromeAssemble(next, [texts_js_1.LINKS_TEXT], 'inline', false, undefined, { ...texts_js_1.LINKS_NAMING });
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'update-links'), file));
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'a file with a twin-link naming shows no update indicator'))
+            return;
+        const r = await runUpdate(page, ctx, next.version);
+        if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
+            return;
+        const saved = firstSaved(ctx);
+        const x = (0, read_js_1.extract)(saved);
+        p.eq(x && [x.text === texts_js_1.LINKS_TEXT, x.shell], [true, next.version], 'the updated file\'s text exact, shell');
+        p.check((0, naming_js_1.sameTwinNaming)(x?.twinLinks, texts_js_1.LINKS_NAMING), `the updated file lost or changed the file's twin-link naming (#orz-shell "links"): ${clip(JSON.stringify(x?.twinLinks ?? null))}`);
+        p.check(saved === expected, `the updated file is not the new release's assemble(text, { twinLinks }) — ${firstDiff(saved, expected)}`);
+    },
+};
 async function hostPage(s, ctx, name, cfg) {
     const src = s.serve(name, await s.assemble(texts_js_1.EDIT_TEXT, { delivery: 'inline' }));
     const page = await ctx.newPage();

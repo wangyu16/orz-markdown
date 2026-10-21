@@ -39,6 +39,7 @@ import type { StorageLike } from '../shell/types.js';
 import type { TextEditorAdapter } from './adapter.js';
 import { type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import type { ColorScheme } from '../../preview-frame.js';
+import { type TwinNaming } from '../naming.js';
 import type { EdElement, EdFile, ShadowRootLike } from './types.js';
 export type EditorMode = 'split' | 'editor' | 'preview';
 export type EditorEventName = 'change' | 'dirty' | 'selection' | 'save' | 'error' | 'print';
@@ -136,9 +137,11 @@ export interface RenderContext {
     /**
      * `false` when the host resolves links itself (`hooks.resolveLink`): render
      * links as written (no twin rewrite), so `resolveLink` gets the source href.
-     * `renderMarkdownPreview` reads it.
+     * (2.5.0) The shell's `twinLinks` naming otherwise, when it is not the
+     * family's (FC-18 §8.2): render twin links with the host's names. Absent:
+     * the family names. `renderMarkdownPreview` reads it.
      */
-    twinLinks?: boolean;
+    twinLinks?: boolean | TwinNaming;
     /** A scratch map that lives as long as the shell (e.g. fetched includes; `renderMarkdownPreviewWithIncludes`). */
     cache?: Map<string, unknown>;
     /**
@@ -261,6 +264,7 @@ export interface EditorShellOptions {
      */
     assemble?(text: string, options?: {
         includes?: Record<string, string>;
+        twinLinks?: TwinNaming;
     }): string | Promise<string>;
     /**
      * The opened file's resolved includes (`extract(html).includes`, the `#orz-includes` island,
@@ -270,6 +274,14 @@ export interface EditorShellOptions {
     includes?: Record<string, string>;
     /** The assembled file's name for the standalone save (default `document` + the kind's extension). */
     fileName?: string;
+    /**
+     * (2.5.0, FC-19 §3) The twin-link naming (FC-18 §8.2): the preview renders
+     * links to text twins with these names (`render`'s `ctx.twinLinks`; not
+     * with `hooks.resolveLink`, which gets the source href), and a standalone
+     * save passes it to `assemble(text, { twinLinks })`. The family naming
+     * (or an invalid value) is the same as none.
+     */
+    twinLinks?: TwinNaming | null;
     /**
      * A saver to use instead of `createSaver({ uid, suggestedName: fileName, kind, host, openedHtml,
      * servedNotice })`. The shell's own saver shows the served-page notice only for an assembled file

@@ -103,3 +103,15 @@ export const INCLUDES: Readonly<Record<string, string>> = {
   'https://example.org/notes/glossary.md': '## Glossary\r\n\r\nTitrant — 𝒳 the solution of known concentration.\r\n',
   'parts/safety-rules.md': '## Safety rules\n\n- Goggles on. A literal </script> stays text.\n- No food in the lab.\n',
 };
+
+/**
+ * (2.5.0) A host's twin-link naming (FC-18 §8.2) for the `C.links.*` checks: md and slides
+ * pages under names of their own, paged kept on the family name.
+ */
+export const LINKS_NAMING: Readonly<Record<string, string>> = { md: '{stem}.html', slides: '{stem}.deck.html' };
+
+/** (2.5.0) A text whose links the naming renames (and some it must leave alone). */
+export const LINKS_TEXT = `{{nyml\nkind: document\ntitle: Twin links\nuid: doc-conformance4l5n6k\n}}\n\n# Twin links\n\nSee [week two](week2.slides.md#s3), [the notes](../notes.md?v=1), [the handout](handout.paged.md), [elsewhere](https://example.org/x.md), [the data](data.csv) and [the top](#twin-links).\n`;
+
+/** (2.5.0) The hrefs LINKS_TEXT's links render with under LINKS_NAMING, in order. */
+export const LINKS_HREFS: readonly string[] = ['week2.deck.html#s3', '../notes.html?v=1', 'handout.paged.html', 'https://example.org/x.md', 'data.csv', '#twin-links'];

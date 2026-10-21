@@ -388,8 +388,8 @@ const BOOT_RESULT = 'orz-reassembled';
 /**
  * The listener that runs inside the sandbox after the bundle: it answers only
  * its parent, calls `OrzCarrier.assemble(text, { delivery, engineSource,
- * includes? })` (`includes` only when the request carries them) and posts the
- * html back. ES5, no backticks, no `</script`.
+ * includes?, twinLinks? })` (`includes` and `twinLinks` only when the request
+ * carries them) and posts the html back. ES5, no backticks, no `</script`.
  */
 const BOOTSTRAP = [
     '(function () {',
@@ -404,6 +404,7 @@ const BOOTSTRAP = [
     "      if (!C || typeof C.assemble !== 'function') throw new Error('The bundle did not set OrzCarrier.assemble.');",
     '      var o = { delivery: d.delivery, engineSource: d.engineSource };',
     '      if (d.includes) o.includes = d.includes;',
+    '      if (d.twinLinks) o.twinLinks = d.twinLinks;',
     '      ok(C.assemble(d.text, o));',
     '    }).then(function (html) {',
     "      reply({ ok: typeof html === 'string', html: html, kind: String(C.kind), version: String(C.version), error: typeof html === 'string' ? '' : 'assemble returned no string' });",
@@ -460,6 +461,7 @@ function runInSandbox(bundle, opts, delivery) {
     frame.setAttribute('style', 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none');
     frame.srcdoc = sandboxDocument(bundle);
     const id = `u${++requestCounter}`;
+    const links = (0, read_js_1.readTwinNaming)(opts.twinLinks);
     const timeoutMs = typeof opts.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : exports.REASSEMBLE_TIMEOUT_MS;
     const w = win;
     return new Promise((resolve, reject) => {
@@ -488,7 +490,7 @@ function runInSandbox(bundle, opts, delivery) {
                 return;
             if (d.type === BOOT_READY) {
                 try {
-                    frame.contentWindow.postMessage({ type: BOOT_REQUEST, id, text: opts.text, delivery, engineSource: bundle, ...(hasIncludes(opts.includes) ? { includes: { ...opts.includes } } : {}) }, '*');
+                    frame.contentWindow.postMessage({ type: BOOT_REQUEST, id, text: opts.text, delivery, engineSource: bundle, ...(hasIncludes(opts.includes) ? { includes: { ...opts.includes } } : {}), ...(links ? { twinLinks: { ...links } } : {}) }, '*');
                 }
                 catch (err) {
                     finish(new UpdateError('bundle', `The update could not start: ${String(err?.message ?? err)}`));
@@ -519,10 +521,11 @@ function runInSandbox(bundle, opts, delivery) {
  *   1. download the bundle from the hard-coded CDN URL; its SHA-384 must
  *      equal `release.bundle.integrity`, it must be UTF-8 and script-safe;
  *   2. in a hidden `sandbox="allow-scripts"` iframe (opaque origin), call the
- *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes? })`;
+ *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes?, twinLinks? })`;
  *      only messages from that iframe's window are read;
  *   3. accept the html only if `extract(html)` gives exactly `text`, the
- *      kind, the release's version, the delivery and the `includes`;
+ *      kind, the release's version, the delivery, the `includes` and (2.5.0)
+ *      the `twinLinks` naming;
  *   4. remove the iframe in every outcome.
  *
  * Resolves the new file's html; rejects with an {@link UpdateError}. The
@@ -585,6 +588,8 @@ async function reassemble(opts) {
         throw new UpdateError('delivery', `The new version wrote delivery "${back.delivery}" instead of "${delivery}"; nothing was changed.`);
     if (!sameIncludes(back.includes, opts.includes))
         throw new UpdateError('includes', 'The new version would not keep the document\'s resolved includes exactly; nothing was changed.');
+    if (!(0, read_js_1.sameTwinNaming)(back.twinLinks, opts.twinLinks))
+        throw new UpdateError('links', 'The new version would not keep the names this page gives its links to other documents; nothing was changed.');
     return html;
 }
 const CHANGED = 'The document changed while the update ran, so nothing was saved; try again.';

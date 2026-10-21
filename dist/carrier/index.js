@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.TWIN_LINKS_RULE = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
+exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.linkTargets = exports.includeTargets = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.TWIN_LINKS_RULE = exports.envTwinNaming = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
+exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -28,7 +29,20 @@ Object.defineProperty(exports, "SETTING_DEFAULTS", { enumerable: true, get: func
 var links_js_1 = require("./links.js");
 Object.defineProperty(exports, "twinHref", { enumerable: true, get: function () { return links_js_1.twinHref; } });
 Object.defineProperty(exports, "registerTwinLinks", { enumerable: true, get: function () { return links_js_1.registerTwinLinks; } });
+Object.defineProperty(exports, "envTwinNaming", { enumerable: true, get: function () { return links_js_1.envTwinNaming; } });
 Object.defineProperty(exports, "TWIN_LINKS_RULE", { enumerable: true, get: function () { return links_js_1.TWIN_LINKS_RULE; } });
+// 2.5.0: twin-link naming (FC-18 §8.2 `twinLinks`, K1) and the parser-based targets of a text (K2)
+var naming_js_1 = require("./naming.js");
+Object.defineProperty(exports, "twinNaming", { enumerable: true, get: function () { return naming_js_1.twinNaming; } });
+Object.defineProperty(exports, "readTwinNaming", { enumerable: true, get: function () { return naming_js_1.readTwinNaming; } });
+Object.defineProperty(exports, "sameTwinNaming", { enumerable: true, get: function () { return naming_js_1.sameTwinNaming; } });
+Object.defineProperty(exports, "isTwinTemplate", { enumerable: true, get: function () { return naming_js_1.isTwinTemplate; } });
+Object.defineProperty(exports, "twinFileName", { enumerable: true, get: function () { return naming_js_1.twinFileName; } });
+Object.defineProperty(exports, "textNameOf", { enumerable: true, get: function () { return naming_js_1.textNameOf; } });
+Object.defineProperty(exports, "FAMILY_NAMING", { enumerable: true, get: function () { return naming_js_1.FAMILY_NAMING; } });
+var targets_js_1 = require("./targets.js");
+Object.defineProperty(exports, "includeTargets", { enumerable: true, get: function () { return targets_js_1.includeTargets; } });
+Object.defineProperty(exports, "linkTargets", { enumerable: true, get: function () { return targets_js_1.linkTargets; } });
 var text_js_1 = require("./text.js");
 Object.defineProperty(exports, "decodeText", { enumerable: true, get: function () { return text_js_1.decodeText; } });
 var envelope_js_1 = require("./envelope.js");

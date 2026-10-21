@@ -1,38 +1,33 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TWIN_LINKS_RULE = void 0;
-exports.twinHref = twinHref;
+exports.TWIN_LINKS_RULE = exports.twinHref = void 0;
+exports.envTwinNaming = envTwinNaming;
 exports.registerTwinLinks = registerTwinLinks;
 const index_js_1 = require("../index.js");
 const env_js_1 = require("../env.js");
+const naming_js_1 = require("./naming.js");
+var naming_js_2 = require("./naming.js");
+Object.defineProperty(exports, "twinHref", { enumerable: true, get: function () { return naming_js_2.twinHref; } });
 /** Name of the core rule on the shared `md`. */
 exports.TWIN_LINKS_RULE = 'orz_twin_links';
 /**
- * The assembled-twin href of a link href, or the href unchanged.
- *
- * Rewritten: a relative path (also `./`, `../`, or root-relative `/…`) whose
- * last segment ends in `.md`, `.slides.md` or `.paged.md` (lower case), with
- * an optional `?query` and/or `#fragment`, which are kept. Untouched: absolute
- * URLs (any `scheme:`, so `https:`, `mailto:`, `data:`), protocol-relative
- * `//host/…`, fragment- or query-only hrefs, and every other path.
+ * The naming a render's `env.orzTwinLinks` asks for: `undefined` = no rewrite
+ * (anything but `true` or an object), `null` = the family names, else the
+ * naming. An object that is not a valid naming renders the family names
+ * (a stored naming is validated when it is written and read; FC-18 §8.2).
  */
-function twinHref(href) {
-    if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(href) || href.startsWith('//'))
-        return href;
-    const cut = href.search(/[?#]/);
-    const path = cut >= 0 ? href.slice(0, cut) : href;
-    const rest = cut >= 0 ? href.slice(cut) : '';
-    const seg = path.slice(path.lastIndexOf('/') + 1);
-    let m;
-    if ((m = /^(.+)\.(slides|paged)\.md$/.exec(seg)))
-        return `${path.slice(0, path.length - seg.length)}${m[1]}.${m[2]}.html${rest}`;
-    if (/^.+\.md$/.test(seg))
-        return `${path}.html${rest}`;
-    return href;
+function envTwinNaming(env) {
+    const v = (0, env_js_1.rootEnv)(env)['orzTwinLinks'];
+    if (v === true)
+        return null;
+    if (v && typeof v === 'object' && !Array.isArray(v))
+        return (0, naming_js_1.readTwinNaming)(v);
+    return undefined;
 }
-/** The core rule: rewrites `link_open` hrefs when `env.orzTwinLinks === true`. */
+/** The core rule: rewrites `link_open` hrefs when `env.orzTwinLinks` is `true` or a naming. */
 function twinLinksRule(state) {
-    if ((0, env_js_1.rootEnv)(state.env)['orzTwinLinks'] !== true)
+    const naming = envTwinNaming(state.env);
+    if (naming === undefined)
         return;
     for (const token of state.tokens) {
         if (token.type !== 'inline' || !token.children)
@@ -43,7 +38,7 @@ function twinLinksRule(state) {
             const href = child.attrGet('href');
             if (href === null)
                 continue;
-            const next = twinHref(href);
+            const next = (0, naming_js_1.twinHref)(href, naming);
             if (next !== href)
                 child.attrSet('href', next);
         }

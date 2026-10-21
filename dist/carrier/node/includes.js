@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isUrl = void 0;
-exports.includeTargets = includeTargets;
+exports.includeTargets = exports.isUrl = void 0;
 exports.keepReferenced = keepReferenced;
 exports.unresolvedIncludes = unresolvedIncludes;
 exports.resolveFileIncludes = resolveFileIncludes;
@@ -18,9 +17,8 @@ exports.includePlan = includePlan;
  * keeps the record's entries the text still uses, and names what stays
  * unresolved. One level, as the renderer.
  */
-const markdown_include_js_1 = require("../../plugins/markdown-include.js");
-const header_js_1 = require("../header.js");
-const parser_js_1 = require("../parser.js");
+const targets_js_1 = require("../targets.js");
+Object.defineProperty(exports, "includeTargets", { enumerable: true, get: function () { return targets_js_1.includeTargets; } });
 const text_js_1 = require("../text.js");
 const builtins_js_1 = require("./builtins.js");
 /** A URL target (`scheme://…`): never read by the CLI. */
@@ -39,20 +37,6 @@ function rootPath(target) {
     }
     return `/${out.join('/')}`;
 }
-/** The include targets of a text's body, as written, in order, without repeats (`directives`: the include directive names, default the kit's). */
-function includeTargets(text, directives = markdown_include_js_1.INCLUDE_DIRECTIVES) {
-    const names = new Set(directives);
-    const tokens = (0, parser_js_1.kitParser)().parse((0, header_js_1.withoutHeader)(text).body, {});
-    const seen = new Set();
-    for (const t of tokens) {
-        if (t.type !== 'plugin_block' || !names.has(t.info))
-            continue;
-        const target = (t.content || '').trim();
-        if (target)
-            seen.add(target);
-    }
-    return [...seen];
-}
 /** The record entry that answers a target (URLs exactly; files by their normalized path). */
 function entryFor(record, target) {
     if (Object.prototype.hasOwnProperty.call(record, target))
@@ -65,7 +49,7 @@ function entryFor(record, target) {
 /** The entries of `record` the text still includes (a removed directive's entry is dropped). */
 function keepReferenced(text, record, directives) {
     const out = {};
-    for (const target of includeTargets(text, directives)) {
+    for (const target of (0, targets_js_1.includeTargets)(text, directives)) {
         const key = entryFor(record, target);
         if (key !== null)
             out[key] = record[key];
@@ -74,7 +58,7 @@ function keepReferenced(text, record, directives) {
 }
 /** The include targets of the text the record does not answer. */
 function unresolvedIncludes(text, record, directives) {
-    return includeTargets(text, directives).filter((t) => entryFor(record, t) === null);
+    return (0, targets_js_1.includeTargets)(text, directives).filter((t) => entryFor(record, t) === null);
 }
 /**
  * Read the text's file includes from `folder` (the text twin's folder): each
@@ -94,7 +78,7 @@ function resolveFileIncludes(text, folder, directives) {
     catch {
         return { includes, problems, folderProblem: `the folder ${folder} cannot be read` };
     }
-    for (const target of includeTargets(text, directives)) {
+    for (const target of (0, targets_js_1.includeTargets)(text, directives)) {
         if ((0, exports.isUrl)(target))
             continue;
         const at = p.resolve(folder, target.replace(/\\/g, '/'));

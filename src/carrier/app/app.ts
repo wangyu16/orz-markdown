@@ -60,6 +60,8 @@ import type { UpdateIndicator } from '../shell/indicator.js';
 import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import { copyName, readOpenedFile } from './file.js';
+import { extract } from '../read.js';
+import { sameTwinNaming, type TwinNaming } from '../naming.js';
 import { attachAiMenu, button, hiddenFor, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
 import { HANDLE_CSS, mountHandle, type HandleEntry, type HandleRowButton, type HandleSubItem } from './handle.js';
 import type {
@@ -213,8 +215,18 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
 
   // ── the file's own assembly: its delivery, engine and includes (FC-19 §8.5); the opened bytes (content proof) ──
   const engineSource = file.engine ?? undefined;
-  const assembleWith = (t: string, includes: Record<string, string> | undefined): Promise<string> =>
-    Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}) })).then(String);
+  /**
+   * The file's assemble. `links` (2.5.0): the twin-link naming — the file's own
+   * (`#orz-shell` `"links"`, FC-18 §8.2), kept by every save like the delivery
+   * and the includes; a new document has none. A kind that drops it (built
+   * before it took `twinLinks`) is refused rather than silently writing the
+   * family names into a page published under other names.
+   */
+  const assembleWith = (t: string, includes: Record<string, string> | undefined, links: TwinNaming | null = file.twinLinks ?? null): Promise<string> =>
+    Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}), ...(links ? { twinLinks: { ...links } } : {}) })).then(String).then((html) => {
+      if (links && !sameTwinNaming(extract(html)?.twinLinks, links)) throw new Error('this version of the carrier cannot keep the page\'s link names (#orz-shell "links"); nothing was written');
+      return html;
+    });
   const assembleFile = (t: string, o?: { includes?: Record<string, string> }): Promise<string> => assembleWith(t, o?.includes);
   let openedBytes: Promise<string> | null = null;
   /** The opened bytes, once they are assembled (a failure is not kept: tried again at the next save, never disabling the conflict check). */
@@ -285,6 +297,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     saver,
     ...(host ? { host } : {}),
     ...(file.includes ? { includes: { ...file.includes } } : {}),
+    ...(file.twinLinks ? { twinLinks: { ...file.twinLinks } } : {}),
     openedHtml,
     standalone: !host,
     ...(hostAi ? { ai: hostAi } : {}),
@@ -307,7 +320,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     if (view.setVisible) view.setVisible(visible);
     else if (view.element) view.element.hidden = !visible;
   };
-  const renderView = (): Promise<void> => Promise.resolve().then(() => view.render(currentText(), { ...(file.includes ? { includes: file.includes } : {}), ...(hostInclude ? { fetchInclude: hostInclude } : {}) }));
+  const renderView = (): Promise<void> => Promise.resolve().then(() => view.render(currentText(), { ...(file.includes ? { includes: file.includes } : {}), ...(hostInclude ? { fetchInclude: hostInclude } : {}), ...(file.twinLinks ? { twinLinks: file.twinLinks } : {}) }));
   rerender = () => { if (!editor) void renderView().catch(() => undefined); else void editor.refreshPreview(); };
   const ready = renderView().then(() => {
     // a fragment in the address goes to its element once the content exists
@@ -863,7 +876,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
   async function saveNewFile(t: string, name: string, what: 'new' | 'copy'): Promise<SaveResult> {
     let html: string;
     try {
-      html = await assembleWith(t, what === 'copy' ? file.includes : undefined);
+      html = await (what === 'copy' ? assembleWith(t, file.includes) : assembleWith(t, undefined, null));
     } catch (e) {
       toast(`Could not create the file: ${errorText(e)}`, 'error');
       return { via: 'download', ok: false, error: errorText(e), confirmed: false };
@@ -1106,6 +1119,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
       const r = await services.performUpdate({
         info, kind: k.kind, current: k.version, getText: currentText, saver: updateSaver, delivery: file.delivery,
         ...(file.includes ? { includes: file.includes } : {}),
+        ...(file.twinLinks ? { twinLinks: file.twinLinks } : {}),
       });
       if (r.status === 'up-to-date') return;
       if (r.status === 'failed') throw new Error(r.error);

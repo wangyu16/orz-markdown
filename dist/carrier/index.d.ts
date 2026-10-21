@@ -8,7 +8,11 @@ export { readHeader, withoutHeader, editHeader, normalizeHeader, setHeaderValue,
 export type { Header, HeaderBlock, HeaderEntry, HeaderChange, Lint, LintOptions } from './header.js';
 export { readDocument, kindFromFilename, twinName, mintUid, SETTING_DEFAULTS } from './document.js';
 export type { Kind, DocumentInfo, ReadDocumentOptions, KitToken } from './document.js';
-export { twinHref, registerTwinLinks, TWIN_LINKS_RULE } from './links.js';
+export { twinHref, registerTwinLinks, envTwinNaming, TWIN_LINKS_RULE } from './links.js';
+export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
+export type { TwinNaming, TwinKind } from './naming.js';
+export { includeTargets, linkTargets } from './targets.js';
+export type { LinkTarget } from './targets.js';
 export { decodeText } from './text.js';
 export { assembleEnvelope, extract, readIslandFromDom, skillUrl, eolStyle, hasMixedEol, hasLoneSurrogate, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './envelope.js';
 export type { ShellParts, Extracted, EolStyle, IslandElement } from './envelope.js';

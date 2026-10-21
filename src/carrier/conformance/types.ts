@@ -2,6 +2,7 @@
  * Types of the carrier conformance harness (spec/conformance.md).
  */
 import type { Kind } from '../document.js';
+import type { TwinNaming } from '../naming.js';
 
 /** A carrier release on disk: its browser bundle and its `release.json` (spec/shell-runtime.md §6). */
 export interface BundleSource {
@@ -22,6 +23,11 @@ export interface AssembleOptions {
    * pass the opened file's (`extract(html).includes`). Absent or empty: none.
    */
   includes?: Record<string, string>;
+  /**
+   * (2.5.0) The twin-link naming (FC-18 §8.2): stored in `#orz-shell` as `"links"` when it is
+   * not the family's, carried by every save and the quiet update (`C.links.*`).
+   */
+  twinLinks?: TwinNaming;
 }
 
 /** The carrier under test. */
@@ -58,6 +64,13 @@ export interface CarrierTarget extends BundleSource {
    * Without this declaration a missing `previous` is a skip.
    */
   firstRelease?: boolean;
+  /**
+   * (2.5.0) The carrier takes `assemble(text, { twinLinks })` (FC-18 §8.2). The `C.links.*`
+   * checks run when its Node `assemble` stores a naming; a carrier that ignores the option
+   * (built before kit 2.5.0) gets them `not-applicable` — unless it declares `twinLinks: true`,
+   * when ignoring it fails.
+   */
+  twinLinks?: boolean;
 }
 
 /** A Playwright browser (playwright-core), structurally. */

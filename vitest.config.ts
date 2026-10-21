@@ -12,7 +12,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
  * `beforeAll` took over 10 s under that load. They are not claims; bounded
  * claims carry their own explicit limits.
  */
-const CHROME = ['tests/browser-copy.test.ts', 'tests/carrier-editor.test.ts', 'tests/carrier-shell.test.ts', 'tests/carrier-update.test.ts', 'tests/carrier-app.test.ts'];
+const CHROME = ['tests/browser-copy.test.ts', 'tests/carrier-editor.test.ts', 'tests/carrier-shell.test.ts', 'tests/carrier-update.test.ts', 'tests/carrier-app.test.ts', 'tests/carrier-links-chrome.test.ts'];
 const HEAVY = ['tests/conformance.test.ts'];
 /** The screen notebook (M.31): full-page screenshots and pixel reads; beside the editor's focus-sensitive
  * Chrome tests (E.13/E.14 keys and clicks in the preview) it made them flake, so it runs on its own. */

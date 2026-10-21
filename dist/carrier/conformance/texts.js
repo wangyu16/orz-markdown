@@ -6,7 +6,7 @@
  * checks open.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES = exports.INCLUDE_TEXT = exports.GRAB_PAGE = exports.GRAB_SCRIPT = exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
+exports.LINKS_HREFS = exports.LINKS_TEXT = exports.LINKS_NAMING = exports.INCLUDES = exports.INCLUDE_TEXT = exports.GRAB_PAGE = exports.GRAB_SCRIPT = exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
 exports.replacedTexts = replacedTexts;
 /** Uids used by the browser checks (well-formed, FC-18 §5.1). */
 exports.UID_A = 'doc-conformance0a1b2c';
@@ -92,4 +92,13 @@ exports.INCLUDES = {
     'https://example.org/notes/glossary.md': '## Glossary\r\n\r\nTitrant — 𝒳 the solution of known concentration.\r\n',
     'parts/safety-rules.md': '## Safety rules\n\n- Goggles on. A literal </script> stays text.\n- No food in the lab.\n',
 };
+/**
+ * (2.5.0) A host's twin-link naming (FC-18 §8.2) for the `C.links.*` checks: md and slides
+ * pages under names of their own, paged kept on the family name.
+ */
+exports.LINKS_NAMING = { md: '{stem}.html', slides: '{stem}.deck.html' };
+/** (2.5.0) A text whose links the naming renames (and some it must leave alone). */
+exports.LINKS_TEXT = `{{nyml\nkind: document\ntitle: Twin links\nuid: doc-conformance4l5n6k\n}}\n\n# Twin links\n\nSee [week two](week2.slides.md#s3), [the notes](../notes.md?v=1), [the handout](handout.paged.md), [elsewhere](https://example.org/x.md), [the data](data.csv) and [the top](#twin-links).\n`;
+/** (2.5.0) The hrefs LINKS_TEXT's links render with under LINKS_NAMING, in order. */
+exports.LINKS_HREFS = ['week2.deck.html#s3', '../notes.html?v=1', 'handout.paged.html', 'https://example.org/x.md', 'data.csv', '#twin-links'];
 //# sourceMappingURL=texts.js.map

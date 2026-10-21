@@ -55,4 +55,13 @@ export declare function replacedTexts(grabUrl: string): Record<string, string>;
  */
 export declare const INCLUDE_TEXT = "{{nyml\nkind: document\nformat: 1\ntitle: Titration lab \u2014 with includes\nuid: doc-conformance1i2n3c\n}}\n\n# Titration lab\n\n{{md parts/safety-rules.md}}\n\nProcedure follows.\n\n{{md https://example.org/notes/glossary.md}}\n";
 export declare const INCLUDES: Readonly<Record<string, string>>;
+/**
+ * (2.5.0) A host's twin-link naming (FC-18 §8.2) for the `C.links.*` checks: md and slides
+ * pages under names of their own, paged kept on the family name.
+ */
+export declare const LINKS_NAMING: Readonly<Record<string, string>>;
+/** (2.5.0) A text whose links the naming renames (and some it must leave alone). */
+export declare const LINKS_TEXT = "{{nyml\nkind: document\ntitle: Twin links\nuid: doc-conformance4l5n6k\n}}\n\n# Twin links\n\nSee [week two](week2.slides.md#s3), [the notes](../notes.md?v=1), [the handout](handout.paged.md), [elsewhere](https://example.org/x.md), [the data](data.csv) and [the top](#twin-links).\n";
+/** (2.5.0) The hrefs LINKS_TEXT's links render with under LINKS_NAMING, in order. */
+export declare const LINKS_HREFS: readonly string[];
 //# sourceMappingURL=texts.d.ts.map

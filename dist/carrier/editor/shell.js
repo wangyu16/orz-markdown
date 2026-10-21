@@ -45,6 +45,7 @@ const codemirror6_js_1 = require("./codemirror6.js");
 const preview_js_1 = require("./preview.js");
 const styles_js_1 = require("./styles.js");
 const text_model_js_1 = require("./text-model.js");
+const naming_js_1 = require("../naming.js");
 /** A text's well-formed header uid, as the editor reads its own (`readHeader`). */
 const headerUid = (text) => {
     const u = (0, header_js_1.readHeader)(text)?.fields['uid']?.trim();
@@ -428,11 +429,13 @@ function createEditorShell(element, options) {
             resolvedBlobs.add(r.trim());
         return r;
     } : null;
+    /** The shell's twin-link naming (normalized; null = the family's). */
+    const naming = (0, naming_js_1.readTwinNaming)(options.twinLinks);
     const renderCtx = {
         ...(hooks.fetchInclude ? { fetchInclude: (t) => hooks.fetchInclude(t) } : {}),
         ...(hooks.resolveAsset ? { resolveAsset: (p) => resolveAssetHook(p) } : {}),
         // B#12: with the host's own link resolution, links stay as written so resolveLink gets the source href
-        ...(hooks.resolveLink ? { twinLinks: false } : {}),
+        ...(hooks.resolveLink ? { twinLinks: false } : naming ? { twinLinks: naming } : {}),
         cache: new Map(),
         ...(options.includes && typeof options.includes === 'object' && Object.keys(options.includes).length > 0 ? { includes: Object.freeze({ ...options.includes }) } : {}),
     };
@@ -915,7 +918,7 @@ function createEditorShell(element, options) {
     /** The includes a save writes: the opened ones, until `refreshPreview({ includes })` hands newer ones (round 3, L7). */
     let saveIncludes = openedIncludes;
     /** The carrier's `assemble`, with the given includes (FC-18 D4). */
-    const assembleWith = (t, inc) => Promise.resolve().then(() => (inc ? options.assemble(t, { includes: { ...inc } }) : options.assemble(t))).then(String);
+    const assembleWith = (t, inc) => Promise.resolve().then(() => (inc || naming ? options.assemble(t, { ...(inc ? { includes: { ...inc } } : {}), ...(naming ? { twinLinks: { ...naming } } : {}) }) : options.assemble(t))).then(String);
     let openedMemo = null;
     /** `assemble` of the text the shell was mounted with — the default opened bytes — once it succeeds (a failure is tried again). */
     const openedAssembled = () => {

@@ -91,7 +91,7 @@ const TEXTS = [
 
 // ── a fake page + sandbox for reassemble ─────────────────────────────────
 
-type Assemble = (text: string, o: { delivery: string; engineSource: string; includes?: Record<string, string> }) => unknown;
+type Assemble = (text: string, o: { delivery: string; engineSource: string; includes?: Record<string, string>; twinLinks?: Record<string, string> }) => unknown;
 
 /**
  * A page document and window; appending an iframe "boots" it: its window
@@ -129,7 +129,7 @@ function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: b
       const attrs: Record<string, string> = {};
       const rec = { attrs, srcdoc: '', removed: false, contentWindow: null as unknown };
       const contentWindow = {
-        postMessage(msg: { type: string; id: string; text: string; delivery: string; engineSource: string; includes?: Record<string, string> }, target: string) {
+        postMessage(msg: { type: string; id: string; text: string; delivery: string; engineSource: string; includes?: Record<string, string>; twinLinks?: Record<string, string> }, target: string) {
           if (rec.removed) return;
           expect(target).toBe('*');
           posted.push(msg);
@@ -140,7 +140,7 @@ function fakePage(assemble: Assemble | null, opts: { silent?: boolean; forge?: b
           if (opts.stale) for (const id of ['u0', `${msg.id}x`, 'x', '']) emit({ type: 'orz-reassembled', id, ok: true, html: 'STALE' }, contentWindow);
           setTimeout(async () => {
             try {
-              const html = await assemble!(msg.text, { delivery: msg.delivery, engineSource: msg.engineSource, ...(msg.includes ? { includes: msg.includes } : {}) });
+              const html = await assemble!(msg.text, { delivery: msg.delivery, engineSource: msg.engineSource, ...(msg.includes ? { includes: msg.includes } : {}), ...(msg.twinLinks ? { twinLinks: msg.twinLinks } : {}) });
               emit({ type: 'orz-reassembled', id: msg.id, ok: typeof html === 'string', html }, contentWindow);
             } catch (e) {
               emit({ type: 'orz-reassembled', id: msg.id, ok: false, error: String((e as Error).message) }, contentWindow);
@@ -172,7 +172,7 @@ function served(bundle: string, over: Partial<ReleaseManifest> = {}, serveBytes?
   return { m, url, ...f };
 }
 
-const goodAssemble = (version = '1.1.0', over: Partial<ShellParts> = {}): Assemble => (text, o) => assembleEnvelope(text, PARTS(version, { delivery: o.delivery as 'inline' | 'cdn', ...(o.includes ? { includes: o.includes } : {}), ...over }));
+const goodAssemble = (version = '1.1.0', over: Partial<ShellParts> = {}): Assemble => (text, o) => assembleEnvelope(text, PARTS(version, { delivery: o.delivery as 'inline' | 'cdn', ...(o.includes ? { includes: o.includes } : {}), ...(o.twinLinks ? { twinLinks: o.twinLinks } : {}), ...over }));
 
 // ── U.1 manifest and URLs ────────────────────────────────────────────────
 
@@ -551,6 +551,51 @@ describe('reassemble (spec/shell-runtime.md §7)', () => {
     const p2 = fakePage(bad[0]);
     expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'b\n', includes, saver, fetch: s.fetch, document: p2.document, window: p2.window })).toMatchObject({ status: 'failed', code: 'includes' });
     expect(saved).toHaveLength(1);
+  });
+
+  it('[U.14] (2.5.0) the twin-link naming (#orz-shell "links", FC-18 §8.2) is carried over and verified like the includes: reassemble passes it to the bundle\'s assemble (and nothing when the file has none or the family naming) and accepts the file only when it holds exactly it; a bundle that drops, alters or adds one is refused (code links); performUpdate passes it on; the sandbox\'s listener hands it to OrzCarrier.assemble', async () => {
+    const s = served(BUNDLE);
+    const twinLinks = { md: '{stem}.html' };
+    const seen: unknown[] = [];
+    const ok = fakePage((t, o) => { seen.push(o.twinLinks); return goodAssemble()(t, o); });
+    const html = await reassemble({ text: TEXTS[0], kind: 'md', release: s.m, twinLinks, fetch: s.fetch, document: ok.document, window: ok.window });
+    expect(extract(html)).toMatchObject({ text: TEXTS[0], twinLinks });
+    expect(seen).toEqual([twinLinks]);
+    for (const none of [undefined, { md: '{stem}.md.html' }]) {
+      const p = fakePage((t, o) => { seen.push('twinLinks' in o); return goodAssemble()(t, o); });
+      expect(extract(await reassemble({ text: 'a\n', kind: 'md', release: s.m, ...(none ? { twinLinks: none } : {}), fetch: s.fetch, document: p.document, window: p.window }))!.twinLinks).toBeUndefined();
+      expect(seen.at(-1)).toBe(false);
+    }
+    const bad: Assemble[] = [
+      (t, o) => goodAssemble()(t, { delivery: o.delivery, engineSource: o.engineSource }), // a release that ignores the option
+      (t, o) => goodAssemble('1.1.0', { twinLinks: { md: '{stem}.htm.html' } })(t, o),
+    ];
+    for (const assemble of bad) {
+      const page = fakePage(assemble);
+      const err = await reassemble({ text: 'a\n', kind: 'md', release: s.m, twinLinks, fetch: s.fetch, document: page.document, window: page.window }).catch((e) => e);
+      expect([err.code, page.frames[0].removed]).toEqual(['links', true]);
+    }
+    const adds = fakePage(goodAssemble('1.1.0', { twinLinks }));
+    expect((await reassemble({ text: 'a\n', kind: 'md', release: s.m, fetch: s.fetch, document: adds.document, window: adds.window }).catch((e) => e)).code).toBe('links');
+    const info: UpdateInfo = { kind: 'md', current: '1.0.0', latest: '1.1.0', notes: '', manifest: s.m };
+    const saved: string[] = [];
+    const saver = { save: async (i: { text: string; html: string }): Promise<SaveResult> => { saved.push(i.html); return { via: 'file', ok: true, picked: false, opened: true }; } };
+    const p1 = fakePage(goodAssemble());
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'b\n', twinLinks, saver, fetch: s.fetch, document: p1.document, window: p1.window })).toMatchObject({ status: 'updated', reload: true });
+    expect(extract(saved[0])!.twinLinks).toEqual(twinLinks);
+    const p2 = fakePage(bad[0]);
+    expect(await performUpdate({ info, kind: 'md', current: '1.0.0', getText: () => 'b\n', twinLinks, saver, fetch: s.fetch, document: p2.document, window: p2.window })).toMatchObject({ status: 'failed', code: 'links' });
+    expect(saved).toHaveLength(1);
+    // the sandbox's own listener (run here against a fake OrzCarrier) passes the request's twinLinks on
+    const boot = /<script>(\(function \(\) \{[\s\S]*?\}\)\(\);)<\/script><\/body>/.exec(sandboxDocument('/* bundle */'))![1];
+    const got: unknown[] = [];
+    const listeners: Array<(e: unknown) => void> = [];
+    const parentWin = { postMessage: (m: unknown) => got.push(m) };
+    const ctx = { parent: parentWin, self: { OrzCarrier: { kind: 'md', version: '1', assemble: (_t: string, o: unknown) => JSON.stringify(o) } }, addEventListener: (_n: string, f: (e: unknown) => void) => listeners.push(f), Promise };
+    new Function('parent', 'self', 'addEventListener', 'Promise', boot)(ctx.parent, ctx.self, ctx.addEventListener, Promise);
+    listeners[0]({ source: parentWin, data: { type: 'orz-reassemble', id: 'u1', text: 'x', delivery: 'inline', engineSource: 'E', twinLinks } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(JSON.parse((got.at(-1) as { html: string }).html)).toEqual({ delivery: 'inline', engineSource: 'E', twinLinks });
   });
 
   it('[U.8] the transaction touches nothing in the page but its own iframe, which is removed on success and on every failure', async () => {

@@ -11,6 +11,7 @@
  * a real `HTMLElement`, `Document` or `Window` satisfies them.
  */
 import type { HeaderChange } from '../header.js';
+import type { TwinNaming } from '../naming.js';
 import type { Extracted } from '../envelope.js';
 import type { DocumentInfo } from '../document.js';
 import type { EditorHooks, EditorShell } from '../editor/shell.js';
@@ -162,8 +163,14 @@ export interface OpenedFile {
   includes?: Record<string, string>;
   /** The inline engine's exact text (`#orz-engine` without `src`), or null (a cdn file). */
   engine: string | null;
-  /** The opened file's name (`<x>.md.html`), else `document` + the kind's extension. */
+  /**
+   * The opened file's name (`<x>.md.html`); (2.5.0) for a page published under
+   * its naming's name (`week1.html` with `{ md: '{stem}.html' }`) the dual
+   * name (`week1.md.html`); else `document` + the kind's extension.
+   */
   fileName: string;
+  /** (2.5.0) The file's twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2), kept by every save; absent = the family's. */
+  twinLinks?: TwinNaming;
 }
 
 // ── the seam ───────────────────────────────────────────────────────────────
@@ -173,6 +180,8 @@ export interface AppAssembleOptions {
   delivery?: 'inline' | 'cdn';
   engineSource?: string;
   includes?: Record<string, string>;
+  /** (2.5.0) The twin-link naming (FC-18 §8.2): stored in `#orz-shell` when it is not the family's. */
+  twinLinks?: TwinNaming;
 }
 
 /** FC-19 §3 `EditorOptions`, as a kind's `mountEditor` takes them. */
@@ -200,6 +209,14 @@ export interface KindEditorOptions {
    * name (`StandaloneContext.fileName`) is used.
    */
   fileName?: string;
+  /**
+   * FC-19 §3 `twinLinks` (2.5.0): the host's twin-link naming (FC-18 §8.2).
+   * The kind passes it to `createEditorShell({ twinLinks })` (its preview
+   * names twin links so) and to every render of its own that sets
+   * `orzTwinLinks`; in an assembled file the file's own naming
+   * (`StandaloneContext.twinLinks`) is used.
+   */
+  twinLinks?: TwinNaming;
 }
 
 /**
@@ -213,13 +230,19 @@ export interface KindEditorOptions {
 export interface StandaloneContext {
   /** The opened file's name (the saver's suggested name). */
   fileName: string;
-  /** The file's assemble: its delivery, its engine, the given includes (FC-19 §8.5). */
-  assemble(text: string, options?: { includes?: Record<string, string> }): Promise<string>;
+  /** The file's assemble: its delivery, its engine, its twin-link naming (2.5.0), the given includes (FC-19 §8.5). */
+  assemble(text: string, options?: { includes?: Record<string, string>; twinLinks?: TwinNaming }): Promise<string>;
   /** The page's one saver (its session handle, its content proof, its host). */
   saver: Saver;
   host?: HostConnection;
   /** The opened file's `#orz-includes`. */
   includes?: Record<string, string>;
+  /**
+   * (2.5.0) The opened file's twin-link naming (`#orz-shell` `"links"`): the
+   * kind passes it to `createEditorShell({ twinLinks })`, so the preview
+   * names twin links as the file does. `assemble` keeps it by itself.
+   */
+  twinLinks?: TwinNaming;
   /** The opened file's bytes (the saver's content proof, shell-runtime §1 step 3). */
   openedHtml?: () => Promise<string>;
   /** The page is this file, top-level, with no host (the preview's `file:` sandbox rule, FC-19 §8.4). */
@@ -240,6 +263,13 @@ export interface ReadViewContext {
   includes?: Readonly<Record<string, string>>;
   /** A connected host's include resolution (it wins over the record, spec/shell-runtime.md §5). */
   fetchInclude?(url: string): Promise<string | null>;
+  /**
+   * (2.5.0) The file's twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2):
+   * render twin links with these names (`orzTwinLinks: ctx.twinLinks ?? true`;
+   * `renderMarkdownPreviewWithIncludes(text, ctx)` reads it). Absent: the
+   * family names.
+   */
+  twinLinks?: TwinNaming;
 }
 
 /** The kind's read view of the page (md: the document in the page; paged: Paged.js pages; slides: the deck). */

@@ -15,7 +15,7 @@
 export { bootCarrierApp, APP_CSS, UPDATE_CONFLICT_MESSAGE, UPDATE_QUESTION_OPEN } from './app.js';
 export { startCarrier, carrierGlobal } from './start.js';
 export type { StartOptions } from './start.js';
-export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, openedFileName, copyName } from './file.js';
+export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, shellTwinLinks, openedFileName, copyName } from './file.js';
 export { captureEngineSource } from './engine-source.js';
 export type { EngineSource, CaptureOptions } from './engine-source.js';
 export {

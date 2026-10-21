@@ -1,11 +1,15 @@
 import { type IncludeEnv } from '../../plugins/markdown-include.js';
+import { type TwinNaming } from '../naming.js';
 export interface MarkdownPreviewOptions {
     /**
      * Rewrite links to text twins (`x.md` → `x.md.html`), as an assembled file
      * does. Default `true`; the shell passes `false` when the host resolves
-     * links itself (`hooks.resolveLink` then gets the source href).
+     * links itself (`hooks.resolveLink` then gets the source href). (2.5.0) A
+     * `TwinNaming` (FC-18 §8.2 `twinLinks`) rewrites them to the host's names
+     * (`{ md: '{stem}.html' }`: `x.md` → `x.html`); an invalid one renders
+     * the family names.
      */
-    twinLinks?: boolean;
+    twinLinks?: boolean | TwinNaming | null;
     /** Extra render env (e.g. a host's include resolution). */
     env?: Record<string, unknown>;
     /**

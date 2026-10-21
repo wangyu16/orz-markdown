@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
 exports.readIslandFromDom = readIslandFromDom;
 exports.reservedIdIn = reservedIdIn;
 exports.extract = extract;
@@ -15,6 +15,7 @@ exports.extract = extract;
  */
 const ascii_js_1 = require("../ascii.js");
 const html_js_1 = require("../html.js");
+const naming_js_1 = require("./naming.js");
 var html_js_2 = require("../html.js");
 Object.defineProperty(exports, "escapeHtml", { enumerable: true, get: function () { return html_js_2.escapeHtml; } });
 Object.defineProperty(exports, "escapeAttr", { enumerable: true, get: function () { return html_js_2.escapeAttr; } });
@@ -26,6 +27,15 @@ Object.defineProperty(exports, "decodeText", { enumerable: true, get: function (
 Object.defineProperty(exports, "eolStyle", { enumerable: true, get: function () { return text_js_1.eolStyle; } });
 Object.defineProperty(exports, "hasMixedEol", { enumerable: true, get: function () { return text_js_1.hasMixedEol; } });
 Object.defineProperty(exports, "hasLoneSurrogate", { enumerable: true, get: function () { return text_js_1.hasLoneSurrogate; } });
+var naming_js_2 = require("./naming.js");
+Object.defineProperty(exports, "twinNaming", { enumerable: true, get: function () { return naming_js_2.twinNaming; } });
+Object.defineProperty(exports, "readTwinNaming", { enumerable: true, get: function () { return naming_js_2.readTwinNaming; } });
+Object.defineProperty(exports, "sameTwinNaming", { enumerable: true, get: function () { return naming_js_2.sameTwinNaming; } });
+Object.defineProperty(exports, "isTwinTemplate", { enumerable: true, get: function () { return naming_js_2.isTwinTemplate; } });
+Object.defineProperty(exports, "twinHref", { enumerable: true, get: function () { return naming_js_2.twinHref; } });
+Object.defineProperty(exports, "twinFileName", { enumerable: true, get: function () { return naming_js_2.twinFileName; } });
+Object.defineProperty(exports, "textNameOf", { enumerable: true, get: function () { return naming_js_2.textNameOf; } });
+Object.defineProperty(exports, "FAMILY_NAMING", { enumerable: true, get: function () { return naming_js_2.FAMILY_NAMING; } });
 /**
  * The npm package of each kind's carrier (its agent skill ships there; its
  * browser bundle and release manifest are `<package>-browser`). Hard-coded:
@@ -219,7 +229,9 @@ function isKind(v) {
  * skipped), unescaped with `unescapeScriptText`, its line endings and BOM
  * restored from `data-orz-eol` / `data-orz-bom`; kind, format, shell version
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
- * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`.
+ * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
+ * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
+ * other than the family's.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -254,6 +266,9 @@ function extract(html) {
         shell: typeof shellData['shell'] === 'string' ? shellData['shell'] : '',
         delivery: typeof shellData['delivery'] === 'string' ? shellData['delivery'] : '',
     };
+    const links = (0, naming_js_1.readTwinNaming)(shellData['links']);
+    if (links)
+        result.twinLinks = links;
     // The includes island follows the source island (shell markup before it is not consulted).
     const inc = findScript(html, exports.INCLUDES_ISLAND_ID, Infinity, island.content[1]);
     if (inc) {
