@@ -1181,7 +1181,8 @@ describe('round 2: reading files', () => {
     expect(pkg.exports['./carrier/read']).toBe('./dist/carrier/read.js');
     expect(pkg.dependencies['@types/markdown-it']).toBeDefined(); // the .d.ts files expose markdown-it types
     const read = await import('../src/carrier/read');
-    expect(Object.keys(read).sort()).toEqual(['INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'jsonForScript', 'readIslandFromDom', 'reservedIdIn', 'unescapeScriptText']);
+    // 2.5.0: the twin-link naming helpers (FAMILY_NAMING … twinNaming)
+    expect(Object.keys(read).sort()).toEqual(['FAMILY_NAMING', 'INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'isTwinTemplate', 'jsonForScript', 'readIslandFromDom', 'readTwinNaming', 'reservedIdIn', 'sameTwinNaming', 'textNameOf', 'twinFileName', 'twinHref', 'twinNaming', 'unescapeScriptText'].sort());
   });
 });
 

@@ -1247,7 +1247,8 @@ const SHELL_BUNDLE_LIMIT = 82_000; // 74,775 B on 2026-10-09 with the brand mark
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
-const READER_GRAPH = ['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
+// naming.ts (2.5.0): the twin-link naming the reader reads from #orz-shell; it imports nothing
+const READER_GRAPH = ['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {
   it('[S.11] orz-markdown/carrier/shell is parser-free: its value-import graph is src/carrier/shell plus the parser-free reader, what ships (the CommonJS dist) bundles for the browser under 82 KB minified with no parser module, the package exports it, and orz-markdown/carrier does not import it', async () => {

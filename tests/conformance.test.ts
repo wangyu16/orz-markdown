@@ -127,7 +127,7 @@ describe('the harness API', () => {
   it('[H.1] check ids are stable, unique C.<area>.<name> ids, each implemented, with a title and a spec reference; spec/conformance.md lists every one', () => {
     expect(new Set(CHECK_IDS).size).toBe(CHECK_IDS.length);
     for (const c of CHECKS) {
-      expect(c.id).toMatch(/^C\.(law|bundle|create|edit|save|update|host|prefs)\.[a-z]+(-[a-z]+)*$/);
+      expect(c.id).toMatch(/^C\.(law|bundle|create|edit|save|update|links|host|prefs)\.[a-z]+(-[a-z]+)*$/);
       expect(c.title.length).toBeGreaterThan(20);
       expect(c.spec).toMatch(/FC-1[89]|shell-runtime|host-protocols|FD-0/);
     }

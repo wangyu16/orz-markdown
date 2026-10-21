@@ -1212,14 +1212,16 @@ function valueImports(entry: string): Set<string> {
  * no ESM build ships). Bounds ~11 %, ~10 % and ~23 % above the measurement: one more round of guards
  * fits, a real jump in size fails.
  */
-const UPDATE_LIMIT = 22_000;
+// 2.5.0: 23,944 B — the reader carries the twin-link naming (naming.ts) the update verifies; bound ~9 % above.
+const UPDATE_LIMIT = 26_000;
 // 2026-10-08 (round 1 of the carrier-app loop: syntax tokens, three icons, kind icons, toast actions,
 // the save-conflict question): update 20,377 B; update + indicator + chrome 40,852 B; chrome 16,871 B.
 // Bounds ~10 % above.
 // 2026-10-08, round 3 (the question as an alertdialog with a title, its two wordings and labels, the
 // questions' own container): update + indicator + chrome 43,170 B; chrome 19,186 B. Chrome bound raised
 // to ~10 % above (21 KB); the others stand.
-const UPDATE_UI_LIMIT = 45_000;
+// 2.5.0: 46,831 B (the reader's twin-link naming); bound ~7 % above.
+const UPDATE_UI_LIMIT = 50_000;
 const CHROME_LIMIT = 21_000;
 /** Bundle `contents` (JS importing from `dist/`) as a carrier would. */
 async function shippedSize(contents: string): Promise<{ bytes: number; inputs: string[] }> {
@@ -1230,12 +1232,12 @@ async function shippedSize(contents: string): Promise<{ bytes: number; inputs: s
 }
 
 describe('module boundaries', () => {
-  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 22 KB (with indicator and chrome under 45 KB)', async () => {
-    expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
+  it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 26 KB (with indicator and chrome under 50 KB)', async () => {
+    expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
     expect([...valueImports('src/carrier/shell/indicator.ts')].sort()).toEqual(['src/carrier/shell/chrome.ts', 'src/carrier/shell/indicator.ts']);
     const u = await shippedSize("export * from './dist/carrier/shell/update.js';");
     expect(u.bytes).toBeLessThan(UPDATE_LIMIT);
-    expect(u.inputs.sort()).toEqual(['dist/ascii.js', 'dist/carrier/read.js', 'dist/carrier/shell/types.js', 'dist/carrier/shell/update.js', 'dist/carrier/text.js', 'dist/html.js', '<stdin>'].sort());
+    expect(u.inputs.sort()).toEqual(['dist/ascii.js', 'dist/carrier/naming.js', 'dist/carrier/read.js', 'dist/carrier/shell/types.js', 'dist/carrier/shell/update.js', 'dist/carrier/text.js', 'dist/html.js', '<stdin>'].sort());
     const ui = await shippedSize("export * from './dist/carrier/shell/update.js'; export * from './dist/carrier/shell/indicator.js'; export * from './dist/carrier/shell/chrome.js';");
     expect(ui.bytes).toBeLessThan(UPDATE_UI_LIMIT);
     expect(ui.inputs.filter((f) => /markdown-it|katex|dist\/index|header|document\.js|parser/.test(f))).toEqual([]);
