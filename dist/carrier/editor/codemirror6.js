@@ -301,6 +301,10 @@ function flashExtension(m) {
     });
     return { effect, field, extension: [field] };
 }
+/** A line that is only a list item's marker (in its indent and quote prefix): what a list continuation writes. */
+const CONTINUED_ITEM = /^((?:[ \t]*>)*[ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?$/;
+/** A list marker typed by the reader. */
+const TYPED_MARKER = /^(?:[-*+]|\d{1,9}[.)])$/;
 function codemirror6Adapter(options = {}) {
     let fallback = (0, adapter_js_1.textareaAdapter)();
     let view = null;
@@ -319,6 +323,29 @@ function codemirror6Adapter(options = {}) {
     /** The flash (2.4.0): its CodeMirror field and the timer that clears it. */
     let flashExt = null;
     let flashTimer = null;
+    /** (D-95) The line a list continuation just started (its start, the marker it wrote), while the caret stays on it. */
+    let continued = null;
+    const noteContinuation = (state) => {
+        const sel = state.selection.main;
+        const line = sel.empty ? state.doc.lineAt(sel.head) : null;
+        continued = line && sel.head === line.to && CONTINUED_ITEM.test(line.text) ? { from: line.from, marker: line.text } : null;
+    };
+    /** The space after a marker the reader typed on a continued line: their marker replaces the continued one. */
+    const ownMarker = (v, from, to, text) => {
+        const c = continued;
+        if (!c || text !== ' ' || from !== to || readOnlyNow)
+            return false;
+        const line = v.state.doc.lineAt(from);
+        if (line.from !== c.from || from !== line.to || !line.text.startsWith(c.marker))
+            return false;
+        const typed = line.text.slice(c.marker.length);
+        if (!TYPED_MARKER.test(typed))
+            return false;
+        const start = line.from + (CONTINUED_ITEM.exec(c.marker)?.[1].length ?? 0);
+        continued = null;
+        v.dispatch({ changes: { from: start, to: line.to, insert: `${typed} ` }, selection: { anchor: start + typed.length + 1 }, userEvent: 'input.type' });
+        return true;
+    };
     const build = (m, o) => {
         const { EditorState } = m.state;
         const { EditorView, keymap } = m.view;
@@ -329,7 +356,14 @@ function codemirror6Adapter(options = {}) {
         roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
         focus = focusExtension(m);
         flashExt = flashExtension(m);
-        const keys = [...(m.markdown.markdownKeymap ?? []), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
+        // (2.5.0, STATUS D-95) Enter continues a list ("- "); a reader who then types a marker of their
+        // own ("- pears") gets one marker, not "- - pears": theirs replaces the continued one when they type
+        // the space after it. Only right after the continuation, on that line, with nothing else typed.
+        const continueEnter = (b) => (b && b.key === 'Enter' && typeof b.run === 'function'
+            ? { ...b, run: (v) => { const ok = b.run(v); if (ok)
+                    noteContinuation(v.state); return ok; } }
+            : b);
+        const keys = [...(m.markdown.markdownKeymap ?? []).map(continueEnter), ...c.defaultKeymap, ...c.historyKeymap, ...(m.search?.searchKeymap ?? []), ...(c.indentWithTab ? [c.indentWithTab] : [])];
         return [
             m.view.highlightSpecialChars?.(),
             c.history(),
@@ -349,7 +383,14 @@ function codemirror6Adapter(options = {}) {
             ...(focus ? focus.extension : []),
             ...(flashExt ? flashExt.extension : []),
             options.nonce && EditorView.cspNonce ? EditorView.cspNonce.of(options.nonce) : undefined,
+            EditorView.inputHandler ? EditorView.inputHandler.of((v, from, to, text) => ownMarker(v, from, to, text)) : undefined,
             EditorView.updateListener.of((u) => {
+                if (continued && (u.docChanged || u.selectionSet)) {
+                    // the continued line stays the one the caret is on, or the chance is gone
+                    const from = u.docChanged ? u.changes.mapPos(continued.from, -1) : continued.from;
+                    const head = u.state.selection.main;
+                    continued = head.empty && u.state.doc.lineAt(head.head).from === from ? { from, marker: continued.marker } : null;
+                }
                 if (u.docChanged)
                     o.onChange();
                 if (u.selectionSet && o.onSelection) {

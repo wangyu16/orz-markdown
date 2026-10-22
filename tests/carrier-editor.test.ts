@@ -3941,6 +3941,42 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     await p.close();
   });
 
+  it('[E.13] (2.5.0, STATUS D-95) a list continued by Enter and a marker the reader types after it make ONE marker ("- pears", not "- - pears") — bullets, numbers, indented and quoted items, tasks; text after a continued marker, a marker typed elsewhere or after moving away stays as typed', async () => {
+    const p = await open();
+    expect(await p.evaluate(`mount('a', '', ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    const content = p.locator('#a .cm-content');
+    const typeInto = async (keys: Array<string | { key: string }>): Promise<string> => {
+      await p.evaluate('shell_a.setText("")');
+      await content.click();
+      for (const k of keys) {
+        if (typeof k === 'string') await p.keyboard.type(k, { delay: 5 });
+        else await p.keyboard.press(k.key);
+      }
+      return String(await p.evaluate('shell_a.getText()'));
+    };
+    const enter = { key: 'Enter' };
+    // the round-1 report: "- apples", Enter, "- pears", Enter, "- plums"
+    expect(await typeInto(['- apples', enter, '- pears', enter, '- plums'])).toBe('- apples\n- pears\n- plums');
+    // relying on the continuation still works
+    expect(await typeInto(['- apples', enter, 'pears'])).toBe('- apples\n- pears');
+    // the reader's own marker wins: another bullet, a number, a task's marker
+    expect(await typeInto(['* a', enter, '- b'])).toBe('* a\n- b');
+    expect(await typeInto(['1. one', enter, '2. two', enter, '3) three'])).toBe('1. one\n2. two\n3) three');
+    expect(await typeInto(['- [ ] task', enter, '- [ ] next'])).toBe('- [ ] task\n- [ ] next');
+    // quoted items keep their prefix
+    expect(await typeInto(['> - a', enter, '- b'])).toBe('> - a\n> - b');
+    // content that only starts like a marker stays content
+    expect(await typeInto(['1. one', enter, '10 apples'])).toBe('1. one\n2. 10 apples');
+    expect(await typeInto(['- a', enter, '-x '])).toBe('- a\n- -x ');
+    // after moving away and back, a typed marker is the reader's text
+    expect(await typeInto(['- a', enter, { key: 'ArrowUp' }, { key: 'ArrowDown' }, { key: 'End' }, '- b'])).toBe('- a\n- - b');
+    // one undo takes back the replacement (the reader's keys are kept as typed before it)
+    await typeInto(['- a', enter, '- b']);
+    await p.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+    expect(String(await p.evaluate('shell_a.getText()'))).not.toBe('- a\n- b');
+    await p.close();
+  });
+
   it('[E.13] [E.21] [E.9] typing and a header edit made while CodeMirror loads carry over: CodeMirror starts from the textarea\'s current text with one undo step per textarea step; setText right after typing is its own undo step', async () => {
     const T = '# T\r\n\r\nx\r\n';
     const p = await open();

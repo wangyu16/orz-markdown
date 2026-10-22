@@ -63,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shows the document, which stays as an inert picture until the new frame
   has loaded its stylesheets and drawn the document (at most 3 s); a dark
   theme no longer shows a white, empty preview for half a second.
+- Editor list continuation (STATUS D-95): after Enter continues a list
+  (`- `), typing a marker of your own (`- pears`, `2. two`, `- [ ] next`)
+  gives one marker, not `- - pears`: when you type the space after it, your
+  marker replaces the continued one (only right after the continuation, on
+  that line; `10 apples` or `-x` stay content; one undo takes it back).
 
 ### Release tooling
 
