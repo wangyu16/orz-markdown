@@ -42,7 +42,7 @@ import type { HostConnection } from '../shell/file-side.js';
 import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import type { TextEditorAdapter } from './adapter.js';
 import { codemirror6Adapter } from './codemirror6.js';
-import { assetPath, blobUrlsIn, createPreview, isRelativeAsset, lineToTop, readBlobUrl, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
+import { assetPath, blobUrlsIn, createPreview, previewScriptHashes, isRelativeAsset, lineToTop, readBlobUrl, rewriteAssetUrls, topToLine, type PreviewController, type PreviewFrameOptions, type PreviewMessage } from './preview.js';
 import { EDITOR_CSS } from './styles.js';
 import { createTextModel, detachString, toEditorOffset, toEditorText } from './text-model.js';
 import type { ColorScheme } from '../../preview-frame.js';
@@ -511,6 +511,12 @@ const filesOf = (t: EdDataTransfer | null | undefined): EdFile[] => {
 };
 
 /** Mount the editor shell in `element`. */
+/**
+ * The start of the error a stalled preview frame reports (2.5.0, STATUS D-80): the options an
+ * embedder actually has. The shell adds the frame's own script hashes.
+ */
+const PREVIEW_STALL_MESSAGE = 'The preview frame did not start: this page\'s Content-Security-Policy most likely blocks its inline scripts. Give the editor the page\'s CSP nonce (the nonce option of createEditorShell, or of a carrier\'s mountEditor),';
+
 export function createEditorShell(element: EdElement, options: EditorShellOptions): EditorShell {
   if (typeof options?.text !== 'string') throw new TypeError('orz editor: options.text must be a string');
   if (typeof options.render !== 'function') throw new TypeError('orz editor: options.render must be a function');
@@ -1040,8 +1046,14 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     },
     onStall: () => {
       if (destroyed) return;
-      const error = new Error('The preview frame did not start: a Content-Security-Policy that blocks its inline scripts? Pass preview.nonce, or allow PREVIEW_BRIDGE_HASH / previewScriptHashes().');
-      emit('error', { source: 'render', message: error.message, error });
+      // (2.5.0, STATUS D-80) name what an embedder has: the `nonce` option (every carrier's
+      // mountEditor passes it on) and the very hashes of this frame's scripts — the -browser bundles
+      // export neither PREVIEW_BRIDGE_HASH nor previewScriptHashes
+      void previewScriptHashes(previewOptions).then((h) => h.map((x) => `'${x}'`).join(' '), () => null).then((hashes) => {
+        if (destroyed) return;
+        const error = new Error(`${PREVIEW_STALL_MESSAGE} ${hashes ? `or allow its scripts by adding ${hashes} to script-src.` : 'or allow its scripts by hash in script-src (previewScriptHashes() of orz-markdown/carrier/editor lists them).'}`);
+        emit('error', { source: 'render', message: error.message, error });
+      });
       previewNote = el('div', 'orz-editor__preview-note');
       previewNote.setAttribute('role', 'status');
       previewNote.append(doc.createTextNode('The preview could not start on this page.'));

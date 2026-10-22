@@ -672,7 +672,11 @@ shell.preview.context / resolveAsset(ref) / resolveAssets(html) / shareAssets(ht
   `shell.preview.on(type, fn) → off` hears the frame's messages of a type
   (claims: data); `shell.preview.setOptions({ head?, scheme?, articleClass? })`
   rebuilds the frame document (e.g. a theme or measure change; `articleClass`
-  since 2.2.0) and shows the last HTML again. (2.4.0, additive)
+  since 2.2.0) and shows the last HTML again — (2.5.0, D-100) the frame
+  that shows the document stays over the rebuilt one, inert, until that one
+  has loaded and drawn it (at most 3 s), so a theme change never flashes an
+  empty or unstyled preview; the preview's parent must be positioned (the
+  shell's pane is). (2.4.0, additive)
   `shell.preview.context` is the render context the shell passes to
   `render(text, ctx)` — the same object, so a carrier's own surfaces
   resolve includes through the one per-shell cache (`previewIncludes(text,
@@ -753,11 +757,15 @@ shell.preview.context / resolveAsset(ref) / resolveAssets(html) / shareAssets(ht
   the whole list (`'self'` and the stylesheet hosts) and cannot carry the
   nonce (a nonce switches `'unsafe-inline'` off); fonts — KaTeX's font host;
   images — wherever the document's images are (`resolveAsset` decides). A
-  frame that does not say ready within `preview.readyTimeoutMs` (8 s) is an
+  frame that does not say ready within `preview.readyTimeoutMs` (8 s) — or
+  (2.5.0, D-80) within 1 s of its load event, since the bridge runs while
+  the document is parsed — is an
   `error { source: 'render' }` and a quiet notice in the preview pane instead
   of a blank pane (it goes when the frame starts after all); the message
-  suggests a policy that blocks the bridge, the usual cause — a slow
-  stylesheet no longer delays the ready.
+  names a policy that blocks the bridge, the usual cause, and what an
+  embedder can do: pass the page's nonce as the `nonce` option, or add the
+  frame's own script hashes, which the message lists (`'sha256-…'`), to
+  `script-src` — a slow stylesheet no longer delays the ready.
 - **Printing the document** (2.3.0, additive; round 3 of the orz-paged
   loop). The `print` event (§4) tells an app that the reader pressed
   Cmd/Ctrl+P in the editor or its preview; without a listener the editor

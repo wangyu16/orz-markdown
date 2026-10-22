@@ -1099,7 +1099,8 @@ describe('includes in apps and missing includes (2.2.0, round 1 of the carrier-a
 
 /** The shell's preview frame, driven from the test: what the shell posts to it, and messages "from" it. */
 function frameOf(m: Mounted) {
-  const iframe = m.root.querySelector('iframe') as HTMLIFrameElement;
+  // the live frame: the last one (2.5.0, D-100: a rebuilt frame document loads under the previous frame, which stays as a picture until it has drawn)
+  const iframe = [...m.root.querySelectorAll('iframe')].at(-1) as HTMLIFrameElement;
   const cw = iframe.contentWindow as unknown as { postMessage: unknown };
   const posted: Array<Record<string, unknown>> = [];
   cw.postMessage = (msg: Record<string, unknown>) => { posted.push(msg); };
@@ -1346,8 +1347,7 @@ describe('preview rendering (B-5, B-9, B-11, item 11)', () => {
     const errors: string[] = [];
     m.shell.on('error', (e) => errors.push(e.source));
     const f = frameOf(m);
-    await tick(60);
-    expect(errors).toEqual(['render']);
+    await expect.poll(() => errors, { timeout: 2000 }).toEqual(['render']); // the error names the frame's script hashes (computed: 2.5.0, D-80)
     expect(m.root.querySelector('.orz-editor__preview-note')!.textContent).toBe('The preview could not start on this page.');
     f.say({ type: 'orz-preview-ready' });
     expect(m.root.querySelector('.orz-editor__preview-note')).toBeNull();
@@ -2248,8 +2248,14 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     off();
     f.say({ type: 'x-slides-at', index: 4 });
     expect(heard).toEqual([3]);
-    const iframe = m.root.querySelector('iframe')!;
+    const before = m.root.querySelector('iframe')!;
     m.shell.preview.setOptions({ head: '<link rel="stylesheet" href="theme-2.css">', scheme: 'dark' });
+    // (2.5.0, D-100) the frame that shows the document stays, inert, over the rebuilt one until that one has drawn it
+    const frames = [...m.root.querySelectorAll('iframe')];
+    expect(frames.length).toBe(2);
+    expect([frames[0] === before, before.getAttribute('aria-hidden'), (before as unknown as { inert: boolean }).inert, before.style.position]).toEqual([true, 'true', true, 'absolute']);
+    const iframe = frames[1];
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
     expect(iframe.srcdoc).toContain('href="theme-2.css"');
     expect(iframe.srcdoc).toContain('data-scheme="dark"');
     expect(m.shell.preview.post({ type: 'x' })).toBe(false); // reloading
@@ -2265,12 +2271,14 @@ describe('preview pacing, navigation, channel (round 2: B#3, LOW6, B#4, B#8)', (
     const f = frameOf(m);
     f.say({ type: 'orz-preview-ready' });
     await tick(30);
-    const iframe = m.root.querySelector('iframe')!;
+    const live = () => [...m.root.querySelectorAll('iframe')].at(-1)!;
     m.shell.preview.setOptions({ articleClass: 'markdown-body measure-wide' });
-    expect(iframe.srcdoc).toContain('<article class="markdown-body measure-wide" id="orz-doc">');
-    expect(iframe.srcdoc).toContain('href="t.css"');
+    expect(live().srcdoc).toContain('<article class="markdown-body measure-wide" id="orz-doc">');
+    expect(live().srcdoc).toContain('href="t.css"');
     m.shell.preview.setOptions({ articleClass: '"><script>x</script>' });
-    expect(iframe.srcdoc).toContain('<article class="&quot;&gt;&lt;script&gt;x&lt;/script&gt;" id="orz-doc">');
+    // a rebuild while the last one still loads replaces that one; the picture stays (one picture, one live frame)
+    expect(m.root.querySelectorAll('iframe').length).toBe(2);
+    expect(live().srcdoc).toContain('<article class="&quot;&gt;&lt;script&gt;x&lt;/script&gt;" id="orz-doc">');
     const f2 = frameOf(m);
     f2.say({ type: 'orz-preview-ready' });
     expect(f2.posted).toContainEqual(expect.objectContaining({ type: 'orz-preview-render', html: '<p>x</p>' }));
@@ -3145,8 +3153,10 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
       if (path === '/cm6-tampered.js') return js(`${cm}\n/* one byte more */`);
       if (path === '/cm6-slow.js') { setTimeout(() => js(cm), 2500); return; }
       if (path === '/slow.css') { setTimeout(() => { res.setHeader('content-type', 'text/css'); res.end('body{color:rgb(0,0,255)}'); }, 6000); return; }
+      if (path.startsWith('/slow-theme-')) { setTimeout(() => { res.setHeader('content-type', 'text/css'); res.end(`body{background:${path.includes('dark') ? 'rgb(20,20,30)' : 'rgb(250,250,240)'}}`); }, 700); return; }
       res.setHeader('content-type', 'text/html; charset=utf-8');
       if (path === '/csp') res.setHeader('content-security-policy', "script-src 'self' 'nonce-abc'");
+      if (path === '/csp-hash') res.setHeader('content-security-policy', `script-src 'self' ${new URL(req.url ?? '/', 'http://x').searchParams.get('h') ?? ''}`);
       res.end('<!doctype html><html><head><meta charset="utf-8"><title>host page</title><style>body{margin:0;font:30px serif;color:red} .box{width:1000px;height:420px} button{background:red}</style></head><body><div id="a" class="box"></div><div id="b" class="box"></div><div id="c" class="box"></div><script src="/editor.js"></script><script src="/app.js"></script></body></html>');
     });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -3868,6 +3878,66 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     expect(await p.evaluate('errors_b[0]')).toMatch(/^render: The preview frame did not start/);
     expect(await p.evaluate('shell_b.root.querySelector(".orz-editor__preview-note").textContent')).toBe('The preview could not start on this page.');
     expect(await p.evaluate('[errors_a.length, shell_a.root.querySelector(".orz-editor__preview-note")]')).toEqual([0, null]);
+    await p.close();
+  });
+
+  it('[E.19] (2.5.0, STATUS D-80) a frame a policy blocks is reported a moment after it loads, not after the 8 s ready timeout, and the error names what an embedder has: the nonce option and this frame\'s own script hashes — which, added to script-src, let the preview start', async () => {
+    const p = await browser!.newPage({ viewport: { width: 1200, height: 1400 } });
+    await p.goto(`${A}/csp`);
+    await expect.poll(() => p.evaluate('typeof window.mountOpts')).toBe('function');
+    const t0 = Date.now();
+    await p.evaluate(`mountOpts('a', '# Blocked\\n\\ntext\\n', ${JSON.stringify(`${A}/cm6.js`)})`);
+    await expect.poll(() => p.evaluate('errors_a.length'), { timeout: 4000, intervals: [50] }).toBeGreaterThan(0);
+    expect(Date.now() - t0).toBeLessThan(4000); // was PREVIEW_READY_TIMEOUT_MS (8 s), more after a theme change
+    const message = String(await p.evaluate('errors_a[0]'));
+    expect(message).toMatch(/^render: The preview frame did not start: this page's Content-Security-Policy most likely blocks its inline scripts\. Give the editor the page's CSP nonce \(the nonce option of createEditorShell, or of a carrier's mountEditor\), or allow its scripts by adding '(sha256-[A-Za-z0-9+/=]+)'( 'sha256-[A-Za-z0-9+/=]+')* to script-src\.$/);
+    expect(message).not.toMatch(/preview\.nonce|PREVIEW_BRIDGE_HASH/);
+    const hashes = message.match(/'sha256-[A-Za-z0-9+/=]+'/g)!;
+    expect(hashes).toContain(`'${PREVIEW_BRIDGE_HASH}'`);
+    expect(await p.evaluate('shell_a.root.querySelector(".orz-editor__preview-note").textContent')).toBe('The preview could not start on this page.');
+    await p.close();
+    // the hashes it named are enough: the same editor under a policy that allows just them starts
+    const q = await browser!.newPage({ viewport: { width: 1200, height: 1400 } });
+    await q.goto(`${A}/csp-hash?h=${encodeURIComponent(hashes.join(' '))}`);
+    await expect.poll(() => q.evaluate('typeof window.mountOpts')).toBe('function');
+    await q.evaluate(`mountOpts('a', '# Allowed by hash\\n\\nhashok\\n', ${JSON.stringify(`${A}/cm6.js`)})`);
+    await frameOf(q, 'hashok');
+    await q.waitForTimeout(1500);
+    expect(await q.evaluate('errors_a')).toEqual([]);
+    await q.close();
+  });
+
+  it('[E.25] (2.5.0, STATUS D-100) a theme change never flashes: while the rebuilt frame loads its (slow) stylesheet, the previous frame keeps showing the document over it; the new one is shown only once it has drawn the document with its theme, and then it is the only frame', async () => {
+    const p = await open();
+    expect(await p.evaluate(`mountOpts('a', '# Theme flash\\n\\nmarker-d100\\n', ${JSON.stringify(`${A}/cm6.js`)}, { preview: { head: '<link rel="stylesheet" href="${A}/slow-theme-light.css">' } })`)).toEqual({ engine: 'codemirror6', error: null });
+    await frameOf(p, 'marker-d100');
+    expect(await p.evaluate('shell_a.root.querySelectorAll("iframe").length')).toBe(1);
+    /** What the reader sees: the top frame (the picture while there is one) — its text and its body colour. */
+    const seen = async (retry = 3): Promise<[number, string, string]> => {
+      const list = await p.evaluateHandle('shell_a.root.querySelectorAll("iframe")');
+      const n = Number(await list.evaluate((l: NodeListOf<HTMLIFrameElement>) => l.length));
+      const top = (await list.evaluateHandle((l: NodeListOf<HTMLIFrameElement>) => l[0])).asElement()!;
+      const f = await top.contentFrame();
+      const [text, bg] = f ? await f.evaluate('[document.getElementById("orz-doc") ? document.getElementById("orz-doc").textContent : "", getComputedStyle(document.body).backgroundColor]').catch(() => ['', '']) as [string, string] : ['', ''];
+      // the picture went between the two reads (its frame detached): look again
+      if (text === '' && bg === '' && retry > 0) return seen(retry - 1);
+      return [n, text, bg];
+    };
+    await expect.poll(async () => (await seen())[2], { timeout: 5000 }).toBe('rgb(250, 250, 240)'); // the first theme has arrived
+    await p.evaluate(`shell_a.preview.setOptions({ head: '<link rel="stylesheet" href="${A}/slow-theme-dark.css">', scheme: 'dark' })`);
+    const samples: Array<[number, string, string]> = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < 2500) { samples.push(await seen()); await p.waitForTimeout(25); }
+    // every sample shows the document: the light picture first, then the drawn dark frame — never an empty or unstyled one
+    for (const [n, text, bg] of samples) {
+      expect(text).toContain('marker-d100');
+      expect([n, bg]).toContainEqual(n === 2 ? 'rgb(250, 250, 240)' : 'rgb(20, 20, 30)');
+    }
+    expect(samples[0][0]).toBe(2);
+    expect(samples.at(-1)).toEqual([1, expect.stringContaining('marker-d100'), 'rgb(20, 20, 30)']);
+    // the live frame takes renders and the shell's keys as before
+    await p.evaluate(`shell_a.setText('# Theme flash\\n\\nafter-d100\\n')`);
+    await frameOf(p, 'after-d100');
     await p.close();
   });
 

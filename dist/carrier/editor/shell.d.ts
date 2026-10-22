@@ -526,6 +526,5 @@ export interface EditorShell {
      */
     destroy(): void;
 }
-/** Mount the editor shell in `element`. */
 export declare function createEditorShell(element: EdElement, options: EditorShellOptions): EditorShell;
 //# sourceMappingURL=shell.d.ts.map

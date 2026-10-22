@@ -646,6 +646,12 @@ export interface PreviewController {
 /** How long the frame may take to say ready before `onStall`. */
 export const PREVIEW_READY_TIMEOUT_MS = 8000;
 
+/** (2.5.0, D-80) How long after its load event a frame that has not said ready is reported as stalled. */
+export const PREVIEW_LOAD_GRACE_MS = 1000;
+
+/** (2.5.0, D-100) The longest a rebuilt frame document (a theme change) stays hidden behind the previous one. */
+export const PREVIEW_REBUILD_MAX_MS = 3000;
+
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /** A fresh frame secret (Web Crypto when there is one). */
@@ -671,11 +677,25 @@ export function createPreview(
   /** This frame document's secret: a ready that carries it gets the port (a new one for every frame document). */
   let secret = frameSecret(win);
   const frameDocument = (): string => previewFrameDocument({ ...frameOptions, secret });
-  const iframe = doc.createElement('iframe') as EdIframe;
-  iframe.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
-  iframe.setAttribute('title', options.title ?? 'Document preview');
-  iframe.className = 'orz-editor__frame';
+  /** The one place the preview iframe is made (a rebuilt frame document gets another, D-100). */
+  const makeFrame = (): EdIframe => {
+    const iframe = doc.createElement('iframe') as EdIframe;
+    iframe.setAttribute('sandbox', previewSandbox(options.context ?? { host: 'app', protocol: '' }));
+    iframe.setAttribute('title', options.title ?? 'Document preview');
+    iframe.className = 'orz-editor__frame';
+    return iframe;
+  };
+  /** The frame the shell talks to (its window is the only source of messages taken). */
+  let iframe = makeFrame();
   iframe.srcdoc = frameDocument();
+  /**
+   * (2.5.0, STATUS D-100) The previous frame, still shown while `iframe` — a rebuilt frame document
+   * (`setOptions`: a theme change) — loads covered by it (the parent is positioned, as the shell's
+   * preview pane is): it is only a picture (inert, no messages taken), removed once the new frame has drawn the last HTML with its stylesheets, so a theme
+   * change never flashes an empty or unstyled preview.
+   */
+  let shown: EdIframe | null = null;
+  let staging: { loaded: boolean; drawn: boolean; timer: unknown } | null = null;
   const diff = options.diff !== false;
   let ready = false;
   let seq = 0;
@@ -727,6 +747,7 @@ export function createPreview(
     // a bridge that reports ids paces the renders (B#3); one without ids acknowledges any render
     if (waiting && (d.id === waiting.id || !num(d.id))) { acknowledges = true; settle(true); }
     events.onRendered?.(anchors, max);
+    stagedStep('drawn');
   };
   /** The authenticated bridge's reports (through its port): the reader's own input in the frame. */
   const onPort = (e: { data?: unknown }): void => {
@@ -752,6 +773,22 @@ export function createPreview(
         break;
     }
     notify(d);
+  };
+  /** Show the frame the shell talks to (the end of a rebuild: the picture of the previous one goes). */
+  const reveal = (): void => {
+    const st = staging;
+    staging = null;
+    if (st && st.timer !== null) win?.clearTimeout(st.timer);
+    const old = shown;
+    shown = null;
+    old?.remove();
+    iframe.removeAttribute('aria-hidden');
+    iframe.inert = false;
+  };
+  const stagedStep = (what: 'loaded' | 'drawn'): void => {
+    if (!staging) return;
+    staging[what] = true;
+    if (staging.loaded && (staging.drawn || pending === null)) reveal();
   };
   const takeReady = (): void => {
     ready = true;
@@ -806,28 +843,68 @@ export function createPreview(
     notify(d);
   };
   win?.addEventListener('message', onMessage);
-  /** A new document in the frame (a reload of the same srcdoc, or the document's own navigation): one more authenticated ready may come. */
-  const onLoad: EdListener = () => { taken = false; };
+  let stall: unknown = null;
+  const stalled = (): void => {
+    if (stall !== null) { win?.clearTimeout(stall); stall = null; }
+    if (ready || destroyed) return;
+    reveal(); // what the frame shows now is this page's (the note goes over it)
+    events.onStall?.();
+  };
+  const armStall = (ms = options.readyTimeoutMs ?? PREVIEW_READY_TIMEOUT_MS): void => {
+    if (stall !== null) win?.clearTimeout(stall);
+    stall = win ? win.setTimeout(stalled, ms) : null;
+  };
+  /**
+   * A new document in the frame (a reload of the same srcdoc, or the document's own navigation): one
+   * more authenticated ready may come. (2.5.0, STATUS D-80) A frame document that has loaded without
+   * its bridge saying ready never will (a Content-Security-Policy blocked its inline scripts): the
+   * stall is reported a moment after the load, not after the whole ready timeout — the bridge runs
+   * while the document is parsed, before its load event.
+   */
+  const onLoad: EdListener = () => {
+    taken = false;
+    if (!ready && !destroyed) armStall(Math.min(PREVIEW_LOAD_GRACE_MS, options.readyTimeoutMs ?? PREVIEW_READY_TIMEOUT_MS));
+    stagedStep('loaded');
+  };
   iframe.addEventListener('load', onLoad);
   // A moved or reloaded frame boots again and says ready again: the last HTML is re-sent then.
   parent.append(iframe);
-  let stall: unknown = null;
-  const armStall = (): void => {
-    if (stall !== null) win?.clearTimeout(stall);
-    stall = win ? win.setTimeout(() => { stall = null; if (!ready && !destroyed) events.onStall?.(); }, options.readyTimeoutMs ?? PREVIEW_READY_TIMEOUT_MS) : null;
-  };
   armStall();
   /** Rebuild the frame document (a new secret: the old document's bridge cannot speak for the new one). */
-  const reload = (next: PreviewFrameOptions): void => {
+  const reload = (nextOptions: PreviewFrameOptions): void => {
     if (destroyed) return;
-    frameOptions = next;
+    frameOptions = nextOptions;
+    const showing = ready && pending !== null;
     ready = false;
     closePort(true);
     settle(false);
     secret = frameSecret(win);
     handed = false;
     taken = false;
-    iframe.srcdoc = frameDocument();
+    // a frame that shows the document is kept, as a picture, until the new one has drawn it (D-100);
+    // a frame still loading, or already hidden behind the picture, is simply replaced
+    const keep = shown === null && showing ? iframe : null;
+    const next = keep || shown !== null ? makeFrame() : iframe;
+    if (next !== iframe) {
+      iframe.removeEventListener('load', onLoad);
+      if (keep) {
+        // the picture lies over the new frame, which takes its place in the layout: the new frame is
+        // on screen at its real size (Chrome throttles a hidden or off-screen frame), only covered
+        shown = keep;
+        keep.setAttribute('aria-hidden', 'true');
+        keep.setAttribute('tabindex', '-1');
+        keep.inert = true;
+        for (const [k, v] of [['position', 'absolute'], ['top', '0'], ['left', '0'], ['width', '100%'], ['height', '100%'], ['z-index', '1']]) keep.style.setProperty(k, v);
+      } else iframe.remove();
+      iframe = next;
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.inert = true;
+      iframe.addEventListener('load', onLoad);
+      iframe.srcdoc = frameDocument();
+      parent.append(iframe);
+      if (staging && staging.timer !== null) win?.clearTimeout(staging.timer);
+      staging = { loaded: false, drawn: false, timer: win ? win.setTimeout(reveal, PREVIEW_REBUILD_MAX_MS) : null };
+    } else iframe.srcdoc = frameDocument();
     armStall();
   };
   return {
@@ -887,6 +964,10 @@ export function createPreview(
       win?.removeEventListener('message', onMessage);
       iframe.removeEventListener('load', onLoad);
       if (stall !== null) { win?.clearTimeout(stall); stall = null; }
+      if (staging && staging.timer !== null) win?.clearTimeout(staging.timer);
+      staging = null;
+      shown?.remove();
+      shown = null;
       closePort();
       for (const p of retired) closeNow(p);
       retired.clear();

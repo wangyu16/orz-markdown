@@ -327,6 +327,10 @@ export interface PreviewController {
 }
 /** How long the frame may take to say ready before `onStall`. */
 export declare const PREVIEW_READY_TIMEOUT_MS = 8000;
+/** (2.5.0, D-80) How long after its load event a frame that has not said ready is reported as stalled. */
+export declare const PREVIEW_LOAD_GRACE_MS = 1000;
+/** (2.5.0, D-100) The longest a rebuilt frame document (a theme change) stays hidden behind the previous one. */
+export declare const PREVIEW_REBUILD_MAX_MS = 3000;
 /** Create the sandboxed preview iframe in `parent` and talk to it. */
 export declare function createPreview(doc: EdDocument, parent: EdElement, options: PreviewFrameOptions & {
     title?: string;

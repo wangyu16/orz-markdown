@@ -48,6 +48,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   byte for byte; a file whose `"links"` names a release from before the
   naming is reported as not made by it.
 
+### Fixed
+
+- Editor preview under a Content-Security-Policy (STATUS D-80): a preview
+  frame the policy blocks is reported about a second after it loads
+  instead of after the 8 s ready timeout (longer after a theme change), and
+  the error names what an embedder actually has — the `nonce` option of
+  `createEditorShell` or of a carrier's `mountEditor`, and this frame's own
+  script hashes (`'sha256-…'`, ready to add to `script-src`) — instead of
+  `preview.nonce` / `PREVIEW_BRIDGE_HASH` / `previewScriptHashes()`, which
+  the carriers' `-browser` bundles do not export.
+- No flash on a theme change in the editor (STATUS D-100): a rebuilt preview
+  frame document (`shell.preview.setOptions`) loads under the frame that
+  shows the document, which stays as an inert picture until the new frame
+  has loaded its stylesheets and drawn the document (at most 3 s); a dark
+  theme no longer shows a white, empty preview for half a second.
+
 ### Release tooling
 
 - Publishing no longer re-runs the suite: `npm run test:release` runs it once

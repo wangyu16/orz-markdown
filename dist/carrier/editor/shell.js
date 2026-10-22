@@ -91,6 +91,11 @@ const filesOf = (t) => {
     return f && typeof f.length === 'number' ? Array.from(f) : [];
 };
 /** Mount the editor shell in `element`. */
+/**
+ * The start of the error a stalled preview frame reports (2.5.0, STATUS D-80): the options an
+ * embedder actually has. The shell adds the frame's own script hashes.
+ */
+const PREVIEW_STALL_MESSAGE = 'The preview frame did not start: this page\'s Content-Security-Policy most likely blocks its inline scripts. Give the editor the page\'s CSP nonce (the nonce option of createEditorShell, or of a carrier\'s mountEditor),';
 function createEditorShell(element, options) {
     if (typeof options?.text !== 'string')
         throw new TypeError('orz editor: options.text must be a string');
@@ -734,8 +739,15 @@ function createEditorShell(element, options) {
         onStall: () => {
             if (destroyed)
                 return;
-            const error = new Error('The preview frame did not start: a Content-Security-Policy that blocks its inline scripts? Pass preview.nonce, or allow PREVIEW_BRIDGE_HASH / previewScriptHashes().');
-            emit('error', { source: 'render', message: error.message, error });
+            // (2.5.0, STATUS D-80) name what an embedder has: the `nonce` option (every carrier's
+            // mountEditor passes it on) and the very hashes of this frame's scripts — the -browser bundles
+            // export neither PREVIEW_BRIDGE_HASH nor previewScriptHashes
+            void (0, preview_js_1.previewScriptHashes)(previewOptions).then((h) => h.map((x) => `'${x}'`).join(' '), () => null).then((hashes) => {
+                if (destroyed)
+                    return;
+                const error = new Error(`${PREVIEW_STALL_MESSAGE} ${hashes ? `or allow its scripts by adding ${hashes} to script-src.` : 'or allow its scripts by hash in script-src (previewScriptHashes() of orz-markdown/carrier/editor lists them).'}`);
+                emit('error', { source: 'render', message: error.message, error });
+            });
             previewNote = el('div', 'orz-editor__preview-note');
             previewNote.setAttribute('role', 'status');
             previewNote.append(doc.createTextNode('The preview could not start on this page.'));
