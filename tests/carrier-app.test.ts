@@ -199,7 +199,9 @@ const APP_DELTA_LIMIT = 82_000;
 // 2026-10-14 (2.4.0, orz-slides closed-loop round A2: the chart palette past its end and the span-aware gantt axis in
 // the content-theme script, +4.3 KB): both 1,150,373 B; the total bound raised to 1.16 MB (own and delta unchanged).
 // 2.4.0 confirming round (E.46 shared blob assets, E.47 asset paths, E.48 the render context on the channel, +1.6 KB): 1,161,571 B; bound 1.17 MB
-const EDITOR_AND_APP_LIMIT = 1_170_000;
+// 2.5.0 repairs (D-80 the frame's script hashes in the CSP error, D-100 the rebuilt frame under the previous one,
+// D-101 the toolbar fit, D-91 messages in user words): 1,170,756 B; bound 1.18 MB
+const EDITOR_AND_APP_LIMIT = 1_180_000;
 
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
