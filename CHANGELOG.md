@@ -68,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gives one marker, not `- - pears`: when you type the space after it, your
   marker replaces the continued one (only right after the continuation, on
   that line; `10 apples` or `-x` stay content; one undo takes it back).
+- Theme picker dots (STATUS D-95): `THEMES` entries now carry each theme's
+  `paper` (page) and `accent` (signature) colour, and `themeSwatch(id)`
+  (main entry and `orz-markdown/themes`) gives a picker dot's CSS
+  background — the two colours split diagonally, different for every
+  bundled theme. Carriers whose menus showed one dot per colour scheme can
+  pass `swatch: themeSwatch(t.id)`.
 
 ### Release tooling
 

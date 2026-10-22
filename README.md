@@ -229,7 +229,7 @@ preview identically instead of re-deriving it.
 | `orz-markdown/carrier/node` | (≥ 2.3.0, Node only) the core every carrier's CLI shares — `carrierNode(tool)`: the overwrite guards (known earlier states from git and the CLI's pair records, `--replaces` tokens, the uid-identity gate), backups, atomic writes, includes from the text's folder, the shared reason codes and `next` commands ([spec/carrier-node.md](spec/carrier-node.md)); ≥ 2.4.0: the reason `no-browser`, `cutOff(html)` and the `fileHtml` input that keep a cut-off file's text from replacing a complete one |
 | `orz-markdown/carrier/conformance` | the Node-side conformance harness a carrier runs against itself (real Chrome via the optional peer `playwright-core`), and its page helpers for a carrier's own tests (OPFS picker, `readOpfs`, `writeOpfs`) |
 | `orz-markdown/version` | `VERSION`, `KATEX_VERSION` — without loading the parser |
-| `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes), `DEFAULT_THEME`, `isThemeId`, `themeInfo` — also on the main entry |
+| `orz-markdown/themes` | (≥ 2.2.0) `THEMES` (ids, names, colour schemes; ≥ 2.5.0 also each theme's `paper` and `accent` colour), `DEFAULT_THEME`, `isThemeId`, `themeInfo`, (≥ 2.5.0) `themeSwatch(id)` — a picker dot's CSS background, different per theme — also on the main entry |
 | `orz-markdown/themes/*` | the CSS themes |
 
 orz-markdown has no static Node dependencies: it bundles for the browser

@@ -18,10 +18,21 @@ export interface ThemeInfo {
     readonly name: string;
     /** The theme's colour scheme (`color-scheme` in its stylesheet). */
     readonly scheme: ThemeScheme;
+    /** (2.5.0) The theme's page colour (its stylesheet's page background), for a picker's swatch. */
+    readonly paper: string;
+    /** (2.5.0) The theme's signature colour (an accent, link or rubric colour of its stylesheet), for a picker's swatch. */
+    readonly accent: string;
 }
 export declare const THEMES: readonly ThemeInfo[];
 /** The theme of a document whose header names none, or an unknown one (the site editor's default too). */
 export declare const DEFAULT_THEME = "light-neat-3";
+/**
+ * (2.5.0, STATUS D-95) A CSS `background` for a theme picker's colour dot: the
+ * theme's page colour and its signature colour, split diagonally — every
+ * bundled theme's dot differs (the chrome cannot read a theme's colours
+ * without loading its stylesheet). An unknown id gets the default theme's.
+ */
+export declare function themeSwatch(id: string | null | undefined): string;
 /** Whether `id` names a bundled theme. */
 export declare function isThemeId(id: unknown): id is string;
 /** The bundled theme `id` names, else the default theme. */

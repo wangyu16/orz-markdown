@@ -222,4 +222,25 @@ describe('the theme list (2.2.0)', () => {
     expect(pkg.exports['./themes']).toBe('./dist/themes.js');
     expect(pkg.exports['./themes/*']).toBe('./themes/*');
   });
+
+  it('[M.25] (2.5.0, STATUS D-95) each theme names its page colour and its signature colour as its stylesheet declares them (paper: a background custom property, accent: a colour custom property), and themeSwatch gives every theme a different picker dot (the default theme\'s for an unknown id); on the main entry too', async () => {
+    const { THEMES, DEFAULT_THEME, themeSwatch } = await import('../src/themes.js');
+    const main = await import('../src/index.js');
+    expect(main.themeSwatch).toBe(themeSwatch);
+    for (const t of THEMES) {
+      const css = readFileSync(`themes/${t.id}.css`, 'utf8');
+      const props = (re: RegExp) => [...css.matchAll(/--([a-z0-9-]+)\s*:\s*(#[0-9a-f]{3,8})\b/gi)].filter((m) => re.test(m[1])).map((m) => m[2].toLowerCase());
+      expect(t.paper, t.id).toMatch(/^#[0-9a-f]{6}$/);
+      expect(t.accent, t.id).toMatch(/^#[0-9a-f]{6}$/);
+      expect(props(/^bg(-color)?$/), t.id).toContain(t.paper);
+      expect(props(/^(accent|link(-color)?|rubric|c-[a-z]+)$/), t.id).toContain(t.accent);
+      expect(themeSwatch(t.id)).toBe(`linear-gradient(135deg, ${t.paper} 50%, ${t.accent} 50%)`);
+    }
+    expect(new Set(THEMES.map((t) => themeSwatch(t.id))).size).toBe(THEMES.length);
+    // light and dark themes are told apart by their page colour too
+    const lum = (hex: string) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255); };
+    for (const t of THEMES) expect(lum(t.paper) > 128, t.id).toBe(t.scheme === 'light');
+    expect(themeSwatch('no-such-theme')).toBe(themeSwatch(DEFAULT_THEME));
+    expect(themeSwatch(undefined)).toBe(themeSwatch(DEFAULT_THEME));
+  });
 });
