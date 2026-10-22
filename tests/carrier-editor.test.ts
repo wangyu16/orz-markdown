@@ -3802,6 +3802,44 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     await p.close();
   });
 
+  it('[E.36] (2.5.0, STATUS D-101) the save status never moves the bar: its label keeps the width of "Unsaved changes" while it says "Saved"; where the last controls would wrap onto a second row, the status shows its dot alone (the words stay as its title and for assistive technology) and Save stays on the first row — typing changes neither the bar\'s height nor where Save is', async () => {
+    const p = await open();
+    await p.evaluate(`(function(){var d=document.createElement('div');d.id='fit';d.style.cssText='width:1400px;height:420px';document.body.insertBefore(d,document.body.firstChild);scrollTo(0,0);window.__saved.fit=[];})()`);
+    expect(await p.evaluate(`mountOpts('fit', '# Fit\\n\\ntext\\n', ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
+    // a carrier's tools (orz-slides: Issues, Live slide, This slide, theme, layout, AI)
+    await p.evaluate(`(function(){var t=shell_fit.toolbar;['Issues 0','Live slide','This slide','Theme: Paper','Layout','Width','AI'].forEach(function(l){var b=document.createElement('button');b.className='orz-btn orz-btn--ghost';b.textContent=l;t.appendChild(b)})})()`);
+    const state = async () => (await p.evaluate(`(function(){
+      var root=shell_fit.root,bar=root.querySelector('.orz-editor__bar'),modes=root.querySelector('.orz-editor__modes'),save=root.querySelector('.orz-editor__save'),label=root.querySelector('.orz-editor__status-text'),status=root.querySelector('.orz-editor__status');
+      return {height:Math.round(bar.getBoundingClientRect().height),saveRow1:save.getBoundingClientRect().top<modes.getBoundingClientRect().bottom,labelWidth:Math.round(label.getBoundingClientRect().width),compact:root.querySelector('.orz-editor').hasAttribute('data-status-compact'),text:label.textContent,title:status.getAttribute('title')};
+    })()`)) as { height: number; saveRow1: boolean; labelWidth: number; compact: boolean; text: string; title: string };
+    await p.waitForTimeout(100);
+    const wide = await state();
+    expect(wide).toMatchObject({ saveRow1: true, compact: false, text: 'Saved', title: 'Saved' });
+    expect(wide.height).toBeLessThan(50);
+    // the width a one-row bar needs while it says "Saved", measured: the sum of its parts
+    const need = Number(await p.evaluate(`(function(){var bar=shell_fit.root.querySelector('.orz-editor__bar'),cs=getComputedStyle(bar),w=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight),n=0;
+      [].forEach.call(bar.children,function(c){var r=c.getBoundingClientRect();if(r.width){w+=c.classList.contains('orz-editor__tools')?[].reduce.call(c.children,function(a,b){return a+b.getBoundingClientRect().width},0)+6*(c.children.length-1):r.width;n++}});
+      return w+parseFloat(cs.columnGap)*(n-1)+2;})()`));
+    // "Unsaved changes" with the old label was ~60 px wider: at need + 20 px it wrapped Save onto a second row
+    await p.evaluate(`document.getElementById('fit').style.width='${Math.ceil(need + 20)}px'`);
+    await p.waitForTimeout(150);
+    const before = await state();
+    expect(before.saveRow1).toBe(true);
+    expect(before.height).toBeLessThan(50);
+    await p.locator('#fit .cm-content').click();
+    await p.keyboard.type('more ');
+    await expect.poll(async () => (await state()).title).toBe('Unsaved changes');
+    const after = await state();
+    expect([after.saveRow1, after.height, after.compact]).toEqual([true, before.height, before.compact]);
+    // wide again: the words show, and both texts take the same width
+    await p.evaluate(`document.getElementById('fit').style.width='1400px'`);
+    await p.waitForTimeout(150);
+    const dirtyWide = await state();
+    expect(dirtyWide).toMatchObject({ compact: false, text: 'Unsaved changes', saveRow1: true });
+    expect(dirtyWide.labelWidth).toBe(wide.labelWidth);
+    await p.close();
+  });
+
   it('[E.37] (2.3.0 round 3 of the paged loop) printDocument(html) prints the document in a hidden sandboxed frame (allow-scripts allow-modals, never allow-same-origin): the frame waits for the document\'s __orzPrintReady, calls its own print() — not the page\'s —, cannot reach the page, and goes away after; under a nonce policy it needs the nonce, and without it resolves false', { timeout: 60_000 }, async () => {
     // the document records its own print() (headless Chrome shows no dialog): what it saw, and whether it could reach the page
     const STUB = "window.print = function () { var r; try { r = String(parent.document.title); } catch (e) { r = e.name; } parent.postMessage({ probe: { kind: 'print', ready: document.body && document.body.getAttribute('data-ready'), title: document.title, reach: r } }, '*'); };";

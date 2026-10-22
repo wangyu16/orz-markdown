@@ -95,6 +95,8 @@ const filesOf = (t) => {
  * The start of the error a stalled preview frame reports (2.5.0, STATUS D-80): the options an
  * embedder actually has. The shell adds the frame's own script hashes.
  */
+/** The longest save status the bar shows (its width is kept for every status; D-101). */
+const STATUS_LONGEST = 'Unsaved changes';
 const PREVIEW_STALL_MESSAGE = 'The preview frame did not start: this page\'s Content-Security-Policy most likely blocks its inline scripts. Give the editor the page\'s CSP nonce (the nonce option of createEditorShell, or of a carrier\'s mountEditor),';
 function createEditorShell(element, options) {
     if (typeof options?.text !== 'string')
@@ -222,6 +224,8 @@ function createEditorShell(element, options) {
     let statusText = null;
     let syncButton = null;
     let saveButton = null;
+    /** The bar, its view buttons (always on its first row) and the status, for {@link fitBar}. */
+    let barParts = null;
     if (chromeLevel !== 'none') {
         const bar = el('div', 'orz-editor__bar');
         bar.setAttribute('role', 'toolbar');
@@ -239,8 +243,13 @@ function createEditorShell(element, options) {
         }
         toolbar = el('div', 'orz-editor__tools');
         const status = el('span', 'orz-editor__status');
+        // (2.5.0, STATUS D-101) the label keeps the width of its longest text, so "Unsaved changes" never
+        // moves Save onto a second row that "Saved" left on the first
+        const label = el('span', 'orz-editor__status-text');
+        label.setAttribute('data-reserve', STATUS_LONGEST);
         statusText = doc.createTextNode('');
-        status.append(statusText);
+        label.append(statusText);
+        status.append(label);
         syncButton = button('orz-btn orz-btn--ghost orz-editor__sync', 'Sync scroll');
         syncButton.title = 'Scroll the preview with the editor';
         listen(syncButton, 'click', () => setScrollSync(!prefs.get('scrollSync')));
@@ -252,7 +261,33 @@ function createEditorShell(element, options) {
         listen(saveButton, 'click', () => { void api.save(); });
         bar.append(saveButton);
         container.append(bar);
+        barParts = { bar, modes, status };
     }
+    /**
+     * (2.5.0, STATUS D-101) When the bar's last controls would wrap onto a second row and showing the
+     * save status as its dot alone keeps them on one, it does (the words stay for assistive technology
+     * and as the status's title). Run on every change of the shell's or the bar's size.
+     */
+    const fitBar = () => {
+        const parts = barParts;
+        if (!parts || typeof parts.modes.getBoundingClientRect !== 'function')
+            return;
+        const wraps = () => {
+            const first = parts.modes.getBoundingClientRect();
+            if (!first.height)
+                return false;
+            return [parts.status, syncButton, saveButton].some((e) => {
+                const r = e?.getBoundingClientRect?.();
+                return !!r && r.height > 0 && r.top >= first.top + first.height - 1;
+            });
+        };
+        container.removeAttribute('data-status-compact');
+        if (!wraps())
+            return;
+        container.setAttribute('data-status-compact', '');
+        if (wraps())
+            container.removeAttribute('data-status-compact');
+    };
     if (newerFormat !== null) {
         // a quiet notice (no action: the quiet update of the standalone file, or the app, offers the newer editor)
         const note = el('div', 'orz-editor__notice orz-editor__notice--quiet');
@@ -383,6 +418,7 @@ function createEditorShell(element, options) {
         container.setAttribute('data-dirty', String(d));
         if (statusText)
             statusText.data = d ? 'Unsaved changes' : 'Saved';
+        barParts?.status.setAttribute('title', statusText?.data ?? '');
         try {
             options.host?.setDirty(d);
         }
@@ -785,6 +821,7 @@ function createEditorShell(element, options) {
     container.setAttribute('data-dirty', 'false');
     if (statusText)
         statusText.data = 'Saved';
+    barParts?.status.setAttribute('title', 'Saved');
     const formatError = () => new Error(`text format ${formatOf((0, header_js_1.readHeader)(getText())?.fields)} is newer than this editor (format ${maxFormat}): read-only, not saved`);
     if (newerFormat !== null) {
         // after the caller had a chance to subscribe
@@ -914,15 +951,19 @@ function createEditorShell(element, options) {
     let observer = null;
     if (win.ResizeObserver) {
         try {
-            observer = new win.ResizeObserver(() => measure());
+            observer = new win.ResizeObserver(() => { measure(); fitBar(); });
             observer.observe(host);
+            // the bar's own size: a carrier adding tools, fonts arriving
+            if (barParts)
+                observer.observe(barParts.bar);
         }
         catch {
             observer = null;
         }
     }
-    listen(win, 'resize', () => measure());
+    listen(win, 'resize', () => { measure(); fitBar(); });
     measure();
+    fitBar();
     applyMode();
     // ── save ──
     /** The opened file's includes (the shell's `includes` option): the opened bytes are assembled with them. */

@@ -74,6 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   background — the two colours split diagonally, different for every
   bundled theme. Carriers whose menus showed one dot per colour scheme can
   pass `swatch: themeSwatch(t.id)`.
+- Editor toolbar (STATUS D-101): the save status keeps the width of
+  "Unsaved changes" while it says "Saved", so the first edit no longer
+  wraps Save onto a second row (seen at 1100–1120 px in orz-slides); where
+  the bar's last controls would wrap anyway, the status shows only its dot
+  (the words stay as its tooltip and for screen readers) and Save stays on
+  the first row.
 
 ### Release tooling
 

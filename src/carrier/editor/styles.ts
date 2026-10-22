@@ -36,6 +36,11 @@ export const EDITOR_CSS = `
 .orz-editor__status { display: inline-flex; align-items: center; gap: 6px; color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); white-space: nowrap; }
 .orz-editor__status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orz-chrome-success); }
 .orz-editor[data-dirty="true"] .orz-editor__status::before { background: var(--orz-chrome-warning); }
+/* the label is as wide as its longest text (data-reserve), whatever it says now (D-101) */
+.orz-editor__status-text { display: inline-grid; }
+.orz-editor__status-text::after { content: attr(data-reserve); visibility: hidden; height: 0; overflow: hidden; }
+/* the bar would wrap: the status shows its dot only (D-101) */
+.orz-editor[data-status-compact] .orz-editor__status-text { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orz-editor__sync { min-height: 26px; padding: 0 var(--orz-chrome-space-3); font-size: var(--orz-chrome-text-sm); }
 .orz-editor__sync[aria-pressed="true"] { color: var(--orz-chrome-accent); }
 .orz-editor__save { min-height: 28px; }
