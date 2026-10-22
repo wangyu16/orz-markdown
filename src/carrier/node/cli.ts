@@ -25,7 +25,7 @@ export type Reason =
   | 'not-orz'            // the output exists and is not an orz file; or the input holds no orz document
   | 'twin-differs'       // the twin holds a different text that is not a known state
   | 'output-differs'     // an -o output holds another text, or any output holds another document (another uid)
-  | 'replaces-mismatch'  // --replaces: the existing file's text is not the one whose SHA-256 was given
+  | 'replaces-mismatch'  // --replaces: the existing file's text is not the one whose fingerprint (sha256) was given
   | 'legacy-file'        // a 0.x file where a format-1 file is needed
   | 'newer-shell'        // the existing file was made by a newer version of the tool
   | 'newer-format'       // the text's format is newer than this tool writes
@@ -110,7 +110,7 @@ export const SHA256_PATTERN = /^[0-9a-fA-F]{64}$/;
 /** A `--replaces` token, checked: lowercased, or null when not given; anything else is a usage error. */
 export function replacesToken(value: string | undefined): string | null {
   if (value === undefined) return null;
-  if (!SHA256_PATTERN.test(value)) throw new CliError(`--replaces takes a SHA-256: 64 hex digits (the "sha256" inspect, extract or assemble print), got ${JSON.stringify(value)}`, EXIT_USAGE);
+  if (!SHA256_PATTERN.test(value)) throw new CliError(`--replaces needs the fingerprint of the text the file should still hold: the 64-character "sha256" value that inspect, extract and assemble print — got ${JSON.stringify(value)}`, EXIT_USAGE);
   return value.toLowerCase();
 }
 

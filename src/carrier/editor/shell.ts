@@ -696,7 +696,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     const note = el('div', 'orz-editor__notice orz-editor__notice--quiet');
     note.setAttribute('id', 'orz-format-note');
     note.setAttribute('role', 'status');
-    note.append(doc.createTextNode(`This document uses text format ${newerFormat}, newer than this editor (format ${maxFormat}). It is shown read-only and will not be saved here.`));
+    note.append(doc.createTextNode(`A newer version of orz wrote this document (text format ${newerFormat}; this editor knows ${maxFormat}). It is shown read-only and will not be saved here — update to edit it.`));
     container.append(note);
   }
   const noticeSlot = el('div');

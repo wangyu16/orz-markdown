@@ -80,6 +80,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the bar's last controls would wrap anyway, the status shows only its dot
   (the words stay as its tooltip and for screen readers) and Save stays on
   the first row.
+- Messages in user words (STATUS D-91, the kit's part): `carrier/node`'s
+  errors, warnings and advice, the header lints (`unknown-key`,
+  `newer-format`, `nul`, `deck-block`), `assembleEnvelope`'s refusals and
+  the editor's newer-format note no longer say "format-1", "text format 1",
+  "#orz-src island", "SHA-256" or "(sha256 <hash>)": they say what happened
+  and what to run ("no longer holds the text you named with --replaces: it
+  has changed since …", "--replaces needs the fingerprint of the text the
+  file should still hold: the 64-character "sha256" value that inspect,
+  extract and assemble print", "could not note that the two files match …
+  add --replaces <hash> to it"). Reason and lint codes are unchanged; a
+  carrier test that matched the old wording needs the new one.
 
 ### Release tooling
 

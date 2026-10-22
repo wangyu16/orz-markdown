@@ -707,7 +707,7 @@ export function readHeaderAndLint(text: string, kind: KindName, blocks?: () => N
 function lintLocated(text: string, loc: Located | null, kind: KindName | undefined, blocks?: () => NymlBlock[], themes?: ReadonlySet<string>, tokens?: () => BlockToken[]): Lint[] {
   const out: Lint[] = [];
   const at = (from: number, to: number): Pick<Lint, 'line' | 'from' | 'to'> => ({ line: lineAt(text, from), from, to });
-  if (text.includes('\u0000')) out.push({ level: 'error', code: 'nul', message: 'the text holds U+0000 (NUL), which format 1 cannot store' });
+  if (text.includes('\u0000')) out.push({ level: 'error', code: 'nul', message: 'the text holds a NUL character (U+0000), which an orz file cannot store: remove it' });
   if (hasLoneSurrogate(text)) out.push({ level: 'error', code: 'lone-surrogate', message: 'the text holds a lone surrogate, which a UTF-8 file cannot represent' });
   if (hasMixedEol(text)) out.push({ level: 'warning', code: 'mixed-eol', message: 'the text mixes line-ending styles; assembling stores them all in the style of the first line break' });
   const fm = FRONT_MATTER.exec(text);
@@ -726,7 +726,7 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
   const carrierKey = loc && Object.prototype.hasOwnProperty.call(loc.header.fields, 'carrier') ? loc.header.fields['carrier'] : undefined;
   if ((kind ?? (isKindName(carrierKey) ? carrierKey : undefined)) === 'slides') {
     for (const d of deckBlocks(text, tokens)) {
-      out.push({ level: 'error', code: 'deck-block', message: 'a <!-- deck … --> block: format 1 keeps the deck config in the header only, so this block renders nothing and is not read (a 0.x text: upgrade it)', next: 'upgrade', ...at(d.from, d.to) });
+      out.push({ level: 'error', code: 'deck-block', message: 'a <!-- deck … --> block (orz-slides 0.x): deck settings now live in the header only, so this block does nothing; run upgrade to move them there', next: 'upgrade', ...at(d.from, d.to) });
     }
   }
   if (!loc) {
@@ -834,7 +834,7 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
     if (key.startsWith('x_')) {
       if (!/^x_[a-z0-9]+_[a-z0-9_]+$/.test(key)) out.push({ level: 'warning', code: 'host-key', key, message: `host key "${key}" should be shaped x_<name>_<key>`, ...posOf(key) });
     } else if (!known.has(key)) {
-      out.push({ level: 'warning', code: 'unknown-key', key, message: `"${key}" is not a format-1 header key${effective ? ` for kind ${effective}` : ''} (kept untouched)`, ...posOf(key) });
+      out.push({ level: 'warning', code: 'unknown-key', key, message: `"${key}" is not a header setting orz knows${effective ? ` for a ${effective} document` : ''}; it is kept as written and does nothing (a typo?)`, ...posOf(key) });
     }
     if (fields[key].includes('}}')) out.push({ level: 'error', code: 'closer-in-value', key, message: `the value of "${key}" contains "}}"`, ...posOf(key) });
   }
@@ -845,7 +845,7 @@ function lintLocated(text: string, loc: Located | null, kind: KindName | undefin
   if (own(fields, 'format')) {
     const f = fields['format'];
     if (!/^[1-9][0-9]*$/.test(f)) out.push({ level: 'error', code: 'bad-format', key: 'format', message: `format "${f}" is not a positive integer`, ...posOf('format') });
-    else if (Number(f) > 1) out.push({ level: 'error', code: 'newer-format', key: 'format', message: `format ${f} is newer than this reader (format 1): open read-only`, ...posOf('format') });
+    else if (Number(f) > 1) out.push({ level: 'error', code: 'newer-format', key: 'format', message: `"format: ${f}" means a newer orz release wrote this text; this release opens it read-only (update to edit it)`, ...posOf('format') });
   }
   if (own(fields, 'carrier')) {
     const c = fields['carrier'];

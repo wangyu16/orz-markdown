@@ -100,7 +100,7 @@ function sortedJson(record: Record<string, string>): string {
  * `orz-shell`.
  */
 export function assembleEnvelope(text: string, parts: ShellParts): string {
-  if (text.includes('\u0000')) throw new Error('orz carrier: text format 1 cannot hold U+0000 (NUL); an HTML file cannot carry it');
+  if (text.includes('\u0000')) throw new Error('orz carrier: the text holds a NUL character (U+0000), which an orz file cannot store: remove it');
   if (hasLoneSurrogate(text)) throw new Error('orz carrier: the text holds a lone surrogate, which a UTF-8 file cannot represent');
   for (const [name, html] of [['headHtml', parts.headHtml], ['bodyHtml', parts.bodyHtml]] as const) {
     const bad = reservedIdIn(html ?? '');
@@ -108,7 +108,7 @@ export function assembleEnvelope(text: string, parts: ShellParts): string {
   }
   const links = twinNaming(parts.twinLinks ?? null);
   const doc = readDocument(text, { kind: parts.kind });
-  if (doc.format > 1) throw new Error(`orz carrier: the text is format ${doc.format}; this shell writes format 1 only`);
+  if (doc.format > 1) throw new Error(`orz carrier: the header says format ${doc.format}, a newer format than this release can save — update to the release that wrote it`);
   const kind = parts.kind;
   const bom = text.charCodeAt(0) === 0xfeff;
   const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');

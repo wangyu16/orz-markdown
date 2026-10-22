@@ -73,7 +73,7 @@ function replacesToken(value) {
     if (value === undefined)
         return null;
     if (!exports.SHA256_PATTERN.test(value))
-        throw new CliError(`--replaces takes a SHA-256: 64 hex digits (the "sha256" inspect, extract or assemble print), got ${JSON.stringify(value)}`, exports.EXIT_USAGE);
+        throw new CliError(`--replaces needs the fingerprint of the text the file should still hold: the 64-character "sha256" value that inspect, extract and assemble print — got ${JSON.stringify(value)}`, exports.EXIT_USAGE);
     return value.toLowerCase();
 }
 /** The arguments of the user's own `assemble` (output, delivery, includes) for a suggested re-run, plus `extra`. */

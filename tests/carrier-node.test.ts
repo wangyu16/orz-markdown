@@ -105,7 +105,7 @@ describe('carrier/node vocabulary', () => {
     const h = sha256('x');
     expect(replacesToken(undefined)).toBeNull();
     expect(replacesToken(h.toUpperCase())).toBe(h);
-    for (const bad of [h.slice(1), `${h}0`, ` ${h}`, 'g'.repeat(64)]) expect(() => replacesToken(bad)).toThrow(/64 hex digits/);
+    for (const bad of [h.slice(1), `${h}0`, ` ${h}`, 'g'.repeat(64)]) expect(() => replacesToken(bad)).toThrow(/needs the fingerprint of the text the file should still hold: the 64-character "sha256" value/);
     try { replacesToken('x'); } catch (e) { expect((e as CliError).code).toBe(2); }
     expect(assembleArgs({ out: 'pub/x.html', delivery: 'cdn', noIncludes: true }, 'x.md', ['--replaces', h])).toEqual(['x.md', '-o', 'pub/x.html', '--cdn', '--no-includes', '--replaces', h]);
     expect(assembleArgs({ noIncludes: true }, 'x.md', ['--resolve-includes'])).toEqual(['x.md', '--resolve-includes']);
@@ -126,6 +126,27 @@ describe('carrier/node vocabulary', () => {
     const u = cli(['assemble', 'x.md', '--bogus'], d);
     expect(u.code).toBe(2);
     expect(u.stderr).toBe('orz-kittest assemble: unknown option --bogus\n(see orz-kittest assemble --help)\n');
+  });
+});
+
+describe('carrier/node messages in user words (2.5.0, STATUS D-91)', () => {
+  it('[N.9] what the kit tells a person — carrier/node\'s errors, warnings and advice, the header lints, the envelope\'s refusals, the editor\'s notes — names no contract (FC-18), text format number as a word ("format-1", "text format 1"), "shim", "#orz-src island", "SHA-256" or a bare "(sha256 <hash>)"; the machine codes stay in reason / code', () => {
+    const files = [...readdirSync('src/carrier/node').map((f) => `src/carrier/node/${f}`), 'src/carrier/header.ts', 'src/carrier/envelope.ts', 'src/carrier/editor/shell.ts'];
+    const banned = [/FC-1\d/, /format-1/i, /text format 1\b/, /\bshim\b/, /#orz-src. island|island is not closed/, /SHA-256/, /\(sha256 /];
+    for (const f of files) {
+      // the code without its comments: what can reach a person
+      const code = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^'"`\n]*$/gm, '$1');
+      for (const re of banned) expect(code.match(re)?.[0], `${f}: ${re}`).toBeUndefined();
+    }
+    // a refused --replaces says what to pass, a mismatch what happened — and the reason codes are unchanged
+    expect(() => replacesToken('x')).toThrow(/needs the fingerprint of the text the file should still hold/);
+    const d = folder();
+    write(join(d, 'x.md'), 'one\n');
+    expect(json(cli(['assemble', 'x.md', '--json'], d))).toMatchObject({ ok: true });
+    write(join(d, 'x.md'), 'two\n');
+    const r = json(cli(['assemble', 'x.md', '--replaces', sha256('zero\n'), '--json'], d));
+    expect(r).toMatchObject({ ok: false, reason: 'replaces-mismatch' });
+    expect(r.error).toMatch(/^x\.md\.html no longer holds the text you named with --replaces: it has changed since \(saved in the browser, or written by someone else\); not replaced\. Bring its changes in: `orz-kittest extract x\.md\.html -o \S+`, merge them into x\.md, then `orz-kittest assemble x\.md --replaces [0-9a-f]{64}`$/);
   });
 });
 
@@ -222,7 +243,7 @@ describe('carrier/node known states', () => {
         const h = sha256(text(join(d, 'x.md')));
         const ok = cli(['extract', 'x.md.html', '--replaces', h, '--json'], d, { XDG_CACHE_HOME: cache });
         expect(json(ok)).toMatchObject({ ok: true, replaced: 'token' });
-        expect(json(ok).warnings.join('\n')).toMatch(new RegExp(`pair not recorded \\(cache not writable: .*\\); the next extract needs --replaces ${sha256(`${doc('X', 'doc-n4000000001')}\nbrowser\n`)}`));
+        expect(json(ok).warnings.join('\n')).toMatch(new RegExp(`could not note that the two files match \\(cache folder not writable: .*\\), so the next extract cannot tell it may replace the file: add --replaces ${sha256(`${doc('X', 'doc-n4000000001')}\nbrowser\n`)}`));
       } finally { for (const p of ro) chmodSync(p, 0o755); }
     }
     expect(recordPair('orz-kittest', join(d, 'x.md'), join(d, 'x.md.html'), 'a', 'b')).toBe('recorded');
@@ -304,7 +325,7 @@ describe('carrier/node guards', () => {
     write(join(d, 'x.md.html'), legacyFile('# old\n'));
     const r4 = json(cli(['assemble', 'x.md', '--json'], d));
     expect(r4).toMatchObject({ ok: false, reason: 'legacy-file', next: { command: 'upgrade', args: ['x.md.html', '--text', 'x.browser-2.md'] } });
-    expect(r4.error).toMatch(/a legacy orz-kittest 0\.x file.*`orz-kittest assemble x\.md --replaces <sha256>` with that sha256/);
+    expect(r4.error).toMatch(/an older orz-kittest 0\.x file.*printing a "sha256" value: the fingerprint of the text it then holds.*`orz-kittest assemble x\.md --replaces <sha256>` with that value/);
     const up = json(cli(['upgrade', 'x.md.html', '--text', 'x.browser-2.md', '--json'], d));
     expect(up.ok).toBe(true);
     expect(text(join(d, 'x.browser-2.md'))).toBe('# old\n');

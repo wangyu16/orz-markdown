@@ -178,7 +178,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     'git-index': 'its staged version',
     'git-log': 'one of its recent commits',
     cache: `the text ${name} last wrote or read for this pair`,
-    token: 'the text whose SHA-256 --replaces gave',
+    token: 'the text you named with --replaces',
   };
 
   const changedAfter = (p: string, other: string, words: (o: string) => string, otherN: string): string => {
@@ -190,8 +190,8 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
   const rememberPair: CarrierNode['rememberPair'] = (twin, file, held, twinText, o, token) => {
     const r = recordPair(cache, twin, file, held, twinText);
     if (r !== 'recorded') {
-      const where = r === 'no-cache' ? 'no cache folder: set $XDG_CACHE_HOME or HOME' : `cache not writable: ${cacheDir(cache) ?? ''}`;
-      o.warn(`pair not recorded (${where}); the next ${token.command} needs --replaces ${token.sha}`);
+      const where = r === 'no-cache' ? 'no cache folder: set $XDG_CACHE_HOME or HOME' : `cache folder not writable: ${cacheDir(cache) ?? ''}`;
+      o.warn(`could not note that the two files match (${where}), so the next ${token.command} cannot tell it may replace the file: add --replaces ${token.sha} to it`);
     }
     return r;
   };
@@ -225,7 +225,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
       if (heldHash === token) return { risk: null, earlier: 'token' };
       return {
         risk: {
-          message: `${names.out} no longer holds the text you named (--replaces ${token}): it holds another one (sha256 ${heldHash}) — saved in the browser or written by someone else since; not replaced. Bring its changes in: \`${line(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])} <sha256>\` with the sha256 that upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
+          message: `${names.out} no longer holds the text you named with --replaces: it has changed since (saved in the browser, or written by someone else); not replaced. Bring its changes in: \`${line(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])} <sha256>\`, with the "sha256" value upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
           reason: 'replaces-mismatch',
           next: legacy ? legacyPull : pull,
         },
@@ -243,7 +243,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     if (legacy) {
       return {
         risk: {
-          message: `${names.out} is a legacy ${name} 0.x file holding a different text than ${names.input}; not replaced. Its text is not readable by extract: \`${line(legacyPull)}\` writes its format-1 text to ${other} (and makes ${names.out} a file of this version, printing the sha256 of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])} <sha256>\` with that sha256 (it replaces ${names.out} only while it still holds that text)`,
+          message: `${names.out} is an older ${name} 0.x file holding a different text than ${names.input}; not replaced. extract cannot read it: \`${line(legacyPull)}\` writes its text to ${other} (and turns ${names.out} into a file of this version, printing a "sha256" value: the fingerprint of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])} <sha256>\` with that value (it replaces ${names.out} only while it still holds that text)`,
           reason: 'legacy-file',
           next: legacyPull,
         },
@@ -257,7 +257,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
       const recovered = recoveredName(names.out);
       return {
         risk: {
-          message: `${names.out} was cut off inside its text (its #orz-src island is not closed): it holds an incomplete text, not changes to bring in; not replaced. Keep ${names.input}'s complete text and repair the file from it: \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that cut text). To look at what the cut file holds first: \`${line({ command: 'extract', args: [names.out, '-o', recovered] })}\``,
+          message: `${names.out} was cut off: its text stops part-way (the file ends before the text does), so it holds an incomplete text, not changes to bring in; not replaced. Keep ${names.input}'s complete text and repair the file from it: \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that cut text). To look at what the cut file holds first: \`${line({ command: 'extract', args: [names.out, '-o', recovered] })}\``,
           reason: 'unclosed-island',
           next: { command: 'assemble', args: assembleArgs(call, names.input, ['--replaces', heldHash]) },
         },
@@ -353,7 +353,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
       const recovered = recoveredName(names.file);
       return {
         risk: {
-          message: `${names.file} was cut off inside its text (its #orz-src island is not closed): the text it holds may be incomplete; ${names.out} not overwritten. Write what it holds to another name and compare: \`${line({ command: 'extract', args: [names.file, '-o', recovered] })}\`; --force replaces ${names.out} anyway (the old text is kept as ${names.out}~)`,
+          message: `${names.file} was cut off: its text stops part-way (the file ends before the text does), so the text it holds may be incomplete; ${names.out} not overwritten. Write what it holds to another name and compare: \`${line({ command: 'extract', args: [names.file, '-o', recovered] })}\`; --force replaces ${names.out} anyway (the old text is kept as ${names.out}~)`,
           reason: 'unclosed-island',
           next: { command: 'extract', args: [names.file, '-o', recovered] },
         },
@@ -363,7 +363,7 @@ export function carrierNode(spec: CarrierTool): CarrierNode {
     if (token !== null) {
       if (h === token) return { risk: null, earlier: 'token' };
       const a = advice(h ?? '');
-      return { risk: { message: `${names.out} no longer holds the text you named (--replaces ${token})${h ? `: it holds another one (sha256 ${h})` : ''}; not overwritten. ${a.message}`, reason: 'replaces-mismatch', ...(a.next ? { next: a.next } : {}) }, earlier: null };
+      return { risk: { message: `${names.out} no longer holds the text you named with --replaces${h ? ': it has changed since' : ''}; not overwritten. ${a.message}`, reason: 'replaces-mismatch', ...(a.next ? { next: a.next } : {}) }, earlier: null };
     }
     const git = twinName(file) === out;
     const known = existing === null ? null : twinStateOf(cache, out, file, existing, { git });
