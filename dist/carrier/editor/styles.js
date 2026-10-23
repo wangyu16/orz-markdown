@@ -45,7 +45,8 @@ exports.EDITOR_CSS = `
 /* the bar would wrap: the status shows its dot only (D-101) */
 .orz-editor[data-status-compact] .orz-editor__status-text { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orz-editor__sync { min-height: 26px; padding: 0 var(--orz-chrome-space-3); font-size: var(--orz-chrome-text-sm); }
-.orz-editor__sync[aria-pressed="true"] { color: var(--orz-chrome-accent); }
+/* on (the default) reads as a pressed toggle, not a link: a tinted fill and a ring like the view buttons' (D-95) */
+.orz-editor__sync[aria-pressed="true"] { color: var(--orz-chrome-accent); background: color-mix(in oklab, var(--orz-chrome-accent) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--orz-chrome-accent) 45%, transparent); }
 .orz-editor__save { min-height: 28px; }
 .orz-editor[data-chrome-level="compact"] .orz-editor__label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orz-editor__notice {

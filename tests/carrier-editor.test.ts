@@ -499,6 +499,8 @@ describe('reader preferences (FC-18 §6)', () => {
     expect((ra.host as HTMLElement).getAttribute('data-chrome')).toBe('dark');
     expect((ra.querySelector('.orz-editor') as HTMLElement).style.getPropertyValue('--orz-editor-font-size')).toBe('18px');
     expect(ra.querySelector('.orz-editor__sync')!.getAttribute('aria-pressed')).toBe('false');
+    // D-95: the pressed (on) toggle has its own fill and ring, not only an accent colour
+    expect(EDITOR_CSS).toMatch(/\.orz-editor__sync\[aria-pressed="true"\] \{[^}]*background: color-mix\([^}]*box-shadow: inset/);
     // another document (another uid) does not see them; nor does a document without one
     const b = createEditorShell(ctx.mountPoint(), { text: TEXTS.LF, render: () => '', adapter: textareaAdapter(), storage, preview: { assets: false } });
     expect(b.getSplitRatio()).toBe(0.5);
