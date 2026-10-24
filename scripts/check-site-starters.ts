@@ -15,7 +15,7 @@ const docsDir = new URL('../docs/', import.meta.url);
 const startersDir = new URL('../docs/starters/', import.meta.url);
 
 const starters = [
-  { file: 'new-mdhtml.md.html', version: '1.0.2', pkg: 'orz-mdhtml' },
+  { file: 'new-mdhtml.md.html', version: '1.1.0', pkg: 'orz-mdhtml' },
   { file: 'new-slides.slides.html', version: '1.0.0', pkg: 'orz-slides' },
   { file: 'new-paged.paged.html', version: '1.0.0', pkg: 'orz-paged' },
 ] as const;
