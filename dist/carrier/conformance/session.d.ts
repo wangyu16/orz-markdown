@@ -26,7 +26,7 @@ export interface Record_ {
  * `CODEMIRROR6_URL`): answered inside the closed network from this package's
  * own `vendor/codemirror6.js`, so the edit checks run with CodeMirror loaded.
  */
-export declare const CODEMIRROR_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.4.0/vendor/codemirror6.js";
+export declare const CODEMIRROR_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.5.0/vendor/codemirror6.js";
 /**
  * Chrome refuses the origin-private file system on `file:` pages unless it was
  * launched with this flag; the `opfs` picker (real handles for

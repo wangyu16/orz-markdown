@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-10-23
+
+Twin-link naming (K1) and browser-safe targets of a text (K2) for the
+orz-site builder, plus editor and message repairs (STATUS D-80, D-91,
+D-95, D-100, D-101). **Additive for `^2.4.0` consumers**: no export was
+removed or changed incompatibly (kit messages are reworded; their codes are
+unchanged), and a file assembled without `twinLinks`
+keeps its exact bytes.
+
 ### Added
 
 - **Twin-link naming** (FC-18 §8.2/§8.3 and FC-19 minor revision; K1 of the

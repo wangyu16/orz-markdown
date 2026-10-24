@@ -6,7 +6,7 @@ compatibility: "Needs the npm package orz-markdown (Node.js >= 20.16; a CommonJS
 
 # orz-markdown
 
-A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`. This skill describes orz-markdown 2.4.
+A deeply customized `markdown-it` instance with 10+ custom plugins, 10 official plugin bundles, and 12 ready-to-use CSS themes. All rendered HTML lives inside `<article class="markdown-body">`. This skill describes orz-markdown 2.5.
 
 > **Common mistakes — check every document you write for these.**
 >

@@ -35,7 +35,8 @@
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -173,7 +174,10 @@
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -502,6 +506,22 @@
   --markdown-body-border: 1px solid var(--border-subtle);
   --markdown-body-radius: var(--radius-lg);
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  /* drawn on the light panel below, so dark ink */
+  --chart-text: #3a3f4c;
+  --chart-grid: rgba(0, 0, 0, 0.1);
+  --chart-1: #3f5fa8;
+  --chart-2: #1a7f4b;
+  --chart-3: #b7791f;
+  --chart-4: #c0392b;
+  --chart-5: #7b52c7;
+  --chart-6: #1b8aa0;
+  --mm-text: #1c1f2e;
+  --mm-line: #3a3f4c;
+  --mm-node: #e8eeff;
+  --mm-border: #3f5fa8;
+  --mm-accent: #5f8cff;
+  --mm-note: #fff3c4;
 }
 
 /* --------------------------------------------------------------------------
@@ -1184,7 +1204,8 @@ body {
 /* ---- mermaid & charts: light panel for legibility on the dark background ---- */
 .markdown-body div.mermaid { background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
-.markdown-body canvas.orz-chart { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
+/* the panel is the chart's frame (2.4.0): padding on the canvas itself broke Chart.js's sizing */
+.markdown-body .orz-chart-frame { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
 
   </style>
@@ -1213,7 +1234,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -1351,7 +1373,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -1716,6 +1741,22 @@ body {
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
   --markdown-body-decorations-display: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  /* drawn on the light panel below, so dark ink */
+  --chart-text: #3a3f4c;
+  --chart-grid: rgba(0, 0, 0, 0.1);
+  --chart-1: #c4612f;
+  --chart-2: #2e8f6a;
+  --chart-3: #7a5aa6;
+  --chart-4: #2f7fb0;
+  --chart-5: #b8860b;
+  --chart-6: #b0405f;
+  --mm-text: #172733;
+  --mm-line: #3a3f4c;
+  --mm-node: #fbeae0;
+  --mm-border: #a9492a;
+  --mm-accent: #b08dcf;
+  --mm-note: #fff3c4;
 }
 
 /* --------------------------------------------------------------------------
@@ -2816,7 +2857,8 @@ body {
 /* ---- mermaid & charts: light panel for legibility on the dark background ---- */
 .markdown-body div.mermaid { background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
-.markdown-body canvas.orz-chart { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
+/* the panel is the chart's frame (2.4.0): padding on the canvas itself broke Chart.js's sizing */
+.markdown-body .orz-chart-frame { background: rgba(255, 255, 255, 0.88); border-radius: 10px; padding: 0.6rem;
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22); }
 
   </style>
@@ -2845,7 +2887,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -2983,7 +3026,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -3344,6 +3390,21 @@ body {
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
   --markdown-body-decorations-display: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #587085;
+  --chart-grid: rgba(34, 49, 63, 0.12);
+  --chart-1: #2e8bcf;
+  --chart-2: #48b7a8;
+  --chart-3: #f0a33b;
+  --chart-4: #e0607e;
+  --chart-5: #5b6fc8;
+  --chart-6: #8fb33c;
+  --mm-text: #22313f;
+  --mm-line: #587085;
+  --mm-node: #eef4fa;
+  --mm-border: #2e8bcf;
+  --mm-accent: #48b7a8;
+  --mm-note: #fff4d6;
 }
 
 body.font-serif,
@@ -4466,7 +4527,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -4604,7 +4666,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -4967,6 +5032,21 @@ body {
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
   --markdown-body-decorations-display: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #62685f;
+  --chart-grid: rgba(45, 50, 47, 0.12);
+  --chart-1: #167a72;
+  --chart-2: #d48f41;
+  --chart-3: #8ca0ca;
+  --chart-4: #c4616a;
+  --chart-5: #2f9f96;
+  --chart-6: #8c7a3c;
+  --mm-text: #2d322f;
+  --mm-line: #62685f;
+  --mm-node: #f1eee7;
+  --mm-border: #167a72;
+  --mm-accent: #8ca0ca;
+  --mm-note: #f7ecd2;
 }
 
 body.font-serif,
@@ -6019,7 +6099,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -6157,7 +6238,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -6463,6 +6547,21 @@ body {
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #574a3f;
+  --chart-grid: rgba(69, 56, 46, 0.14);
+  --chart-1: #8c3b31;
+  --chart-2: #1a609e;
+  --chart-3: #21763c;
+  --chart-4: #a96b00;
+  --chart-5: #6b4f7a;
+  --chart-6: #4d6b6b;
+  --mm-text: #45382e;
+  --mm-line: #574a3f;
+  --mm-node: #efe5d4;
+  --mm-border: #8c3b31;
+  --mm-accent: #1a609e;
+  --mm-note: #f7e9cc;
 }
 
 body {
@@ -7169,7 +7268,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -7307,7 +7407,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -7610,6 +7713,21 @@ body {
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #574a3f;
+  --chart-grid: rgba(69, 55, 44, 0.14);
+  --chart-1: #2f6154;
+  --chart-2: #b46e00;
+  --chart-3: #1762b6;
+  --chart-4: #b72533;
+  --chart-5: #6d5a8a;
+  --chart-6: #7a6a3a;
+  --mm-text: #45372c;
+  --mm-line: #574a3f;
+  --mm-node: #e7dece;
+  --mm-border: #2f6154;
+  --mm-accent: #b46e00;
+  --mm-note: #f2e3c3;
 }
 
 body {
@@ -8283,7 +8401,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -8421,7 +8540,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -8729,6 +8851,21 @@ body {
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #3d362d;
+  --chart-grid: rgba(31, 27, 22, 0.12);
+  --chart-1: #24496f;
+  --chart-2: #8e2a1e;
+  --chart-3: #2c5e34;
+  --chart-4: #b26f00;
+  --chart-5: #6b4f8a;
+  --chart-6: #4f7f8f;
+  --mm-text: #1f1b16;
+  --mm-line: #3d362d;
+  --mm-node: #f7f4ea;
+  --mm-border: #2a241d;
+  --mm-accent: #24496f;
+  --mm-note: #f8f0dc;
 }
 
 body {
@@ -9383,7 +9520,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -9521,7 +9659,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -9826,6 +9967,21 @@ body {
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #343a44;
+  --chart-grid: rgba(22, 25, 31, 0.12);
+  --chart-1: #0b4a8b;
+  --chart-2: #c51e21;
+  --chart-3: #007f35;
+  --chart-4: #be7200;
+  --chart-5: #6a3d9a;
+  --chart-6: #2a7f8f;
+  --mm-text: #16191f;
+  --mm-line: #343a44;
+  --mm-node: #f5f6f8;
+  --mm-border: #16191f;
+  --mm-accent: #0b4a8b;
+  --mm-note: #fbf4e1;
 }
 
 body {
@@ -10435,7 +10591,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -10573,7 +10730,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -10874,6 +11034,21 @@ body {
   --markdown-body-border: none;
   --markdown-body-radius: 0;
   --markdown-body-shadow: none;
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #35332f;
+  --chart-grid: rgba(58, 128, 214, 0.22);
+  --chart-1: #d6336c;
+  --chart-2: #00649a;
+  --chart-3: #3d6e17;
+  --chart-4: #e8890c;
+  --chart-5: #7048e8;
+  --chart-6: #0b8a8a;
+  --mm-text: #35332f;
+  --mm-line: #35332f;
+  --mm-node: #fffefa;
+  --mm-border: #00649a;
+  --mm-accent: #d6336c;
+  --mm-note: #ffd5e3;
 }
 
 body {
@@ -11055,11 +11230,10 @@ body {
 }
 
 /* ---- Ruling -------------------------------------------------------------
-   Running text (top-level paragraphs and lists) carries its own ruling, so the
-   lines always sit under the words wherever the block lands on the page.
-   Gaps are padding (one blank ruled line), so consecutive blocks join into
-   one continuous ruled sheet; headings, code, tables, quotes and notes
-   interrupt it like things written or pasted into a real exercise book. */
+   Running text (top-level paragraphs and lists) moves in whole rules: one
+   line box per rule, a blank ruled line after each block. The ruling itself
+   is the paper: on screen it is the article's background (the notebook model
+   at the end of this file); on paper the carrier draws it (orz-paged). */
 .markdown-body > p,
 .markdown-body > ul:not(.toc-list),
 .markdown-body > ol {
@@ -11067,27 +11241,6 @@ body {
   margin-top: 0;
   margin-bottom: 0;
   padding-bottom: var(--rule);
-}
-.markdown-body > p::before,
-.markdown-body > ul:not(.toc-list)::before,
-.markdown-body > ol::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 0 calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
-  background:
-    linear-gradient(to bottom,
-      transparent calc(var(--rule) - var(--rule-drop) - 1px),
-      var(--rule-ink) calc(var(--rule) - var(--rule-drop) - 1px),
-      var(--rule-ink) calc(var(--rule) - var(--rule-drop)),
-      transparent calc(var(--rule) - var(--rule-drop)))
-    0 0 / 100% var(--rule) repeat-y;
-  pointer-events: none;
-}
-.markdown-body > p:has(> img:only-child)::before,
-.markdown-body > p.katex-block::before,
-.markdown-body > p:has(.katex-display)::before {
-  display: none;
 }
 /* inline pieces must not stretch a ruled line */
 .markdown-body > p :is(code, kbd, samp, mark, sup, sub, .katex),
@@ -11458,13 +11611,294 @@ body {
   }
 }
 
+/* ---- On screen: a ruled notebook page ------------------------------------
+   (owner 2026-10-12: the same model as orz-paged's print version.) Every
+   element is either written on the lines or on a sheet attached on top of
+   the ruled paper.
+   - The ruling is the paper: the article's background, out to its edges, at
+     the body line height (--orz-grid, an absolute length), from the content
+     box top, at the height where a body line's baseline falls
+     (--orz-rule-at). Nothing written on it hides it.
+   - On the lines (no background): paragraphs, lists and the TOC (one line box
+     per rule, a blank ruled line after), headings (straight, a whole number
+     of lines: the two largest span two), rules, footnotes, display formulas
+     (their baseline on a rule, rounded up to whole lines). Inline pieces
+     (formulas, code, marks, QR codes) never grow a line box.
+   - Attached on top (opaque sheets, a hard shadow): tables, code, callouts,
+     quotes (a slip clipped on, slightly tilted), pictures and figures,
+     diagrams, charts, molecules, QR blocks, videos, columns (each column a
+     sheet), tabs and spoilers. A sheet starts on a rule one blank line under
+     the text above and ends on a rule.
+   The orz-markdown enhancement (enhanceDocument in a page, __orzEnhance in
+   the preview frame) opts in through --orz-grid: it measures --orz-rule-at
+   and the headings' shifts (--orz-sh-<k>, --orz-mb-<k>), places each block
+   and grows each sheet (src/baseline-grid.ts). Without it the ruling and the
+   whole-line text still hold; headings, formulas and sheets sit where they
+   fall. Print (and orz-paged, which drops every @media block) is unaffected. */
+@media screen {
+  .markdown-body {
+    --orz-grid: var(--rule);
+    --orz-rule: var(--orz-rule-at, calc(var(--rule) - var(--rule-drop)));
+    --orz-sheet: var(--paper-slip);
+    --orz-sheet-shadow: 1.5px 2.5px 0 rgba(80, 60, 30, 0.12);
+    background-image:
+      linear-gradient(to right,
+        transparent calc(var(--pad-l) - 1.1rem),
+        var(--margin-ink) calc(var(--pad-l) - 1.1rem),
+        var(--margin-ink) calc(var(--pad-l) - 1.1rem + 1.5px),
+        transparent calc(var(--pad-l) - 1.1rem + 1.5px)),
+      linear-gradient(to bottom,
+        transparent calc(var(--orz-rule) - 1px),
+        var(--rule-ink) calc(var(--orz-rule) - 1px),
+        var(--rule-ink) var(--orz-rule),
+        transparent var(--orz-rule));
+    background-size: 100% 100%, 100% var(--orz-grid);
+    background-repeat: no-repeat, repeat;
+    background-origin: padding-box, content-box;
+  }
+
+  /* ---- on the lines ---- */
+
+  /* running text: one line box per rule, a blank ruled line after each block */
+  .markdown-body > :is(p, ul, ol, dl),
+  .markdown-body > :is(.center, .right) > :is(p, ul, ol, dl) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: var(--orz-grid);
+  }
+
+  .markdown-body > :is(.center, .right) {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0;
+  }
+
+  .markdown-body > :is(ul, ol, dl) :is(li, ul, ol, dt, dd, p),
+  .markdown-body > :is(.center, .right) > :is(ul, ol, dl) :is(li, ul, ol, dt, dd, p) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* the contents: written on the lines like a list */
+  .markdown-body > ul.toc-list {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0 1.4rem var(--orz-grid);
+  }
+
+  /* inline pieces never grow a line box: raised marks sit on the baseline
+     (shifted), atomic pieces (a formula's parts, a code, a badge, a box) may
+     overflow their line without moving it */
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) :is(sup, sub, .footnote-backref) {
+    vertical-align: baseline;
+    position: relative;
+    line-height: 0;
+  }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) sup { top: -0.45em; }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) sub { top: 0.25em; }
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) :is(.katex .base, span.success, span.info, span.warning, span.danger) {
+    margin-top: -3em;
+    margin-bottom: -3em;
+  }
+  /* (a QR code's baseline is its bottom edge: only its top may overflow) */
+  .markdown-body > :is(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, .center, .right, section.footnotes) span.qrcode:not(.qrcode--standalone) {
+    margin-top: -3em;
+  }
+  .markdown-body > :is(p, ul, ol, dl, .center, .right) :is(.task-list-item-checkbox, input[type="checkbox"]) {
+    vertical-align: middle;
+  }
+  /* a display formula keeps its height (the enhancement rounds it to lines) */
+  .markdown-body > :is(p, ul, ol, dl, .center, .right) .katex-display .katex .base {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  /* headings: written on the lines, straight (a tilt would lift one end off
+     its rule); the baseline of every line on a rule (--orz-sh-<k>), the text
+     after on the next line (--orz-mb-<k>); after the two largest, a blank line */
+  .markdown-body > :is(h1, h2, h3, h4, h5, h6) {
+    position: relative;
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border: 0;
+    transform: none;
+  }
+  .markdown-body > h1 { line-height: calc(2 * var(--orz-grid)); top: var(--orz-sh-h1, 0px); margin-bottom: calc(var(--orz-mb-h1, 0px) + var(--orz-grid)); }
+  .markdown-body > h2 { line-height: calc(2 * var(--orz-grid)); top: var(--orz-sh-h2, 0px); margin-bottom: calc(var(--orz-mb-h2, 0px) + var(--orz-grid)); }
+  .markdown-body > h3 { top: var(--orz-sh-h3, 0px); margin-bottom: var(--orz-mb-h3, 0px); }
+  .markdown-body > h4 { top: var(--orz-sh-h4, 0px); margin-bottom: var(--orz-mb-h4, 0px); }
+  .markdown-body > h5 { top: var(--orz-sh-h5, 0px); margin-bottom: var(--orz-mb-h5, 0px); }
+  .markdown-body > h6 { top: var(--orz-sh-h6, 0px); margin-bottom: var(--orz-mb-h6, 0px); }
+
+  /* the second-level heading's dashed rule becomes a dashed underline (a
+     border would add to its height and take it off the grid) */
+  .markdown-body > h2 {
+    text-decoration: underline dashed currentColor;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.18em;
+  }
+
+  /* display formulas: on the lines, transparent; the enhancement moves the
+     baseline onto a rule and rounds the height up to whole lines; then one
+     blank line */
+  .markdown-body > p:is(.katex-block, :has(.katex-display)) {
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: var(--orz-grid);
+  }
+  .markdown-body > p .katex-display {
+    margin: 0;
+  }
+
+  /* a rule is one line: the squiggle drawn along a rule, a blank line after */
+  .markdown-body > hr:not(.footnotes-sep) {
+    box-sizing: content-box;
+    height: var(--orz-grid);
+    margin: 0 0 var(--orz-grid);
+    background-position: left calc(var(--orz-rule) - 6px);
+  }
+
+  /* footnotes: a dashed rule drawn over a rule, then the notes on the lines */
+  .markdown-body > hr.footnotes-sep {
+    box-sizing: content-box;
+    height: var(--orz-grid);
+    margin: 0;
+    border: 0;
+    background: linear-gradient(to right, var(--border-color) 50%, transparent 50%) left calc(var(--orz-rule) - 1.5px) / 10px 2px repeat-x;
+  }
+  .markdown-body > section.footnotes {
+    position: relative;
+    top: var(--orz-sh-fn, 0px);
+    margin: 0 0 var(--orz-mb-fn, 0px);
+    padding: 0 0 var(--orz-grid);
+    line-height: var(--orz-grid);
+  }
+  .markdown-body > section.footnotes :is(ol, li, p) {
+    line-height: var(--orz-grid);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* the fallback: a written block whose lines still left the grid hides the
+     ruling behind it */
+  .markdown-body > .orz-off-grid {
+    background-color: var(--bg-color);
+  }
+
+  /* ---- attached on top: sheets ---- */
+
+  /* anything not written on the lines is opaque (on top of the paper); the
+     enhancement sets the space around it, so its own top margin goes and a
+     blank line follows it */
+  .markdown-body > :where(:not(p, ul, ol, dl, h1, h2, h3, h4, h5, h6, hr, section.footnotes, .center, .right, .cols, .left)),
+  .markdown-body > :where(p.orz-picture) {
+    background-color: var(--bg-color);
+    margin-top: 0;
+    margin-bottom: var(--orz-grid);
+  }
+
+  .markdown-body > :is(blockquote, pre, table, figure, details, .tabs, .mermaid, .smiles-render, .youtube-embed, canvas.orz-chart, div:has(> canvas.orz-chart), .info, .success, .warning, .danger, .cols, p.orz-picture) {
+    margin-top: 0;
+    margin-bottom: var(--orz-grid);
+  }
+
+  /* sheets cast a hard shadow onto the page */
+  .markdown-body > :is(blockquote, pre, table, figure, details, .tabs, .mermaid, .smiles-render, .youtube-embed, canvas.orz-chart, div:has(> canvas.orz-chart), p.orz-picture, .info, .success, .warning, .danger),
+  .markdown-body > .cols > .col {
+    box-shadow: var(--orz-sheet-shadow);
+  }
+
+  /* a quote: a slip of paper clipped onto the page, slightly tilted (the tilt
+     moves only what is painted) */
+  .markdown-body > blockquote {
+    margin-left: 0.4rem;
+    margin-right: 0.4rem;
+    background-color: var(--orz-sheet);
+  }
+  /* the clip holds the slip: over its top edge near the left corner, its
+     lower loop on the paper, clear of the first letter */
+  .markdown-body > blockquote::before {
+    left: 0.2rem;
+  }
+
+  /* a picture, a QR code or a figure: pasted in, on a white-ish border, taped at the top */
+  .markdown-body > :is(p.orz-picture, figure) {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0.5em 0.5em 0.6em;
+    background-color: var(--orz-sheet);
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+  }
+  .markdown-body > p.orz-picture {
+    line-height: 0;
+  }
+  .markdown-body > figure {
+    line-height: 1.4;
+  }
+  .markdown-body > figure img {
+    margin: 0;
+  }
+  .markdown-body > figure figcaption {
+    margin-top: 0.45em;
+    font-family: var(--heading-font);
+    font-size: 1.1em;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .markdown-body > :is(p.orz-picture, figure)::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    width: 64px;
+    height: 20px;
+    transform: translateX(-50%) rotate(-3deg);
+    background: rgba(240, 230, 205, 0.78);
+    border-left: 1px dashed rgba(150, 130, 90, 0.25);
+    border-right: 1px dashed rgba(150, 130, 90, 0.25);
+  }
+
+  /* diagrams, charts, molecules and videos: drawn on their own sheet */
+  .markdown-body > :is(.mermaid, div.smiles-render, canvas.orz-chart, div:has(> canvas.orz-chart), .youtube-embed) {
+    background-color: var(--orz-sheet);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.6em;
+  }
+
+  /* the callouts' soft shadow becomes the sheets' hard one (above) */
+  .markdown-body > :is(.info, .success, .warning, .danger) {
+    margin-top: 0;
+  }
+
+  /* the columns are sheets side by side: the ruling shows between them (and
+     between stacked columns on a phone: one line apart) */
+  .markdown-body > .cols {
+    background-color: transparent;
+    row-gap: var(--orz-grid);
+  }
+}
+
 /* ---- Print ----------------------------------------------------------------- */
 @media print {
   body { background: #fff; color: #000; padding: 0; }
   .markdown-body { padding: 0; border: none; box-shadow: none; background: none; }
-  .markdown-body > p::before,
-  .markdown-body > ul::before,
-  .markdown-body > ol::before { content: none; }
   .markdown-body .success,
   .markdown-body .info,
   .markdown-body .warning,
@@ -11488,7 +11922,8 @@ body {
 
    A theme imports this file FIRST and then adds decoration only: colours,
    typography, borders, backgrounds, radii, shadows, spacing rhythm. It must
-   not re-declare the mechanisms below (tests/themes.test.ts enforces this).
+   not re-declare the mechanisms below (a test in the orz-markdown source
+   repository, tests/themes.test.ts, enforces this; it is not in the package).
    It may tune them through these tokens, set on :root:
 
      --markdown-body-max-width   measure of the article       (default: none)
@@ -11626,7 +12061,10 @@ body {
    an explicit width/height. */
 .markdown-body img:not([width]) { width: auto; }
 .markdown-body img:not([height]) { height: auto; }
-.markdown-body p > img {
+/* An image in running text stays in its line: in a paragraph, a link (a linked
+   icon, a badge), a list item or a table cell (orz-slides round A4: a block
+   there broke a sentence into three lines). Only a raw <img> on its own is a block. */
+.markdown-body :is(p, a, li, td, th) > img {
   display: inline;
   margin: 0;
 }
@@ -11918,6 +12356,22 @@ body {
   --markdown-body-padding: 3rem;
   --markdown-body-border: 4px solid var(--border-color);
   --markdown-body-shadow: 8px 8px 0px rgba(0,0,0,0.1);
+  /* charts and diagrams (2.4.0): Chart.js and Mermaid read these (references/themes.md) */
+  --chart-text: #202020;
+  --chart-grid: rgba(32, 32, 32, 0.15);
+  --chart-1: #ff6b6b;
+  --chart-2: #4ecdc4;
+  --chart-3: #ffd93b;
+  --chart-4: #6cd69f;
+  --chart-5: #1f5fbf;
+  --chart-6: #b8321c;
+  --chart-fill-opacity: 0.75;
+  --mm-text: #202020;
+  --mm-line: #202020;
+  --mm-node: #fffefb;
+  --mm-border: #202020;
+  --mm-accent: #ff6b6b;
+  --mm-note: #ffe66d;
 }
 
 body {
