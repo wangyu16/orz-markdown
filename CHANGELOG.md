@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-10-31
+
+The raw-HTML allowlist render setting for hosts whose documents have several
+authors (STATUS D-127), and a fix to the include URL check. **Additive for
+`^2.5.0` consumers**: with no setting, output is byte for byte unchanged.
+
 ### Added
 
 - **Raw-HTML allowlist render setting** (STATUS D-127, claim M.45). Render with

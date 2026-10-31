@@ -54,7 +54,7 @@ export interface CodeMirror6Modules {
     versions?: Record<string, string>;
 }
 /** Where the pinned bundle is served (the package version that ships it). */
-export declare const CODEMIRROR6_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.5.0/vendor/codemirror6.js";
+export declare const CODEMIRROR6_URL = "https://cdn.jsdelivr.net/npm/orz-markdown@2.6.0/vendor/codemirror6.js";
 /** How long the bundle may take to load before the textarea is kept. */
 export declare const CODEMIRROR6_TIMEOUT_MS = 20000;
 /**
