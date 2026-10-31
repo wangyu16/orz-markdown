@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authors (Alembic). The element list now lives in `src/raw-html.ts`, shared
   with the fetched-text checks (unchanged).
 
+### Fixed
+
+- **Fetched text: `javascript:` written with numeric references without `;`**
+  (`&#106avascript&#58…`) passed the URL check of includes (M.16): browsers
+  decode such references in attributes, markdown-it's `unescapeAll` does not.
+  URL attributes and reserved ids are now decoded as a browser does (found by
+  the D-127 attack round).
+
 ## [2.5.0] — 2026-10-23
 
 Twin-link naming (K1) and browser-safe targets of a text (K2) for the

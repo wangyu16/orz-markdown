@@ -1107,3 +1107,15 @@ reshapes the fetched document around it), B-L3/F8 (copy of a host followed by
 
 The carrier-kit verification (carrier rebuild, from 2026-10-05) has its own
 record: [carrier-kit-loop.md](carrier-kit-loop.md).
+
+## D-127 adversary round 1 (2026-10-31): raw-HTML allowlist (M.45)
+
+Independent attack on `orzRawHtml: 'allowlist'` (f4c4c28). **HIGH:** `<a href="&#106avascript&#58alert(1)">` kept — numeric
+references without `;` are decoded by browsers in attributes but not by markdown-it's `unescapeAll`; the same hole was in the
+fetched-text URL check (M.16, published 2.5.0). Fixed in both with `decodeNumericRefs`; probes added (raw-html.test.ts,
+audit-round12). **MEDIUM:** reserved ids by reference (`id="&#102;n1"`) — `idKey` decodes them now. **LOW:** `rel="opener"` /
+named targets refused. Dismissed as accepted limits (recorded in M.45): a `style` overlay (author's layout, by design), the fixed
+YouTube embed (orz's own construct), markdown-it's quadratic inline-comment scan (upstream, same with the setting off).
+Tried and held: ~40 other vectors (tag syntax, comments, CDATA, `<input>`, attrs, every plugin and container, yaml/nyml islands,
+KaTeX `\href`, nested renders, regex cost).
+

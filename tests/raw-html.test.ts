@@ -51,6 +51,10 @@ const PROBES: Record<string, string> = {
   'base and meta': '<base href="https://evil"><meta http-equiv="refresh" content="0;url=https://evil">',
   'img data url': '<img src="data:image/svg+xml,<svg onload=alert(1)>">',
   'object embed': '<object data="x.swf"></object><embed src="x.swf">',
+  'refs without semicolon': '<a href="&#106avascript&#58alert(1)">x</a>',
+  'hex refs without semicolon': '<a href=&#X6a&#x61vascript&#x3a;alert(1)>x</a>',
+  'refs in a spoil label': '::: spoil <A HREF=&#106avascript&#58alert(1)>x</A>\nbody\n:::',
+  'srcset refs': '<img srcset="&#106avascript&#58alert(1) 1x">',
 };
 
 describe('raw HTML allowlist render setting (D-127)', () => {
@@ -116,6 +120,13 @@ describe('raw HTML allowlist render setting (D-127)', () => {
     expect(html).toContain('style="color:red"');
     expect(html).not.toContain('onclick');
     expect(strict('para {{attrs[#orzRuntime]}}')).not.toContain('orzRuntime');
+  });
+
+  it('[M.45] reserved ids, opener and named targets are refused however they are written', () => {
+    for (const src of ['<a id="&#102;n1">x</a>', '<div id="&#110yml-data">x</div>', '<a name="&#95;_orzX">x</a>', '<a href="https://x.org" target="_blank" rel="opener">x</a>', '<a href="https://x.org" target="other">x</a>']) {
+      expect(strict(src)).toContain('&lt;');
+    }
+    expect(strict('<a href="https://x.org" target="_blank" rel="noopener">x</a>')).not.toContain('&lt;');
   });
 
   it('[M.45] linear in the number of "<"', () => {

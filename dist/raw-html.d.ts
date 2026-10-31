@@ -9,7 +9,14 @@ export declare const RAW_ATTRS: RegExp;
 export declare const URL_ATTRS: RegExp;
 /** Ids the renderer gives out at render time: a document's own HTML cannot claim them either (they shadow page globals). */
 export declare const RESERVED_ID: RegExp;
-/** An id as the browser matches it: a fragment is tried percent-decoded too. */
+/**
+ * Numeric character references as a browser decodes them in an attribute: the `;` is optional
+ * (`&#106avascript&#58` is `javascript:`; markdown-it's `unescapeAll` needs the `;`, adversary
+ * round 1 of D-127, HIGH). Named references are left to `unescapeAll` (legacy names without `;`
+ * yield no letter or colon).
+ */
+export declare function decodeNumericRefs(v: string): string;
+/** An id as the browser matches it: references decoded; a fragment is tried percent-decoded too. */
 export declare function idKey(v: string): string;
 /** The attributes of a strict tag's attribute text. */
 export declare function rawAttrs(source: string): Array<[string, string]>;

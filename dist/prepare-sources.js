@@ -375,6 +375,8 @@ function safeUrl(raw, srcset = false) {
     const md = parser();
     // Entities decoded, control characters and whitespace removed, as the
     // browser does before reading the scheme (`java&#9;script:` runs).
+    // Numeric references without ";" too, as a browser reads an attribute (D-127 adversary round 1, HIGH).
+    raw = (0, raw_html_js_1.decodeNumericRefs)(raw);
     const decoded = md.utils.unescapeAll(raw).replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
     const urls = srcset ? md.utils.unescapeAll(raw).split(',').map((c) => c.trim().split(/\s+/)[0].replace(/[\u0000-\u0020\u007f-\u009f]/g, '')) : [decoded];
     return urls.every((u) => !u || md.validateLink(u));

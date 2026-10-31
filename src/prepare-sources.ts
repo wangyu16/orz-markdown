@@ -124,7 +124,7 @@ import { MAX_TOC_ENTRIES, MAX_TOC_BYTES } from './plugins/toc.js';
 import { MAX_QR_OUTPUT } from './plugins/qrcode.js';
 import { MAX_TEX_TOTAL, MAX_CHEM_TOTAL, MAX_KATEX_OUTPUT } from './index.js';
 import * as indexModule from './index.js';
-import { ALLOWED_HTML, VOID_HTML, STRICT_TAG, STRICT_COMMENT, RAW_ATTRS, URL_ATTRS, RESERVED_ID, idKey, rawAttrs } from './raw-html.js';
+import { ALLOWED_HTML, VOID_HTML, STRICT_TAG, STRICT_COMMENT, RAW_ATTRS, URL_ATTRS, RESERVED_ID, idKey, rawAttrs, decodeNumericRefs } from './raw-html.js';
 
 /**
  * Remote content must never make the host renderer read local files. Every
@@ -405,6 +405,8 @@ function safeUrl(raw: string, srcset = false): boolean {
   const md = parser();
   // Entities decoded, control characters and whitespace removed, as the
   // browser does before reading the scheme (`java&#9;script:` runs).
+  // Numeric references without ";" too, as a browser reads an attribute (D-127 adversary round 1, HIGH).
+  raw = decodeNumericRefs(raw);
   const decoded = md.utils.unescapeAll(raw).replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
   const urls = srcset ? md.utils.unescapeAll(raw).split(',').map((c) => c.trim().split(/\s+/)[0].replace(/[\u0000-\u0020\u007f-\u009f]/g, '')) : [decoded];
   return urls.every((u) => !u || md.validateLink(u));

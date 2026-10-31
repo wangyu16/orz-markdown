@@ -46,6 +46,8 @@ describe('includes — half A', () => {
     '<a href="javascript:window.__pwned=1">click</a>',
     '<a href="&#106;avascript:window.__pwned=1">click</a>',
     '<a href="java&#9;script:window.__pwned=1">click</a>',
+    '<a href="&#106avascript&#58window.__pwned=1">click</a>', // no ";" (D-127 adversary round 1)
+    '<a href=&#X6a&#x61vascript&#x3a;x>click</a>',
     '<a href=" JAVASCRIPT:x">click</a>',
     '<img src="x.png" srcset="ok.png 1x, javascript:x 2x">',
     '<a href="vbscript:x">click</a>',

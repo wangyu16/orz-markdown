@@ -50,9 +50,23 @@ export const URL_ATTRS = /^(href|src|cite|poster|srcset)$/i;
 /** Ids the renderer gives out at render time: a document's own HTML cannot claim them either (they shadow page globals). */
 export const RESERVED_ID = /^(fn(ref)?\d+(:\d+)?|nyml-data(-\d+)?|orz[\w-]*|hljs|mermaid|chart|smilesdrawer|katex|__orz[\w-]*)$/i;
 
-/** An id as the browser matches it: a fragment is tried percent-decoded too. */
+/**
+ * Numeric character references as a browser decodes them in an attribute: the `;` is optional
+ * (`&#106avascript&#58` is `javascript:`; markdown-it's `unescapeAll` needs the `;`, adversary
+ * round 1 of D-127, HIGH). Named references are left to `unescapeAll` (legacy names without `;`
+ * yield no letter or colon).
+ */
+export function decodeNumericRefs(v: string): string {
+  return v.replace(/&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?/g, (_m, hex: string | undefined, dec: string | undefined) => {
+    const digits = (hex ?? dec!).replace(/^0+/, '');
+    const n = digits.length > 8 ? Infinity : parseInt(digits || '0', hex !== undefined ? 16 : 10);
+    return n === 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff) || !Number.isFinite(n) ? '\uFFFD' : String.fromCodePoint(n);
+  });
+}
+
+/** An id as the browser matches it: references decoded; a fragment is tried percent-decoded too. */
 export function idKey(v: string): string {
-  const t = v.trim();
+  const t = decodeNumericRefs(v).trim();
   try { return decodeURIComponent(t); } catch { return t; }
 }
 
@@ -74,7 +88,7 @@ export interface UrlCheck {
 /** Is a URL attribute's value one a Markdown link would also allow (entities decoded, controls removed, as a browser reads it)? */
 export function urlOk(raw: string, check: UrlCheck, srcset = false): boolean {
   const strip = (s: string) => s.replace(/[\u0000- \u007f-\u009f]/g, '');
-  const text = check.unescapeAll(raw);
+  const text = check.unescapeAll(decodeNumericRefs(raw));
   const urls = srcset ? text.split(',').map((c) => strip(c.trim().split(/\s+/)[0] ?? '')) : [strip(text)];
   return urls.every((u) => !u || check.validateLink(u));
 }
@@ -99,6 +113,9 @@ export function authorAttrOk(element: string, name: string, value: string, check
   if (!(RAW_ATTRS.test(key) || /^(class|style|tabindex|aria-[a-z]+)$/.test(key))) return false;
   if ((key === 'id' || key === 'name') && RESERVED_ID.test(idKey(value))) return false;
   if (key === 'name' && element !== 'a') return false;
+  // A new tab never gets a handle on this page (reverse tabnabbing); no named or parent windows.
+  if (key === 'rel' && /(^|\s)opener(\s|$)/i.test(check.unescapeAll(decodeNumericRefs(value)))) return false;
+  if (key === 'target' && !/^(_blank|_self)$/i.test(check.unescapeAll(decodeNumericRefs(value)).trim())) return false;
   if (URL_ATTRS.test(key) && !urlOk(value, check, key === 'srcset')) return false;
   return true;
 }
