@@ -38,7 +38,7 @@ const html = md.render(markdownSource);
 const page = `<article class="markdown-body">${html}</article>`;
 ```
 
-Parser is configured with `html: true` — raw HTML in source is emitted verbatim. Sanitize untrusted content before rendering to avoid XSS. Also `linkify: true` (bare `https://…` and `www.…` become links) and `typographer: true` (`--` → –, `---` → —, `...` → …, `(c)` → ©, straight quotes → curly).
+Parser is configured with `html: true` — raw HTML in source is emitted verbatim. Sanitize untrusted content before rendering to avoid XSS, or render with `{ orzRawHtml: 'allowlist' }` in the env (only harmless tags and attributes kept; other HTML shown as text). Also `linkify: true` (bare `https://…` and `www.…` become links) and `typographer: true` (`--` → –, `---` → —, `...` → …, `(c)` → ©, straight quotes → curly).
 
 ### Remote URL includes
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Raw-HTML allowlist render setting** (STATUS D-127, claim M.45). Render with
+  `md.render(text, { orzRawHtml: 'allowlist' })` (any value other than
+  `'allow'` counts as the allowlist; no setting is unchanged): in an author's
+  own raw HTML — blocks, inline HTML, table cells, `{{sp …}}` bodies and
+  `::: spoil` labels — only start and end tags of the M.20 element list
+  with safe attributes (no event handlers, no URL a Markdown link refuses, no
+  id the renderer reserves; `class`, `style` and `aria-*` allowed) and
+  well-formed comments are kept; every other `<` is written `&lt;`, so the
+  reader sees the HTML as text and nothing runs. `{{attrs[…]}}` drops the
+  attributes the list refuses. For hosts whose documents have several
+  authors (Alembic). The element list now lives in `src/raw-html.ts`, shared
+  with the fetched-text checks (unchanged).
+
 ## [2.5.0] — 2026-10-23
 
 Twin-link naming (K1) and browser-safe targets of a text (K2) for the

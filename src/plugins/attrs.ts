@@ -1,5 +1,7 @@
 import type MarkdownIt from 'markdown-it';
 import { register } from '../registry.js';
+import { rootEnv } from '../env.js';
+import { authorAttrOk, rawHtmlMode } from '../raw-html.js';
 
 export function parseAttrs(attrString: string): Array<[string, string]> {
   const result: Array<[string, string]> = [];
@@ -37,6 +39,9 @@ export function registerAttrs(md: MarkdownIt, registry = true): void {
   // One pass per inline token (a splice per marker, and an attrSet walk per
   // distinct key, were quadratic: round 18, M1).
   md.core.ruler.push('attrs_resolve', (state) => {
+    // Allowlist mode (D-127, M.45): an attribute that could run script or load a page is dropped.
+    const strict = rawHtmlMode(rootEnv(state.env)) === 'allowlist';
+    const check = { unescapeAll: (t: string) => md.utils.unescapeAll(t), validateLink: (u: string) => md.validateLink(u) };
     for (let i = 0; i < state.tokens.length; i++) {
       const blockToken = state.tokens[i];
       if (blockToken.type !== 'inline') continue;
@@ -52,7 +57,10 @@ export function registerAttrs(md: MarkdownIt, registry = true): void {
         if (child.type !== 'plugin_inline' || child.info !== 'attrs') { kept.push(child); continue; }
         const attrString = child.meta?.args as string | null;
         if (attrString && target) {
-          for (const [key, val] of parseAttrs(attrString)) { merged.set(key, val); changed = true; }
+          for (const [key, val] of parseAttrs(attrString)) {
+            if (strict && !authorAttrOk(target.tag, key, val, check)) continue;
+            merged.set(key, val); changed = true;
+          }
         }
       }
       if (target && changed) target.attrs = Array.from(merged);

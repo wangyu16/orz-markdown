@@ -48,4 +48,5 @@ export type { MarkdownMaskOptions } from './source-scan.js';
 export { resolveIncludePath } from './plugins/markdown-include.js';
 export type { IncludeEnv } from './plugins/markdown-include.js';
 export { VERSION, KATEX_VERSION } from './version.js';
+export type { RawHtmlMode } from './raw-html.js';
 //# sourceMappingURL=index.d.ts.map

@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseAttrs = parseAttrs;
 exports.registerAttrs = registerAttrs;
 const registry_js_1 = require("../registry.js");
+const env_js_1 = require("../env.js");
+const raw_html_js_1 = require("../raw-html.js");
 function parseAttrs(attrString) {
     const result = [];
     // Match: .classname, #idname, key="value", or bare key
@@ -39,6 +41,9 @@ function registerAttrs(md, registry = true) {
     // One pass per inline token (a splice per marker, and an attrSet walk per
     // distinct key, were quadratic: round 18, M1).
     md.core.ruler.push('attrs_resolve', (state) => {
+        // Allowlist mode (D-127, M.45): an attribute that could run script or load a page is dropped.
+        const strict = (0, raw_html_js_1.rawHtmlMode)((0, env_js_1.rootEnv)(state.env)) === 'allowlist';
+        const check = { unescapeAll: (t) => md.utils.unescapeAll(t), validateLink: (u) => md.validateLink(u) };
         for (let i = 0; i < state.tokens.length; i++) {
             const blockToken = state.tokens[i];
             if (blockToken.type !== 'inline')
@@ -59,6 +64,8 @@ function registerAttrs(md, registry = true) {
                 const attrString = child.meta?.args;
                 if (attrString && target) {
                     for (const [key, val] of parseAttrs(attrString)) {
+                        if (strict && !(0, raw_html_js_1.authorAttrOk)(target.tag, key, val, check))
+                            continue;
                         merged.set(key, val);
                         changed = true;
                     }

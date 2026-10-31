@@ -6,6 +6,7 @@ import footnote from 'markdown-it-footnote';
 import { footnoteTail } from './rules/footnote-tail.js';
 import { taskLists as taskListsLinear } from './rules/task-lists.js';
 import { inlineEnv, rootEnv } from './env.js';
+import { allowlistHtml, rawHtmlMode } from './raw-html.js';
 import mark from 'markdown-it-mark';
 import sub from 'markdown-it-sub';
 import sup from 'markdown-it-sup';
@@ -289,6 +290,17 @@ export function createMarkdown(registerPlugins = true): MarkdownIt {
       return label !== undefined ? html.replace('class="footnote-item"', `class="footnote-item" data-footnote-label="${escapeAttr(label)}"`) : html;
     };
   }
+  // Raw HTML (D-127, M.45): as written by default; with `env.orzRawHtml` set to
+  // "allowlist" only tags on the M.20 list with safe attributes are kept, and
+  // the rest is shown as text. Nested renders (`{{sp}}` bodies, `::: spoil`
+  // labels) read the document's setting through `__orzRoot`.
+  const urlCheck = { unescapeAll: (t: string) => md.utils.unescapeAll(t), validateLink: (u: string) => md.validateLink(u) };
+  for (const rule of ['html_block', 'html_inline'] as const) {
+    md.renderer.rules[rule] = (tokens, idx, _options, env) => {
+      const html = tokens[idx].content;
+      return rawHtmlMode(rootEnv(env)) === 'allow' ? html : allowlistHtml(html, urlCheck);
+    };
+  }
   registerImsize(md);
   md.use(mark);
   md.use(sub);
@@ -499,3 +511,4 @@ export type { MarkdownMaskOptions } from './source-scan.js';
 export { resolveIncludePath } from './plugins/markdown-include.js';
 export type { IncludeEnv } from './plugins/markdown-include.js';
 export { VERSION, KATEX_VERSION } from './version.js';
+export type { RawHtmlMode } from './raw-html.js';

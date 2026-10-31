@@ -124,6 +124,7 @@ import { MAX_TOC_ENTRIES, MAX_TOC_BYTES } from './plugins/toc.js';
 import { MAX_QR_OUTPUT } from './plugins/qrcode.js';
 import { MAX_TEX_TOTAL, MAX_CHEM_TOTAL, MAX_KATEX_OUTPUT } from './index.js';
 import * as indexModule from './index.js';
+import { ALLOWED_HTML, VOID_HTML, STRICT_TAG, STRICT_COMMENT, RAW_ATTRS, URL_ATTRS, RESERVED_ID, idKey, rawAttrs } from './raw-html.js';
 
 /**
  * Remote content must never make the host renderer read local files. Every
@@ -373,48 +374,17 @@ function inlineDepths(content: string, spans: Array<[number, number]>, env: obje
  * else — SVG/MathML, `<script>`/`<style>`/`<textarea>`/`<plaintext>`, forms,
  * `<template>`, … — fails the check; the block holding it is removed (M.20).
  */
-const ALLOWED_HTML: Record<string, readonly string[] | null> = {
-  // element: required parent among the raw elements, or null for "anywhere"
-  div: null, span: null, p: null, b: null, i: null, em: null, strong: null, code: null, kbd: null, samp: null,
-  var: null, sub: null, sup: null, mark: null, del: null, ins: null, s: null, u: null, small: null, abbr: null,
-  cite: null, q: null, dfn: null, time: null, bdi: null, bdo: null, details: null, summary: null, figure: null,
-  figcaption: null, blockquote: null, center: null, section: null, article: null,
-  // no nav/main/header/footer/aside: landmarks in the host's accessibility tree (round 15, M-1)
-  address: null, pre: null, ruby: null, rt: ['ruby'], rp: ['ruby'], strike: null, tt: null, big: null,
-  h1: null, h2: null, h3: null, h4: null, h5: null, h6: null, a: null, video: null, audio: null, picture: null,
-  ul: null, ol: null, li: ['ul', 'ol'], dl: null, dt: ['dl'], dd: ['dl'],
-  table: null, caption: ['table'], colgroup: ['table'], thead: ['table'], tbody: ['table'], tfoot: ['table'],
-  tr: ['table', 'thead', 'tbody', 'tfoot'], td: ['tr'], th: ['tr'],
-};
-const VOID_HTML = new Set(['br', 'hr', 'img', 'wbr', 'source', 'track', 'col', 'input']); // input: task-list checkboxes only (below)
-const STRICT_TAG = /<(\/?)([A-Za-z][A-Za-z0-9]*)((?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*(\/?)>/y;
-const STRICT_COMMENT = /<!--(?!-?>)([\s\S]*?)-->/y;
+// ALLOWED_HTML, VOID_HTML, STRICT_TAG, STRICT_COMMENT: src/raw-html.ts (shared with the renderer's allowlist mode, M.45).
 
-/**
- * Attributes fetched raw HTML may carry. No `class` and no `style`: a class can
- * pick up the page's own fixed-position rules (`.qrcode-overlay`, or any class
- * of the host site), and allowed CSS properties still paint over neighbours
- * (`opacity`, huge `font-size`, comment-hidden negative margins) — round 13.
- * Policing values lost every round; the vectors are removed instead.
- */
-const RAW_ATTRS = /^(id|title|lang|dir|role|hidden|translate|aria-label|border|clear|data-[a-z0-9-]+|href|src|srcset|sizes|alt|width|height|colspan|rowspan|scope|headers|align|valign|start|reversed|type|open|datetime|cite|name|rel|target|loading|decoding|controls|poster|preload|muted|loop|playsinline|media|srclang|kind|label|default|value|span|abbr|checked|disabled)$/i;
+/* RAW_ATTRS (no `class`, no `style`: a class can pick up the page's own fixed-position
+ * rules and allowed CSS still paints over neighbours, round 13): src/raw-html.ts. */
 /** Attributes Markdown's own tokens may carry in fetched text (where
  *  `{{attrs[…]}}` lands): no `role`, `aria-*`, `contenteditable`, `accesskey`
  *  (round 15, M-1). `tabindex` only as the anchor plugin sets it. */
 const TOKEN_ATTRS = /^(id|class|style|tabindex|href|src|alt|title|start|width|height|colspan|rowspan|align|reversed|type|value|lang|dir)$/;
-/** Attributes that hold a URL: validated like a Markdown link (no `javascript:`). */
-const URL_ATTRS = /^(href|src|cite|poster|srcset)$/i;
-/** Ids the renderer gives out at render time (footnotes, data islands, the
- *  doc-meta island, preview-frame assets): fetched text cannot claim them. */
-const RESERVED_ID = /^(fn(ref)?\d+(:\d+)?|nyml-data(-\d+)?|orz[\w-]*|hljs|mermaid|chart|smilesdrawer|katex|__orz[\w-]*)$/i; // orz*: every family global (orzPosterReadiness, …)
 /** ARIA attributes that point at other elements by id (they could re-parent host content in the accessibility tree). */
 const ARIA_REFS = /^aria-(owns|controls|activedescendant|flowto|details|labelledby|describedby|errormessage)$/;
 
-/** An id as the browser matches it: a fragment is tried percent-decoded too. */
-function idKey(v: string): string {
-  const t = v.trim();
-  try { return decodeURIComponent(t); } catch { return t; }
-}
 /** Classes markdown itself puts on tokens (task lists). */
 const TOKEN_CLASSES = /^(task-list-item|contains-task-list|task-list-item-checkbox|enabled)$/;
 /** The documented `{{sp[…]}}` classes (references/syntax.md). */
@@ -470,14 +440,6 @@ function attrsOk(attrs: Array<[string, string]>, raw: boolean, auto = false): bo
     if (URL_ATTRS.test(key) && !safeUrl(value, key === 'srcset')) return false;
   }
   return true;
-}
-
-function rawAttrs(source: string): Array<[string, string]> {
-  const out: Array<[string, string]> = [];
-  for (const m of source.matchAll(/([A-Za-z_:][A-Za-z0-9_.:-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
-    out.push([m[1], m[2] ?? m[3] ?? m[4] ?? '']);
-  }
-  return out;
 }
 
 /** Every id / name value in raw HTML, read tag by tag with the strict tokenizer. */

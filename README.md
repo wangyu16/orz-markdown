@@ -39,7 +39,12 @@ Import the configured markdown instance and use it to render markdown strings in
 > **HTML Support:** The parser is initialized with `html: true`, so any raw
 > HTML tags included in your markdown (e.g. `<div>Example</div>`) will be
 > emitted verbatim instead of being escaped. Be aware of XSS risks when
-> rendering untrusted content.
+> rendering untrusted content. A host whose documents have several authors can
+> render with `md.render(text, { orzRawHtml: 'allowlist' })`: then only a list
+> of harmless tags (`<br>`, `<sub>`, `<span style>`, `<details>`, `<a href>`,
+> `<img src>`, tables, …) with safe attributes is kept, and any other HTML
+> (`<script>`, `<iframe>`, `<svg>`, `<style>`, forms, event handlers,
+> `javascript:` links) is shown as text; `{{attrs[…]}}` drops such attributes.
 
 
 ```javascript
@@ -252,7 +257,8 @@ above; everything else is for carrier and host builders.
 ### Security notes
 
 - The parser runs with `html: true`: raw HTML in the source is emitted as-is.
-  Sanitize untrusted input yourself.
+  Sanitize untrusted input yourself, or render with `{ orzRawHtml: 'allowlist' }`
+  (2.6.0): only the listed harmless tags and attributes stay, the rest is text.
 - File includes never happen by default. A host grants them per render with
   `markdownBasePath` / `readFile`, and should confine them with
   `markdownIncludeRoot` unless the source is fully trusted.

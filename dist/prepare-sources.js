@@ -119,6 +119,7 @@ const toc_js_1 = require("./plugins/toc.js");
 const qrcode_js_1 = require("./plugins/qrcode.js");
 const index_js_1 = require("./index.js");
 const indexModule = __importStar(require("./index.js"));
+const raw_html_js_1 = require("./raw-html.js");
 /**
  * Remote content must never make the host renderer read local files. Every
  * file-include directive in fetched text — any spelling the block dispatcher
@@ -346,51 +347,15 @@ function inlineDepths(content, spans, env) {
  * else — SVG/MathML, `<script>`/`<style>`/`<textarea>`/`<plaintext>`, forms,
  * `<template>`, … — fails the check; the block holding it is removed (M.20).
  */
-const ALLOWED_HTML = {
-    // element: required parent among the raw elements, or null for "anywhere"
-    div: null, span: null, p: null, b: null, i: null, em: null, strong: null, code: null, kbd: null, samp: null,
-    var: null, sub: null, sup: null, mark: null, del: null, ins: null, s: null, u: null, small: null, abbr: null,
-    cite: null, q: null, dfn: null, time: null, bdi: null, bdo: null, details: null, summary: null, figure: null,
-    figcaption: null, blockquote: null, center: null, section: null, article: null,
-    // no nav/main/header/footer/aside: landmarks in the host's accessibility tree (round 15, M-1)
-    address: null, pre: null, ruby: null, rt: ['ruby'], rp: ['ruby'], strike: null, tt: null, big: null,
-    h1: null, h2: null, h3: null, h4: null, h5: null, h6: null, a: null, video: null, audio: null, picture: null,
-    ul: null, ol: null, li: ['ul', 'ol'], dl: null, dt: ['dl'], dd: ['dl'],
-    table: null, caption: ['table'], colgroup: ['table'], thead: ['table'], tbody: ['table'], tfoot: ['table'],
-    tr: ['table', 'thead', 'tbody', 'tfoot'], td: ['tr'], th: ['tr'],
-};
-const VOID_HTML = new Set(['br', 'hr', 'img', 'wbr', 'source', 'track', 'col', 'input']); // input: task-list checkboxes only (below)
-const STRICT_TAG = /<(\/?)([A-Za-z][A-Za-z0-9]*)((?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*(\/?)>/y;
-const STRICT_COMMENT = /<!--(?!-?>)([\s\S]*?)-->/y;
-/**
- * Attributes fetched raw HTML may carry. No `class` and no `style`: a class can
- * pick up the page's own fixed-position rules (`.qrcode-overlay`, or any class
- * of the host site), and allowed CSS properties still paint over neighbours
- * (`opacity`, huge `font-size`, comment-hidden negative margins) — round 13.
- * Policing values lost every round; the vectors are removed instead.
- */
-const RAW_ATTRS = /^(id|title|lang|dir|role|hidden|translate|aria-label|border|clear|data-[a-z0-9-]+|href|src|srcset|sizes|alt|width|height|colspan|rowspan|scope|headers|align|valign|start|reversed|type|open|datetime|cite|name|rel|target|loading|decoding|controls|poster|preload|muted|loop|playsinline|media|srclang|kind|label|default|value|span|abbr|checked|disabled)$/i;
+// ALLOWED_HTML, VOID_HTML, STRICT_TAG, STRICT_COMMENT: src/raw-html.ts (shared with the renderer's allowlist mode, M.45).
+/* RAW_ATTRS (no `class`, no `style`: a class can pick up the page's own fixed-position
+ * rules and allowed CSS still paints over neighbours, round 13): src/raw-html.ts. */
 /** Attributes Markdown's own tokens may carry in fetched text (where
  *  `{{attrs[…]}}` lands): no `role`, `aria-*`, `contenteditable`, `accesskey`
  *  (round 15, M-1). `tabindex` only as the anchor plugin sets it. */
 const TOKEN_ATTRS = /^(id|class|style|tabindex|href|src|alt|title|start|width|height|colspan|rowspan|align|reversed|type|value|lang|dir)$/;
-/** Attributes that hold a URL: validated like a Markdown link (no `javascript:`). */
-const URL_ATTRS = /^(href|src|cite|poster|srcset)$/i;
-/** Ids the renderer gives out at render time (footnotes, data islands, the
- *  doc-meta island, preview-frame assets): fetched text cannot claim them. */
-const RESERVED_ID = /^(fn(ref)?\d+(:\d+)?|nyml-data(-\d+)?|orz[\w-]*|hljs|mermaid|chart|smilesdrawer|katex|__orz[\w-]*)$/i; // orz*: every family global (orzPosterReadiness, …)
 /** ARIA attributes that point at other elements by id (they could re-parent host content in the accessibility tree). */
 const ARIA_REFS = /^aria-(owns|controls|activedescendant|flowto|details|labelledby|describedby|errormessage)$/;
-/** An id as the browser matches it: a fragment is tried percent-decoded too. */
-function idKey(v) {
-    const t = v.trim();
-    try {
-        return decodeURIComponent(t);
-    }
-    catch {
-        return t;
-    }
-}
 /** Classes markdown itself puts on tokens (task lists). */
 const TOKEN_CLASSES = /^(task-list-item|contains-task-list|task-list-item-checkbox|enabled)$/;
 /** The documented `{{sp[…]}}` classes (references/syntax.md). */
@@ -427,7 +392,7 @@ function attrsOk(attrs, raw, auto = false) {
         const key = (0, ascii_js_1.asciiLower)(name);
         if (/^on/.test(key) || /^data-(md|orz-)/.test(key))
             return false; // handlers; copy breadcrumbs
-        if (raw ? !RAW_ATTRS.test(key) : !TOKEN_ATTRS.test(key))
+        if (raw ? !raw_html_js_1.RAW_ATTRS.test(key) : !TOKEN_ATTRS.test(key))
             return false;
         // Fetched text cannot add landmarks or headings to the host's
         // accessibility tree (`role="navigation"`, `role="heading"`: round 15, M-1).
@@ -435,7 +400,7 @@ function attrsOk(attrs, raw, auto = false) {
             return false;
         if (key === 'tabindex' && value.trim() !== '-1')
             return false;
-        if ((key === 'id' || key === 'name') && (auto ? RENDER_IDS : RESERVED_ID).test(idKey(value)))
+        if ((key === 'id' || key === 'name') && (auto ? RENDER_IDS : raw_html_js_1.RESERVED_ID).test((0, raw_html_js_1.idKey)(value)))
             return false;
         if (ARIA_REFS.test(key))
             return false;
@@ -451,30 +416,23 @@ function attrsOk(attrs, raw, auto = false) {
             return false;
         if ((key === 'width' || key === 'height') && !/^\s*(\d{1,4}(px|%)?|auto)\s*$/i.test(value))
             return false;
-        if (URL_ATTRS.test(key) && !safeUrl(value, key === 'srcset'))
+        if (raw_html_js_1.URL_ATTRS.test(key) && !safeUrl(value, key === 'srcset'))
             return false;
     }
     return true;
-}
-function rawAttrs(source) {
-    const out = [];
-    for (const m of source.matchAll(/([A-Za-z_:][A-Za-z0-9_.:-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
-        out.push([m[1], m[2] ?? m[3] ?? m[4] ?? '']);
-    }
-    return out;
 }
 /** Every id / name value in raw HTML, read tag by tag with the strict tokenizer. */
 function rawIds(html) {
     const out = [];
     for (let at = html.indexOf('<'); at >= 0; at = html.indexOf('<', at + 1)) {
-        STRICT_TAG.lastIndex = at;
-        const m = STRICT_TAG.exec(html);
+        raw_html_js_1.STRICT_TAG.lastIndex = at;
+        const m = raw_html_js_1.STRICT_TAG.exec(html);
         if (!m || m[1])
             continue;
-        for (const [k, v] of rawAttrs(m[3]))
+        for (const [k, v] of (0, raw_html_js_1.rawAttrs)(m[3]))
             if (/^(id|name)$/i.test(k))
                 out.push(v);
-        at = STRICT_TAG.lastIndex - 1;
+        at = raw_html_js_1.STRICT_TAG.lastIndex - 1;
     }
     return out;
 }
@@ -496,30 +454,30 @@ function rawHtmlStaysInside(tokens, dropped) {
     };
     const takeTags = (html) => {
         for (let at = html.indexOf('<'); at >= 0; at = html.indexOf('<', at)) {
-            STRICT_COMMENT.lastIndex = at;
-            const c = STRICT_COMMENT.exec(html);
+            raw_html_js_1.STRICT_COMMENT.lastIndex = at;
+            const c = raw_html_js_1.STRICT_COMMENT.exec(html);
             if (c) {
                 if (c[1].includes('--!>'))
                     return false; // the browser ends the comment there
-                at = STRICT_COMMENT.lastIndex;
+                at = raw_html_js_1.STRICT_COMMENT.lastIndex;
                 continue;
             }
-            STRICT_TAG.lastIndex = at;
-            const m = STRICT_TAG.exec(html);
+            raw_html_js_1.STRICT_TAG.lastIndex = at;
+            const m = raw_html_js_1.STRICT_TAG.exec(html);
             if (!m)
                 return false; // unterminated tag or quote, doctype, CDATA, bare "<"
-            at = STRICT_TAG.lastIndex;
+            at = raw_html_js_1.STRICT_TAG.lastIndex;
             const [, close, rawName, attrs, slash] = m;
             const name = (0, ascii_js_1.asciiLower)(rawName);
             const stack = frames[frames.length - 1];
-            if (!(name in ALLOWED_HTML) && !VOID_HTML.has(name))
+            if (!(name in raw_html_js_1.ALLOWED_HTML) && !raw_html_js_1.VOID_HTML.has(name))
                 return false;
             if (close) {
                 if (attrs.trim() || slash || stack.pop() !== name)
                     return false;
                 continue;
             }
-            const list = rawAttrs(attrs);
+            const list = (0, raw_html_js_1.rawAttrs)(attrs);
             if (name === 'input') {
                 // Only a checkbox (what the task-list plugin emits), in any attribute order.
                 const ok = list.every(([k, v]) => {
@@ -540,12 +498,12 @@ function rawHtmlStaysInside(tokens, dropped) {
                 if (/^(img|video|table|picture)$/.test(name) && list.some(([k, v]) => (0, ascii_js_1.asciiLower)(k) === 'align' && /^(left|right)$/i.test(v.trim())))
                     return false;
             }
-            const parent = ALLOWED_HTML[name];
+            const parent = raw_html_js_1.ALLOWED_HTML[name];
             if (parent && !parent.includes(stack[stack.length - 1] ?? ''))
                 return false;
             if (name === 'a' && (inLink > 0 || frames.some((f) => f.includes('a'))))
                 return false;
-            if (VOID_HTML.has(name)) {
+            if (raw_html_js_1.VOID_HTML.has(name)) {
                 if (name === 'col' && !['colgroup', 'table'].includes(stack[stack.length - 1] ?? ''))
                     return false;
                 continue;
@@ -777,7 +735,7 @@ function parseHost({ doc, regions }, base = {}) {
         for (const x of [t, ...(t.children ?? [])]) {
             for (const [k, v] of x.attrs ?? [])
                 if ((0, ascii_js_1.asciiLower)(k) === 'id') {
-                    const key = idKey(v);
+                    const key = (0, raw_html_js_1.idKey)(v);
                     ids.set(key, (ids.get(key) ?? 0) + 1);
                 }
             // An id (or an anchor name) written in raw HTML is a target too (round 11,
@@ -785,7 +743,7 @@ function parseHost({ doc, regions }, base = {}) {
             // once per tag (a regex per "<" was quadratic: round 14, H1/H3).
             if (x.type === 'html_block' || x.type === 'html_inline' || (x.type === 'plugin_inline' && (x.info === 'sp' || x.info === 'span'))) {
                 for (const v of rawIds(x.content)) {
-                    const key = idKey(v);
+                    const key = (0, raw_html_js_1.idKey)(v);
                     ids.set(key, (ids.get(key) ?? 0) + 1);
                 }
             }
