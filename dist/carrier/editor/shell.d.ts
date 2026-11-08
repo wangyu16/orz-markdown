@@ -129,7 +129,41 @@ export interface EditorHooks {
     resolveLink?(href: string): string;
     /** A host-minted `uid` (FC-18 §10) for `ensureUid()`; default the kit's `mintUid()`. */
     mintUid?(): Promise<string>;
+    /**
+     * (2.7.0, FC-19 §3, STATUS D-131) The words of the toolbar's save status, for
+     * a host that saves on its own rhythm (a routine wait before it sends): asked
+     * at mount, whenever the dirty or saving state changes, and on
+     * `refreshSaveStatus()`. A string is the words (`pending` tone while dirty,
+     * `saved` when clean); `{ text, tone }` sets the tone too; null or undefined
+     * (or a throw) leaves the default ("Unsaved changes" / "Saved"). With this
+     * hook the Save button reads "Save now". It changes words only: `isDirty`,
+     * the `dirty` event and `markSaved` are as before.
+     */
+    saveStatus?(state: SaveStatusState): SaveStatus | string | null | undefined;
 }
+/** What `hooks.saveStatus` is asked about (2.7.0). */
+export interface SaveStatusState {
+    /** The text differs from the last saved one (`isDirty()`). */
+    readonly dirty: boolean;
+    /** A save started by the editor (Save, Cmd/Ctrl+S, `save()`) is running. */
+    readonly saving: boolean;
+}
+/** The save status the host supplies (2.7.0): its words and how the status dot reads. */
+export interface SaveStatus {
+    text: string;
+    /** `saved` green, `pending` neutral (a routine wait — never the warning colour), `unsaved` amber, `error` red. Default: `pending` while dirty, else `saved`. */
+    tone?: SaveTone;
+}
+export type SaveTone = 'saved' | 'pending' | 'unsaved' | 'error';
+/**
+ * Where `reveal` goes (2.7.0, FC-19 §4): a range of the exact text, or a
+ * heading — its text as the reader sees it (`"Buffers"`; spaces collapsed,
+ * case ignored when no heading matches exactly), or its id with a `#`
+ * (`"#buffers"`, the id the preview gives it).
+ */
+export type RevealTarget = TextRange | string | {
+    heading: string;
+};
 /** What `render` gets besides the text: the host's hooks that a renderer may use. */
 export interface RenderContext {
     fetchInclude?(target: string): Promise<string | null>;
@@ -327,6 +361,14 @@ export interface EditorShellOptions {
     label?: string;
     /** Below this width (CSS px) only one pane shows at a time. Default 640. */
     narrowWidth?: number;
+    /**
+     * (2.7.0, FC-19 §3, STATUS D-130) Fold the document header (`{{nyml …}}`)
+     * in the source view to one closed line, "Document settings · <title> ▸",
+     * that opens on a click or when the caret moves into it. Default true;
+     * `false` shows the header's lines as text. The text never changes. The
+     * textarea engine shows the header as text.
+     */
+    foldHeader?: boolean;
 }
 /** How an AI request went. Never rejects. */
 export type AiOutcome = {
@@ -436,6 +478,21 @@ export interface EditorShell {
         from: number;
         to: number;
     } | null;
+    /**
+     * (2.7.0, FC-19 §4, STATUS D-134) Take the reader to a place in the text:
+     * a range of the exact text, or a heading (its text, or `#id`). The caret
+     * goes to its start (`select: true` selects the range — a heading's line),
+     * the source view scrolls it to the top (a folded header opens when the
+     * place is in it), and a preview that shows scrolls to the same place
+     * (`navigate` mode: shows it). A pane that is hidden follows when it shows.
+     * It does not move the keyboard focus (call `focus()`) and works read-only.
+     * Returns the exact range revealed, or null (no such heading; destroyed).
+     */
+    reveal(target: RevealTarget, options?: {
+        select?: boolean;
+    }): TextRange | null;
+    /** (2.7.0, FC-19 §4, STATUS D-131) Ask `hooks.saveStatus` again (the host's own save state changed). */
+    refreshSaveStatus(): void;
     isDirty(): boolean;
     /** The current text is the saved one. */
     markSaved(): void;

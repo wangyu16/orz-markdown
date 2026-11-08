@@ -15,7 +15,7 @@ exports.EDITOR_CSS = `
 }
 .orz-editor:focus { outline: none; }
 .orz-editor__bar {
-  flex: none; display: flex; align-items: center; gap: var(--orz-chrome-space-3); flex-wrap: wrap;
+  flex: none; position: relative; display: flex; align-items: center; gap: var(--orz-chrome-space-3); flex-wrap: wrap;
   min-height: 40px; padding: var(--orz-chrome-space-2) var(--orz-chrome-space-3);
   background: var(--orz-chrome-surface); border-bottom: 1px solid var(--orz-chrome-border);
 }
@@ -39,6 +39,11 @@ exports.EDITOR_CSS = `
 .orz-editor__status { display: inline-flex; align-items: center; gap: 6px; color: var(--orz-chrome-muted); font-size: var(--orz-chrome-text-sm); white-space: nowrap; }
 .orz-editor__status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orz-chrome-success); }
 .orz-editor[data-dirty="true"] .orz-editor__status::before { background: var(--orz-chrome-warning); }
+/* (2.7.0, D-131) the dot follows the status's tone: a host's routine wait is neutral, never the warning colour */
+.orz-editor[data-save-tone="saved"] .orz-editor__status::before { background: var(--orz-chrome-success); }
+.orz-editor[data-save-tone="pending"] .orz-editor__status::before { background: var(--orz-chrome-muted); }
+.orz-editor[data-save-tone="unsaved"] .orz-editor__status::before { background: var(--orz-chrome-warning); }
+.orz-editor[data-save-tone="error"] .orz-editor__status::before { background: var(--orz-chrome-danger); }
 /* the label is as wide as its longest text (data-reserve), whatever it says now (D-101) */
 .orz-editor__status-text { display: inline-grid; }
 .orz-editor__status-text::after { content: attr(data-reserve); visibility: hidden; height: 0; overflow: hidden; }
@@ -48,6 +53,19 @@ exports.EDITOR_CSS = `
 /* on (the default) reads as a pressed toggle, not a link: a tinted fill and a ring like the view buttons' (D-95) */
 .orz-editor__sync[aria-pressed="true"] { color: var(--orz-chrome-accent); background: color-mix(in oklab, var(--orz-chrome-accent) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--orz-chrome-accent) 45%, transparent); }
 .orz-editor__save { min-height: 28px; }
+/* (2.7.0, D-132) a narrow bar keeps one row: the carrier's tools open under More, a pop-up below the bar */
+.orz-editor__more { display: none; min-height: 28px; }
+.orz-editor[data-more] .orz-editor__more { display: inline-flex; }
+.orz-editor[data-more] .orz-editor__tools { display: none; }
+.orz-editor[data-more][data-more-open] .orz-editor__tools {
+  display: flex; position: absolute; z-index: var(--orz-chrome-z, 20); top: calc(100% + 4px); right: var(--orz-chrome-space-3); left: auto;
+  width: max-content; max-width: calc(100% - 2 * var(--orz-chrome-space-3)); flex-wrap: wrap; justify-content: flex-end;
+  padding: var(--orz-chrome-space-2); background: var(--orz-chrome-surface); color: var(--orz-chrome-fg);
+  border: 1px solid var(--orz-chrome-border); border-radius: var(--orz-chrome-radius-s, 6px); box-shadow: 0 6px 20px oklch(0% 0 0 / 0.16);
+}
+.orz-editor[data-more] .orz-editor__more[aria-expanded="true"] { background: var(--orz-chrome-surface-2); }
+/* the narrowest bar: the view, Save and More buttons as icons (their names stay as labels) */
+.orz-editor[data-bar-icons] :is(.orz-editor__mode, .orz-editor__save, .orz-editor__more) .orz-editor__label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orz-editor[data-chrome-level="compact"] .orz-editor__label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orz-editor__notice {
   flex: none; display: flex; align-items: center; gap: var(--orz-chrome-space-3); flex-wrap: wrap;

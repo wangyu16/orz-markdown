@@ -16,7 +16,7 @@ export interface CodeMirror6Modules {
         StateField?: Any;
         StateEffect?: Any;
     };
-    /** `Decoration` (2.4.0, optional): the focus range's dimming and folding. */
+    /** `Decoration` (2.4.0, optional): the focus range's dimming and folding. `WidgetType` (2.7.0, optional): the folded header's line. */
     view: {
         EditorView: Any;
         keymap: Any;
@@ -25,6 +25,7 @@ export interface CodeMirror6Modules {
         highlightSpecialChars?: Any;
         dropCursor?: Any;
         Decoration?: Any;
+        WidgetType?: Any;
     };
     commands: {
         history: Any;

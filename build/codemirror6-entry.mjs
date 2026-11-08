@@ -10,7 +10,7 @@
  * `CodeMirror6Modules`), and `markdownLanguage` instead of `markdown()`, which
  * would pull in lang-html/css/javascript (543 KB instead of ~355 KB). */
 import { EditorState, Compartment, EditorSelection, StateField, StateEffect } from '@codemirror/state';
-import { EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, Decoration } from '@codemirror/view';
+import { EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, Decoration, WidgetType } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap, indentWithTab, undo, redo, isolateHistory } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching, LanguageSupport } from '@codemirror/language';
 import { markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
@@ -19,7 +19,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 /* global __CM_VERSIONS__ */
 export const versions = __CM_VERSIONS__;
 export const state = { EditorState, Compartment, EditorSelection, StateField, StateEffect };
-export const view = { EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, Decoration };
+export const view = { EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, Decoration, WidgetType };
 export const commands = { history, defaultKeymap, historyKeymap, indentWithTab, undo, redo, isolateHistory };
 export const language = { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching, LanguageSupport };
 export const markdown = { markdownLanguage, markdownKeymap };

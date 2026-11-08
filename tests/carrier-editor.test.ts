@@ -298,7 +298,7 @@ describe('layout, modes, keyboard', () => {
     r.shell.destroy();
   });
 
-  it('[E.4] setMode and the mode buttons switch views (stored as the viewMode preference); Cmd/Ctrl+\\ cycles split → editor → preview → split; Cmd/Ctrl+S saves; Esc in the editor moves focus to the toolbar', async () => {
+  it('[E.4] setMode and the mode buttons switch views (stored as the viewMode preference); Cmd/Ctrl+\\ cycles split → editor → preview → split; Cmd/Ctrl+S saves; Esc in the editor leaves the focus in the text (D-129, E.50)', async () => {
     const save = vi.fn(async () => undefined);
     const m = mount({ hooks: { save }, uid: UID_A });
     const c = m.root.querySelector('.orz-editor')!;
@@ -321,7 +321,7 @@ describe('layout, modes, keyboard', () => {
     expect(save).toHaveBeenCalledWith(`${CRLF_BOM}!`);
     ta.focus();
     key(m, ta, 'Escape');
-    expect(m.root.activeElement?.getAttribute('data-mode')).toBe('split');
+    expect(m.root.activeElement).toBe(ta);
     m.shell.destroy();
   });
 
@@ -820,13 +820,14 @@ function valueImports(entry: string): Set<string> {
 // fetchInclude, the missing-include note, the save-conflict question); bound ~10 % above.
 // 79,093 B with 2.4.0 (applyEdits, select, setFocusRange, the focus-range field); bound ~10 % above.
 // 87,027 B with 2.5.0 (the twinLinks option: render context and saves); bound ~10 % above.
-const EDITOR_OWN_LIMIT = 96_000;
+// 102,662 B with 2.7.0 (D-129…D-135: reveal, the save-status hook, the folded header, the toolbar's More); bound ~10 % above.
+const EDITOR_OWN_LIMIT = 113_000;
 /** The whole shipped editor bundle (parser, one KaTeX, editor; no CodeMirror): 967 KB before round 2, 982 KB after. */
 // 1,066,302 B with 2.4.0 (CONTENT_THEME_SCRIPT and the frame's drawing script in bodyScripts); bound ~8 % above.
 const EDITOR_BUNDLE_LIMIT = 1_150_000;
 
 describe('module boundaries', () => {
-  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 96 KB, the whole bundle under 1.15 MB with one KaTeX, and no CodeMirror', async () => {
+  it('[E.10] carrier/shell and carrier/read stay parser-free and do not import the editor; carrier does not either; the package exports ./carrier/editor; what ships (the CommonJS dist entry, bundled) holds the editor\'s own code under 113 KB, the whole bundle under 1.15 MB with one KaTeX, and no CodeMirror', async () => {
     for (const entry of ['src/carrier/shell/index.ts', 'src/carrier/read.ts', 'src/carrier.ts', 'src/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/editor')), entry).toEqual([]);
     }
@@ -3448,7 +3449,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await p.close();
   });
 
-  it('[E.13] [E.3] [E.4] [E.8] modes, keyboard and save in Chrome: the Preview button and Cmd/Ctrl+\\ switch views, Cmd/Ctrl+S inside CodeMirror (and inside the preview frame) saves the exact text through hooks.save and clears dirty, undo returns the exact original, Esc leaves the editor', async () => {
+  it('[E.13] [E.3] [E.4] [E.8] modes, keyboard and save in Chrome: the Preview button and Cmd/Ctrl+\\ switch views, Cmd/Ctrl+S inside CodeMirror (and inside the preview frame) saves the exact text through hooks.save and clears dirty, undo returns the exact original, Esc keeps the caret in the text (D-129)', async () => {
     const p = await open();
     await mountBoth(p);
     const content = p.locator('#a .cm-content');
@@ -3481,7 +3482,7 @@ chrome('real Chrome (playwright-core, channel chrome)', { timeout: 120_000 }, ()
     await p.keyboard.press('ControlOrMeta+Backslash');
     expect(await p.evaluate('[shell_a.getMode(), getComputedStyle(shell_a.root.querySelector(".orz-editor__pane--preview")).display]')).toEqual(['editor', 'none']);
     await p.keyboard.press('Escape');
-    expect(await p.evaluate('shell_a.root.activeElement && shell_a.root.activeElement.getAttribute("data-mode")')).toBe('editor');
+    expect(await p.evaluate('!!(shell_a.root.activeElement && shell_a.root.activeElement.closest(".cm-editor"))')).toBe(true);
     expect(await p.evaluate('shell_b.getMode()')).toBe('split');
     await p.close();
   });
@@ -3786,9 +3787,9 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
     await p.close();
   });
 
-  it('[E.36] (2.3.0 round 3 of the paged loop) in a ~500 px column the toolbar wraps: a carrier\'s settings group in the tools slot, the view buttons, the status and Save all stay inside the bar, none overlaps another, and the bar has no horizontal overflow', async () => {
+  it('[E.36] (2.3.0 round 3 of the paged loop) in a column too narrow for one row (700 px; below the narrow width a phone\'s bar keeps one row with More, E.53) the toolbar wraps: a carrier\'s settings group in the tools slot, the view buttons, the status and Save all stay inside the bar, none overlaps another, and the bar has no horizontal overflow', async () => {
     const p = await open();
-    await p.evaluate(`(function(){var d=document.createElement('div');d.id='narrow';d.style.cssText='width:500px;height:420px';document.body.insertBefore(d,document.body.firstChild);scrollTo(0,0);window.__saved.narrow=[];})()`);
+    await p.evaluate(`(function(){var d=document.createElement('div');d.id='narrow';d.style.cssText='width:700px;height:420px';document.body.insertBefore(d,document.body.firstChild);scrollTo(0,0);window.__saved.narrow=[];})()`);
     expect(await p.evaluate(`mountOpts('narrow', ${JSON.stringify(TEXT_B)}, ${JSON.stringify(`${A}/cm6.js`)})`)).toEqual({ engine: 'codemirror6', error: null });
     // a carrier's settings group (orz-paged: theme, page size, margins, fonts, version) and its AI menu
     await p.evaluate(`(function(){var t=shell_narrow.toolbar;['Theme: Classic','Page: A4','Margins: Normal','Font: Serif','Version: Full','AI'].forEach(function(l){var b=document.createElement('button');b.className='orz-btn orz-btn--ghost';b.textContent=l;t.appendChild(b)})})()`);
@@ -3800,7 +3801,7 @@ try{window.__orzPreview.navigated(40)}catch(x){}window.__hits++;(document.scroll
       for(var i=0;i<boxes.length;i++)for(var j=i+1;j<boxes.length;j++){var a=boxes[i][1],b=boxes[j][1];if(a.left<b.right-0.5&&b.left<a.right-0.5&&a.top<b.bottom-0.5&&b.top<a.bottom-0.5)overlap.push(boxes[i][0]+' / '+boxes[j][0])}
       return {n:boxes.length,out:out,overlap:overlap,scroll:bar.scrollWidth-bar.clientWidth,width:Math.round(br.width),tall:br.height>50};
     })()`)) as Record<string, unknown>;
-    expect(r).toEqual({ n: 10, out: [], overlap: [], scroll: 0, width: 500, tall: true });
+    expect(r).toEqual({ n: 12, out: [], overlap: [], scroll: 0, width: 700, tall: true });
     await p.close();
   });
 

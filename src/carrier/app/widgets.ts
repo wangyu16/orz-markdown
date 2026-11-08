@@ -351,6 +351,10 @@ export function menuButton(doc: AppDocument, o: ButtonOptions & { items(): MenuI
       return true;
     });
     wrap.append(m);
+    // (2.7.0, D-132) kept on screen: a right-aligned menu of a button near the left edge (a phone's toolbar, the
+    // tools under More) opens to the right instead
+    const box = m.getBoundingClientRect?.();
+    if (box && box.width > 0 && box.left < 8 && o.align !== 'left') m.setAttribute('data-align', 'left');
     btn.setAttribute('aria-expanded', 'true');
     win?.addEventListener('pointerdown', onOutside, true);
     const list = itemsNow();

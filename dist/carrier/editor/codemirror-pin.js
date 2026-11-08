@@ -19,9 +19,9 @@ exports.CODEMIRROR6_VERSIONS = {
 /** The bundle's path inside the orz-markdown package. */
 exports.CODEMIRROR6_PATH = 'vendor/codemirror6.js';
 /** Subresource Integrity of the bundle's exact bytes. */
-exports.CODEMIRROR6_INTEGRITY = 'sha384-265qYkDUs7Cbe/xL4/g6l08dOgRZWX+BGgzt+eU1/BQhla54z4ErWI4XSIekaIC+';
+exports.CODEMIRROR6_INTEGRITY = 'sha384-eDuFlngbiYwsCj2Z5MIds+967YVG/Ktti5gKYGlNS7Zvgo1FPAt2mLL5f9UQ1W1x';
 /** The bundle's size in bytes. */
-exports.CODEMIRROR6_BYTES = 355853;
+exports.CODEMIRROR6_BYTES = 355867;
 /** The global the bundle sets. */
 exports.CODEMIRROR6_GLOBAL = 'OrzCodeMirror6';
 //# sourceMappingURL=codemirror-pin.js.map

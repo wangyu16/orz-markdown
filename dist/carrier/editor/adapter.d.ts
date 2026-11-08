@@ -44,6 +44,21 @@ export interface AdapterMountOptions {
     root?: ShadowRootLike;
     /** An accessible name for the editing surface. */
     label?: string;
+    /**
+     * (2.7.0, STATUS D-130) Where the document header is in a text (offsets in
+     * the adapter's text: `from` at `{{nyml`, `to` just past its `}}`) and the
+     * title to show, or null: an engine that can fold shows it as one closed
+     * line ("Document settings · <title> ▸") until the reader opens it. The text
+     * is never changed. An engine without folding ignores it.
+     */
+    headerFold?(text: string): HeaderFoldInfo | null;
+}
+/** The header an engine folds (2.7.0, `AdapterMountOptions.headerFold`). */
+export interface HeaderFoldInfo {
+    from: number;
+    to: number;
+    /** The header's title (may be empty). */
+    title: string;
 }
 export interface TextEditorAdapter {
     /** The engine in use (`textarea`, `codemirror6`). */
@@ -91,6 +106,21 @@ export interface TextEditorAdapter {
     flash?(ranges: readonly Selection[], options?: {
         ms?: number;
     }): void;
+    /**
+     * (2.7.0, STATUS D-134, the shell's `reveal`) Put the caret at `from`
+     * (`select`: select the range) and scroll the range's first line to the top
+     * of the view. Without it the shell uses `setSelection` and `scrollTo`.
+     */
+    reveal?(selection: Selection, options?: {
+        select?: boolean;
+    }): void;
+    /**
+     * (2.7.0, STATUS D-130) Open (`false`) or close (`true`) the folded header;
+     * `isHeaderFolded()` says whether it shows as the one closed line now
+     * (false without a header or folding).
+     */
+    setHeaderFolded?(folded: boolean): void;
+    isHeaderFolded?(): boolean;
     hasFocus?(): boolean;
     undo?(): boolean;
     redo?(): boolean;

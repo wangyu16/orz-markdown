@@ -15,9 +15,10 @@ export { createEditorShell } from './shell.js';
 export type {
   EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext,
   EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, TextEdit, EditorPreviewChannel,
+  SaveStatus, SaveStatusState, SaveTone, RevealTarget,
 } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
-export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition, TextChange, FocusMode } from './adapter.js';
+export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition, TextChange, FocusMode, HeaderFoldInfo } from './adapter.js';
 export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, ORZ_HIGHLIGHTER, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS, CODEMIRROR6_HISTORY_STEPS } from './codemirror6.js';
 export type { CodeMirror6Modules, CodeMirror6Options } from './codemirror6.js';
 export { CODEMIRROR6_VERSIONS, CODEMIRROR6_PATH, CODEMIRROR6_INTEGRITY, CODEMIRROR6_BYTES, CODEMIRROR6_GLOBAL } from './codemirror-pin.js';

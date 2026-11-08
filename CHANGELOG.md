@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The editor shell's reader fixes from the owner's Alembic rounds (STATUS
+D-129…D-135). **Additive for `^2.6.0` consumers** (FC-19 minor revision): an
+existing host and carrier change nothing; a carrier gets them by rebuilding
+on this version.
+
+### Added
+
+- **`reveal(target, { select? })`** on the editor (FC-19 §4, STATUS D-134,
+  claim E.54): a range of the exact text, or a heading by its text or `#id`;
+  the caret goes there, the source view scrolls that line to its top and the
+  preview shows the same place (a hidden pane follows when it shows); returns
+  the exact range, or null.
+- **`hooks.saveStatus({ dirty, saving })`** and **`refreshSaveStatus()`**
+  (FC-19 §3–4, STATUS D-131, claim E.52): a host supplies the save status's
+  words and tone (`saved` / `pending` / `unsaved` / `error`), so its routine
+  save wait reads e.g. "Saved on this device" with a neutral dot instead of
+  an amber "Unsaved changes"; with the hook Save reads "Save now". Types
+  `SaveStatus`, `SaveStatusState`, `SaveTone`, `RevealTarget`.
+- **The folded header** (FC-19 §3 `foldHeader`, default true; STATUS D-130,
+  claim E.51): the source view shows `{{nyml …}}` as one closed line,
+  "Document settings · <title> ▸"; a click (or the caret moving in) opens it,
+  a bar folds it again. The text never changes. The pinned CodeMirror bundle
+  now also exports `WidgetType` (`vendor/codemirror6.js` rebuilt; same
+  package versions).
+- **One toolbar row on a phone** (STATUS D-132, claim E.53): in a narrow
+  shell the bar keeps the views, the save status, Save and a **More** button
+  on one row; the carrier's tools open under More.
+- Adapters may implement `reveal`, `setHeaderFolded` / `isHeaderFolded` and
+  take the mount option `headerFold(text)` (FC-19 §8.6).
+
+### Changed
+
+- **Esc keeps the caret in the text** (STATUS D-129, claim E.50): it closes
+  the editor's own pop-ups and no longer moves the focus to the toolbar
+  (what the reader typed next was lost). Leaving the text by keyboard is Esc
+  then Tab (Shift+Tab comes back); no keyboard trap.
+
+### Fixed
+
+- **Cmd/Ctrl+\ stopped after Preview** (STATUS D-135, claim E.55): the
+  focus fell to the page when the editor pane hid; a view change from the
+  keyboard now moves the focus to the pane that shows (the preview frame
+  reports the next key), so the cycle goes on.
+- A carrier-app menu (`menuButton`) of a button near the left edge — a
+  phone's toolbar, the tools under More — opens to the right instead of off
+  the screen.
+
 ## [2.6.0] — 2026-10-31
 
 The raw-HTML allowlist render setting for hosts whose documents have several

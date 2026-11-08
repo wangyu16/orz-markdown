@@ -8,6 +8,15 @@ design):** the twin-link naming `twinLinks` (FC-18 §8.2) on `assemble`,
 `extract`, `renderPreview` (§2), `EditorOptions` (§3) and the editor shell
 (§8.1, §8.5, §8.8). Carriers adopt it in a minor release (§7).
 
+**Minor revision, orz-markdown 2.7.0 (additive; STATUS D-129…D-135):**
+`EditorOptions.foldHeader` and `EditorHooks.saveStatus` (§3); `Editor.reveal`
+and `Editor.refreshSaveStatus` (§4); in the shell (§8.2): Esc no longer moves
+the focus out of the text, Cmd/Ctrl+\ keeps the keyboard in the shell, a
+narrow toolbar keeps one row with the carrier's tools under More, and the
+header shows folded in the source view. A carrier adopts them by rebuilding
+on the kit (its `mountEditor` returns the shell and passes `hooks` through);
+an existing host changes nothing.
+
 ## 1. One editor, two kinds of host
 
 Each `orz-<x>-browser` package exports the editor for its kind. The assembled
@@ -94,6 +103,7 @@ interface EditorOptions {
   fileName?: string;                  // added 2.2.0 (round 2): the suggested name of the standalone save of an app's editor without hooks.save (picker and download)
   twinLinks?: TwinNaming;             // added 2.5.0: the host's twin-link naming (FC-18 §8.2): the preview renders links to text twins with its names
                                       //   (hooks.resolveLink, when given, still gets the source href); an app's standalone save passes it to assemble
+  foldHeader?: boolean;               // added 2.7.0: the header folded to one line in the source view (default true; below)
 }
 
 interface EditorHooks {
@@ -106,8 +116,38 @@ interface EditorHooks {
   uploadAsset?(file: File): Promise<string>;               // returns the relative path to insert
   resolveLink?(href: string): string;                      // e.g. map twin links inside an app; also preview link clicks
   mintUid?(): Promise<string>;                             // host-minted ids (FC-18 §10)
+  saveStatus?(state: { dirty: boolean; saving: boolean }): { text: string; tone?: SaveTone } | string | null | undefined;
+                                                           // added 2.7.0: the toolbar's save-status words (below)
 }
+
+type SaveTone = "saved" | "pending" | "unsaved" | "error";
 ```
+
+**`hooks.saveStatus`** (2.7.0, additive; STATUS D-131). A host that saves on
+its own rhythm — Alembic keeps every change on the device at once and sends
+it after a routine wait — supplies the words of the toolbar's save status, so
+that wait does not read as an amber "Unsaved changes". The editor asks at
+mount, whenever its dirty or saving state changes (`saving`: a save the
+editor started — Save, Cmd/Ctrl+S, `save()` — is running) and on
+`refreshSaveStatus()` (§4), which the host calls when its own state changes
+(sent, offline, refused). A string is the words, with the dot neutral
+(`pending`) while dirty and green (`saved`) when clean; `{ text, tone }` sets
+the dot too (`saved` green, `pending` neutral, `unsaved` amber, `error`
+red). Null, undefined, empty words or a throw keep the defaults ("Unsaved
+changes" / "Saved"). With the hook the Save button reads **"Save now"** (the
+host saves anyway; the button sends at once). Only words change: `isDirty()`,
+the `dirty` event and `markSaved()` keep their meaning, and a host still calls
+`markSaved()` when its save is done.
+
+**`foldHeader`** (2.7.0, additive; STATUS D-130). The source view shows the
+document header (`{{nyml …}}`, FC-18 §5 — with its `uid` and every other
+key) as one closed line, "Document settings · <title> ▸". A click opens it
+— its lines are text again, under a bar that folds it back — and so does the
+caret moving into it (Ctrl+Home, the up arrow, a search match, `select`,
+`reveal`, an undo there). Nothing in the text, its history or `getText()`
+changes (FC-18 is untouched). `foldHeader: false` shows the lines as before;
+so does the textarea engine (CodeMirror not loaded) and an app's own
+CodeMirror build without `WidgetType`.
 
 ## 4. `Editor`
 
@@ -144,6 +184,9 @@ interface Editor {
   setFocusRange(from: number | null, to?: number, options?: { mode?: "dim" | "fold" }): void;  // null: show everything
   flash(ranges: Array<{ from: number; to: number }>, options?: { ms?: number }): void;  // light the lines a tool changed
   getSelection(): { from: number; to: number } | null;                          // exact offsets, mapped by every change
+  // added 2.7.0 (additive; STATUS D-131, D-134)
+  reveal(target: { from: number; to?: number } | string | { heading: string }, options?: { select?: boolean }): { from: number; to: number } | null;
+  refreshSaveStatus(): void;                                                   // ask hooks.saveStatus again (§3)
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
@@ -232,6 +275,24 @@ counted).
   `applyEdits`, an AI edit — which MAPS the selection and emits no
   `selection` event: a host that keeps the caret reads it here rather than
   keeping a copy from the last event.
+
+**`reveal`** (2.7.0, additive; STATUS D-134) takes the reader to a place:
+a range of the exact text (offsets as `selection` reports them; `to`
+optional), or a heading — its text as the reader sees it (`"Weak acids"`;
+spaces collapsed, any case when no heading matches exactly) or its id with
+a `#` (`"#weak-acids"`, the id the preview gives it; a heading-looking line
+inside code is not a heading). The caret goes to the start (`select: true`
+selects the range — a heading's whole line), the source view scrolls that
+line to its top, a folded header opens when the place is in it, and a
+preview that shows scrolls to the same source line (`navigate` mode:
+navigates to it); the preview is placed again when the frame re-reports its
+layout within a moment (a reflow after a view change), unless the reader
+moved. A pane that is hidden follows when it shows. It returns the exact
+range revealed, or null (no such heading; after `destroy`), throws a
+`TypeError` for another kind of target, works read-only, changes no text and
+does not move the keyboard focus (call `focus()`). Unlike `select`, it puts
+the place at the top and moves the preview with it (`flash` still only
+lights).
 
 **`includes` and `fetchInclude`** (2.2.0, additive; round 1 of the
 carrier-app loop): a FILE include is read from `includes` first (an
@@ -416,18 +477,35 @@ shell.preview.context / resolveAsset(ref) / resolveAssets(html) / shareAssets(ht
 - One host element appended to `element`, with an open shadow root holding
   `CHROME_CSS` and `EDITOR_CSS` (constructed stylesheets): a toolbar
   (Editor / Split / Preview with `aria-pressed`, the carrier's slot, the save
-  state, Sync scroll, Save), an optional served-page notice, the editor pane,
+  state, Sync scroll, Save, and — 2.7.0 — More), an optional served-page notice, the editor pane,
   a separator and the preview pane. `chrome: 'compact'` hides the labels
   (icons stay, controls keep their `aria-label`); `'none'` has no toolbar. The
   toolbar wraps onto more lines in a narrow column, the carrier's slot too
-  (2.3.0: its settings group wraps instead of overflowing).
+  (2.3.0: its settings group wraps instead of overflowing). (2.7.0, STATUS
+  D-132) Below `narrowWidth` (one pane: a phone, a narrow column) the bar
+  keeps ONE row: the first of these that fits — the save status's words, its
+  dot alone, the carrier's slot under a **More** button (`aria-expanded`,
+  `aria-controls`; the slot opens as a pop-up below the bar; Esc, a press
+  outside or More closes it), with the words, then the dot, and last the
+  view, Save and More buttons as icons (their names stay as labels). A
+  carrier keeps adding its tools to `shell.toolbar`; the element is the same.
 - Modes `split` / `editor` / `preview`. Cmd/Ctrl+\ cycles split → editor →
-  preview → split. Below `narrowWidth` (640 px) of the shell's **own** width
+  preview → split. (2.7.0, STATUS D-135) A view change from the keyboard
+  keeps the keyboard in the shell: when it hides the pane that holds the
+  focus, the focus goes to the pane that shows — the editor, else the
+  preview frame, whose bridge reports the next Cmd/Ctrl+\ (before, the
+  focus fell to the page and the cycle stopped at Preview). Below `narrowWidth` (640 px) of the shell's **own** width
   (a `ResizeObserver`; an app may give it a narrow column) only one pane
   shows: `split` shows the editor, Cmd/Ctrl+\ flips editor ↔ preview, the
   Split button hides. `getView()` is what shows.
-- Cmd/Ctrl+S saves; Esc in the editor moves focus to the toolbar (so Tab
-  indentation never traps focus). Cmd/Ctrl+P (2.3.0, not with Shift or Alt)
+- Cmd/Ctrl+S saves. Esc (2.7.0, STATUS D-129) closes the shell's own
+  pop-ups (the link chip, the tools under More) and never takes the caret
+  out of the text — before 2.7.0 it moved the focus to the toolbar, so what
+  the reader typed next was lost. Leaving the text by keyboard is **Esc then
+  Tab** (CodeMirror's Tab-focus window after Escape; the textarea does not
+  bind Tab), Shift+Tab comes back; Tab alone indents. No keyboard trap.
+  Escape reported from the preview frame (no text there) brings the focus
+  to the toolbar. Cmd/Ctrl+P (2.3.0, not with Shift or Alt)
   is the `print` event when the editor has a listener (default prevented),
   else the browser's. The preview frame forwards the same keys — Cmd/Ctrl+P
   too, its own print prevented (§8.4 says when the shell acts on them).
@@ -874,6 +952,8 @@ interface TextEditorAdapter {
   // optional: getSelection, setSelection(sel, { scroll? }), setReadOnly, hasFocus, undo, redo, getScroll → { line, fraction }, scrollTo({ line | fraction }), ready()
   // optional (2.4.0): applyChanges(changes) — one undoable step; setFocusRange(range | null, { mode? }) — dim / fold outside;
   //                  flash(ranges, { ms? }) — light the lines the ranges touch for a moment
+  // optional (2.7.0): reveal(sel, { select? }) — caret (or selection) there, its line at the top; setHeaderFolded(flag), isHeaderFolded();
+  //                  mount option headerFold(text) → { from, to, title } | null — where the header is (the shell passes it unless foldHeader: false)
 }
 ```
 
@@ -1050,6 +1130,14 @@ The kind-independent §3 hooks live in the shell (`hooks`, shaped like
   accepting a naming; from `orz-markdown/carrier`: `TwinNaming`,
   `twinNaming`, `twinHref(href, naming?)`, `twinFileName`, `textNameOf`,
   `includeTargets` (browser-safe) and `linkTargets`.
+- 2.7.0 (additive; STATUS D-129…D-135): `EditorOptions.foldHeader` and the
+  shell option `foldHeader`, `EditorHooks.saveStatus` and the types
+  `SaveStatus`, `SaveStatusState`, `SaveTone`, `RevealTarget` (§3);
+  `reveal`, `refreshSaveStatus` (§4); Esc, Cmd/Ctrl+\ focus and the
+  narrow toolbar's More (§8.2); adapters may implement `reveal`,
+  `setHeaderFolded` / `isHeaderFolded`, and take the mount option
+  `headerFold(text)` (§8.6); the pinned CodeMirror bundle also exports
+  `WidgetType`. Claims E.50–E.55.
 - 2.4.0 (additive; the kit gaps of orz-slides 1.0, REBUILD §3c): `Editor`
   `applyEdits`, `select`, `setFocusRange`, `flash`, `getSelection` and the `change` event's
   `label` (§4); adapters may implement `applyChanges`, `setFocusRange` and

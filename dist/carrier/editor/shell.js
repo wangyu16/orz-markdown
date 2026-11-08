@@ -46,6 +46,7 @@ const preview_js_1 = require("./preview.js");
 const styles_js_1 = require("./styles.js");
 const text_model_js_1 = require("./text-model.js");
 const naming_js_1 = require("../naming.js");
+const parser_js_1 = require("../parser.js");
 /** A text's well-formed header uid, as the editor reads its own (`readHeader`). */
 const headerUid = (text) => {
     const u = (0, header_js_1.readHeader)(text)?.fields['uid']?.trim();
@@ -224,8 +225,12 @@ function createEditorShell(element, options) {
     let statusText = null;
     let syncButton = null;
     let saveButton = null;
-    /** The bar, its view buttons (always on its first row) and the status, for {@link fitBar}. */
+    /** (2.7.0, D-132) The More button: on a narrow shell whose bar would wrap, the carrier's tools open under it. */
+    let moreButton = null;
+    /** The bar, its view buttons (always on its first row), the carrier's slot and the status, for {@link fitBar}. */
     let barParts = null;
+    /** (2.7.0, D-131) A host that supplies the save status words saves on its own rhythm: Save reads "Save now". */
+    const saveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
     if (chromeLevel !== 'none') {
         const bar = el('div', 'orz-editor__bar');
         bar.setAttribute('role', 'toolbar');
@@ -242,6 +247,7 @@ function createEditorShell(element, options) {
             modes.append(b);
         }
         toolbar = el('div', 'orz-editor__tools');
+        toolbar.setAttribute('id', 'orz-editor-tools');
         const status = el('span', 'orz-editor__status');
         // (2.5.0, STATUS D-101) the label keeps the width of its longest text, so "Unsaved changes" never
         // moves Save onto a second row that "Saved" left on the first
@@ -255,38 +261,82 @@ function createEditorShell(element, options) {
         listen(syncButton, 'click', () => setScrollSync(!prefs.get('scrollSync')));
         bar.append(modes, toolbar, status, syncButton);
         // hidden while read-only (setReadOnly shows it again)
-        saveButton = button('orz-btn orz-btn--primary orz-editor__save', 'Save', 'save');
-        saveButton.title = `Save (${mod}S)`;
+        saveButton = button('orz-btn orz-btn--primary orz-editor__save', saveWord, 'save');
+        saveButton.title = `${saveWord} (${mod}S)`;
         saveButton.hidden = readOnly;
         listen(saveButton, 'click', () => { void api.save(); });
         bar.append(saveButton);
+        // (2.7.0, D-132) shown only when the narrow bar moves the carrier's tools under it (fitBar)
+        moreButton = button('orz-btn orz-btn--ghost orz-editor__more', 'More', 'more');
+        moreButton.title = 'More tools';
+        moreButton.setAttribute('aria-expanded', 'false');
+        moreButton.setAttribute('aria-controls', 'orz-editor-tools');
+        listen(moreButton, 'click', () => setMoreOpen(!moreOpen(), true));
+        bar.append(moreButton);
         container.append(bar);
-        barParts = { bar, modes, status };
+        barParts = { bar, modes, tools: toolbar, status, label };
+    }
+    const moreOpen = () => (container.getAttribute('data-more-open') !== null);
+    /** Open or close the carrier's tools under More (a non-modal pop-up: Escape, a press outside or More closes it). */
+    function setMoreOpen(open, focusInside = false) {
+        if (!moreButton)
+            return;
+        const can = open && (container.getAttribute('data-more') !== null);
+        if (can)
+            container.setAttribute('data-more-open', '');
+        else
+            container.removeAttribute('data-more-open');
+        moreButton.setAttribute('aria-expanded', String(can));
+        if (can && focusInside) {
+            const first = toolbar.querySelector?.('button:not([disabled]), [tabindex]:not([tabindex="-1"]), select, input');
+            first?.focus?.();
+        }
     }
     /**
      * (2.5.0, STATUS D-101) When the bar's last controls would wrap onto a second row and showing the
      * save status as its dot alone keeps them on one, it does (the words stay for assistive technology
-     * and as the status's title). Run on every change of the shell's or the bar's size.
+     * and as the status's title). (2.7.0, STATUS D-132) In a narrow shell (one pane, a phone) the bar
+     * keeps ONE row: the first of these that fits — the status's words, its dot alone, the carrier's
+     * tools under More (with the words, then the dot), and last the view and Save buttons as icons
+     * (their names stay as labels). Run on every change of the shell's or the bar's size.
      */
     const fitBar = () => {
         const parts = barParts;
         if (!parts || typeof parts.modes.getBoundingClientRect !== 'function')
             return;
+        const wasOpen = moreOpen();
+        const toolsUsed = (parts.tools.childElementCount ?? 1) > 0;
         const wraps = () => {
             const first = parts.modes.getBoundingClientRect();
             if (!first.height)
                 return false;
-            return [parts.status, syncButton, saveButton].some((e) => {
+            // in a narrow shell the carrier's tools count too (one row); in a wide one they may wrap (E.36)
+            const tools = narrow && !(container.getAttribute('data-more') !== null) ? [parts.tools] : [];
+            return [...tools, parts.status, syncButton, saveButton, (container.getAttribute('data-more') !== null) ? moreButton : null].some((e) => {
                 const r = e?.getBoundingClientRect?.();
                 return !!r && r.height > 0 && r.top >= first.top + first.height - 1;
             });
         };
-        container.removeAttribute('data-status-compact');
-        if (!wraps())
-            return;
-        container.setAttribute('data-status-compact', '');
-        if (wraps())
-            container.removeAttribute('data-status-compact');
+        const levels = narrow
+            ? [[], ['data-status-compact'], ...(toolsUsed && moreButton ? [['data-more'], ['data-more', 'data-status-compact']] : []), [...(toolsUsed && moreButton ? ['data-more'] : []), 'data-status-compact', 'data-bar-icons']]
+            : [[], ['data-status-compact']];
+        const all = ['data-status-compact', 'data-more', 'data-bar-icons'];
+        let chosen = levels[0];
+        for (const level of levels) {
+            for (const a of all)
+                if (level.includes(a))
+                    container.setAttribute(a, '');
+                else
+                    container.removeAttribute(a);
+            chosen = level;
+            if (!wraps())
+                break;
+        }
+        // nothing fits better than the words (a wide shell whose status alone does not help: as before)
+        if (!narrow && chosen.length && wraps())
+            for (const a of all)
+                container.removeAttribute(a);
+        setMoreOpen(wasOpen && (container.getAttribute('data-more') !== null));
     };
     if (newerFormat !== null) {
         // a quiet notice (no action: the quiet update of the standalone file, or the app, offers the newer editor)
@@ -348,6 +398,9 @@ function createEditorShell(element, options) {
     let narrow = false;
     let narrowView = mode === 'preview' ? 'preview' : 'editor';
     const currentView = () => (narrow && mode === 'split' ? narrowView : mode);
+    /** (D-134) A reveal waiting for the editor pane / the preview to show (or to render). */
+    let pendingReveal = null;
+    let pendingPreviewLine = null;
     /** The view last applied (null before the first). */
     let shownView = null;
     const applyMode = () => {
@@ -368,6 +421,17 @@ function createEditorShell(element, options) {
         shownView = v;
         if (v !== 'editor' && previewStale)
             scheduleRender(0);
+        // (D-134) a reveal made while a pane was hidden: it follows when the pane shows
+        if (pendingReveal && v !== 'preview') {
+            const r = pendingReveal;
+            pendingReveal = null;
+            revealInEditor(r.sel, r.select);
+        }
+        if (pendingPreviewLine !== null && v !== 'editor' && lastRendered !== null) {
+            const l = pendingPreviewLine;
+            pendingPreviewLine = null;
+            previewToLine(l);
+        }
     };
     function setMode(m) {
         if (!MODES.includes(m))
@@ -408,6 +472,43 @@ function createEditorShell(element, options) {
     let finalText = null;
     const getText = () => (finalText !== null ? finalText : model.toExact(adapter.getDoc()));
     const differs = () => !model.isSaved(adapter.getDoc());
+    /** A save the editor started is running (`hooks.saveStatus`'s `saving`). */
+    let savingNow = false;
+    /** The longest status words shown so far: the label keeps their width (D-101). */
+    let reserve = STATUS_LONGEST;
+    /**
+     * The status words and the dot's tone (2.7.0, D-131): the host's (`hooks.saveStatus`), else
+     * "Unsaved changes" (amber) / "Saved" (green).
+     */
+    const applyStatus = () => {
+        if (destroyed)
+            return;
+        let text = dirty ? 'Unsaved changes' : 'Saved';
+        let tone = dirty ? 'unsaved' : 'saved';
+        if (typeof hooks.saveStatus === 'function') {
+            let got;
+            try {
+                got = hooks.saveStatus({ dirty, saving: savingNow });
+            }
+            catch {
+                got = null;
+            }
+            const words = typeof got === 'string' ? got : got && typeof got === 'object' && typeof got.text === 'string' ? got.text : null;
+            if (words !== null && words.trim() !== '') {
+                text = words.replace(/\s+/g, ' ').trim();
+                const t = typeof got === 'object' ? got.tone : undefined;
+                tone = t === 'saved' || t === 'pending' || t === 'unsaved' || t === 'error' ? t : dirty ? 'pending' : 'saved';
+            }
+        }
+        container.setAttribute('data-save-tone', tone);
+        if (statusText && statusText.data !== text)
+            statusText.data = text;
+        if (text.length > reserve.length) {
+            reserve = text;
+            barParts?.label.setAttribute('data-reserve', reserve);
+        }
+        barParts?.status.setAttribute('title', text);
+    };
     const updateDirty = () => {
         if (destroyed)
             return; // a save finishing after destroy posts nothing (to the host either)
@@ -416,9 +517,7 @@ function createEditorShell(element, options) {
             return;
         dirty = d;
         container.setAttribute('data-dirty', String(d));
-        if (statusText)
-            statusText.data = d ? 'Unsaved changes' : 'Saved';
-        barParts?.status.setAttribute('title', statusText?.data ?? '');
+        applyStatus();
         try {
             options.host?.setDirty(d);
         }
@@ -645,13 +744,23 @@ function createEditorShell(element, options) {
             preview.navigate(line);
     }
     let syncQueued = false;
+    /** (D-134) The line a `reveal` showed in the preview: shown again when the frame re-reports its anchors (a reflow after a view change) for a moment, unless the reader moved since. */
+    let revealFollow = null;
+    /** How long a `reveal` keeps the preview on its place while the frame re-lays out (ms). */
+    const REVEAL_FOLLOW_MS = 3000;
+    /**
+     * A `reveal` holds the preview on its place: for a moment, until the reader touches the editor or the
+     * preview. Scroll sync must not map the editor's top line over it meanwhile (the editor scrolls to the
+     * place a frame later, and its top line is a little above the place).
+     */
+    const revealHolds = () => revealFollow !== null && clock() < revealFollow.at + REVEAL_FOLLOW_MS && claimAt <= revealFollow.at && editorTouchAt <= revealFollow.at;
     function syncFromEditor() {
-        if (!syncOn() || previewLeads() || syncQueued)
+        if (!syncOn() || previewLeads() || syncQueued || revealHolds())
             return;
         syncQueued = true;
         const run = () => {
             syncQueued = false;
-            if (destroyed || !syncOn() || previewLeads())
+            if (destroyed || !syncOn() || previewLeads() || revealHolds())
                 return;
             if (navigateMode) {
                 const sel = adapter.hasFocus?.() ? adapter.getSelection?.() : undefined;
@@ -671,6 +780,77 @@ function createEditorShell(element, options) {
             win.requestAnimationFrame(run);
         else
             later(run, 16);
+    }
+    /** (D-134) Show a source line (0-based) in the preview: navigate mode shows what holds it; else its mapped top. */
+    function previewToLine(line) {
+        if (destroyed)
+            return;
+        if (navigateMode) {
+            preview.navigate(line);
+            return;
+        }
+        const anchors = preview.anchors;
+        const mapped = previewOptions.mapLine?.(line, { anchors, max: preview.max });
+        if (typeof mapped === 'number' && Number.isFinite(mapped)) {
+            preview.scrollTo(mapped);
+            return;
+        }
+        // no anchors yet (the frame has not reported its first render): when it does
+        if (!anchors.length) {
+            pendingPreviewLine = line;
+            return;
+        }
+        preview.scrollTo((0, preview_js_1.lineToTop)(anchors, line));
+    }
+    /** (D-134) Caret (or selection) at an editor-text range, its first line at the top of the source view. */
+    function revealInEditor(sel, select) {
+        if (destroyed)
+            return;
+        if (adapter.reveal) {
+            adapter.reveal(sel, { select });
+            return;
+        }
+        adapter.setSelection?.(select ? sel : { from: sel.from, to: sel.from }, { scroll: false });
+        adapter.scrollTo?.({ line: lineOf(adapter.getDoc(), sel.from) });
+    }
+    /** (D-134) A heading of the editor text, by its text or `#id`: the range of its first line, or null. */
+    function findHeading(d, wanted) {
+        const norm = (x) => x.replace(/\s+/g, ' ').trim();
+        const w = norm(wanted);
+        if (!w)
+            return null;
+        let tokens;
+        try {
+            tokens = (0, parser_js_1.kitParser)().parse(d, {});
+        }
+        catch {
+            return null;
+        }
+        const heads = [];
+        for (let i = 0; i < tokens.length; i++) {
+            const t = tokens[i];
+            if (t.type !== 'heading_open' || !t.map)
+                continue;
+            const inline = tokens[i + 1];
+            const children = inline?.children;
+            const text = children ? children.filter((c) => c.type === 'text' || c.type === 'code_inline' || c.type === 'emoji').map((c) => c.content).join('') : String(inline?.content ?? '');
+            heads.push({ line: t.map[0], text: norm(text), id: String(t.attrGet?.('id') ?? '') });
+        }
+        const byId = w.startsWith('#') ? w.slice(1) : null;
+        const hit = byId !== null
+            ? heads.find((h) => h.id === byId)
+            : heads.find((h) => h.text === w) ?? heads.find((h) => h.text.toLowerCase() === w.toLowerCase()) ?? heads.find((h) => h.id === w);
+        if (!hit)
+            return null;
+        let from = 0;
+        for (let n = 0; n < hit.line; n++) {
+            const i = d.indexOf('\n', from);
+            if (i < 0)
+                return null;
+            from = i + 1;
+        }
+        const end = d.indexOf('\n', from);
+        return { from, to: end < 0 ? d.length : end };
     }
     const syncFromPreview = (top, max, line) => {
         if (!syncOn() || !previewLeads() || !adapter.scrollTo)
@@ -756,6 +936,15 @@ function createEditorShell(element, options) {
         context: { host: standalone ? 'standalone' : 'app', protocol: String(win.location?.protocol ?? ''), topLevel, connected: !!options.host },
     }, {
         onRendered: () => {
+            if (revealFollow && !revealHolds())
+                revealFollow = null;
+            if (revealFollow && currentView() !== 'editor')
+                previewToLine(revealFollow.line);
+            if (pendingPreviewLine !== null && currentView() !== 'editor') {
+                const l = pendingPreviewLine;
+                pendingPreviewLine = null;
+                previewToLine(l);
+            }
             syncFromEditor();
             if (navigateAfterRender) {
                 navigateAfterRender = false;
@@ -799,6 +988,13 @@ function createEditorShell(element, options) {
         readOnly,
         root,
         label: 'Document text',
+        // (2.7.0, D-130) the header folded to one line in the source view (the text is unchanged)
+        ...(options.foldHeader === false ? {} : {
+            headerFold: (t) => {
+                const h = (0, header_js_1.readHeader)(t);
+                return h ? { from: h.start, to: h.end, title: h.fields['title'] ?? '' } : null;
+            },
+        }),
         onChange: () => { if (!setting)
             changed(); },
         onSelection: (s) => {
@@ -819,9 +1015,7 @@ function createEditorShell(element, options) {
         return r;
     });
     container.setAttribute('data-dirty', 'false');
-    if (statusText)
-        statusText.data = 'Saved';
-    barParts?.status.setAttribute('title', 'Saved');
+    applyStatus();
     const formatError = () => new Error(`text format ${formatOf((0, header_js_1.readHeader)(getText())?.fields)} is newer than this editor (format ${maxFormat}): read-only, not saved`);
     if (newerFormat !== null) {
         // after the caller had a chance to subscribe
@@ -837,6 +1031,37 @@ function createEditorShell(element, options) {
         const b = modeButtons.get(currentView()) ?? null;
         (b ?? container).focus?.();
     };
+    /** The shell's own pop-ups (the link chip, the tools under More): close them; true when one was open. */
+    const closePopups = () => {
+        let closed = false;
+        if (linkChip) {
+            dismissChip();
+            closed = true;
+        }
+        if (moreOpen()) {
+            setMoreOpen(false);
+            closed = true;
+        }
+        return closed;
+    };
+    const inside = (node, of) => !!node && (of.contains?.(node) ?? false);
+    /**
+     * (2.7.0, STATUS D-135) A view change from the keyboard keeps the keyboard in the shell: when the pane
+     * that held the focus is hidden, the focus goes to the pane that shows (the editor, else the preview
+     * frame, whose bridge reports the next Cmd/Ctrl+\ through its port) — before, it fell to the page and
+     * the next Cmd/Ctrl+\ reached nothing.
+     */
+    const toggleFromKey = (fromFrame) => {
+        const active = root.activeElement;
+        const inEditor = !fromFrame && inside(active, editorPane);
+        const inPreview = fromFrame || active === preview.iframe || inside(active, previewPane);
+        toggleMode();
+        const v = currentView();
+        if (inEditor && v === 'preview')
+            preview.iframe.focus?.();
+        else if (inPreview && v === 'editor')
+            adapter.focus();
+    };
     function onShortcut(key, e) {
         if (key === 's') {
             e?.preventDefault();
@@ -846,11 +1071,15 @@ function createEditorShell(element, options) {
         }
         if (key === '\\') {
             e?.preventDefault();
-            toggleMode();
+            toggleFromKey(e === null);
             return true;
         }
         if (key === 'Escape') {
-            focusChrome();
+            // (2.7.0, STATUS D-129) Esc closes the shell's own pop-ups and never takes the caret out of the text:
+            // the engine's Escape then Tab leaves it (CodeMirror's Tab-focus window; the textarea never traps Tab).
+            // From the preview frame (no text there) it still brings the focus to the toolbar.
+            if (!closePopups() && e === null)
+                focusChrome();
             return true;
         }
         if (key === 'p') {
@@ -881,9 +1110,23 @@ function createEditorShell(element, options) {
             onShortcut('\\', e);
         else if (k === 'Escape' && editorPane.contains?.(e.target))
             onShortcut('Escape', e);
+        else if (k === 'Escape' && moreOpen()) {
+            e.preventDefault();
+            setMoreOpen(false);
+            moreButton?.focus?.();
+        }
         else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (k === 'p' || k === 'P'))
             onShortcut('p', e);
     });
+    // (D-132) a press outside the tools under More (and outside More) closes them
+    listen(root, 'pointerdown', (e) => {
+        if (!moreOpen() || !toolbar)
+            return;
+        const path = e.composedPath?.() ?? [];
+        if (path.includes(toolbar) || (moreButton && path.includes(moreButton)))
+            return;
+        setMoreOpen(false);
+    }, true);
     // a file pasted or dropped into the editor goes to hooks.uploadAsset (capture: before the engine reads it as text)
     const takeFiles = (e, files) => {
         if (!hooks.uploadAsset || readOnly || !files.length)
@@ -1192,7 +1435,11 @@ function createEditorShell(element, options) {
     const save = (fromKey) => {
         if (destroyed)
             return Promise.resolve({ ok: false, error: 'destroyed' });
-        saving ?? (saving = doSave(fromKey).finally(() => { saving = null; }));
+        if (!saving) {
+            savingNow = true;
+            applyStatus();
+            saving = doSave(fromKey).finally(() => { saving = null; savingNow = false; applyStatus(); });
+        }
         return saving;
     };
     /** Replace an editor-text range with editor text (LF), as one undoable edit written in the document's style; the caret goes after it. */
@@ -1344,6 +1591,44 @@ function createEditorShell(element, options) {
             const d = adapter.getDoc();
             return { from: model.toExactOffset(d, Math.min(sel.from, sel.to)), to: model.toExactOffset(d, Math.max(sel.from, sel.to)) };
         },
+        reveal(target, o) {
+            if (destroyed)
+                return null;
+            const d = adapter.getDoc();
+            const exact = getText();
+            let sel = null;
+            if (typeof target === 'string' || (target && typeof target === 'object' && typeof target.heading === 'string')) {
+                sel = findHeading(d, typeof target === 'string' ? target : target.heading);
+            }
+            else if (target && typeof target === 'object' && typeof target.from === 'number' && !Number.isNaN(target.from)) {
+                const r = target;
+                const to = typeof r.to === 'number' && !Number.isNaN(r.to) ? r.to : r.from;
+                const a = (0, text_model_js_1.toEditorOffset)(exact, Math.min(r.from, to));
+                const b = (0, text_model_js_1.toEditorOffset)(exact, Math.max(r.from, to));
+                sel = { from: Math.max(0, Math.min(d.length, a)), to: Math.max(0, Math.min(d.length, b)) };
+            }
+            else {
+                throw new TypeError('orz editor: reveal needs { from, to? }, a heading\'s text or "#id", or { heading }');
+            }
+            if (!sel)
+                return null;
+            const select = o?.select === true;
+            const v = currentView();
+            // the editor's own scrolling now must not move the preview off the place (scroll sync maps its top line)
+            const line = lineOf(d, sel.from);
+            revealFollow = { line, at: clock() };
+            revealInEditor(sel, select);
+            // the hidden pane follows when it shows (CodeMirror cannot scroll a pane that is not laid out)
+            pendingReveal = v === 'preview' ? { sel, select } : null;
+            if (v !== 'editor' && lastRendered !== null) {
+                pendingPreviewLine = null;
+                previewToLine(line);
+            }
+            else
+                pendingPreviewLine = line;
+            return { from: model.toExactOffset(d, sel.from), to: model.toExactOffset(d, sel.to) };
+        },
+        refreshSaveStatus() { applyStatus(); },
         isDirty() { updateDirty(); return dirty; },
         markSaved() { if (!destroyed) {
             adoptBaseline(getText());

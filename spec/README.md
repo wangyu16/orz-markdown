@@ -66,7 +66,7 @@ nonce and hashes, scroll-sync maths), `print.ts` (2.3.0: `printDocument`, a
 whole document printed from a sandboxed hidden frame), `render-md.ts` (`renderMarkdownPreview`, `renderMarkdownPreviewWithIncludes`, `includeRecordEnv`), `styles.ts`
 (`EDITOR_CSS`) — exported as `orz-markdown/carrier/editor` (it may load the
 parser; `carrier/shell` and `carrier/read` do not import it). Claims
-E.1–E.44, tests in `tests/carrier-editor.test.ts` (real Chrome for
+E.1–E.55, tests in `tests/carrier-editor.test.ts` and (2.7.0) `tests/carrier-editor-ux.test.ts` (real Chrome for
 CodeMirror in a shadow root, the opaque-origin preview and its standalone
 `file:` exception, the split drag,
 scroll sync and Subresource Integrity).

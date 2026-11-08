@@ -127,6 +127,16 @@ const THEME = {
     '.cm-panels': { backgroundColor: 'var(--orz-chrome-surface-2)', color: 'var(--orz-chrome-fg)' },
     // setFocusRange (2.4.0): the text outside the focus range, dimmed
     '.orz-focus-outside': { opacity: '0.38' },
+    // the folded header (2.7.0, D-130): one closed line, and the bar over an opened one
+    '.orz-header-fold': {
+        display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 4px', padding: '2px 16px', minHeight: '26px', boxSizing: 'border-box',
+        cursor: 'pointer', userSelect: 'none', fontFamily: 'var(--orz-chrome-font)', fontSize: 'var(--orz-chrome-text-sm, 13px)',
+        color: 'var(--orz-chrome-muted)', background: 'var(--orz-chrome-surface-2)', borderBottom: '1px solid var(--orz-chrome-border)',
+    },
+    '.orz-header-fold:hover': { color: 'var(--orz-chrome-fg)' },
+    '.orz-header-fold__name': { fontWeight: '600', color: 'var(--orz-chrome-fg)', whiteSpace: 'nowrap' },
+    '.orz-header-fold__title': { minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+    '.orz-header-fold__mark': { marginLeft: 'auto', paddingLeft: '8px' },
     // flash (2.4.0): the lines a tool just changed, lit briefly
     '.cm-line.orz-flash': { backgroundColor: 'color-mix(in oklch, var(--orz-chrome-flash, oklch(85% 0.16 90)) 42%, transparent)', animation: 'orz-flash-fade var(--orz-flash-ms, 1600ms) ease-in forwards' },
     '@keyframes orz-flash-fade': { '0%, 55%': { backgroundColor: 'color-mix(in oklch, var(--orz-chrome-flash, oklch(85% 0.16 90)) 42%, transparent)' }, '100%': { backgroundColor: 'transparent' } },
@@ -301,6 +311,157 @@ function flashExtension(m) {
     });
     return { effect, field, extension: [field] };
 }
+/** How much of the text the header is looked for in (a header longer than this is not folded). */
+const HEADER_PROBE = 65536;
+/**
+ * (2.7.0, STATUS D-130) The document header folded to one closed line —
+ * "Document settings · <title> ▸" — that opens on a click, or when the caret
+ * moves into it (a click above it, Ctrl+Home, the up arrow, a search match,
+ * `select`, `reveal`, an undo there); an opened header has a bar above it
+ * that folds it again. Nothing in the text changes: the header's lines are a
+ * block replaced by a widget while closed. Lines from the start of the
+ * header's first line to the end of its `}}` line; a header whose `}}` line
+ * holds more text, or longer than {@link HEADER_PROBE}, is not folded. While
+ * a `setFocusRange` fold hides the header's lines, nothing more is drawn.
+ * Null without `StateField`, `StateEffect`, `Decoration` or `WidgetType`.
+ */
+function headerFoldExtension(m, find, focusField) {
+    const { StateField, StateEffect } = m.state;
+    const { Decoration, EditorView, WidgetType } = m.view;
+    if (typeof StateField?.define !== 'function' || typeof StateEffect?.define !== 'function' || typeof Decoration?.replace !== 'function' || typeof WidgetType !== 'function' || !EditorView?.decorations)
+        return null;
+    const effect = StateEffect.define();
+    const locate = (doc) => {
+        let info = null;
+        try {
+            info = find(doc.sliceString(0, Math.min(doc.length, HEADER_PROBE)));
+        }
+        catch {
+            info = null;
+        }
+        if (!info || !(info.to > info.from) || info.to > doc.length)
+            return null;
+        const first = doc.lineAt(info.from);
+        const last = doc.lineAt(info.to);
+        if (doc.sliceString(info.to, last.to).trim() !== '')
+            return null; // more text on the }} line: not folded
+        return { from: first.from, to: last.to, title: String(info.title ?? '').replace(/\s+/g, ' ').trim() };
+    };
+    /** The selection's head inside the folded lines (both ends count: typing there would change the header). */
+    const inside = (at, sel) => sel.ranges.some((r) => r.head >= at.from && r.head <= at.to);
+    class FoldLine extends WidgetType {
+        constructor(title, open) {
+            super();
+            this.title = title;
+            this.open = open;
+        }
+        eq(other) { return other.title === this.title && other.open === this.open; }
+        toDOM(view) {
+            const d = view.dom.ownerDocument;
+            const line = d.createElement('div');
+            line.className = 'orz-header-fold';
+            line.setAttribute('data-orz-header-fold', this.open ? 'open' : 'closed');
+            line.setAttribute('role', 'button');
+            line.setAttribute('aria-expanded', String(this.open));
+            line.setAttribute('aria-label', this.open ? 'Fold the document settings' : `Document settings${this.title ? `: ${this.title}` : ''}. Open them to edit.`);
+            line.title = this.open ? 'Fold the document settings into one line' : 'Open the document settings (the {{nyml}} header) to edit them';
+            const name = d.createElement('span');
+            name.className = 'orz-header-fold__name';
+            name.textContent = 'Document settings';
+            line.append(name);
+            if (this.title && !this.open) {
+                const t = d.createElement('span');
+                t.className = 'orz-header-fold__title';
+                t.textContent = `· ${this.title}`;
+                line.append(t);
+            }
+            const mark = d.createElement('span');
+            mark.className = 'orz-header-fold__mark';
+            mark.setAttribute('aria-hidden', 'true');
+            mark.textContent = this.open ? '▾' : '▸';
+            line.append(mark);
+            const open = this.open;
+            // the editor ignores events in the widget (ignoreEvent): the pointer press is ours, and moves no caret
+            line.addEventListener('mousedown', (e) => {
+                if (e.button !== 0)
+                    return;
+                e.preventDefault();
+                const v = view.state.field(field, false);
+                const at = v?.at;
+                if (!at)
+                    return;
+                if (open) {
+                    // fold again: a caret inside goes after the header, so the header stays closed
+                    const sel = view.state.selection;
+                    const after = Math.min(view.state.doc.length, at.to + 1);
+                    view.dispatch({ effects: effect.of(false), ...(inside(at, sel) ? { selection: { anchor: after } } : {}) });
+                }
+                else {
+                    // open, the caret on the first setting (the line after {{nyml)
+                    const doc = view.state.doc;
+                    const firstLine = doc.lineAt(at.from);
+                    const caret = firstLine.number < doc.lines && doc.line(firstLine.number + 1).from <= at.to ? doc.line(firstLine.number + 1).to : at.from;
+                    view.dispatch({ effects: effect.of(true), selection: { anchor: caret } });
+                }
+                view.focus();
+            });
+            return line;
+        }
+        ignoreEvent() { return true; }
+    }
+    const draw = (at, open) => {
+        if (!at)
+            return Decoration.none;
+        if (open)
+            return Decoration.set([Decoration.widget({ widget: new FoldLine(at.title, true), block: true, side: -1 }).range(at.from)]);
+        return Decoration.set([Decoration.replace({ widget: new FoldLine(at.title, false), block: true }).range(at.from, at.to)]);
+    };
+    const field = StateField.define({
+        create: (state) => {
+            const at = locate(state.doc);
+            return { at, open: false, deco: draw(at, false) };
+        },
+        update(v, tr) {
+            let at = v.at;
+            let open = v.open;
+            let changed = false;
+            if (tr.docChanged) {
+                const reach = at ? at.to + 1 : Math.min(tr.startState.doc.length, HEADER_PROBE);
+                if (tr.changes.touchesRange(0, reach))
+                    at = locate(tr.newDoc);
+                else if (at)
+                    at = { from: tr.changes.mapPos(at.from), to: tr.changes.mapPos(at.to), title: at.title };
+                changed = true;
+            }
+            // the caret moved into the closed header: it opens (the reader sees what they edit)
+            if (at && !open && tr.selection && inside(at, tr.newSelection)) {
+                open = true;
+                changed = true;
+            }
+            for (const e of tr.effects)
+                if (e.is(effect)) {
+                    open = e.value === true;
+                    changed = true;
+                }
+            if (!at)
+                open = false;
+            if (!changed)
+                return v;
+            if (v.at && at && v.open === open && v.at.from === at.from && v.at.to === at.to && v.at.title === at.title)
+                return { at, open, deco: v.deco.map(tr.changes) };
+            return { at, open, deco: draw(at, open) };
+        },
+    });
+    // a focus fold (setFocusRange 'fold') that hides the header's lines leaves nothing to draw
+    const decorations = EditorView.decorations.compute([field, ...(focusField ? [focusField] : [])], (state) => {
+        const v = state.field(field);
+        const f = focusField ? state.field(focusField, false)?.value : null;
+        if (v.at && f && f.mode === 'fold' && state.doc.lineAt(f.from).from > v.at.from)
+            return Decoration.none;
+        return v.deco;
+    });
+    return { effect, field, extension: [field, decorations] };
+}
 /** A line that is only a list item's marker (in its indent and quote prefix): what a list continuation writes. */
 const CONTINUED_ITEM = /^((?:[ \t]*>)*[ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?$/;
 /** A list marker typed by the reader. */
@@ -323,6 +484,8 @@ function codemirror6Adapter(options = {}) {
     /** The flash (2.4.0): its CodeMirror field and the timer that clears it. */
     let flashExt = null;
     let flashTimer = null;
+    /** The folded header (2.7.0, D-130): its CodeMirror field, when the shell asked for it and the modules can. */
+    let headerExt = null;
     /** (D-95) The line a list continuation just started (its start, the marker it wrote), while the caret stays on it. */
     let continued = null;
     const noteContinuation = (state) => {
@@ -356,6 +519,7 @@ function codemirror6Adapter(options = {}) {
         roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
         focus = focusExtension(m);
         flashExt = flashExtension(m);
+        headerExt = o.headerFold ? headerFoldExtension(m, o.headerFold, focus?.field ?? null) : null;
         // (2.5.0, STATUS D-95) Enter continues a list ("- "); a reader who then types a marker of their
         // own ("- pears") gets one marker, not "- - pears": theirs replaces the continued one when they type
         // the space after it. Only right after the continuation, on that line, with nothing else typed.
@@ -382,6 +546,7 @@ function codemirror6Adapter(options = {}) {
             EditorView.theme(THEME),
             ...(focus ? focus.extension : []),
             ...(flashExt ? flashExt.extension : []),
+            ...(headerExt ? headerExt.extension : []),
             options.nonce && EditorView.cspNonce ? EditorView.cspNonce.of(options.nonce) : undefined,
             EditorView.inputHandler ? EditorView.inputHandler.of((v, from, to, text) => ownMarker(v, from, to, text)) : undefined,
             EditorView.updateListener.of((u) => {
@@ -407,7 +572,7 @@ function codemirror6Adapter(options = {}) {
         (0, adapter_js_1.syncTextarea)(f);
         const doc = f.getDoc();
         const history = (0, adapter_js_1.undoSteps)(f, exports.CODEMIRROR6_HISTORY_STEPS) ?? { base: doc, changes: [] };
-        const sel = f.getSelection?.() ?? { from: 0, to: 0 };
+        let sel = f.getSelection?.() ?? { from: 0, to: 0 };
         const focused = f.hasFocus?.() ?? false;
         const scroll = f.getScroll?.();
         cm = m;
@@ -426,6 +591,11 @@ function codemirror6Adapter(options = {}) {
             state = EditorState.create({ doc, extensions });
         const len = doc.length;
         const clamp = (n) => Math.max(0, Math.min(len, n));
+        // (D-130) a caret still at the very start, before a folded header, starts after it: typing there would go into
+        // the header the reader does not see
+        const folded = headerExt ? state.field(headerExt.field, false)?.at : null;
+        if (folded && sel.from === 0 && sel.to === 0 && folded.from === 0)
+            sel = { from: Math.min(len, folded.to + 1), to: Math.min(len, folded.to + 1) };
         state = state.update({ selection: { anchor: clamp(sel.from), head: clamp(sel.to) } }).state;
         f.destroy();
         fallback = null;
@@ -623,6 +793,44 @@ function codemirror6Adapter(options = {}) {
             const ext = flashExt;
             flashTimer = setTimeout(() => { flashTimer = null; if (view && ext)
                 view.dispatch({ effects: ext.effect.of(null) }); }, ms);
+        },
+        reveal(s, o) {
+            if (!view) {
+                fallback?.setSelection?.(o?.select ? s : { from: s.from, to: s.from }, { scroll: false });
+                const before = (fallback?.getDoc() ?? '').slice(0, Math.max(0, s.from));
+                let line = 0;
+                for (let i = before.indexOf('\n'); i >= 0; i = before.indexOf('\n', i + 1))
+                    line++;
+                fallback?.scrollTo?.({ line });
+                return;
+            }
+            const len = view.state.doc.length;
+            const clamp = (n) => Math.max(0, Math.min(len, n));
+            const from = clamp(Math.min(s.from, s.to));
+            const to = clamp(Math.max(s.from, s.to));
+            const { EditorView } = cm.view;
+            // the range's first line at the top of the view (a heading above its section), not merely in view
+            view.dispatch({
+                selection: { anchor: from, head: o?.select ? to : from },
+                ...(typeof EditorView.scrollIntoView === 'function' ? { effects: EditorView.scrollIntoView(from, { y: 'start', yMargin: 8 }) } : { scrollIntoView: true }),
+            });
+        },
+        setHeaderFolded(flag) {
+            if (!view || !headerExt)
+                return;
+            const v = view.state.field(headerExt.field, false);
+            if (!v?.at || v.open === !flag)
+                return;
+            const sel = view.state.selection.main;
+            // folding with the caret inside moves it after the header (else the caret would open it again)
+            const after = Math.min(view.state.doc.length, v.at.to + 1);
+            view.dispatch({ effects: headerExt.effect.of(!flag), ...(flag && sel.head >= v.at.from && sel.head <= v.at.to ? { selection: { anchor: after } } : {}) });
+        },
+        isHeaderFolded() {
+            if (!view || !headerExt)
+                return false;
+            const v = view.state.field(headerExt.field, false);
+            return !!v?.at && !v.open;
         },
         hasFocus() {
             return view ? view.hasFocus === true : fallback?.hasFocus?.() ?? false;
