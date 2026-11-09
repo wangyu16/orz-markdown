@@ -65,6 +65,12 @@ on this version.
   key the reader presses changes its hidden text unless the whole header is
   selected — it opens instead; select-all then a collapsing move (End, an
   arrow, a click) collapses; a double-click on the closed line leaves it open.
+- Audit round 3: the header guard is inverted — while the header is closed,
+  no command changes its hidden text unless it comes from code, is an
+  undo/redo (which opens it) or replaces the whole text; the header opens
+  instead. A selection over the whole closed header draws it selected; a
+  reload with the caret in the header shows it open; Replace all keeps its
+  body replacements and says why the settings were left.
 - A carrier-app menu (`menuButton`) of a button near the left edge — a
   phone's toolbar, the tools under More — opens to the right instead of off
   the screen.

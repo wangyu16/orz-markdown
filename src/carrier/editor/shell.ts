@@ -1318,6 +1318,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
         return h ? { from: h.start, to: h.end, title: h.fields['title'] ?? '' } : null;
       },
     }),
+    onNotice: (t: string) => { if (!destroyed) showToast(root, t, { tone: 'info' }); },
     onChange: () => { if (!setting) changed(); },
     onSelection: (s) => {
       if (navigateMode) syncFromEditor();

@@ -517,37 +517,45 @@ chrome('real Chrome: keyboard, fold, layout, reveal (2.7.0)', { timeout: 120_000
     await n.close();
   });
 
-  it('[E.51] property (audit 2): over random selections, folds and unfolds (host fold, the bar, select, reveal) and delete or typing keys, no single key deletes header text the reader did not see selected — with the header closed and not wholly selected, the header survives every key', async () => {
+  it('[E.51] property (audits 2–3): over random texts (blank line after "}}" or not, a blank line above the header, header only), random selections — covering the header but not all, from either direction — folds and unfolds (host fold, the bar, select, reveal), reloads (setText with resetHistory) and one user key (delete keys, typing, Enter, Tab, toggle comment, indent, line moves, transpose), no single action changes header text the reader neither saw selected nor saw open: with the header closed and the whole text not selected, the header text before the key is still the text\'s prefix after it', async () => {
     const p = await open();
-    const HEADER_END = TEXT.indexOf('}}') + 2;
-    let seed = 20261108;
+    const H = TEXT.slice(0, TEXT.indexOf('}}') + 2);
+    let seed = 20261109;
     const rnd = (n: number): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-    const KEYS = ['Backspace', 'Delete', 'x', 'Alt+Backspace', 'ControlOrMeta+Backspace', 'Alt+Delete', 'Shift+Backspace'];
+    const KEYS = ['Backspace', 'Delete', 'x', 'Alt+Backspace', 'ControlOrMeta+Backspace', 'Alt+Delete', 'Shift+Backspace', 'Enter', 'Tab', 'Shift+Tab', 'ControlOrMeta+/', 'ControlOrMeta+Alt+Backslash', 'ControlOrMeta+BracketRight', 'Alt+ArrowUp', 'Alt+ArrowDown', 'Control+t', 'ControlOrMeta+Shift+k', 'Shift+Alt+ArrowUp'];
     const failures: string[] = [];
-    for (let i = 0; i < 120; i++) {
-      await p.evaluate(`shell.setText(${JSON.stringify(TEXT)}, { resetHistory: true })`);
+    const RUNS = Number(process.env.E51_RUNS ?? 300);
+    for (let i = 0; i < RUNS; i++) {
+      const variant = rnd(4);
+      const T = variant === 0 ? TEXT : variant === 1 ? TEXT.replace('}}\n\n', '}}\n') : variant === 2 ? `\n\n${TEXT}` : `${H}\n`;
+      const off = variant === 2 ? 2 : 0;
+      const hEnd = off + H.length;
+      await p.evaluate(`shell.setText(${JSON.stringify(T)}, { resetHistory: true })`);
       const ops: string[] = [];
-      const len = TEXT.length;
-      const pick = (): number => (rnd(3) === 0 ? rnd(HEADER_END + 3) : rnd(len + 1));
-      for (let k = 0; k < 1 + rnd(3); k++) {
-        const r = rnd(5);
+      const near = (): number => Math.min(T.length, rnd(3) === 0 ? rnd(off + 1) : Math.max(0, hEnd - 2 + rnd(8)));
+      const pick = (): number => (rnd(2) === 0 ? near() : rnd(T.length + 1));
+      for (let k = 0; k < 1 + rnd(4); k++) {
+        const r = rnd(8);
         const a = pick(); const b = pick();
         if (r === 0) ops.push(`shell.select(${a}, ${b})`);
-        else if (r === 1) ops.push(`shell.reveal({ from: ${a}, to: ${b} }, { select: true })`);
-        else if (r === 2) ops.push('shell.adapter.setHeaderFolded(true)');
-        else if (r === 3) ops.push('shell.adapter.setHeaderFolded(false)');
-        else ops.push(`(function(){ var w = shell.root.querySelector('[data-orz-header-fold]'); if (w) w.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1 })); })()`);
+        else if (r === 1) ops.push(`shell.select(${rnd(off + 1)}, ${Math.min(T.length, hEnd + 1 + rnd(30))})`); // covers the header, not all
+        else if (r === 2) ops.push(`shell.select(${Math.min(T.length, hEnd + 1 + rnd(30))}, ${rnd(off + 1)})`); // the same, backwards
+        else if (r === 3) ops.push(`shell.reveal({ from: ${a}, to: ${b} }, { select: true })`);
+        else if (r === 4) ops.push('shell.adapter.setHeaderFolded(true)');
+        else if (r === 5) ops.push('shell.adapter.setHeaderFolded(false)');
+        else if (r === 6) ops.push(`(function(){ var w = shell.root.querySelector('[data-orz-header-fold]'); if (w) w.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1 })); })()`);
+        else ops.push(`shell.setText(shell.getText(), { resetHistory: true })`); // a reload: the caret stays where it was
       }
       for (const op of ops) await p.evaluate(op);
       await p.evaluate('shell.focus()');
-      const before = await p.evaluate('({ folded: shell.adapter.isHeaderFolded(), sel: shell.getSelection() })') as { folded: boolean; sel: { from: number; to: number } };
+      const before = await p.evaluate('({ folded: shell.adapter.isHeaderFolded(), sel: shell.getSelection(), text: shell.getText() })') as { folded: boolean; sel: { from: number; to: number }; text: string };
       const key = KEYS[rnd(KEYS.length)];
       if (key === 'x') await p.keyboard.type('x'); else await p.keyboard.press(key);
       const after = await p.evaluate('shell.getText()') as string;
-      const wholly = before.sel.from <= 0 && before.sel.to >= HEADER_END;
-      if (before.folded && !wholly && !after.startsWith(TEXT.slice(0, HEADER_END))) failures.push(`${ops.join('; ')} | ${key} | sel ${JSON.stringify(before.sel)} → ${JSON.stringify(after.slice(0, 50))}`);
+      const all = before.sel.from === 0 && before.sel.to === before.text.length;
+      if (before.folded && !all && !after.startsWith(before.text.slice(0, hEnd))) failures.push(`${variant} | ${ops.join('; ')} | ${key} | sel ${JSON.stringify(before.sel)} → ${JSON.stringify(after.slice(0, 60))}`);
     }
-    expect(failures).toEqual([]);
+    expect(failures.slice(0, 10), `${failures.length} failures`).toEqual([]);
     await p.close();
-  }, 240_000);
+  }, 600_000);
 });

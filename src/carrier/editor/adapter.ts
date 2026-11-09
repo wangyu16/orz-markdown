@@ -58,6 +58,8 @@ export interface AdapterMountOptions {
    * is never changed. An engine without folding ignores it.
    */
   headerFold?(text: string): HeaderFoldInfo | null;
+  /** (2.7.0, audit 3) A message for the reader from the engine (e.g. why a Replace all left the folded settings). */
+  onNotice?(message: string): void;
 }
 
 /** The header an engine folds (2.7.0, `AdapterMountOptions.headerFold`). */

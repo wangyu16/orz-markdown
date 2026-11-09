@@ -1019,6 +1019,8 @@ function createEditorShell(element, options) {
                 return h ? { from: h.start, to: h.end, title: h.fields['title'] ?? '' } : null;
             },
         }),
+        onNotice: (t) => { if (!destroyed)
+            (0, chrome_js_1.showToast)(root, t, { tone: 'info' }); },
         onChange: () => { if (!setting)
             changed(); },
         onSelection: (s) => {
