@@ -516,4 +516,38 @@ chrome('real Chrome: keyboard, fold, layout, reveal (2.7.0)', { timeout: 120_000
     expect(views).toEqual(['preview:preview', 'editor:text', 'preview:preview']);
     await n.close();
   });
+
+  it('[E.51] property (audit 2): over random selections, folds and unfolds (host fold, the bar, select, reveal) and delete or typing keys, no single key deletes header text the reader did not see selected — with the header closed and not wholly selected, the header survives every key', async () => {
+    const p = await open();
+    const HEADER_END = TEXT.indexOf('}}') + 2;
+    let seed = 20261108;
+    const rnd = (n: number): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const KEYS = ['Backspace', 'Delete', 'x', 'Alt+Backspace', 'ControlOrMeta+Backspace', 'Alt+Delete', 'Shift+Backspace'];
+    const failures: string[] = [];
+    for (let i = 0; i < 120; i++) {
+      await p.evaluate(`shell.setText(${JSON.stringify(TEXT)}, { resetHistory: true })`);
+      const ops: string[] = [];
+      const len = TEXT.length;
+      const pick = (): number => (rnd(3) === 0 ? rnd(HEADER_END + 3) : rnd(len + 1));
+      for (let k = 0; k < 1 + rnd(3); k++) {
+        const r = rnd(5);
+        const a = pick(); const b = pick();
+        if (r === 0) ops.push(`shell.select(${a}, ${b})`);
+        else if (r === 1) ops.push(`shell.reveal({ from: ${a}, to: ${b} }, { select: true })`);
+        else if (r === 2) ops.push('shell.adapter.setHeaderFolded(true)');
+        else if (r === 3) ops.push('shell.adapter.setHeaderFolded(false)');
+        else ops.push(`(function(){ var w = shell.root.querySelector('[data-orz-header-fold]'); if (w) w.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1 })); })()`);
+      }
+      for (const op of ops) await p.evaluate(op);
+      await p.evaluate('shell.focus()');
+      const before = await p.evaluate('({ folded: shell.adapter.isHeaderFolded(), sel: shell.getSelection() })') as { folded: boolean; sel: { from: number; to: number } };
+      const key = KEYS[rnd(KEYS.length)];
+      if (key === 'x') await p.keyboard.type('x'); else await p.keyboard.press(key);
+      const after = await p.evaluate('shell.getText()') as string;
+      const wholly = before.sel.from <= 0 && before.sel.to >= HEADER_END;
+      if (before.folded && !wholly && !after.startsWith(TEXT.slice(0, HEADER_END))) failures.push(`${ops.join('; ')} | ${key} | sel ${JSON.stringify(before.sel)} → ${JSON.stringify(after.slice(0, 50))}`);
+    }
+    expect(failures).toEqual([]);
+    await p.close();
+  }, 240_000);
 });

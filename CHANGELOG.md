@@ -60,6 +60,11 @@ on this version.
   a later `select` or edit drops a reveal waiting for its pane; the textarea
   starts with the caret at the start; the source view's scroll position is
   read and set from the document's top (below the content's padding).
+- Audit round 2: a selection anchored inside the closed header opens it (and
+  folding moves its ends after the header); while the header is closed, no
+  key the reader presses changes its hidden text unless the whole header is
+  selected — it opens instead; select-all then a collapsing move (End, an
+  arrow, a click) collapses; a double-click on the closed line leaves it open.
 - A carrier-app menu (`menuButton`) of a button near the left edge — a
   phone's toolbar, the tools under More — opens to the right instead of off
   the screen.

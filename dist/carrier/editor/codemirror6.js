@@ -350,7 +350,17 @@ function headerFoldExtension(m, find, focusField) {
         return { from: first.from, to: last.to, title: String(info.title ?? '').replace(/\s+/g, ' ').trim() };
     };
     /** The selection's head inside the folded lines (both ends count: typing there would change the header). */
-    const inside = (at, sel) => sel.ranges.some((r) => r.head >= at.from && r.head <= at.to);
+    // (audit 2, HIGH) a range is in the header when its head is in [from, to] OR its anchor in (from, to]: a selection
+    // anchored inside the hidden lines would otherwise let one key delete settings the reader cannot see. A range
+    // anchored at the header's very start (select-all) is the whole header, visibly selected: not "inside".
+    const inside = (at, sel) => sel.ranges.some((r) => (r.head >= at.from && r.head <= at.to) || (r.anchor > at.from && r.anchor <= at.to));
+    /** The selection with no end in the header: an end inside goes to the first offset after it. */
+    const outside = (at, sel, len) => {
+        const after = Math.min(len, at.to + 1);
+        const r = sel.main;
+        const fix = (n) => (n >= at.from && n <= at.to ? after : n);
+        return { anchor: fix(r.anchor), head: fix(r.head) };
+    };
     class FoldLine extends WidgetType {
         constructor(title, open) {
             super();
@@ -388,7 +398,8 @@ function headerFoldExtension(m, find, focusField) {
             line.addEventListener('mousedown', (e) => { if (e.button === 0)
                 e.preventDefault(); });
             line.addEventListener('click', (e) => {
-                if (e.button !== 0)
+                // (audit 2) the second click of a double-click does not fold at once what the first opened
+                if (e.button !== 0 || e.detail > 1)
                     return;
                 e.preventDefault();
                 const v = view.state.field(field, false);
@@ -398,8 +409,7 @@ function headerFoldExtension(m, find, focusField) {
                 if (open) {
                     // fold again: a caret inside goes after the header, so the header stays closed
                     const sel = view.state.selection;
-                    const after = Math.min(view.state.doc.length, at.to + 1);
-                    view.dispatch({ effects: effect.of(false), ...(inside(at, sel) ? { selection: { anchor: after } } : {}) });
+                    view.dispatch({ effects: effect.of(false), ...(inside(at, sel) ? { selection: outside(at, sel, view.state.doc.length) } : {}) });
                 }
                 else {
                     // open, the caret on the first setting (the line after {{nyml)
@@ -484,12 +494,35 @@ function headerFoldExtension(m, find, focusField) {
             const doc = tr.startState.doc;
             const after = v.at.to < doc.length ? v.at.to + 1 : v.at.to;
             // the old selection covered the header; the new one is the same but starts just after the header
-            if (s0.from <= v.at.from && !s0.empty && s1.to === s0.to && s1.from >= v.at.to && s1.from <= after && tr.newSelection.ranges.length === 1) {
+            if (s0.from <= v.at.from && !s0.empty && !s1.empty && s1.to === s0.to && s1.from >= v.at.to && s1.from <= after && tr.newSelection.ranges.length === 1) {
                 return [tr, { selection: tr.startState.selection, sequential: true }];
             }
             return tr;
         })] : [];
-    return { effect, field, extension: [field, decorations, ...atomic, ...keepCover] };
+    // (audit 2, HIGH) the rule: no single key may delete header text the reader did not select. While the header is
+    // closed, a reader's edit (typing, delete, paste, a drop, a replace) that would change its hidden text is refused
+    // unless a selection covered the whole header (select-all: the closed line shows selected); instead the header
+    // opens, so the reader sees what the next key would change. Edits from code (setText, setHeader, applyEdits) and
+    // undo/redo pass.
+    const guard = EditorState?.transactionFilter ? [EditorState.transactionFilter.of((tr) => {
+            if (!tr.docChanged)
+                return tr;
+            if (!(tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move')))
+                return tr;
+            const v = tr.startState.field(field, false);
+            if (!v?.at || v.open)
+                return tr;
+            const { from, to } = v.at;
+            let hits = false;
+            tr.changes.iterChangedRanges((fA, tA) => { if (fA < to && tA > from)
+                hits = true; });
+            if (!hits)
+                return tr;
+            if (tr.startState.selection.ranges.some((r) => r.from <= from && r.to >= to))
+                return tr;
+            return { effects: effect.of(true), scrollIntoView: true };
+        })] : [];
+    return { effect, field, inside, outside, extension: [field, decorations, ...atomic, ...keepCover, ...guard] };
 }
 /** What the editing surface announces about leaving it (D-129, WCAG 2.1.2). */
 exports.ESC_TAB_HINT = 'Tab indents. Press Esc, then Tab, to leave the text.';
@@ -880,10 +913,8 @@ function codemirror6Adapter(options = {}) {
             const v = view.state.field(headerExt.field, false);
             if (!v?.at || v.open === !flag)
                 return;
-            const sel = view.state.selection.main;
-            // folding with the caret inside moves it after the header (else the caret would open it again)
-            const after = Math.min(view.state.doc.length, v.at.to + 1);
-            view.dispatch({ effects: headerExt.effect.of(!flag), ...(flag && sel.head >= v.at.from && sel.head <= v.at.to ? { selection: { anchor: after } } : {}) });
+            // folding with an end of the selection inside moves that end after the header (audit 2: the anchor too)
+            view.dispatch({ effects: headerExt.effect.of(!flag), ...(flag && headerExt.inside(v.at, view.state.selection) ? { selection: headerExt.outside(v.at, view.state.selection, view.state.doc.length) } : {}) });
         },
         isHeaderFolded() {
             if (!view || !headerExt)
