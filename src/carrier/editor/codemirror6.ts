@@ -155,7 +155,9 @@ const THEME = {
   '.orz-focus-outside': { opacity: '0.38' },
   // the folded header (2.7.0, D-130): one closed line, and the bar over an opened one
   '.orz-header-fold': {
-    display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 4px', padding: '2px 16px', minHeight: '26px', boxSizing: 'border-box',
+    display: 'flex', alignItems: 'center', gap: '6px', margin: '0', padding: '2px 16px 6px', minHeight: '30px', boxSizing: 'border-box',
+    // (audit 1, H1) NO outer margin: CodeMirror's height map does not measure a block widget's margins, so one
+    // would offset every line below it (clicks on the next line, scroll sync off by a fraction); the gap is padding
     cursor: 'pointer', userSelect: 'none', fontFamily: 'var(--orz-chrome-font)', fontSize: 'var(--orz-chrome-text-sm, 13px)',
     color: 'var(--orz-chrome-muted)', background: 'var(--orz-chrome-surface-2)', borderBottom: '1px solid var(--orz-chrome-border)',
   },
@@ -393,8 +395,10 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
       mark.textContent = this.open ? '▾' : '▸';
       line.append(mark);
       const open = this.open;
-      // the editor ignores events in the widget (ignoreEvent): the pointer press is ours, and moves no caret
-      line.addEventListener('mousedown', (e: Any) => {
+      // the editor ignores events in the widget (ignoreEvent): the pointer press moves no caret, and the click acts
+      // (audit 1, L1: a role="button" activated by assistive technology sends a click alone)
+      line.addEventListener('mousedown', (e: Any) => { if (e.button === 0) e.preventDefault(); });
+      line.addEventListener('click', (e: Any) => {
         if (e.button !== 0) return;
         e.preventDefault();
         const v = view.state.field(field, false) as HeaderFoldValue | undefined;
@@ -454,8 +458,33 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     if (v.at && f && f.mode === 'fold' && state.doc.lineAt(f.from).from > v.at.from) return Decoration.none;
     return v.deco;
   });
-  return { effect, field, extension: [field, decorations] };
+  // (audit 1, M2) the closed header is one atomic piece: the caret steps over it as a whole, a selection never ends
+  // inside it; and a selection that covered it (select-all) is not cut back to the line after it by the browser's
+  // read-back of the DOM selection (the widget cannot hold a DOM caret before it)
+  const atomic = EditorView.atomicRanges ? [EditorView.atomicRanges.of((view: Any) => {
+    const v = view.state.field(field, false) as HeaderFoldValue | undefined;
+    return v?.at && !v.open ? v.deco : Decoration.none;
+  })] : [];
+  const { EditorState } = m.state;
+  const keepCover = EditorState?.transactionFilter ? [EditorState.transactionFilter.of((tr: Any) => {
+    if (tr.docChanged || !tr.selection || tr.effects.length) return tr;
+    const v = tr.startState.field(field, false) as HeaderFoldValue | undefined;
+    if (!v?.at || v.open) return tr;
+    const s0 = tr.startState.selection.main;
+    const s1 = tr.newSelection.main;
+    const doc = tr.startState.doc;
+    const after = v.at.to < doc.length ? v.at.to + 1 : v.at.to;
+    // the old selection covered the header; the new one is the same but starts just after the header
+    if (s0.from <= v.at.from && !s0.empty && s1.to === s0.to && s1.from >= v.at.to && s1.from <= after && tr.newSelection.ranges.length === 1) {
+      return [tr, { selection: tr.startState.selection, sequential: true }];
+    }
+    return tr;
+  })] : [];
+  return { effect, field, extension: [field, decorations, ...atomic, ...keepCover] };
 }
+
+/** What the editing surface announces about leaving it (D-129, WCAG 2.1.2). */
+export const ESC_TAB_HINT = 'Tab indents. Press Esc, then Tab, to leave the text.';
 
 /** A line that is only a list item's marker (in its indent and quote prefix): what a list continuation writes. */
 const CONTINUED_ITEM = /^((?:[ \t]*>)*[ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?$/;
@@ -536,7 +565,8 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       EditorView.lineWrapping,
       keymap.of(keys),
       roCompartment ? roCompartment.of(roExtensions(ro)) : roExtensions(ro),
-      EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true' }),
+      // (audit 1, L2; WCAG 2.1.2) the way out of the text is announced: Tab indents here
+      EditorView.contentAttributes.of({ 'aria-label': o.label ?? 'Document text', 'aria-multiline': 'true', 'aria-description': ESC_TAB_HINT }),
       EditorView.theme(THEME),
       ...(focus ? focus.extension : []),
       ...(flashExt ? flashExt.extension : []),
@@ -620,8 +650,19 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     }
     const onScroll = (): void => o.onScroll?.();
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
+    // (audit 1, M1; D-129) EVERY Escape starts CodeMirror's Tab-focus window — also one its keymap consumes
+    // (a selection simplified, the search panel closed), which never reaches the handler that starts it: so
+    // Esc then Tab always leaves the text. Capture on the editor's root element: its panels too.
+    const onEscape = (e: Any): void => {
+      if (e.key !== 'Escape' || e.isComposing) return;
+      const v = view;
+      if (!v || typeof v.setTabFocusMode !== 'function') return;
+      try { v.setTabFocusMode(2000); } catch { /* an older CodeMirror: its own Escape handling */ }
+    };
+    view.dom.addEventListener('keydown', onEscape, true);
     scrollOff = () => {
       view?.scrollDOM.removeEventListener('scroll', onScroll);
+      view?.dom.removeEventListener('keydown', onEscape, true);
       flushOff();
     };
     if (scroll) adapter.scrollTo!({ fraction: scroll.fraction });
@@ -635,6 +676,14 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     pendingFocus = null;
   };
 
+  /** Where the document's top lies in the scroller's content (its top padding), for the height map's offsets. */
+  const docOffset = (): number => {
+    try {
+      const sd = view.scrollDOM;
+      const o = view.documentTop - sd.getBoundingClientRect().top + sd.scrollTop;
+      return Number.isFinite(o) ? Math.max(0, o) : 0;
+    } catch { return 0; }
+  };
   const adapter: TextEditorAdapter = {
     get name() { return view ? 'codemirror6' : 'textarea'; },
     mount(el, o) {
@@ -789,9 +838,10 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       const sd = view.scrollDOM;
       const top: number = sd.scrollTop;
       const max = Math.max(0, sd.scrollHeight - sd.clientHeight);
-      const block = view.lineBlockAtHeight(top);
+      // (audit 1, H1) heights are from the document's top, which lies below the content's padding
+      const block = view.lineBlockAtHeight(Math.max(0, top - docOffset()));
       const line = view.state.doc.lineAt(block.from).number - 1;
-      const within = block.height > 0 ? Math.max(0, Math.min(1, (top - block.top) / block.height)) : 0;
+      const within = block.height > 0 ? Math.max(0, Math.min(1, (top - docOffset() - block.top) / block.height)) : 0;
       return { line: line + within, fraction: max > 0 ? Math.min(1, top / max) : 0 };
     },
     scrollTo(target) {
@@ -801,7 +851,9 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
         const d = view.state.doc;
         const n = Math.max(0, Math.min(d.lines - 1, Math.floor(target.line)));
         const block = view.lineBlockAt(d.line(n + 1).from);
-        sd.scrollTop = block.top + Math.max(0, Math.min(1, target.line - n)) * block.height;
+        const y = block.top + Math.max(0, Math.min(1, target.line - n)) * block.height;
+        // the first line at the top shows the padding above it too (scrollTop 0)
+        sd.scrollTop = y <= 0 ? 0 : docOffset() + y;
       } else if (typeof target.fraction === 'number' && Number.isFinite(target.fraction)) {
         sd.scrollTop = Math.max(0, Math.min(1, target.fraction)) * Math.max(0, sd.scrollHeight - sd.clientHeight);
       }

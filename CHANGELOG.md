@@ -50,6 +50,16 @@ on this version.
   focus fell to the page when the editor pane hid; a view change from the
   keyboard now moves the focus to the pane that shows (the preview frame
   reports the next key), so the cycle goes on.
+- Audit round 1 of these changes: the folded header line has no outer margin
+  (CodeMirror's height map was off by 4 px below it: clicks on the next line,
+  scroll sync off by a fraction) and is atomic, so select-all keeps it; every
+  Escape starts the Esc-then-Tab window (also one CodeMirror's keymap
+  consumes) and the editing surface announces it (`aria-description`); a
+  `saveStatus` result whose fields throw keeps the default words; `reveal`
+  clamps offsets, finds a heading by its source line too (inline math), and
+  a later `select` or edit drops a reveal waiting for its pane; the textarea
+  starts with the caret at the start; the source view's scroll position is
+  read and set from the document's top (below the content's padding).
 - A carrier-app menu (`menuButton`) of a button near the left edge — a
   phone's toolbar, the tools under More — opens to the right instead of off
   the screen.

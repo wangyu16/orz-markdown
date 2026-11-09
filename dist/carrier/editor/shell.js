@@ -486,18 +486,26 @@ function createEditorShell(element, options) {
         let text = dirty ? 'Unsaved changes' : 'Saved';
         let tone = dirty ? 'unsaved' : 'saved';
         if (typeof hooks.saveStatus === 'function') {
-            let got;
+            // (audit 1, M3) the result is read inside the guard too: a throwing getter or a revoked Proxy keeps the
+            // defaults and never breaks mount, the dirty event, the host's setDirty or save()
             try {
-                got = hooks.saveStatus({ dirty, saving: savingNow });
+                const got = hooks.saveStatus({ dirty, saving: savingNow });
+                let words = null;
+                let t;
+                if (typeof got === 'string')
+                    words = got;
+                else if (got && typeof got === 'object') {
+                    words = got.text;
+                    t = got.tone;
+                }
+                if (typeof words === 'string' && words.trim() !== '') {
+                    text = words.replace(/\s+/g, ' ').trim();
+                    tone = t === 'saved' || t === 'pending' || t === 'unsaved' || t === 'error' ? t : dirty ? 'pending' : 'saved';
+                }
             }
             catch {
-                got = null;
-            }
-            const words = typeof got === 'string' ? got : got && typeof got === 'object' && typeof got.text === 'string' ? got.text : null;
-            if (words !== null && words.trim() !== '') {
-                text = words.replace(/\s+/g, ' ').trim();
-                const t = typeof got === 'object' ? got.tone : undefined;
-                tone = t === 'saved' || t === 'pending' || t === 'unsaved' || t === 'error' ? t : dirty ? 'pending' : 'saved';
+                text = dirty ? 'Unsaved changes' : 'Saved';
+                tone = dirty ? 'unsaved' : 'saved';
             }
         }
         container.setAttribute('data-save-tone', tone);
@@ -531,6 +539,9 @@ function createEditorShell(element, options) {
     const changed = () => {
         if (destroyed)
             return;
+        // (audit 1, L4) an edit wins over a reveal still waiting for its pane
+        pendingReveal = null;
+        pendingPreviewLine = null;
         // back at a remembered text (undo): its BOM and line endings are the document's again
         model.recall(adapter.getDoc());
         updateDirty();
@@ -813,6 +824,17 @@ function createEditorShell(element, options) {
         adapter.setSelection?.(select ? sel : { from: sel.from, to: sel.from }, { scroll: false });
         adapter.scrollTo?.({ line: lineOf(adapter.getDoc(), sel.from) });
     }
+    /** The offset of a 0-based line's start in an LF text, or -1. */
+    function lineStartOf(d, line) {
+        let from = 0;
+        for (let n = 0; n < line; n++) {
+            const i = d.indexOf('\n', from);
+            if (i < 0)
+                return -1;
+            from = i + 1;
+        }
+        return from;
+    }
     /** (D-134) A heading of the editor text, by its text or `#id`: the range of its first line, or null. */
     function findHeading(d, wanted) {
         const norm = (x) => x.replace(/\s+/g, ' ').trim();
@@ -834,21 +856,23 @@ function createEditorShell(element, options) {
             const inline = tokens[i + 1];
             const children = inline?.children;
             const text = children ? children.filter((c) => c.type === 'text' || c.type === 'code_inline' || c.type === 'emoji').map((c) => c.content).join('') : String(inline?.content ?? '');
-            heads.push({ line: t.map[0], text: norm(text), id: String(t.attrGet?.('id') ?? '') });
+            // (audit 1, L5) the source line as written too (inline math, emphasis marks): what the reader sees in the text
+            const ls = lineStartOf(d, t.map[0]);
+            const le = ls < 0 ? -1 : d.indexOf('\n', ls);
+            const rawLine = ls < 0 ? '' : d.slice(ls, le < 0 ? d.length : le);
+            const raw = norm(rawLine.replace(/^ {0,3}#{1,6}(?=\s|$)/, '').replace(/\s#+\s*$/, ''));
+            heads.push({ line: t.map[0], text: norm(text), raw, id: String(t.attrGet?.('id') ?? '') });
         }
         const byId = w.startsWith('#') ? w.slice(1) : null;
         const hit = byId !== null
             ? heads.find((h) => h.id === byId)
-            : heads.find((h) => h.text === w) ?? heads.find((h) => h.text.toLowerCase() === w.toLowerCase()) ?? heads.find((h) => h.id === w);
+            : heads.find((h) => h.text === w) ?? heads.find((h) => h.raw === w)
+                ?? heads.find((h) => h.text.toLowerCase() === w.toLowerCase()) ?? heads.find((h) => h.raw.toLowerCase() === w.toLowerCase()) ?? heads.find((h) => h.id === w);
         if (!hit)
             return null;
-        let from = 0;
-        for (let n = 0; n < hit.line; n++) {
-            const i = d.indexOf('\n', from);
-            if (i < 0)
-                return null;
-            from = i + 1;
-        }
+        const from = lineStartOf(d, hit.line);
+        if (from < 0)
+            return null;
         const end = d.indexOf('\n', from);
         return { from, to: end < 0 ? d.length : end };
     }
@@ -1555,6 +1579,10 @@ function createEditorShell(element, options) {
         select(from, to, o) {
             if (destroyed)
                 return;
+            // (audit 1, L4) a later caret move wins over a reveal still waiting for its pane
+            pendingReveal = null;
+            pendingPreviewLine = null;
+            revealFollow = null;
             if (typeof from !== 'number' || typeof to !== 'number' || Number.isNaN(from) || Number.isNaN(to))
                 throw new TypeError('orz editor: select needs two offsets');
             const exact = getText();
@@ -1602,9 +1630,12 @@ function createEditorShell(element, options) {
             }
             else if (target && typeof target === 'object' && typeof target.from === 'number' && !Number.isNaN(target.from)) {
                 const r = target;
-                const to = typeof r.to === 'number' && !Number.isNaN(r.to) ? r.to : r.from;
-                const a = (0, text_model_js_1.toEditorOffset)(exact, Math.min(r.from, to));
-                const b = (0, text_model_js_1.toEditorOffset)(exact, Math.max(r.from, to));
+                // (audit 1) offsets clamped to the text (infinities and out-of-range values too)
+                const clampX = (n) => Math.max(0, Math.min(exact.length, Math.round(n)));
+                const f = clampX(r.from);
+                const to = typeof r.to === 'number' && !Number.isNaN(r.to) ? clampX(r.to) : f;
+                const a = (0, text_model_js_1.toEditorOffset)(exact, Math.min(f, to));
+                const b = (0, text_model_js_1.toEditorOffset)(exact, Math.max(f, to));
                 sel = { from: Math.max(0, Math.min(d.length, a)), to: Math.max(0, Math.min(d.length, b)) };
             }
             else {

@@ -248,6 +248,8 @@ export function textareaAdapter(): TextEditorAdapter {
       ta.readOnly = options.readOnly === true;
       ta.value = options.doc;
       last = ta.value;
+      // (audit 1, L3) the caret starts at the start, as in CodeMirror (setting the value puts it at the end)
+      try { ta.setSelectionRange?.(0, 0); } catch { /* detached */ }
       el.append(ta);
       listen('input', (e) => {
         const t = now();

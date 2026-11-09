@@ -106,6 +106,8 @@ export declare function loadCodeMirror6(doc: EdDocument, options?: {
 export declare const ORZ_HIGHLIGHTER: {
     style(tags: readonly Any[]): string | null;
 };
+/** What the editing surface announces about leaving it (D-129, WCAG 2.1.2). */
+export declare const ESC_TAB_HINT = "Tab indents. Press Esc, then Tab, to leave the text.";
 export declare function codemirror6Adapter(options?: CodeMirror6Options): TextEditorAdapter;
 export {};
 //# sourceMappingURL=codemirror6.d.ts.map
