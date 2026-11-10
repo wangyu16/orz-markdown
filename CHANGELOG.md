@@ -71,6 +71,13 @@ on this version.
   instead. A selection over the whole closed header draws it selected; a
   reload with the caret in the header shows it open; Replace all keeps its
   body replacements and says why the settings were left.
+- Audit round 4: blank lines above the header fold with it; edits to text a
+  focus fold hides (or from a caret in it) are refused and the fold cleared, a
+  caret moved into hidden lines shows them, and a fold moves an outside caret
+  into its range; a regexp Replace all
+  matching the whole text leaves the folded settings; typing over a selection
+  that covers the closed header opens it, like Backspace; refusals are
+  announced to screen readers.
 - A carrier-app menu (`menuButton`) of a button near the left edge — a
   phone's toolbar, the tools under More — opens to the right instead of off
   the screen.

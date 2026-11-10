@@ -278,7 +278,17 @@ function focusExtension(m: CodeMirror6Modules): { effect: Any; field: Any; exten
         value = { from, to: Math.max(from, tr.changes.mapPos(value.to, 1)), mode: value.mode };
         touched = true;
       }
-      for (const e of tr.effects) if (e.is(effect)) { value = e.value; touched = true; }
+      let set = false;
+      for (const e of tr.effects) if (e.is(effect)) { value = e.value; touched = true; set = true; }
+      // (audit 4, M2) a caret or selection end moved into the lines a fold hides shows them: the reader sees where
+      // the next key acts (as a caret moving into the closed header opens it)
+      if (value && value.mode === 'fold' && tr.selection && !set) {
+        const doc = tr.newDoc;
+        const first = doc.lineAt(Math.max(0, Math.min(doc.length, value.from)));
+        const last = doc.lineAt(Math.max(0, Math.min(doc.length, Math.max(value.from, value.to - (value.to > value.from ? 1 : 0)))));
+        const hidden = (n: number): boolean => n < first.from || n > last.to;
+        if (tr.newSelection.ranges.some((r: Any) => hidden(r.head) || hidden(r.anchor))) { value = null; touched = true; }
+      }
       if (!touched) return f;
       if (value) {
         const len: number = tr.newDoc.length;
@@ -369,7 +379,8 @@ interface HeaderGuardHooks {
  * a `setFocusRange` fold hides the header's lines, nothing more is drawn.
  * Null without `StateField`, `StateEffect`, `Decoration` or `WidgetType`.
  */
-function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => HeaderFoldInfo | null, focusField: Any, hooks: HeaderGuardHooks): HeaderFoldExt | null {
+function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => HeaderFoldInfo | null, focusExt: { field: Any; effect: Any } | null, hooks: HeaderGuardHooks): HeaderFoldExt | null {
+  const focusField = focusExt?.field ?? null;
   const { StateField, StateEffect } = m.state;
   const { Decoration, EditorView, WidgetType } = m.view;
   if (typeof StateField?.define !== 'function' || typeof StateEffect?.define !== 'function' || typeof Decoration?.replace !== 'function' || typeof WidgetType !== 'function' || !EditorView?.decorations) return null;
@@ -381,7 +392,9 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     const first = doc.lineAt(info.from);
     const last = doc.lineAt(info.to);
     if (doc.sliceString(info.to, last.to).trim() !== '') return null; // more text on the }} line: not folded
-    return { from: first.from, to: last.to, title: String(info.title ?? '').replace(/\s+/g, ' ').trim() };
+    // (audit 4, M1) blank lines above the header go with it: a character typed there would make it no header
+    const from = doc.sliceString(0, first.from).trim() === '' ? 0 : first.from;
+    return { from, to: last.to, title: String(info.title ?? '').replace(/\s+/g, ' ').trim() };
   };
   /** The selection's head inside the folded lines (both ends count: typing there would change the header). */
   // (audit 2, HIGH) a range is in the header when its head is in [from, to] OR its anchor in (from, to]: a selection
@@ -413,7 +426,8 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
       name.className = 'orz-header-fold__name';
       name.textContent = 'Document settings';
       line.append(name);
-      if (this.title && !this.open) {
+      // the title on the open bar too (audit 4: an edit that opens it — a block joined to the header — keeps naming it)
+      if (this.title) {
         const t = d.createElement('span');
         t.className = 'orz-header-fold__title';
         t.textContent = `· ${this.title}`;
@@ -483,7 +497,14 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
       if (at && !open && tr.docChanged && (tr.isUserEvent('undo') || tr.isUserEvent('redo')) && touchesHidden(tr.changes, at)) { open = true; changed = true; }
       if (tr.docChanged) {
         // (audit 3, perf) read the header again only when a change touches it (not on every key of the first body line)
-        const reach = at ? at.to : Math.min(tr.startState.doc.length, HEADER_PROBE);
+        // (audit 4, L6) up to the first non-space after the header: a block brought next to it (a legacy meta
+        // block, FC-18's pair) belongs to the header and changes its title
+        let reach = Math.min(tr.startState.doc.length, HEADER_PROBE);
+        if (at) {
+          const tail: string = tr.startState.doc.sliceString(at.to, Math.min(tr.startState.doc.length, at.to + 4096));
+          const ns = tail.search(/\S/);
+          reach = at.to + (ns < 0 ? tail.length : ns + 1);
+        }
         if (tr.changes.touchesRange(0, reach)) at = locate(tr.newDoc);
         else if (at) at = { from: tr.changes.mapPos(at.from), to: tr.changes.mapPos(at.to), title: at.title };
         changed = true;
@@ -535,29 +556,57 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
   // the header, above), or replaces the WHOLE document (select-all, which the closed line shows selected). Instead
   // the header opens and nothing changes; the refusal is no history step. A Replace all keeps its body replacements
   // (the header stays closed) and says why the settings were left.
+  const announce = (msg: string): Any[] => (EditorView.announce ? [EditorView.announce.of(msg)] : []);
+  const OPENED = 'Document settings opened: nothing was changed. Press the key again to change them.';
+  /** (audit 4, M2) the lines a `setFocusRange` fold hides: [from, to] pairs (inclusive ends), or none. */
+  const focusHidden = (state: Any): Array<[number, number]> => {
+    const f = focusField ? (state.field(focusField, false) as { value: FocusValue | null } | undefined)?.value : null;
+    if (!f || f.mode !== 'fold') return [];
+    const doc = state.doc;
+    const first = doc.lineAt(f.from);
+    const last = doc.lineAt(Math.max(f.from, f.to - (f.to > f.from ? 1 : 0)));
+    const out: Array<[number, number]> = [];
+    if (first.number > 1) out.push([0, doc.line(first.number - 1).to]);
+    if (last.number < doc.lines) out.push([doc.line(last.number + 1).from, doc.length]);
+    return out;
+  };
   const guard = EditorState?.transactionFilter ? [EditorState.transactionFilter.of((tr: Any) => {
     if (!tr.docChanged || hooks.fromCode()) return tr;
     if (tr.isUserEvent('undo') || tr.isUserEvent('redo')) return tr;
+    // (audit 4, M2) text a focus fold hides: a change there is refused and the fold cleared, so it shows
+    const hidden = focusHidden(tr.startState);
+    if (hidden.length && focusExt) {
+      let hit = false;
+      tr.changes.iterChangedRanges((fA: number, tA: number) => { for (const [h0, h1] of hidden) if ((fA < h1 && tA > h0) || (fA === tA && fA >= h0 && fA <= h1)) hit = true; });
+      // a caret or selection end the reader cannot see (it sits in the hidden lines): whatever the key does is unseen
+      for (const r of tr.startState.selection.ranges) for (const [h0, h1] of hidden) if ((r.head >= h0 && r.head <= h1) || (r.anchor >= h0 && r.anchor <= h1)) hit = true;
+      if (hit) return { effects: [focusExt.effect.of(null), ...announce('The hidden text is shown again: nothing was changed. Press the key again to change it.')], scrollIntoView: true };
+    }
     const v = tr.startState.field(field, false) as HeaderFoldValue | undefined;
     if (!v?.at || v.open) return tr;
     const at = v.at;
-    if (!touchesHidden(tr.changes, at)) return tr;
     const len: number = tr.startState.doc.length;
     let whole = false;
     tr.changes.iterChangedRanges((fA: number, tA: number) => { if (fA === 0 && tA === len) whole = true; });
-    if (whole) return tr;
-    if (tr.isUserEvent('input.replace.all')) {
+    // (audit 4, L1) a Replace all first: its whole-text match is no reader's select-all
+    if (tr.isUserEvent('input.replace.all') && (touchesHidden(tr.changes, at) || whole)) {
       const kept: Array<{ from: number; to: number; insert: string }> = [];
       tr.changes.iterChanges((fA: number, tA: number, _fB: number, _tB: number, ins: Any) => {
-        const one = { from: fA, to: tA, insert: ins.toString() };
-        if (!((fA < at.to && tA > at.from) || (fA === tA && fA >= at.from && fA < at.to))) kept.push(one);
+        if (!((fA < at.to && tA > at.from) || (fA === tA && fA >= at.from && fA < at.to))) kept.push({ from: fA, to: tA, insert: ins.toString() });
       });
+      // (audit 4, L5) the words say what the reader then sees
       hooks.notice?.(kept.length
         ? 'Replaced in the text. The document settings were left as they are: open them (the line at the top) to replace there too.'
-        : 'Nothing replaced: the matches are in the document settings. Open them (the line at the top) to replace there.');
-      return kept.length ? { changes: kept, userEvent: 'input.replace.all' } : { effects: effect.of(true) };
+        : 'Nothing replaced: the matches are in the document settings, shown now. Press Replace all again to replace them there.');
+      return kept.length ? { changes: kept, userEvent: 'input.replace.all' } : { effects: [effect.of(true), ...announce(OPENED)] };
     }
-    return { effects: effect.of(true), scrollIntoView: true };
+    // (audit 4, L2) a selection over the closed header (not the whole text): any change made from it — also one the
+    // browser reports for the body part alone (typing over it) — opens the header instead
+    const coveringStart = tr.startState.selection.ranges.some((r: Any) => !r.empty && r.from <= at.from && r.to >= at.to);
+    if (!touchesHidden(tr.changes, at) && !coveringStart) return tr;
+    // the whole text replaced from a selection the closed line showed (audit 3, S1: drawn selected)
+    if (whole && v.covered) return tr;
+    return { effects: [effect.of(true), ...announce(OPENED)], scrollIntoView: true };
   })] : [];
   return { effect, field, inside, outside, extension: [field, decorations, ...atomic, ...keepCover, ...guard] };
 }
@@ -625,7 +674,11 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
     roCompartment = m.state.Compartment ? new m.state.Compartment() : null;
     focus = focusExtension(m);
     flashExt = flashExtension(m);
-    headerExt = o.headerFold ? headerFoldExtension(m, o.headerFold, focus?.field ?? null, { fromCode: () => codeEdits > 0, notice: (t) => o.onNotice?.(t) }) : null;
+    headerExt = o.headerFold ? headerFoldExtension(m, o.headerFold, focus, {
+      fromCode: () => codeEdits > 0,
+      // (audit 4, L4) after the transaction, and a host's failing handler never costs the reader the edit
+      notice: (t) => { const fn = o.onNotice; if (!fn) return; queueMicrotask(() => { try { fn(t); } catch { /* the host's */ } }); },
+    }) : null;
     // (2.5.0, STATUS D-95) Enter continues a list ("- "); a reader who then types a marker of their
     // own ("- pears") gets one marker, not "- - pears": theirs replaces the continued one when they type
     // the space after it. Only right after the continuation, on that line, with nothing else typed.
@@ -861,7 +914,16 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
       const value: FocusValue | null = range ? { from: Math.min(range.from, range.to), to: Math.max(range.from, range.to), mode: o?.mode === 'fold' ? 'fold' : 'dim' } : null;
       if (!view) { pendingFocus = value; return; }
       if (!focus) return; // modules without the decoration API: everything stays shown
-      view.dispatch({ effects: focus.effect.of(value) });
+      // (audit 4, M2) folding away the caret's line would leave it where the reader cannot see it: it goes to the range
+      let sel: { anchor: number } | undefined;
+      if (value && value.mode === 'fold') {
+        const doc = view.state.doc;
+        const a = Math.max(0, Math.min(doc.length, value.from));
+        const first = doc.lineAt(a);
+        const last = doc.lineAt(Math.max(a, Math.min(doc.length, value.to - (value.to > value.from ? 1 : 0))));
+        if (view.state.selection.ranges.some((r: Any) => r.head < first.from || r.head > last.to || r.anchor < first.from || r.anchor > last.to)) sel = { anchor: a };
+      }
+      view.dispatch({ effects: focus.effect.of(value), ...(sel ? { selection: sel } : {}) });
     },
     flash(ranges, o) {
       if (!view || !flashExt) return; // the textarea (and a build without the decoration API): nothing lights up

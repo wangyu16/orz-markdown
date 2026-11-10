@@ -202,8 +202,8 @@ const APP_DELTA_LIMIT = 82_000;
 // 2.5.0 repairs (D-80 the frame's script hashes in the CSP error, D-100 the rebuilt frame under the previous one,
 // D-101 the toolbar fit, D-91 messages in user words): 1,170,756 B; bound 1.18 MB
 // 2.7.0 (D-129…D-135: reveal, the save-status hook, the folded header, the toolbar's More, the menu kept on screen):
-// 1,185,845 B; bound 1.19 MB
-const EDITOR_AND_APP_LIMIT = 1_190_000;
+// 1,185,845 B; bound 1.19 MB. Audit rounds 1–4 of 2.7.0 (the header guard, focus-fold refusals, announcements): 1,190,719 B; bound 1.20 MB
+const EDITOR_AND_APP_LIMIT = 1_200_000;
 
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
@@ -218,7 +218,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.19 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.20 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });
