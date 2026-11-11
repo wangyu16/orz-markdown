@@ -603,7 +603,11 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     // (audit 4, L2) a selection over the closed header (not the whole text): any change made from it — also one the
     // browser reports for the body part alone (typing over it) — opens the header instead
     const coveringStart = tr.startState.selection.ranges.some((r: Any) => !r.empty && r.from <= at.from && r.to >= at.to);
-    if (!touchesHidden(tr.changes, at) && !coveringStart) return tr;
+    // (audit 4, final) a caret left at the hidden range's start or inside it (a host's setText keeps a caret where it
+    // was): a key from there acts where the reader cannot see (a forward delete skips the atomic header and takes
+    // the body's first word), so the header opens instead
+    const caretHidden = tr.startState.selection.ranges.some((r: Any) => r.empty && r.head >= at.from && r.head < at.to);
+    if (!touchesHidden(tr.changes, at) && !coveringStart && !caretHidden) return tr;
     // the whole text replaced from a selection the closed line showed (audit 3, S1: drawn selected)
     if (whole && v.covered) return tr;
     return { effects: [effect.of(true), ...announce(OPENED)], scrollIntoView: true };
