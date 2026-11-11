@@ -577,7 +577,8 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     const hidden = focusHidden(tr.startState);
     if (hidden.length && focusExt) {
       let hit = false;
-      tr.changes.iterChangedRanges((fA: number, tA: number) => { for (const [h0, h1] of hidden) if ((fA < h1 && tA > h0) || (fA === tA && fA >= h0 && fA <= h1)) hit = true; });
+      // (final) ends inclusive: a deletion of the line break at a hidden region's edge joins a hidden line into view
+      tr.changes.iterChangedRanges((fA: number, tA: number) => { for (const [h0, h1] of hidden) if ((fA < tA && fA <= h1 && tA >= h0) || (fA === tA && fA >= h0 && fA <= h1)) hit = true; });
       // a caret or selection end the reader cannot see (it sits in the hidden lines): whatever the key does is unseen
       for (const r of tr.startState.selection.ranges) for (const [h0, h1] of hidden) if ((r.head >= h0 && r.head <= h1) || (r.anchor >= h0 && r.anchor <= h1)) hit = true;
       if (hit) return { effects: [focusExt.effect.of(null), ...announce('The hidden text is shown again: nothing was changed. Press the key again to change it.')], scrollIntoView: true };
@@ -863,6 +864,16 @@ export function codemirror6Adapter(options: CodeMirror6Options = {}): TextEditor
           return p <= change.from ? p : p >= change.to ? p + delta : change.from + change.insert.length;
         };
         view.setState(cm!.state.EditorState.create({ doc: text, extensions, selection: { anchor: map(sel.anchor), head: map(sel.head) } }));
+        // (audit 4, final) a caret mapped to the start of a closed header (where the browser cannot draw it) goes after
+        // it at once, so getSelection says where the caret is (before: it moved there unannounced at the next focus)
+        if (headerExt) {
+          const v = view.state.field(headerExt.field, false) as HeaderFoldValue | undefined;
+          const m0 = view.state.selection.main;
+          if (v?.at && !v.open && m0.empty && m0.head >= v.at.from && m0.head <= v.at.to) {
+            const after = Math.min(view.state.doc.length, v.at.to + 1);
+            fromCode(() => view.dispatch({ selection: { anchor: after } }));
+          }
+        }
         // setState is not an update: report it like one
         mountOptions?.onChange();
         return;

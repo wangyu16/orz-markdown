@@ -586,8 +586,9 @@ function headerFoldExtension(m, find, focusExt, hooks) {
             const hidden = focusHidden(tr.startState);
             if (hidden.length && focusExt) {
                 let hit = false;
+                // (final) ends inclusive: a deletion of the line break at a hidden region's edge joins a hidden line into view
                 tr.changes.iterChangedRanges((fA, tA) => { for (const [h0, h1] of hidden)
-                    if ((fA < h1 && tA > h0) || (fA === tA && fA >= h0 && fA <= h1))
+                    if ((fA < tA && fA <= h1 && tA >= h0) || (fA === tA && fA >= h0 && fA <= h1))
                         hit = true; });
                 // a caret or selection end the reader cannot see (it sits in the hidden lines): whatever the key does is unseen
                 for (const r of tr.startState.selection.ranges)
@@ -921,6 +922,16 @@ function codemirror6Adapter(options = {}) {
                     return p <= change.from ? p : p >= change.to ? p + delta : change.from + change.insert.length;
                 };
                 view.setState(cm.state.EditorState.create({ doc: text, extensions, selection: { anchor: map(sel.anchor), head: map(sel.head) } }));
+                // (audit 4, final) a caret mapped to the start of a closed header (where the browser cannot draw it) goes after
+                // it at once, so getSelection says where the caret is (before: it moved there unannounced at the next focus)
+                if (headerExt) {
+                    const v = view.state.field(headerExt.field, false);
+                    const m0 = view.state.selection.main;
+                    if (v?.at && !v.open && m0.empty && m0.head >= v.at.from && m0.head <= v.at.to) {
+                        const after = Math.min(view.state.doc.length, v.at.to + 1);
+                        fromCode(() => view.dispatch({ selection: { anchor: after } }));
+                    }
+                }
                 // setState is not an update: report it like one
                 mountOptions?.onChange();
                 return;
