@@ -388,6 +388,31 @@ chrome('audit1 real Chrome', { timeout: 120_000 }, () => {
     expect(out).toEqual({ Delete: '', 'Delete-undo': 'true', Backspace: '', 'Backspace-undo': 'true', x: 'x', 'x-undo': 'true' });
   });
 
+  it('[A1-F8b] (2.7.1) select-all with the header closed on a text that does not end in a line break, then typing, inserting a whole new document (its own header), or Delete: the text is exactly the input (no header kept, none doubled), one undo step back', async () => {
+    // the browser cannot put its DOM selection before the closed line: before 2.7.1 its edit kept the header (A1-F8
+    // passed only because TEXT ends in a line break); found by orz-paged 1.2.0's preview tests (E.7, E.8)
+    const T = TEXT.replace(/\n+$/, '');
+    const NEW = T.replace('title: Buffers in Five Minutes', 'title: Buffers in Six Minutes').replace('## Section 7\n', '## Section 7\n\nAn inserted paragraph.\n');
+    const out: Record<string, string> = {};
+    for (const k of ['x', 'insert', 'Delete', 'Backspace']) {
+      const p = await open(1000, {}, T);
+      await p.locator('.cm-content').click({ position: { x: 40, y: 200 } });
+      expect(await folded(p)).toBe(true);
+      await p.keyboard.press('ControlOrMeta+a');
+      await p.waitForTimeout(150);
+      if (k === 'x') await p.keyboard.type('x');
+      else if (k === 'insert') await p.keyboard.insertText(NEW);
+      else await p.keyboard.press(k);
+      const want = k === 'x' ? 'x' : k === 'insert' ? NEW : '';
+      const got = await text(p);
+      out[k] = got === want ? 'exact' : JSON.stringify(got.slice(0, 60));
+      await p.keyboard.press('ControlOrMeta+z');
+      out[`${k}-undo`] = String((await text(p)) === T);
+      await p.close();
+    }
+    expect(out).toEqual({ x: 'exact', 'x-undo': 'true', insert: 'exact', 'insert-undo': 'true', Delete: 'exact', 'Delete-undo': 'true', Backspace: 'exact', 'Backspace-undo': 'true' });
+  });
+
   it('[A1-F10] select-all with the header closed selects the whole text (the header too) also when the line after "}}" is not blank: the selection stays 0..length and Delete empties the text, as with a blank line (A1-F8)', async () => {
     const T2 = TEXT.replace('}}\n\n# Start', '}}\n# Start');
     const p = await open(1000, {}, T2);

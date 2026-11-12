@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] — unreleased
+
+### Fixed
+
+- **Select-all, then typing or inserted text, with the header folded** (FC-19
+  §3 `foldHeader`, STATUS D-130): on a text that does not end in a line break
+  the input kept the old header and replaced only the body — a typed `x` gave
+  `{{nyml …}}` + `x`, and a whole new document inserted (`insertText`,
+  dictation, text replacement) gave two headers, the old one first, so the
+  new settings never applied. The browser cannot put its DOM selection
+  before the closed line (a non-editable block), so its edit covered only
+  the lines after it and CodeMirror read the closed line back as the
+  header's text (A1-F8 passed only because its text ended in a line break).
+  The editor now applies typed or inserted text and the browser's deletes to
+  the whole selection itself (`beforeinput`) when select-all covers the
+  closed header. Paste and drop were and are whole; an IME composition is
+  left to the browser. Found by orz-paged 1.2.0's preview tests (E.7, E.8),
+  which replace the text with select-all + `insertText`. Test A1-F8b.
+
 ## [2.7.0] — 2026-11-11
 
 The editor shell's reader fixes from the owner's Alembic rounds (STATUS

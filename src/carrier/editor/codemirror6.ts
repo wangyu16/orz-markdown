@@ -549,6 +549,31 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     }
     return tr;
   })] : [];
+  // (2.7.1) select-all with the header closed, then typed or inserted text (or a delete the browser makes): the browser
+  // cannot put its DOM selection before the closed line (a non-editable block), so its edit would replace only the
+  // lines after it, and CodeMirror reads the closed line back as the header's text — the header stayed, the body went
+  // (and inserted text that brings its own header gave two). Whenever the document does not end in a line break (A1-F8
+  // passed only on a text that did). The reader replaced the whole selection the closed line showed selected: the
+  // input is applied to it here, before the browser edits. A paste or a drop already arrive whole (CodeMirror's own
+  // handlers); a composition (IME) cannot be cancelled and is left to the browser.
+  const wholeInput = EditorView.domEventHandlers ? [EditorView.domEventHandlers({
+    beforeinput: (e: Any, view: Any): boolean => {
+      const v = view.state.field(field, false) as HeaderFoldValue | undefined;
+      if (!v?.at || v.open || !v.covered || view.state.readOnly || e.isComposing) return false;
+      const sel = view.state.selection;
+      const len: number = view.state.doc.length;
+      if (sel.ranges.length !== 1 || sel.main.from !== 0 || sel.main.to !== len) return false;
+      const type = String(e.inputType ?? '');
+      let insert: string | null = null;
+      if (type === 'insertText' || type === 'insertReplacementText') insert = typeof e.data === 'string' ? e.data : (e.dataTransfer?.getData?.('text/plain') ?? null);
+      else if (type.startsWith('delete')) insert = '';
+      if (insert === null) return false;
+      e.preventDefault();
+      const text = insert.replace(/\r\n?/g, '\n');
+      view.dispatch({ changes: { from: 0, to: len, insert: text }, selection: { anchor: text.length }, userEvent: text ? 'input.type' : 'delete', scrollIntoView: true });
+      return true;
+    },
+  })] : [];
   // (audits 2–3, HIGH) the rule: no single user action changes header text the reader neither saw selected nor saw
   // open. INVERTED (audit 3): while the header is closed, EVERY transaction that changes its hidden text is refused —
   // whatever its userEvent (typing, delete, paste, drop, replace, toggle comment, indent, line moves) — unless it
@@ -613,7 +638,7 @@ function headerFoldExtension(m: CodeMirror6Modules, find: (text: string) => Head
     if (whole && v.covered) return tr;
     return { effects: [effect.of(true), ...announce(OPENED)], scrollIntoView: true };
   })] : [];
-  return { effect, field, inside, outside, extension: [field, decorations, ...atomic, ...keepCover, ...guard] };
+  return { effect, field, inside, outside, extension: [field, decorations, ...atomic, ...keepCover, ...wholeInput, ...guard] };
 }
 
 /** What the editing surface announces about leaving it (D-129, WCAG 2.1.2). */
