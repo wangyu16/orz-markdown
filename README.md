@@ -266,7 +266,8 @@ import { splitBlocks, canonicalize, blockFingerprint } from 'orz-markdown/carrie
 const blocks = splitBlocks(text, { filename: 'week1.slides.md' }); // one block per slide
 const parts = blocks.map((b) => text.slice(b.start, b.end));      // parts.join('') === text
 // b.type: 'header' | 'heading' | 'paragraph' | 'list' | 'table' | 'container' | 'code' | … | 'slide' | 'section'
-// b.id: the FC-02 id of its heading (or slide), else null; b.fingerprint: 16 hex digits
+// b.id: the FC-02 id of its heading (or slide), else null; b.duplicate: true when that id is carried twice
+// b.fingerprint: 16 hex digits
 splitBlocks(text, { kind: 'md', unit: 'section', depth: 2 }); // ## sections, a preamble before the first
 canonicalize(text, 'md'); // same rendered HTML, header bytes kept, idempotent
 ```
@@ -276,17 +277,33 @@ canonicalize(text, 'md'); // same rendered HTML, header bytes kept, idempotent
   — the header, heading, paragraph, list, table, container, code, math,
   directive, paged `element`, raw HTML, rule, `definition`; `unit:
   'section'` cuts at headings of level ≤ `depth` (slides: at slide markers,
-  their default). An edit inside one block changes no other block's text,
-  id or fingerprint.
+  their default).
+- **Stability.** An edit inside one block changes no other block's text, id
+  or fingerprint — except an edit that changes where the parser starts
+  constructs: joining two blocks (deleting the blank line between them,
+  breaking a heading, a slide marker or the header), or opening a fence,
+  `$$`, `:::` or HTML comment that is never closed, which swallows every
+  block after it. A block merge then sees every block after the edit as
+  changed (one big edited block instead of the ones it swallowed), and
+  should treat it as a conflict rather than merge into it.
+- **Ids** come only from an explicit `{{attrs[#blk-…]}}` (or
+  `{{attrs[id="blk-…"]}}`) on a top-level heading, or a slide marker's
+  `id=blk-…` — never from a slug, never from a heading nested in a list,
+  quote or container. A block whose id the text carries more than once
+  (another heading at any depth, another slide marker) has `duplicate: true`;
+  FC-02 ids are unique per file, so resolve it before keying on it.
 - **Fingerprints** ignore line endings and the blank lines around a block,
-  nothing else. To compare blocks regardless of trailing spaces, markers or
-  table padding, split the canonical forms.
+  nothing else (blank lines an unclosed fence swallowed are content and
+  count). To compare blocks regardless of trailing spaces, markers or table
+  padding, split the canonical forms.
 - **`canonicalize`** writes LF, one blank line where there were blank lines
   (blocks written next to each other stay so), no trailing spaces except a
   two-space hard break, `# Title` headings, `---` rules, `-` bullets, `1.`
   ordered markers, `*`/`**` emphasis and `| a | b |` tables; code, math, raw
-  HTML, directives and the header keep their bytes. Every change is checked
-  by rendering; a change that would alter the HTML is not made.
+  HTML, directives, the header, a leading BOM and the lines the renderer
+  does not show (reference and footnote definitions) keep their bytes.
+  Every change is checked by rendering; a change that would alter the HTML
+  is not made. Linear in the text.
 
 ### Security notes
 

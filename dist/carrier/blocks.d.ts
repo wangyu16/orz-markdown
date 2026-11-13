@@ -40,11 +40,19 @@ export interface TextBlock {
     name?: string;
     /**
      * The block's stable block id (FC-02, `blk-` + ≥ 8 base36) when it has one,
-     * else `null`: a heading's `{{attrs[#blk-…]}}`; for a section, its heading's;
-     * for a slide, an `id=blk-…` slide option, else the id of the slide's first
+     * else `null`: a top-level heading's explicit `{{attrs[#blk-…]}}` (or
+     * `{{attrs[id="blk-…"]}}`) — never a slug, never a heading nested in a
+     * list, quote or container; for a section, its heading's; for a slide, an
+     * `id=blk-…` slide option, else the id of the slide's first top-level
      * heading that has one.
      */
     id: string | null;
+    /**
+     * `true` when the block's `id` is carried more than once in the text (by
+     * another heading at any depth, or another slide marker): FC-02 ids are
+     * unique per file, so the host must resolve it. Absent otherwise.
+     */
+    duplicate?: true;
     /** Offset of the block's first character in the text. */
     start: number;
     /** Offset just past the block (its trailing blank lines included). */
@@ -79,7 +87,9 @@ export interface SplitOptions extends BlockOptions {
  * with line endings read as LF and the blank lines before and after it (the
  * separator) left out. Two blocks that differ only in line endings or in the
  * blank lines around them have the same fingerprint; any other difference —
- * a trailing space included — gives another one. For whitespace-insensitive
+ * a trailing space included — gives another one. Blank lines that are
+ * content (inside an unclosed fence, `$$` or HTML comment at the end of the
+ * text) are not a separator: they count. For whitespace-insensitive
  * comparison, fingerprint the blocks of `canonicalize(text)`.
  */
 export declare function blockFingerprint(blockText: string): string;
@@ -92,22 +102,29 @@ export declare function blockFingerprint(blockText: string): string;
  * Stability: a block starts where the parser starts a top-level construct,
  * so an edit inside one block leaves every other block's offsets-relative
  * text, `id`, `type` and `fingerprint` unchanged, unless the edit changes
- * where the parser starts constructs (joining two paragraphs by deleting the
- * blank line between them, opening a fence that is never closed, …).
+ * where the parser starts constructs: joining two blocks (deleting the blank
+ * line between them, breaking a heading, slide marker or the header), or
+ * opening a fence, `$$`, `:::` or HTML comment that is never closed — it
+ * swallows every block after it, so the blocks after the edit change (a
+ * block merge sees them all as edited). Ids come from top-level headings
+ * only; an id carried twice is flagged `duplicate`.
  */
 export declare function splitBlocks(text: string, opts?: Kind | SplitOptions): TextBlock[];
 /**
  * The canonical form of a text (see the module comment): the text with LF
- * line endings; the header byte for byte, then one blank line; top-level
- * blocks separated by exactly one blank line, without blank-line runs inside
- * them; no trailing spaces except a two-space hard break; paragraph lines
- * without leading spaces; ATX headings `## Title` (a one-line setext heading
- * too); rules `---`; bullets `-`; ordered markers `1.`; emphasis `*a*` and
- * `**a**`; tables `| a | b |` with `---` / `:---` / `---:` / `:---:`
- * delimiters; one final line break. Code, math, raw HTML and directive
- * blocks keep their bytes. A change that would alter the rendered HTML is not
- * made, so `render(body(canonicalize(x))) === render(body(x))`, and
- * `canonicalize(canonicalize(x)) === canonicalize(x)`.
+ * line endings; a leading BOM kept; the header byte for byte, then one blank
+ * line; top-level blocks separated by exactly one blank line, without
+ * blank-line runs inside them; no trailing spaces except a two-space hard
+ * break; paragraph lines without leading spaces; ATX headings `## Title` (a
+ * one-line setext heading too); rules `---`; bullets `-`; ordered markers
+ * `1.`; emphasis `*a*` and `**a**`; tables `| a | b |` with `---` / `:---` /
+ * `---:` / `:---:` delimiters; one final line break. Code, math, raw HTML and
+ * directive blocks keep their bytes, and so do the lines the renderer does
+ * not show (reference and footnote definitions). A change that would alter
+ * the rendered HTML is not made, so
+ * `render(body(canonicalize(x))) === render(body(x))`, and
+ * `canonicalize(canonicalize(x)) === canonicalize(x)`. Time and memory are
+ * linear in the text.
  */
 export declare function canonicalize(text: string, opts?: Kind | BlockOptions): string;
 //# sourceMappingURL=blocks.d.ts.map

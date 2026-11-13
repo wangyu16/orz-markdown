@@ -1119,3 +1119,51 @@ YouTube embed (orz's own construct), markdown-it's quadratic inline-comment scan
 Tried and held: ~40 other vectors (tag syntax, comments, CDATA, `<input>`, attrs, every plugin and container, yaml/nyml islands,
 KaTeX `\href`, nested renders, regex cost).
 
+
+## K3 blocks audit round 1 (2026-11-13): `splitBlocks` / `canonicalize` / `blockFingerprint` (B.1–B.10)
+
+Independent audit of `4443f44` (branch `blocks-k3`; probes p1–p3, fuzz, stab,
+perf1–5, mem). Each finding is a test of the correct behaviour in
+`tests/carrier-blocks.test.ts`, red on `4443f44`.
+
+- **M1** `canonicalize` rewrote text the renderer does not show (unused
+  reference/footnote definitions: hard breaks, `_` in titles, trailing spaces
+  in titles — the render check cannot see them). Fixed: only lines the
+  renderer shows (an inline token's map, a table, a rule, a heading) are
+  rewritten; definition lines keep their bytes. New claim **B.9** (the
+  auditor's inputs; render equal with every label used).
+- **M2** quadratic in the block count (a copy of every body line per block).
+  Fixed: each block is worked on in its own lines. **B.8**: 40k paragraphs
+  14.9 s → 1.7 s.
+- **M3** one context-dependent block (`[foo_]: /u` + `_x [foo_]`) made the
+  retry render the whole body once per block (≤ 200 blocks: 1 MB 12.3 s,
+  561 MB RSS, every 1 MB string cached) or dropped every change (> 200: B.7
+  broken). Fixed: whole-body renders are not cached; changes that do not add
+  up are found by rendering groups — the non-suspects together, then the
+  suspects (changed blocks whose in-body render differs from their render
+  alone, and definitions), halving a failing group; at most 64 whole renders.
+  **B.7** (both variants above 200 blocks), **B.8** (1 MB with the trigger:
+  1.0 s, 146 MB RSS; without: ~0.8 s).
+- **L1** README / FC-02 overclaimed stability. Documented the exceptions
+  (joining blocks, breaking a marker or the header; an unclosed fence, `$$`,
+  `:::` or HTML comment swallows the rest — an unclosed `{{` does not, it is a
+  paragraph) and what a merge sees; **B.3** test of the exception.
+- **L2** fingerprint collision for an unclosed fence / `$$` / comment at the
+  end (`'```\ncode\n'` vs `'```\ncode\n\n\n'` render differently). Fixed:
+  trailing blank lines inside a verbatim token's map count. **B.4**.
+- **L3** heading ids from any `id` attribute (slugs `# blk-abcdefgh1` passed).
+  Fixed: only an explicit `{{attrs[#…]}}` / `{{attrs[id="…"]}}` in the
+  heading's source. **B.2**.
+- **L4** duplicate ids silent; nested heading ids not reported. Added
+  `duplicate: true` (an id carried twice at any depth or by two slide
+  markers); documented the top-level-only rule. New claim **B.10**.
+- **L5** an unclosed `<!-- slide` was a slide marker. Fixed: `-->` required, as
+  orz-slides' `parseDeck` (region markers too). **B.2**.
+- **L6** a leading BOM was dropped without a header. Fixed: carried through
+  (the parser drops it, so the render is unchanged). **B.5**.
+- **L7** backtick-run masking O(L^1.5) (runs 1…1200: 4.8 s). Fixed: the line's
+  runs indexed by length once, a cursor per length. **B.8**: 0.28 s.
+- **L8** a definition right after a container's closing `:::` was glued into
+  the container. Fixed: the closer is covered with its container. **B.2**.
+
+Fuzz (3 × 3000 seeds) 0 bad; stab: only the documented structural class.

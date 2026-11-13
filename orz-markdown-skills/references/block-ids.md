@@ -60,9 +60,13 @@ text's blocks — `{ type, name?, id, start, end, line, fingerprint }`, tiling
 the text exactly — where `id` is the well-formed `blk-…` id of a heading
 (`unit: 'block'`), of a section's heading (`unit: 'section'`, cut at headings
 of level ≤ `depth`, default 2) or of a slide (`id=blk-…` on the slide marker,
-else its first heading's), and `null` otherwise. A malformed marker
+else its first heading's), and `null` otherwise. Only an explicit
+`{{attrs[#blk-…]}}` / `{{attrs[id="blk-…"]}}` on a top-level heading counts:
+a slug that looks like an id (`# blk-abcdefgh1`) is not one, and a heading
+nested in a list, quote or container gives no block id. A malformed marker
 (`{{attrs[#blk-X]}}`, `blk-hazard-fault`) gives `null`: it is not a block
-id. Blocks without an id are matched by `fingerprint`;
+id. An id carried twice in the text (at any depth) marks its block
+`duplicate: true`. Blocks without an id are matched by `fingerprint`;
 `canonicalize(text, kind)` removes whitespace and marker differences first
 without changing the rendered HTML. Splitting and canonicalizing never add,
 change or remove a `{{attrs[#blk-…]}}` marker.

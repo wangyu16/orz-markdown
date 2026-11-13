@@ -23,8 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other block. `canonicalize(text, kind)` gives the canonical form (LF,
   blank lines, trailing spaces, heading/rule/list/emphasis markers, table
   padding) without changing the rendered HTML or the header's bytes;
-  idempotent. For hosts that combine two concurrent edits block by block
-  (Alembic). Claims B.1–B.8.
+  idempotent; only lines the renderer shows are rewritten (reference and
+  footnote definitions keep their bytes). A block whose id the text carries
+  twice is flagged `duplicate`. For hosts that combine two concurrent edits
+  block by block (Alembic). Claims B.1–B.10.
 
 ## [2.7.1] — 2026-11-12
 

@@ -30,12 +30,17 @@ const header_js_1 = require("./header.js");
 const document_js_1 = require("./document.js");
 const nyml_body_js_1 = require("../nyml-body.js");
 const sha256_js_1 = require("./sha256.js");
+const attrs_js_1 = require("../plugins/attrs.js");
 /** An FC-02 stable block id. */
 const BLOCK_ID = /^blk-[a-z0-9]{8,}$/;
-/** A slide marker: a top-level HTML-comment block `<!-- slide …` (as `readDocument`). */
-const SLIDE_MARKER = /^[ \t]*<!--\s*slide\b/;
-/** A region marker `<!-- @name …`. */
-const REGION_MARKER = /^[ \t]*<!--\s*@([A-Za-z0-9_-]+)/;
+/** A slide marker: a top-level HTML-comment block `<!-- slide … -->`, closed (as orz-slides' `parseDeck`). */
+const SLIDE_MARKER = /^[ \t]*<!--\s*slide\b[\s\S]*?-->/;
+/** A region marker `<!-- @name … -->`, closed. */
+const REGION_MARKER = /^[ \t]*<!--\s*@([A-Za-z0-9_-]+)[\s\S]*?-->/;
+/** A container's closing line `:::`. */
+const CONTAINER_CLOSER = /^ {0,3}:{3,}[ \t]*$/;
+/** An explicit attrs marker in a heading's source; its arguments. */
+const ATTRS_MARKER = /\{\{attrs\[([^\]]*)\]/g;
 /** The start of a reference-link or footnote definition line. */
 const DEFINITION = /^ {0,3}\[/;
 const SLIDE_ID = /(?:^|\s)id=(["']?)(blk-[a-z0-9]{8,})\1(?=\s|-->|$)/;
@@ -73,12 +78,18 @@ function isBlankRange(s, from, to) {
     }
     return true;
 }
+/** Token types whose lines are content, blank lines included (an unclosed fence, `$$` or HTML comment runs to the end). */
+const VERBATIM_TOKENS = new Set(['fence', 'code_block', 'html_block', 'math_block', 'plugin_block']);
+/** Text that can open a construct whose trailing blank lines are content. */
+const MAY_SWALLOW = /`{3}|~{3}|\$\$|</;
 /**
  * A block's fingerprint: the first 16 hex digits of the SHA-256 of its text
  * with line endings read as LF and the blank lines before and after it (the
  * separator) left out. Two blocks that differ only in line endings or in the
  * blank lines around them have the same fingerprint; any other difference —
- * a trailing space included — gives another one. For whitespace-insensitive
+ * a trailing space included — gives another one. Blank lines that are
+ * content (inside an unclosed fence, `$$` or HTML comment at the end of the
+ * text) are not a separator: they count. For whitespace-insensitive
  * comparison, fingerprint the blocks of `canonicalize(text)`.
  */
 function blockFingerprint(blockText) {
@@ -101,29 +112,64 @@ function blockFingerprint(blockText) {
         else if (c !== 32 && c !== 9)
             break;
     }
+    // Trailing blank lines inside a verbatim token (it swallowed them: unclosed) are content.
+    if (s.length - to > 1 && MAY_SWALLOW.test(s)) {
+        let end = 0;
+        for (const t of (0, parser_js_1.kitParser)().parse(s, {}))
+            if (t.map && VERBATIM_TOKENS.has(t.type) && t.map[1] > end)
+                end = t.map[1];
+        if (end > 0) {
+            let line = 0;
+            let keep = s.length;
+            for (let i = 0; i < s.length; i++)
+                if (s.charCodeAt(i) === 10 && ++line === end) {
+                    keep = i;
+                    break;
+                }
+            to = Math.max(to, keep);
+        }
+    }
     return (0, sha256_js_1.sha256)(s.slice(from, Math.max(from, to))).slice(0, 16);
 }
-function headingId(t) {
-    for (const [k, v] of t.attrs ?? [])
-        if (k === 'id' && BLOCK_ID.test(v))
-            return v;
+/**
+ * A heading's FC-02 id: its final `id` attribute when that is a well-formed
+ * block id AND an explicit `{{attrs[…]}}` marker in its source sets it (a
+ * slug such as `# blk-abcdefgh1` is not a block id).
+ */
+function headingId(open, inline) {
+    let id = null;
+    for (const [k, v] of open.attrs ?? [])
+        if (k === 'id')
+            id = v;
+    if (id === null || !BLOCK_ID.test(id) || !inline || inline.type !== 'inline' || !inline.content.includes('{{attrs['))
+        return null;
+    for (const m of inline.content.matchAll(ATTRS_MARKER))
+        for (const [k, v] of (0, attrs_js_1.parseAttrs)(m[1]))
+            if (k === 'id' && v === id)
+                return id;
     return null;
 }
+/** A slide marker's `id=blk-…` option (closed markers only), else null. */
+function slideId(content) {
+    return SLIDE_ID.exec(content.slice(0, content.indexOf('-->') >>> 0))?.[2] ?? null;
+}
 /** The top-level constructs of a parsed body, in line order. */
-function pieces(tokens, bodyLines, isBlankLine, isDefinitionLine, kind) {
+function pieces(tokens, bodyLines, isBlankLine, isDefinitionLine, isCloserLine, kind) {
     const out = [];
     const covered = [];
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
         if (t.level !== 0 || t.nesting === -1 || !t.map || !t.block)
             continue;
-        covered.push([t.map[0], t.map[1]]);
+        // A container's map stops before its closing `:::`: the closer goes with it.
+        const closed = t.type.startsWith('container_') && t.map[1] < bodyLines && isCloserLine(t.map[1]);
+        covered.push([t.map[0], t.map[1] + (closed ? 1 : 0)]);
         const p = { line: t.map[0], type: 'other', id: null, token: i };
         switch (t.type) {
             case 'heading_open':
                 p.type = 'heading';
                 p.level = Number(t.tag.slice(1)) || 1;
-                p.id = headingId(t);
+                p.id = headingId(t, tokens[i + 1]);
                 break;
             case 'paragraph_open':
                 p.type = 'paragraph';
@@ -160,7 +206,7 @@ function pieces(tokens, bodyLines, isBlankLine, isDefinitionLine, kind) {
                     if (SLIDE_MARKER.test(t.content)) {
                         p.type = 'marker';
                         p.name = 'slide';
-                        p.id = SLIDE_ID.exec(t.content.slice(0, t.content.indexOf('-->') >>> 0))?.[2] ?? null;
+                        p.id = slideId(t.content);
                     }
                     else {
                         const r = REGION_MARKER.exec(t.content);
@@ -199,8 +245,8 @@ function pieces(tokens, bodyLines, isBlankLine, isDefinitionLine, kind) {
     }
     // Reference-link and footnote definitions leave no top-level token: a line
     // that no token covers, starts with `[` and follows a blank line or a
-    // covered one starts a `definition` block. (Other uncovered lines — a
-    // container's closing `:::` — stay with the block before them.)
+    // covered one (a container's closing `:::` included) starts a `definition`
+    // block. (Other uncovered lines stay with the block before them.)
     covered.sort((a, b) => a[0] - b[0]);
     let at = 0;
     let c = 0;
@@ -230,7 +276,8 @@ function parseBody(text, kind) {
     const starts = lineStarts(body);
     const lineEnd = (l) => (l + 1 < starts.length ? starts[l + 1] : body.length);
     const tokens = (0, parser_js_1.kitParser)().parse(body, {});
-    const list = pieces(tokens, starts.length, (l) => isBlankRange(body, starts[l], lineEnd(l)), (l) => DEFINITION.test(body.slice(starts[l], Math.min(lineEnd(l), starts[l] + 4))), kind);
+    const lineText = (l) => body.slice(starts[l], lineEnd(l)).replace(/\r?\n$|\r$/, '');
+    const list = pieces(tokens, starts.length, (l) => isBlankRange(body, starts[l], lineEnd(l)), (l) => DEFINITION.test(body.slice(starts[l], Math.min(lineEnd(l), starts[l] + 4))), (l) => CONTAINER_CLOSER.test(lineText(l)), kind);
     return { header, offset, body, starts, tokens, pieces: list };
 }
 /**
@@ -242,8 +289,12 @@ function parseBody(text, kind) {
  * Stability: a block starts where the parser starts a top-level construct,
  * so an edit inside one block leaves every other block's offsets-relative
  * text, `id`, `type` and `fingerprint` unchanged, unless the edit changes
- * where the parser starts constructs (joining two paragraphs by deleting the
- * blank line between them, opening a fence that is never closed, …).
+ * where the parser starts constructs: joining two blocks (deleting the blank
+ * line between them, breaking a heading, slide marker or the header), or
+ * opening a fence, `$$`, `:::` or HTML comment that is never closed — it
+ * swallows every block after it, so the blocks after the edit change (a
+ * block merge sees them all as edited). Ids come from top-level headings
+ * only; an id carried twice is flagged `duplicate`.
  */
 function splitBlocks(text, opts) {
     const o = typeof opts === 'string' ? { kind: opts } : (opts ?? {});
@@ -252,7 +303,7 @@ function splitBlocks(text, opts) {
     const depth = Math.min(6, Math.max(1, Math.floor(o.depth ?? 2)));
     if (text === '')
         return [];
-    const { header, offset, starts, pieces: list } = parseBody(text, kind);
+    const { header, offset, starts, tokens, pieces: list } = parseBody(text, kind);
     const raw = [];
     for (const p of list) {
         const blk = { type: p.type, id: p.id, start: offset + starts[p.line] };
@@ -297,18 +348,37 @@ function splitBlocks(text, opts) {
         }
         return lo + 1;
     };
+    // Every FC-02 id the text carries (headings at any depth, top-level slide markers): a block whose id is carried twice is `duplicate`.
+    const carried = new Map();
+    const count = (id) => { if (id !== null)
+        carried.set(id, (carried.get(id) ?? 0) + 1); };
+    for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.type === 'heading_open')
+            count(headingId(t, tokens[i + 1]));
+        else if (kind === 'slides' && t.type === 'html_block' && t.level === 0 && SLIDE_MARKER.test(t.content))
+            count(slideId(t.content));
+    }
     return groups.map((g, i) => {
         const end = i + 1 < groups.length ? groups[i + 1].start : text.length;
         const out = { type: g.type, id: g.id, start: g.start, end, line: lineOf(g.start), fingerprint: blockFingerprint(text.slice(g.start, end)) };
         if (g.name !== undefined)
             out.name = g.name;
+        if (g.id !== null && (carried.get(g.id) ?? 0) > 1)
+            out.duplicate = true;
         return out;
     });
 }
 // ── canonical form ──────────────────────────────────────────────────────────
-/** Above this many blocks a body whose block-by-block changes do not add up is not retried block by block. */
-const RETRY_BLOCK_LIMIT = 200;
-function renderer() {
+/**
+ * When a body's block-by-block changes do not add up, at most this many
+ * whole-body renders look for the changes that do (groups halved until the
+ * ones that alter the render are found); a change still unchecked then is
+ * not made.
+ */
+const RETRY_RENDER_LIMIT = 64;
+/** Renders of single blocks, cached for the call (block-sized keys; whole bodies are never cached). */
+function blockRenderer() {
     const cache = new Map();
     return (src) => {
         let html = cache.get(src);
@@ -319,6 +389,7 @@ function renderer() {
         return html;
     };
 }
+const renderWhole = (src) => (0, parser_js_1.kitParser)().render(src, {});
 const isBlank = (s) => /^[ \t]*$/.test(s);
 /** Trailing spaces/tabs of a line: two or more spaces on a line whose inline text continues (a hard break) become two; any other run goes. */
 function trimEnd(line, hardBreak) {
@@ -334,6 +405,7 @@ function lineFacts(tokens, n) {
     const verbatim = new Uint8Array(n);
     const paragraph = new Uint8Array(n);
     const continues = new Uint8Array(n);
+    const shown = new Uint8Array(n);
     const visit = (t) => {
         if (!t.map)
             return;
@@ -341,6 +413,9 @@ function lineFacts(tokens, n) {
         if (t.type === 'inline')
             for (let l = a; l < b - 1 && l < n; l++)
                 continues[l] = 1;
+        if (t.type === 'inline' || t.type === 'table_open' || t.type === 'hr' || t.type === 'heading_open')
+            for (let l = a; l < b && l < n; l++)
+                shown[l] = 1;
         if (t.type === 'fence' || t.type === 'code_block' || t.type === 'html_block' || t.type === 'math_block' || t.type === 'plugin_block') {
             for (let l = a; l < b && l < n; l++)
                 verbatim[l] = 1;
@@ -352,7 +427,7 @@ function lineFacts(tokens, n) {
     };
     for (const t of tokens)
         visit(t);
-    return { verbatim, paragraph, continues };
+    return { verbatim, paragraph, continues, shown };
 }
 /**
  * Mask the spans of a line where `_` is never an emphasis marker (code spans,
@@ -372,6 +447,20 @@ function maskedLine(line) {
             missing.add(what);
         return at;
     };
+    // The line's maximal backtick runs, their starts by length (ascending), and a cursor per length: each run is passed once.
+    const runs = new Map();
+    for (let k = line.indexOf('`'); k >= 0;) {
+        let e = k;
+        while (line[e] === '`')
+            e++;
+        const list = runs.get(e - k);
+        if (list)
+            list.push(k);
+        else
+            runs.set(e - k, [k]);
+        k = line.indexOf('`', e);
+    }
+    const cursor = new Map();
     let i = 0;
     while (i < line.length) {
         const c = line[i];
@@ -384,26 +473,13 @@ function maskedLine(line) {
             let n = 0;
             while (line[i + n] === '`')
                 n++;
-            // The closing run: the next run of exactly n backticks.
-            let j = i + n;
-            let close = -1;
-            if (!missing.has('`' + n)) {
-                while (j < line.length) {
-                    const k = line.indexOf('`', j);
-                    if (k < 0)
-                        break;
-                    let e = k;
-                    while (line[e] === '`')
-                        e++;
-                    if (e - k === n) {
-                        close = k;
-                        break;
-                    }
-                    j = e;
-                }
-                if (close < 0)
-                    missing.add('`' + n);
-            }
+            // The closing run: the next maximal run of exactly n backticks.
+            const list = runs.get(n) ?? [];
+            let k = cursor.get(n) ?? 0;
+            while (k < list.length && list[k] < i + n)
+                k++;
+            cursor.set(n, k);
+            const close = k < list.length ? list[k] : -1;
             if (close < 0) {
                 i += n;
                 continue;
@@ -528,23 +604,26 @@ function stages(tokens, facts) {
         }
         return out;
     };
-    // 1. whitespace: blank lines empty, trailing spaces (hard breaks kept as two), a paragraph's leading spaces.
-    const whitespace = (lines, blk) => {
+    // 1. whitespace: blank lines empty, trailing spaces of shown lines (hard breaks kept as two), a paragraph's leading spaces.
+    const whitespace = (w, blk) => {
         for (let l = blk.from; l < blk.to; l++) {
+            const k = l - blk.from;
             if (facts.verbatim[l])
                 continue;
-            if (isBlank(lines[l])) {
-                lines[l] = '';
+            if (isBlank(w[k])) {
+                w[k] = '';
                 continue;
             }
-            let s = trimEnd(lines[l], facts.continues[l] === 1);
+            if (!facts.shown[l])
+                continue;
+            let s = trimEnd(w[k], facts.continues[l] === 1);
             if (facts.paragraph[l])
                 s = s.replace(/^[ \t]+/, '');
-            lines[l] = s;
+            w[k] = s;
         }
     };
     // 2. markers: ATX headings `# text` (single-line setext too), rules `---`.
-    const markers = (lines, blk) => {
+    const markers = (w, blk) => {
         const p = blk.piece;
         if (p.type === 'heading') {
             const open = tokens[p.token];
@@ -557,18 +636,18 @@ function stages(tokens, facts) {
                 return;
             const atx = '#'.repeat(p.level ?? 1) + (content ? ' ' + content : '');
             if (open.markup.startsWith('#') && b - a === 1)
-                lines[a] = atx;
+                w[a - blk.from] = atx;
             else if ((open.markup === '=' || open.markup === '-') && b - a === 2) {
-                lines[a] = atx;
-                lines[a + 1] = '\u0000';
+                w[a - blk.from] = atx;
+                w[a + 1 - blk.from] = '\u0000';
             }
         }
         else if (p.type === 'rule') {
-            lines[blk.from] = '---';
+            w[0] = '---';
         }
     };
     // 3. list markers: `*` `+` → `-`, `1)` → `1.`.
-    const lists = (lines, blk) => {
+    const lists = (w, blk) => {
         if ((blk.piece.type !== 'list' && blk.piece.type !== 'blockquote' && blk.piece.type !== 'container') || blk.besideList)
             return;
         const items = tokensIn(blk).filter((t) => t.type === 'list_item_open' && t.map);
@@ -577,32 +656,33 @@ function stages(tokens, facts) {
             perLine.set(t.map[0], (perLine.get(t.map[0]) ?? 0) + 1);
         for (const t of items) {
             const l = t.map[0];
-            if (perLine.get(l) !== 1 || facts.verbatim[l])
+            if (perLine.get(l) !== 1 || facts.verbatim[l] || l >= blk.to)
                 continue;
-            const line = lines[l];
+            const k = l - blk.from;
+            const line = w[k];
             const pre = /^(?:[ \t]*>[ \t]?)*[ \t]*/.exec(line)[0].length;
             if (t.markup === '*' || t.markup === '+') {
                 if (line[pre] === t.markup)
-                    lines[l] = line.slice(0, pre) + '-' + line.slice(pre + 1);
+                    w[k] = line.slice(0, pre) + '-' + line.slice(pre + 1);
             }
             else if (t.markup === ')') {
                 const m = /^[0-9]{1,9}\)/.exec(line.slice(pre));
                 if (m)
-                    lines[l] = line.slice(0, pre + m[0].length - 1) + '.' + line.slice(pre + m[0].length);
+                    w[k] = line.slice(0, pre + m[0].length - 1) + '.' + line.slice(pre + m[0].length);
             }
         }
     };
-    // 4. emphasis markers: `_` → `*`.
-    const emphasis = (lines, blk) => {
+    // 4. emphasis markers: `_` → `*`, on shown lines only.
+    const emphasis = (w, blk) => {
         const t = blk.piece.type;
         if (t !== 'paragraph' && t !== 'heading' && t !== 'list' && t !== 'blockquote' && t !== 'table' && t !== 'container')
             return;
         for (let l = blk.from; l < blk.to; l++)
-            if (!facts.verbatim[l])
-                lines[l] = starEmphasis(lines[l]);
+            if (!facts.verbatim[l] && facts.shown[l])
+                w[l - blk.from] = starEmphasis(w[l - blk.from]);
     };
     // 5. table padding: `| a | b |`, delimiter cells `---` / `:---` / `---:` / `:---:`.
-    const tables = (lines, blk) => {
+    const tables = (w, blk) => {
         if (blk.piece.type !== 'table')
             return;
         const open = tokens[blk.piece.token];
@@ -610,22 +690,23 @@ function stages(tokens, facts) {
             return;
         const [a, b] = open.map;
         for (let l = a; l < b && l < blk.to; l++)
-            if (!isBlank(lines[l]))
-                lines[l] = tableRow(lines[l], l === a + 1);
+            if (!isBlank(w[l - blk.from]))
+                w[l - blk.from] = tableRow(w[l - blk.from], l === a + 1);
     };
     return [whitespace, markers, lists, emphasis, tables];
 }
-/** A block's lines as text: its blank edges (outside code) left out, `\u0000` (a removed line) dropped. */
-function blockText(lines, blk, facts) {
+/** A block's lines (its window `w`) as text: its blank edges (outside code) left out, `\u0000` (a removed line) dropped. */
+function blockText(w, blk, facts) {
+    const o = blk.from;
     let a = blk.from;
     let b = blk.to;
-    while (a < b && !facts.verbatim[a] && isBlank(lines[a]))
+    while (a < b && !facts.verbatim[a] && isBlank(w[a - o]))
         a++;
-    while (b > a && !facts.verbatim[b - 1] && isBlank(lines[b - 1]))
+    while (b > a && !facts.verbatim[b - 1] && isBlank(w[b - 1 - o]))
         b--;
     const out = [];
     for (let l = a; l < b; l++) {
-        const s = lines[l];
+        const s = w[l - o];
         if (s === '\u0000')
             continue;
         // Runs of blank lines inside a block (outside code) become one.
@@ -637,17 +718,20 @@ function blockText(lines, blk, facts) {
 }
 function canonicalOnce(text, kind, render) {
     const t = text.replace(/\r\n?/g, '\n');
-    const header = (0, header_js_1.readHeader)(t);
-    const headerText = header ? t.slice(0, header.end) : '';
-    const body = t.slice(header ? header.end : 0);
+    // A BOM goes back in front: the parser drops a leading BOM, so it never changes the render.
+    const bom = t.charCodeAt(0) === 0xfeff ? '\uFEFF' : '';
+    const u = t.slice(bom.length);
+    const header = (0, header_js_1.readHeader)(u);
+    const headerText = header ? u.slice(0, header.end) : '';
+    const body = u.slice(header ? header.end : 0);
     const lines = body.split('\n');
     // Text after the header's `}}` on its line: keep the text as it is (lint `closer-in-value` / `closer-not-alone`).
     if (header && !isBlank(lines[0]))
         return t;
     const tokens = (0, parser_js_1.kitParser)().parse(body, {});
-    const list = pieces(tokens, lines.length, (l) => isBlank(lines[l]), (l) => DEFINITION.test(lines[l]), kind);
+    const list = pieces(tokens, lines.length, (l) => isBlank(lines[l]), (l) => DEFINITION.test(lines[l]), (l) => CONTAINER_CLOSER.test(lines[l]), kind);
     if (!list.length)
-        return header ? headerText + '\n' : '';
+        return header ? bom + headerText + '\n' : bom;
     const facts = lineFacts(tokens, lines.length);
     const blocks = list.map((p, i) => ({
         from: p.line,
@@ -658,25 +742,28 @@ function canonicalOnce(text, kind, render) {
     const all = stages(tokens, facts);
     const original = [];
     const chosen = [];
+    /** Each block's render alone (the original text). */
+    const alone = [];
     for (const blk of blocks) {
-        const before = blockText(lines, blk, facts);
+        const own = lines.slice(blk.from, blk.to);
+        const before = blockText(own, blk, facts);
         original.push(before);
         const target = render(before + '\n');
+        alone.push(target);
         // All stages at once; when that changes the render, stage by stage, keeping each that does not.
-        const work = lines.slice();
+        const work = own.slice();
         for (const stage of all)
             stage(work, blk);
         let best = blockText(work, blk, facts);
         if (best !== before && render(best + '\n') !== target) {
-            const acc = lines.slice();
+            let acc = own;
             best = before;
             for (const stage of all) {
                 const trial = acc.slice();
                 stage(trial, blk);
                 const s = blockText(trial, blk, facts);
                 if (s !== best && render(s + '\n') === target) {
-                    for (let l = blk.from; l < blk.to; l++)
-                        acc[l] = trial[l];
+                    acc = trial;
                     best = s;
                 }
             }
@@ -694,49 +781,84 @@ function canonicalOnce(text, kind, render) {
     });
     const headGap = list[0].line > 1;
     const join = (parts) => {
-        let out = header ? headerText + (headGap ? '\n\n' : '\n') : '';
+        const out = [];
         for (let i = 0; i < parts.length; i++)
-            out += parts[i] + (i + 1 === parts.length ? '\n' : gap[i] ? '\n\n' : '\n');
-        return out;
+            out.push(parts[i], i + 1 === parts.length ? '\n' : gap[i] ? '\n\n' : '\n');
+        return out.join('');
     };
-    const target = render(body);
+    const head = bom + (header ? headerText + (headGap ? '\n\n' : '\n') : '');
+    const target = renderWhole(body);
     const out = join(chosen);
-    if (render(out.slice(headerText.length)) === target)
-        return out;
-    // Changes that are neutral one by one but not together (two lists that would join): take them block by block.
-    const base = join(original);
-    if (render(base.slice(headerText.length)) !== target)
-        return t;
-    if (blocks.length > RETRY_BLOCK_LIMIT)
-        return base;
+    if (renderWhole(out) === target)
+        return head + out;
     const parts = original.slice();
-    for (let i = 0; i < parts.length; i++) {
-        if (chosen[i] === parts[i])
-            continue;
-        const keep = parts[i];
-        parts[i] = chosen[i];
-        if (render(join(parts).slice(headerText.length)) !== target)
-            parts[i] = keep;
+    if (renderWhole(join(parts)) !== target)
+        return t;
+    // Changes that keep each block's render but not the body's (a block whose
+    // render depends on others — a reference, a footnote, a heading slug, two
+    // lists that would join): find them by rendering groups of changes. The
+    // suspects — changed blocks that render differently in the body than
+    // alone, and definitions — are tried last, so one of them costs a few
+    // renders, not one per block.
+    const env = {};
+    const inBody = (0, parser_js_1.kitParser)().parse(body, env);
+    // Where block i's tokens end: the next block's first token.
+    const tokenEnd = new Array(blocks.length);
+    for (let i = blocks.length - 1, next = inBody.length; i >= 0; i--) {
+        tokenEnd[i] = next;
+        if (blocks[i].piece.token >= 0)
+            next = blocks[i].piece.token;
     }
-    return join(parts);
+    const suspects = [];
+    const others = [];
+    for (let i = 0; i < blocks.length; i++) {
+        if (chosen[i] === original[i])
+            continue;
+        const tk = blocks[i].piece.token;
+        const here = tk < 0 ? null : (0, parser_js_1.kitParser)().renderer.render(inBody.slice(tk, tokenEnd[i]), (0, parser_js_1.kitParser)().options, env);
+        (here === alone[i] ? others : suspects).push(i);
+    }
+    let budget = RETRY_RENDER_LIMIT;
+    const tryGroup = (g) => {
+        if (!g.length || budget <= 0)
+            return;
+        for (const i of g)
+            parts[i] = chosen[i];
+        budget--;
+        if (renderWhole(join(parts)) === target)
+            return;
+        for (const i of g)
+            parts[i] = original[i];
+        if (g.length === 1)
+            return;
+        const half = g.length >> 1;
+        tryGroup(g.slice(0, half));
+        tryGroup(g.slice(half));
+    };
+    tryGroup(others);
+    tryGroup(suspects);
+    return head + join(parts);
 }
 /**
  * The canonical form of a text (see the module comment): the text with LF
- * line endings; the header byte for byte, then one blank line; top-level
- * blocks separated by exactly one blank line, without blank-line runs inside
- * them; no trailing spaces except a two-space hard break; paragraph lines
- * without leading spaces; ATX headings `## Title` (a one-line setext heading
- * too); rules `---`; bullets `-`; ordered markers `1.`; emphasis `*a*` and
- * `**a**`; tables `| a | b |` with `---` / `:---` / `---:` / `:---:`
- * delimiters; one final line break. Code, math, raw HTML and directive
- * blocks keep their bytes. A change that would alter the rendered HTML is not
- * made, so `render(body(canonicalize(x))) === render(body(x))`, and
- * `canonicalize(canonicalize(x)) === canonicalize(x)`.
+ * line endings; a leading BOM kept; the header byte for byte, then one blank
+ * line; top-level blocks separated by exactly one blank line, without
+ * blank-line runs inside them; no trailing spaces except a two-space hard
+ * break; paragraph lines without leading spaces; ATX headings `## Title` (a
+ * one-line setext heading too); rules `---`; bullets `-`; ordered markers
+ * `1.`; emphasis `*a*` and `**a**`; tables `| a | b |` with `---` / `:---` /
+ * `---:` / `:---:` delimiters; one final line break. Code, math, raw HTML and
+ * directive blocks keep their bytes, and so do the lines the renderer does
+ * not show (reference and footnote definitions). A change that would alter
+ * the rendered HTML is not made, so
+ * `render(body(canonicalize(x))) === render(body(x))`, and
+ * `canonicalize(canonicalize(x)) === canonicalize(x)`. Time and memory are
+ * linear in the text.
  */
 function canonicalize(text, opts) {
     const o = typeof opts === 'string' ? { kind: opts } : (opts ?? {});
     const kind = resolveKind(text, o);
-    const render = renderer();
+    const render = blockRenderer();
     let cur = text;
     // Each pass keeps the render; repeat until nothing changes, so the result is a fixed point (idempotence).
     for (let i = 0; i < 8; i++) {

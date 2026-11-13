@@ -1,7 +1,7 @@
 /**
  * Blocks of a text and its canonical form (2.8.0, family module K3):
  * `splitBlocks`, `canonicalize` and `blockFingerprint` in `orz-markdown/carrier`.
- * Claims B.1–B.8 in notes/CLAIMS.md. Oracles: every Markdown file of this
+ * Claims B.1–B.10 in notes/CLAIMS.md (audit round 1: M1–M3, L1–L8). Oracles: every Markdown file of this
  * repository (git ls-files, the carrier corpus, the starters, specs and docs)
  * and seeded random texts.
  */
@@ -123,6 +123,33 @@ describe('splitBlocks', () => {
     }
   });
 
+  it('[B.2] audit round 1: an id only from an explicit {{attrs[…]}} on a top-level heading (never a slug; `#…` or `id="…"`); an unclosed `<!-- slide` is not a marker; a definition right after a container\'s closing `:::` is its own block', () => {
+    const ids = (t: string, k: Kind = 'md') => splitBlocks(t, k).map((b) => [b.type, b.id]);
+    // L3: slugs that look like block ids are not ids.
+    expect(ids('# blk-abcdefgh1\n\n## Blk Abcdefgh2\n')).toEqual([['heading', null], ['heading', null]]);
+    expect(ids('## T{{attrs[#blk-abcdefgh]}}\n\n## U {{attrs[id="blk-bcdefghi"]}}\n\n## V{{attrs[.x #blk-cdefghij]}}\n')).toEqual([['heading', 'blk-abcdefgh'], ['heading', 'blk-bcdefghi'], ['heading', 'blk-cdefghij']]);
+    expect(ids('## `{{attrs[#blk-abcdefgh]}}`\n')).toEqual([['heading', null]]);
+    // Nested headings give no block id (top-level blocks only).
+    expect(ids('::: info\n## A{{attrs[#blk-abcdefgh]}}\n:::\n\n- ## B{{attrs[#blk-bcdefghi]}}\n')).toEqual([['container', null], ['list', null]]);
+    // L5: an unclosed slide comment is HTML, not a slide (orz-slides requires `-->`).
+    expect(splitBlocks('x\n\n<!-- slide\nB\n', 'slides').map((b) => b.type)).toEqual(['preamble']);
+    expect(splitBlocks('x\n\n<!-- slide\nB\n', { kind: 'slides', unit: 'block' }).map((b) => b.type)).toEqual(['paragraph', 'html']);
+    expect(splitBlocks('<!-- @left\nL\n', { kind: 'slides', unit: 'block' }).map((b) => b.type)).toEqual(['html']);
+    expect(splitBlocks('<!-- slide\nid=blk-aaaaaaaa -->\nA\n', 'slides').map((b) => [b.type, b.id])).toEqual([['slide', 'blk-aaaaaaaa']]);
+    // L8: a definition after a container's closing line.
+    const t = '::: info\nx\n:::\n[r]: /u\n';
+    expect(splitBlocks(t).map((b) => [b.type, t.slice(b.start, b.end)])).toEqual([['container', '::: info\nx\n:::\n'], ['definition', '[r]: /u\n']]);
+  });
+
+  it('[B.10] a block whose id the text carries more than once (another heading at any depth, another slide marker) is marked `duplicate`; other blocks carry no `duplicate` key', () => {
+    const dup = (t: string, k: Kind = 'md', unit: 'block' | 'section' = k === 'slides' ? 'section' : 'block') => splitBlocks(t, { kind: k, unit }).map((b) => [b.id, b.duplicate ?? false]);
+    expect(dup('## A{{attrs[#blk-abcdefgh]}}\n\n## B{{attrs[#blk-abcdefgh]}}\n\n## C{{attrs[#blk-bcdefghi]}}\n')).toEqual([['blk-abcdefgh', true], ['blk-abcdefgh', true], ['blk-bcdefghi', false]]);
+    expect(dup('## A{{attrs[#blk-abcdefgh]}}\n\n::: info\n### N{{attrs[#blk-abcdefgh]}}\n:::\n')).toEqual([['blk-abcdefgh', true], [null, false]]);
+    expect(dup('## A{{attrs[#blk-abcdefgh]}}\n\n## B{{attrs[#blk-abcdefgh]}}\n', 'md', 'section')).toEqual([['blk-abcdefgh', true], ['blk-abcdefgh', true]]);
+    expect(dup('<!-- slide id=blk-aaaaaaaa -->\nA\n\n<!-- slide -->\n## B{{attrs[#blk-aaaaaaaa]}}\n', 'slides')).toEqual([['blk-aaaaaaaa', true], ['blk-aaaaaaaa', true]]);
+    for (const d of DOCS) for (const b of splitBlocks(d.text, d.kind)) expect('duplicate' in b, d.path).toBe(false);
+  });
+
   it('[B.3] stable under edits elsewhere: changing a paragraph changes only the block that holds it, and deleting a block or inserting a paragraph between blank-separated blocks leaves every other block\'s type, name, id, text and fingerprint as they were — every Markdown file of the repository, in each unit', () => {
     let edits = 0;
     for (const d of DOCS) {
@@ -166,6 +193,16 @@ describe('splitBlocks', () => {
     expect(edits).toBeGreaterThan(300);
   }, 180_000);
 
+  it('[B.3] the documented exceptions: an edit that changes where the parser starts constructs — an unclosed fence, `$$`, `:::` or HTML comment swallows every block after it — changes the blocks after it', () => {
+    const t = '# A\n\npara\n\n## B\n\nmore\n';
+    for (const opener of ['```', '$$', '::: info', '<!--']) {
+      const edited = t.replace('para', () => opener + '\nx');
+      const bs = splitBlocks(edited);
+      expect(bs.length, opener).toBe(2);
+      expect(bs[1].end, opener).toBe(edited.length);
+    }
+  });
+
   it('[B.4] blockFingerprint is 16 hex digits of SHA-256; it ignores line endings and the blank lines around a block, and nothing else (a trailing space, a marker, a letter)', () => {
     const f = blockFingerprint('## Title\n\ntext\n');
     expect(f).toMatch(/^[0-9a-f]{16}$/);
@@ -173,6 +210,18 @@ describe('splitBlocks', () => {
     for (const other of ['## Title\n\ntext \n', '# Title\n\ntext\n', '## Title\ntext\n', '## Title\n\nText\n', ' ## Title\n\ntext\n']) expect(blockFingerprint(other), JSON.stringify(other)).not.toBe(f);
     const t = '# A\r\n\r\nb\r\n';
     for (const b of splitBlocks(t)) expect(b.fingerprint).toBe(blockFingerprint(t.slice(b.start, b.end)));
+    // Blank lines an unclosed fence, `$$` or HTML comment swallowed are content (they render): they count.
+    for (const open of ['```\ncode', '~~~\ncode', '$$\nx', '<!-- c', '- x\n\n  ```\n  code']) {
+      const a = `${open}\n`, b = `${open}\n\n\n`;
+      expect(render(a), open).not.toBe(render(b));
+      expect(blockFingerprint(a), open).not.toBe(blockFingerprint(b));
+      expect(blockFingerprint(`${open}\r\n\r\n\r\n`), open).toBe(blockFingerprint(b));
+      const doc = `para\n\n${b}`;
+      const last = splitBlocks(doc).at(-1)!;
+      expect(last.fingerprint, open).toBe(blockFingerprint(b));
+    }
+    // A closed fence: the blank lines after it are a separator.
+    expect(blockFingerprint('```\ncode\n```\n')).toBe(blockFingerprint('```\ncode\n```\n\n\n'));
   });
 });
 
@@ -189,6 +238,34 @@ describe('canonicalize', () => {
     });
     // Something was normalised in most texts (the check is not vacuous).
     expect(corpus.filter((d, i) => canon[i] !== d.text.replace(/\r\n?/g, '\n')).length).toBeGreaterThan(corpus.length / 2);
+  });
+
+  it('[B.5] audit round 1: a leading BOM is kept, with or without a header', () => {
+    for (const t of ['\uFEFF# H\n\npara\n', '\uFEFF#  H  \npara   \n', '\uFEFF{{nyml\nkind: document\n}}\n\n# H  \n', '\uFEFF\n\n']) {
+      const c = canonicalize(t);
+      expect(c.startsWith('\uFEFF'), JSON.stringify(t)).toBe(true);
+      expect(render(c)).toBe(render(t));
+      expect(canonicalize(c)).toBe(c);
+    }
+    expect(canonicalize('\uFEFF#  H  \npara   \n')).toBe('\uFEFF# H\npara\n');
+  });
+
+  it('[B.9] lines the renderer does not show keep their bytes: reference and footnote definitions (unused ones, in a quote, list or container) — hard breaks, emphasis and trailing spaces in titles; the canonical form renders the same when every defined label is used', () => {
+    const cases: Array<[string, string]> = [
+      ['x\n\n[^9]: line one  \n    line two _a_\n', '\n\nUse[^9].\n'],
+      ['> [r]: /u "t _a_ b"\n> para\n', '\n\n[x][r]\n'],
+      ['- [r]: /u "t _a_ b"\n\n  para\n', '\n\n[x][r]\n'],
+      ['::: info\n[r]: /u "t _a_ b"\n\npara  \n:::\n', '\n\n[x][r]\n'],
+      ['[r]: /u\n  "t  \n  b"\n', '\n\n[x][r]\n'],
+    ];
+    for (const [t, use] of cases) {
+      const c = canonicalize(t);
+      expect(render(c), t).toBe(render(t));
+      expect(render(c.replace(/\n+$/, '') + use), t).toBe(render(t.replace(/\n+$/, '') + use));
+      for (const line of t.split('\n').filter((l) => /\[(\^9|r)\]:|^\s+"?t|line two|b"/.test(l))) expect(c.split('\n'), JSON.stringify(t)).toContain(line);
+    }
+    // A used definition's shown text is still normalised where it renders (its hard break kept as two spaces).
+    expect(canonicalize('x[^9]\n\n[^9]: one    \n    two\n')).toBe('x[^9]\n\n[^9]: one  \n    two\n');
   });
 
   it('[B.6] is idempotent: canonicalize(canonicalize(x)) === canonicalize(x) — the same texts', () => {
@@ -218,6 +295,15 @@ describe('canonicalize', () => {
     const two = '- a\n\n* b\n';
     expect(render(canonicalize(two))).toBe(render(two));
     expect(canonicalize(two)).toBe(two);
+    // One block whose render depends on another (a reference whose label has `_`) changes nothing for the rest, above 200 blocks too.
+    const poison = '[foo_]: /u\n\n_x [foo_]\n\n';
+    let v1 = poison, v2 = poison;
+    for (let k = 0; k < 220; k++) { v1 += `Para ${k} _e_   \n\n`; v2 += `Para ${k} *e*\n\n`; }
+    expect(canonicalize(v1)).toBe(canonicalize(v2));
+    expect(canonicalize(v1)).toContain('_x [foo_]\n\nPara 0 *e*\n');
+    let w1 = poison, w2 = poison;
+    for (let k = 0; k < 220; k++) { w1 += `* item ${k} _e_\n\n`; w2 += `- item ${k} *e*\n\n`; }
+    expect(canonicalize(w1)).toBe(canonicalize(w2));
     // Equal canonical forms for corpus files written with CR LF and extra blank lines between blocks.
     for (const d of DOCS.slice(0, 40)) {
       const bs = splitBlocks(d.text, { kind: d.kind, unit: 'block' });
@@ -238,4 +324,25 @@ describe('canonicalize', () => {
     expect(time(() => splitBlocks(many))).toBeLessThan(3000);
     expect(time(() => canonicalize(many))).toBeLessThan(15_000);
   });
+
+  it('[B.8] audit round 1: linear in the block count (40k short paragraphs), in backtick runs of every length on one line, and one context-dependent block among ~200 large ones costs about what the text without it costs', () => {
+    const time = (f: () => unknown) => { const t0 = performance.now(); f(); return performance.now() - t0; };
+    // M2: 40k blocks (quadratic before: ~15 s).
+    const many = Array.from({ length: 40_000 }, (_, i) => `p${i}`).join('\n\n') + '\n';
+    expect(time(() => canonicalize(many))).toBeLessThan(5000);
+    // L7: runs of 1…1200 backticks (720 kB; ~5 s before).
+    let ticks = '_x_ ';
+    for (let i = 1; i <= 1200; i++) ticks += '`'.repeat(i) + 'a';
+    expect(time(() => canonicalize(ticks + '\n'))).toBeLessThan(2000);
+    // M3: ~1 MB, 197 blocks, with and without one context-dependent block (~12 s and ~0.5 GB before).
+    const big = (k: number) => `Paragraph ${k} with _emphasis_ text   \n` + ('lorem ipsum dolor sit amet '.repeat(16) + '\n').repeat(12);
+    let clean = '';
+    for (let k = 0; k < 197; k++) clean += big(k) + '\n';
+    const tClean = time(() => canonicalize(clean));
+    let out = '';
+    const tPoison = time(() => { out = canonicalize('[foo_]: /u\n\n_x [foo_]\n\n' + clean); });
+    expect(out.includes('\n_x [foo_]\n')).toBe(true);
+    expect(out.includes('\nParagraph 196 with *emphasis* text  \n')).toBe(true);
+    expect(tPoison).toBeLessThan(2 * tClean + 1000);
+  }, 60_000);
 });
