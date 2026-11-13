@@ -226,7 +226,7 @@ preview identically instead of re-deriving it.
 | `orz-markdown/runtime` | the browser runtime (tabs, QR expand, copy-as-Markdown) as a script string |
 | `orz-markdown/preview-frame` | `getPreviewFrameAssets()`, `PREVIEW_CDN`, `PREVIEW_LIB_VERSIONS` (exact, pinned), and `enhanceDocument(root, { scheme })`, `disposeEnhancement(root)`, `swapStylesheet(document, id, href)` (≥ 2.2.0) for content rendered in a page; `enhanceDocument(root, { static: true })` (≥ 2.3.0) for print and pagination: drawn charts and SMILES become images, the interactive runtime is skipped; both it and the frame's `__orzEnhance` keep a theme's baseline grid (≥ 2.3.0, `light-playful-1` on screen: a ruled notebook; `BASELINE_GRID_SCRIPT`); ≥ 2.4.0 both theme charts and Mermaid diagrams from CSS custom properties (`--chart-*`, `--mm-*`; `CONTENT_THEME_SCRIPT`), draw charts, SMILES and Mermaid diagrams only when visible / laid out (`redrawEnhancement(el)` for a newly shown container; `__orzRedraw(el)` in the frame), size SMILES from their box, read font sizes from `--chart-font-size` / `--mm-font-size`, and draw Mermaid with SVG labels under a scaling transform (`--mm-labels: svg \| html`) |
 | `orz-markdown/doc-meta` | the DocMeta API on its own |
-| `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint (≥ 2.3.0: `normalizeHeader`, `lintHeader(text, { kind, themes })`), `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser); ≥ 2.3.0 also the helpers carriers shared: a synchronous `sha256`, the legacy 0.x island reader (`readLegacyIsland`) and the kind-independent core of `inspect` (`assembledStructure`, `twinCheck`, `storedText`, …); ≥ 2.4.0 the slides keys `slide_numbers` / `progress` / `section_numbers` and the `deck-block` lint (`next: 'upgrade'`; `Lint.next`), `kitParser()` (its tokens are `KitToken[]`, markdown-it's fields), `readDocument(text, { tokens, lint })` and `readLegacyIsland(…, { island })`; ≥ 2.5.0 the twin-link naming (`TwinNaming`, `twinNaming`, `twinHref(href, naming)`, `twinFileName`, `textNameOf`; `assembleEnvelope(text, { twinLinks })` stores it in `#orz-shell`, `extract(html).twinLinks` reads it) and the browser-safe targets of a text: `includeTargets(text)` (formerly only in `carrier/node`, which still exports it) and `linkTargets(text)` (`{ href, line, kind: 'twin' \| 'asset' \| 'other', image, raw }` for every Markdown link, image and raw `<a href>` as the renderer reads them — a site builder's link check) |
+| `orz-markdown/carrier` | the carrier kit core (text format 1, FC-18): escaping helpers, header read/edit/lint (≥ 2.3.0: `normalizeHeader`, `lintHeader(text, { kind, themes })`), `readDocument`, file-name kinds and twins, `mintUid`, twin links, `assembleEnvelope` / `extract` (loads the parser); ≥ 2.3.0 also the helpers carriers shared: a synchronous `sha256`, the legacy 0.x island reader (`readLegacyIsland`) and the kind-independent core of `inspect` (`assembledStructure`, `twinCheck`, `storedText`, …); ≥ 2.4.0 the slides keys `slide_numbers` / `progress` / `section_numbers` and the `deck-block` lint (`next: 'upgrade'`; `Lint.next`), `kitParser()` (its tokens are `KitToken[]`, markdown-it's fields), `readDocument(text, { tokens, lint })` and `readLegacyIsland(…, { island })`; ≥ 2.5.0 the twin-link naming (`TwinNaming`, `twinNaming`, `twinHref(href, naming)`, `twinFileName`, `textNameOf`; `assembleEnvelope(text, { twinLinks })` stores it in `#orz-shell`, `extract(html).twinLinks` reads it) and the browser-safe targets of a text: `includeTargets(text)` (formerly only in `carrier/node`, which still exports it) and `linkTargets(text)` (`{ href, line, kind: 'twin' \| 'asset' \| 'other', image, raw }` for every Markdown link, image and raw `<a href>` as the renderer reads them — a site builder's link check); ≥ 2.8.0 (unreleased) the blocks of a text and its canonical form: `splitBlocks`, `canonicalize`, `blockFingerprint` ([below](#blocks-of-a-text-unreleased)) |
 | `orz-markdown/carrier/read` | `extract`, `readIslandFromDom`, `decodeText`, escape helpers — reads assembled files without the parser; ≥ 2.5.0 also the twin-link naming helpers (`twinNaming`, `twinHref`, …) |
 | `orz-markdown/carrier/shell` | the browser runtime of every assembled file: save, reader preferences, host protocols, quiet update, chrome (parser-free, Node-safe to import) |
 | `orz-markdown/carrier/editor` | the editor shell every carrier's `mountEditor` wraps (FC-19 §8), with the pinned CodeMirror 6 bundle `vendor/codemirror6.js`; ≥ 2.3.0: the reader's Cmd/Ctrl+P (also from the preview) as the editor's `print` event, `printDocument(html)` to print a whole document from a sandboxed hidden frame instead of the app's page, `preview.maxWaitMs` / `preview.firstAckWaitMs` for kinds whose render is slow; ≥ 2.4.0: `applyEdits(edits, { label })` (several exact-offset edits as one undo step), `select(from, to)`, `setFocusRange(from, to, { mode: 'dim' \| 'fold' })`, `flash(ranges)`, `getSelection()`, and on `shell.preview` the render `context` (one include cache), `resolveAsset` / `resolveAssets` and `shareAssets(html, surface)`; ≥ 2.7.0: `reveal(range \| heading, { select })` (the caret and both views to a place), `hooks.saveStatus` + `refreshSaveStatus()` (a host's own save-status words; Save reads "Save now"), the header folded to one line in the source view (`foldHeader`), Esc that keeps the caret in the text (Esc then Tab leaves), one toolbar row with More on a phone; for a hash-based CSP, `PREVIEW_BRIDGE_HASH` and `previewScriptHashes(options)` |
@@ -253,6 +253,40 @@ supplying its kind — renderer, editor, read view, settings — to
 [`tests/carrier-corpus/`](tests/carrier-corpus/) (shipped in the package).
 Authors only need the [document header](#document-metadata-the-header)
 above; everything else is for carrier and host builders.
+
+### Blocks of a text (unreleased)
+
+A host that combines two people's concurrent edits of one document block by
+block (Alembic) needs the blocks the parser sees. `orz-markdown/carrier`
+gives them for every kind (`md`, `slides`, `paged`):
+
+```ts
+import { splitBlocks, canonicalize, blockFingerprint } from 'orz-markdown/carrier';
+
+const blocks = splitBlocks(text, { filename: 'week1.slides.md' }); // one block per slide
+const parts = blocks.map((b) => text.slice(b.start, b.end));      // parts.join('') === text
+// b.type: 'header' | 'heading' | 'paragraph' | 'list' | 'table' | 'container' | 'code' | … | 'slide' | 'section'
+// b.id: the FC-02 id of its heading (or slide), else null; b.fingerprint: 16 hex digits
+splitBlocks(text, { kind: 'md', unit: 'section', depth: 2 }); // ## sections, a preamble before the first
+canonicalize(text, 'md'); // same rendered HTML, header bytes kept, idempotent
+```
+
+- **Blocks** tile the text exactly; blank lines after a block belong to it.
+  `unit: 'block'` (md and paged default) is one block per top-level construct
+  — the header, heading, paragraph, list, table, container, code, math,
+  directive, paged `element`, raw HTML, rule, `definition`; `unit:
+  'section'` cuts at headings of level ≤ `depth` (slides: at slide markers,
+  their default). An edit inside one block changes no other block's text,
+  id or fingerprint.
+- **Fingerprints** ignore line endings and the blank lines around a block,
+  nothing else. To compare blocks regardless of trailing spaces, markers or
+  table padding, split the canonical forms.
+- **`canonicalize`** writes LF, one blank line where there were blank lines
+  (blocks written next to each other stay so), no trailing spaces except a
+  two-space hard break, `# Title` headings, `---` rules, `-` bullets, `1.`
+  ordered markers, `*`/`**` emphasis and `| a | b |` tables; code, math, raw
+  HTML, directives and the header keep their bytes. Every change is checked
+  by rendering; a change that would alter the HTML is not made.
 
 ### Security notes
 

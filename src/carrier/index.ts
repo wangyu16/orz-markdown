@@ -26,3 +26,6 @@ export type { RawElement, LegacyWriter, LegacyIsland } from './legacy.js';
 export { kitParser } from './parser.js';
 export { looksHtml, shellWord, scriptElement, assembledStructure, storedText, heldText, twinCheck } from './inspect.js';
 export type { ScriptElementInfo, AssembledStructure, StructureOptions, LegacyTextReader, EarlierState, TwinInput, TwinReport } from './inspect.js';
+// 2.8.0 (family module K3): blocks of a text and its canonical form, for hosts that combine concurrent edits block by block
+export { splitBlocks, canonicalize, blockFingerprint } from './blocks.js';
+export type { TextBlock, BlockType, BlockUnit, BlockOptions, SplitOptions } from './blocks.js';

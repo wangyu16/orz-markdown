@@ -22,4 +22,6 @@ export type { RawElement, LegacyWriter, LegacyIsland } from './legacy.js';
 export { kitParser } from './parser.js';
 export { looksHtml, shellWord, scriptElement, assembledStructure, storedText, heldText, twinCheck } from './inspect.js';
 export type { ScriptElementInfo, AssembledStructure, StructureOptions, LegacyTextReader, EarlierState, TwinInput, TwinReport } from './inspect.js';
+export { splitBlocks, canonicalize, blockFingerprint } from './blocks.js';
+export type { TextBlock, BlockType, BlockUnit, BlockOptions, SplitOptions } from './blocks.js';
 //# sourceMappingURL=index.d.ts.map

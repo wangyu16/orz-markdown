@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.linkTargets = exports.includeTargets = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.TWIN_LINKS_RULE = exports.envTwinNaming = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
-exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = void 0;
+exports.blockFingerprint = exports.canonicalize = exports.splitBlocks = exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -79,4 +79,9 @@ Object.defineProperty(exports, "assembledStructure", { enumerable: true, get: fu
 Object.defineProperty(exports, "storedText", { enumerable: true, get: function () { return inspect_js_1.storedText; } });
 Object.defineProperty(exports, "heldText", { enumerable: true, get: function () { return inspect_js_1.heldText; } });
 Object.defineProperty(exports, "twinCheck", { enumerable: true, get: function () { return inspect_js_1.twinCheck; } });
+// 2.8.0 (family module K3): blocks of a text and its canonical form, for hosts that combine concurrent edits block by block
+var blocks_js_1 = require("./blocks.js");
+Object.defineProperty(exports, "splitBlocks", { enumerable: true, get: function () { return blocks_js_1.splitBlocks; } });
+Object.defineProperty(exports, "canonicalize", { enumerable: true, get: function () { return blocks_js_1.canonicalize; } });
+Object.defineProperty(exports, "blockFingerprint", { enumerable: true, get: function () { return blocks_js_1.blockFingerprint; } });
 //# sourceMappingURL=index.js.map

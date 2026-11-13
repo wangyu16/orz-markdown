@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Blocks of a text and its canonical form** (`orz-markdown/carrier`,
+  family module K3; additive): `splitBlocks(text, kind | { kind, filename,
+  unit, depth })` cuts a text into the parser's top-level blocks — the FC-18
+  header, headings, paragraphs, lists, tables, containers, code, math,
+  directives, paged elements, raw HTML, rules, definitions — or into
+  heading-bounded sections (`unit: 'section'`), and a slides text into one
+  block per slide by default. The blocks tile the text exactly
+  (`start`/`end`, joined they are the text), carry the FC-02 id of their
+  heading (or slide) when there is one, and a `fingerprint`
+  (`blockFingerprint`: SHA-256 of the block without line-ending and
+  surrounding blank-line differences). An edit inside one block changes no
+  other block. `canonicalize(text, kind)` gives the canonical form (LF,
+  blank lines, trailing spaces, heading/rule/list/emphasis markers, table
+  padding) without changing the rendered HTML or the header's bytes;
+  idempotent. For hosts that combine two concurrent edits block by block
+  (Alembic). Claims B.1–B.8.
+
 ## [2.7.1] — 2026-11-12
 
 ### Fixed
