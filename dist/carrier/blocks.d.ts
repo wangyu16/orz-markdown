@@ -116,15 +116,18 @@ export declare function splitBlocks(text: string, opts?: Kind | SplitOptions): T
  * line; top-level blocks separated by exactly one blank line, without
  * blank-line runs inside them; no trailing spaces except a two-space hard
  * break; paragraph lines without leading spaces; ATX headings `## Title` (a
- * one-line setext heading too); rules `---`; bullets `-`; ordered markers
- * `1.`; emphasis `*a*` and `**a**`; tables `| a | b |` with `---` / `:---` /
+ * one-line setext heading too); rules `---` (`***` right under a line of
+ * text, where `---` would make a heading); bullets `-`; ordered markers
+ * `1.`; emphasis `*a*` and `**a**` (never inside a reference label or a
+ * footnote reference); tables `| a | b |` with `---` / `:---` /
  * `---:` / `:---:` delimiters; one final line break. Code, math, raw HTML and
  * directive blocks keep their bytes, and so do the lines the renderer does
  * not show (reference and footnote definitions). A change that would alter
  * the rendered HTML is not made, so
  * `render(body(canonicalize(x))) === render(body(x))`, and
  * `canonicalize(canonicalize(x)) === canonicalize(x)`. Time and memory are
- * linear in the text.
+ * linear in the text: at most 1 + 2 × MAX_PASSES + RETRY_RENDER_LIMIT = 81
+ * whole-body renders per call.
  */
 export declare function canonicalize(text: string, opts?: Kind | BlockOptions): string;
 //# sourceMappingURL=blocks.d.ts.map

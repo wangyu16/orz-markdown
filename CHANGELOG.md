@@ -25,8 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   padding) without changing the rendered HTML or the header's bytes;
   idempotent; only lines the renderer shows are rewritten (reference and
   footnote definitions keep their bytes). A block whose id the text carries
-  twice is flagged `duplicate`. For hosts that combine two concurrent edits
-  block by block (Alembic). Claims B.1–B.10.
+  twice is flagged `duplicate`; reference labels and footnote references
+  keep their bytes. Deleting a block can join its neighbours (two lists, two
+  indented code blocks): a host re-splits the merged text and treats a
+  change of block boundaries as a conflict. For hosts that combine two
+  concurrent edits block by block (Alembic). Claims B.1–B.10.
 
 ## [2.7.1] — 2026-11-12
 

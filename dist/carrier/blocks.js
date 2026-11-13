@@ -18,8 +18,9 @@ exports.canonicalize = canonicalize;
  * `canonicalize` gives a text's canonical form — line endings, blank lines,
  * trailing spaces, heading and rule markers, list markers, emphasis markers
  * and table padding normalised — that renders exactly as the text does: every
- * change is checked by rendering the block (and then the whole body) before
- * and after, and a change that alters the render is not made. The header is
+ * change is checked by rendering the block (with the body's reference
+ * definitions) and then the whole body before and after, and a change that
+ * alters the render is not made. The header is
  * kept byte for byte (only its line endings become LF). Idempotent.
  *
  * Kinds are FC-18's (`md`, `slides`, `paged`). Browser-safe and
@@ -43,7 +44,10 @@ const CONTAINER_CLOSER = /^ {0,3}:{3,}[ \t]*$/;
 const ATTRS_MARKER = /\{\{attrs\[([^\]]*)\]/g;
 /** The start of a reference-link or footnote definition line. */
 const DEFINITION = /^ {0,3}\[/;
-const SLIDE_ID = /(?:^|\s)id=(["']?)(blk-[a-z0-9]{8,})\1(?=\s|-->|$)/;
+/** A slide marker's `id=…` option (orz-slides' `readMarkerArgs`: the last valid one counts). */
+const SLIDE_ID = /(?:^|\s)id=(["']?)([^\s"']*)\1(?=\s|-->|$)/g;
+/** An id orz-slides accepts (`readMarkerArgs`); an invalid one is dropped, so the one before it counts. */
+const SLIDE_ID_VALUE = /^[A-Za-z][\w:.-]*$/;
 function isKind(v) {
     return v === 'md' || v === 'slides' || v === 'paged';
 }
@@ -149,9 +153,17 @@ function headingId(open, inline) {
                 return id;
     return null;
 }
-/** A slide marker's `id=blk-…` option (closed markers only), else null. */
+/**
+ * A slide marker's `id=blk-…` option (closed markers only), else null. Given
+ * twice, the last valid `id=` counts (as orz-slides' `readMarkerArgs`); when
+ * that is not a block id, the slide has none.
+ */
 function slideId(content) {
-    return SLIDE_ID.exec(content.slice(0, content.indexOf('-->') >>> 0))?.[2] ?? null;
+    let id = null;
+    for (const m of content.slice(0, content.indexOf('-->') >>> 0).matchAll(SLIDE_ID))
+        if (SLIDE_ID_VALUE.test(m[2]))
+            id = m[2];
+    return id !== null && BLOCK_ID.test(id) ? id : null;
 }
 /** The top-level constructs of a parsed body, in line order. */
 function pieces(tokens, bodyLines, isBlankLine, isDefinitionLine, isCloserLine, kind) {
@@ -372,18 +384,29 @@ function splitBlocks(text, opts) {
 // ── canonical form ──────────────────────────────────────────────────────────
 /**
  * When a body's block-by-block changes do not add up, at most this many
- * whole-body renders look for the changes that do (groups halved until the
- * ones that alter the render are found); a change still unchecked then is
- * not made.
+ * whole-body renders per `canonicalize` call (shared by its passes) look for
+ * the changes that do (groups halved until the ones that alter the render are
+ * found); a change still unchecked then is not made.
  */
 const RETRY_RENDER_LIMIT = 64;
-/** Renders of single blocks, cached for the call (block-sized keys; whole bodies are never cached). */
-function blockRenderer() {
-    const cache = new Map();
+/** Passes of `canonicalize` at most (each keeps the render; the last that changes nothing ends it). */
+const MAX_PASSES = 8;
+/**
+ * Render a single block as it renders inside the body as far as references
+ * go: with the body's reference definitions (a label resolves alike). The
+ * block's own definitions go into an object inheriting the body's, so this
+ * costs nothing per definition.
+ */
+function blockRender(state, refs, refsKey) {
+    if (state.cacheKey !== refsKey) {
+        state.cache = new Map();
+        state.cacheKey = refsKey;
+    }
+    const cache = state.cache;
     return (src) => {
         let html = cache.get(src);
         if (html === undefined) {
-            html = (0, parser_js_1.kitParser)().render(src, {});
+            html = (0, parser_js_1.kitParser)().render(src, refs ? { references: Object.create(refs) } : {});
             cache.set(src, html);
         }
         return html;
@@ -430,9 +453,10 @@ function lineFacts(tokens, n) {
     return { verbatim, paragraph, continues, shown };
 }
 /**
- * Mask the spans of a line where `_` is never an emphasis marker (code spans,
- * `$…$`, `{{…}}`, `<…>`, `](…)`, escapes). Linear: a closer that is not found
- * once is never searched for again.
+ * Mask the spans of a line where `_` is never rewritten (code spans, `$…$`,
+ * `{{…}}`, `<…>`, `](…)`, escapes, and labels: `[…]` not followed by `(`,
+ * the label of `][…]`, `[^…]`). Linear: a closer that is not found once is
+ * never searched for again.
  */
 function maskedLine(line) {
     const m = line.split('');
@@ -489,13 +513,40 @@ function maskedLine(line) {
             continue;
         }
         const close = c === '$' ? find('$', i + 1) : c === '<' ? find('>', i + 1) : c === '{' && line[i + 1] === '{' ? find('}}', i + 2) : c === ']' && line[i + 1] === '(' ? find(')', i + 2) : -1;
+        // A link target `](…)`: its `]` stays (it closes the link text's bracket below).
         if (close >= 0) {
             const to = c === '{' ? close + 2 : close + 1;
-            blank(i, to);
+            blank(c === ']' ? i + 1 : i, to);
             i = to;
             continue;
         }
         i++;
+    }
+    // Labels: whether `[…]` is a link depends on the definitions (in this text
+    // or another version of it), and a label matches by its bytes — so the
+    // inside of a bracket pair not followed by `(` (a reference or shortcut
+    // label, the label part of `][…]`, a footnote reference `[^…]`) is masked.
+    // Brackets pair innermost-first over what is not masked yet (one stack: linear).
+    const open = [];
+    const pairs = [];
+    for (let k = 0; k < m.length; k++) {
+        if (m[k] === '[')
+            open.push(k);
+        else if (m[k] === ']' && open.length)
+            pairs.push([open.pop(), k]);
+    }
+    // Nested pairs overlap: mark each label's inside in a difference array, blank once.
+    const diff = new Int32Array(m.length + 1);
+    for (const [a, b] of pairs) {
+        if (m[a - 1] === ']' || m[a + 1] === '^' || line[b + 1] !== '(') {
+            diff[a + 1]++;
+            diff[b]--;
+        }
+    }
+    for (let k = 0, depth = 0; k < m.length; k++) {
+        depth += diff[k];
+        if (depth > 0)
+            m[k] = '\u0000';
     }
     return m.join('');
 }
@@ -643,7 +694,8 @@ function stages(tokens, facts) {
             }
         }
         else if (p.type === 'rule') {
-            w[0] = '---';
+            // Right under a line of text `---` would underline it (a setext heading): `***` there.
+            w[0] = blk.from > 0 && facts.shown[blk.from - 1] && !facts.verbatim[blk.from - 1] ? '***' : '---';
         }
     };
     // 3. list markers: `*` `+` → `-`, `1)` → `1.`.
@@ -716,7 +768,7 @@ function blockText(w, blk, facts) {
     }
     return out.join('\n');
 }
-function canonicalOnce(text, kind, render) {
+function canonicalOnce(text, kind, state) {
     const t = text.replace(/\r\n?/g, '\n');
     // A BOM goes back in front: the parser drops a leading BOM, so it never changes the render.
     const bom = t.charCodeAt(0) === 0xfeff ? '\uFEFF' : '';
@@ -728,7 +780,11 @@ function canonicalOnce(text, kind, render) {
     // Text after the header's `}}` on its line: keep the text as it is (lint `closer-in-value` / `closer-not-alone`).
     if (header && !isBlank(lines[0]))
         return t;
-    const tokens = (0, parser_js_1.kitParser)().parse(body, {});
+    const env = {};
+    const tokens = (0, parser_js_1.kitParser)().parse(body, env);
+    // Blocks render with the body's reference definitions, so a change whose render depends on a label is judged where it stands.
+    const refs = env.references && Object.keys(env.references).length ? env.references : undefined;
+    const render = blockRender(state, refs, refs ? JSON.stringify(refs) : '');
     const list = pieces(tokens, lines.length, (l) => isBlank(lines[l]), (l) => DEFINITION.test(lines[l]), (l) => CONTAINER_CLOSER.test(lines[l]), kind);
     if (!list.length)
         return header ? bom + headerText + '\n' : bom;
@@ -742,7 +798,7 @@ function canonicalOnce(text, kind, render) {
     const all = stages(tokens, facts);
     const original = [];
     const chosen = [];
-    /** Each block's render alone (the original text). */
+    /** Each block's render alone with the body's definitions (the original text). */
     const alone = [];
     for (const blk of blocks) {
         const own = lines.slice(blk.from, blk.to);
@@ -768,7 +824,8 @@ function canonicalOnce(text, kind, render) {
                 }
             }
         }
-        chosen.push(best);
+        // A change already found to alter the body's render (an earlier pass) is not tried again.
+        chosen.push(state.failed.has(before + '\u0001' + best) ? before : best);
     }
     // Blocks keep their adjacency: written one after the other when no blank line
     // separated them (slides' `<!-- slide -->` above its content, a heading
@@ -787,21 +844,21 @@ function canonicalOnce(text, kind, render) {
         return out.join('');
     };
     const head = bom + (header ? headerText + (headGap ? '\n\n' : '\n') : '');
-    const target = renderWhole(body);
+    const target = (state.target ?? (state.target = renderWhole(body)));
     const out = join(chosen);
     if (renderWhole(out) === target)
         return head + out;
     const parts = original.slice();
     if (renderWhole(join(parts)) !== target)
         return t;
-    // Changes that keep each block's render but not the body's (a block whose
-    // render depends on others — a reference, a footnote, a heading slug, two
-    // lists that would join): find them by rendering groups of changes. The
-    // suspects — changed blocks that render differently in the body than
-    // alone, and definitions — are tried last, so one of them costs a few
-    // renders, not one per block.
-    const env = {};
-    const inBody = (0, parser_js_1.kitParser)().parse(body, env);
+    // Changes that keep each block's render (with the body's definitions) but
+    // not the body's (a block whose render depends on others — a footnote, two
+    // constructs written next to each other): find them by rendering groups of
+    // changes. The suspects — changed blocks that render differently in the
+    // body than alone, and definitions — are tried last, so one of them costs a
+    // few renders, not one per block. The budget is the call's, shared by its
+    // passes; a change found to alter the render is remembered.
+    const inBody = tokens;
     // Where block i's tokens end: the next block's first token.
     const tokenEnd = new Array(blocks.length);
     for (let i = blocks.length - 1, next = inBody.length; i >= 0; i--) {
@@ -818,19 +875,20 @@ function canonicalOnce(text, kind, render) {
         const here = tk < 0 ? null : (0, parser_js_1.kitParser)().renderer.render(inBody.slice(tk, tokenEnd[i]), (0, parser_js_1.kitParser)().options, env);
         (here === alone[i] ? others : suspects).push(i);
     }
-    let budget = RETRY_RENDER_LIMIT;
     const tryGroup = (g) => {
-        if (!g.length || budget <= 0)
+        if (!g.length || state.budget <= 0)
             return;
         for (const i of g)
             parts[i] = chosen[i];
-        budget--;
+        state.budget--;
         if (renderWhole(join(parts)) === target)
             return;
         for (const i of g)
             parts[i] = original[i];
-        if (g.length === 1)
+        if (g.length === 1) {
+            state.failed.add(original[g[0]] + '\u0001' + chosen[g[0]]);
             return;
+        }
         const half = g.length >> 1;
         tryGroup(g.slice(0, half));
         tryGroup(g.slice(half));
@@ -845,24 +903,27 @@ function canonicalOnce(text, kind, render) {
  * line; top-level blocks separated by exactly one blank line, without
  * blank-line runs inside them; no trailing spaces except a two-space hard
  * break; paragraph lines without leading spaces; ATX headings `## Title` (a
- * one-line setext heading too); rules `---`; bullets `-`; ordered markers
- * `1.`; emphasis `*a*` and `**a**`; tables `| a | b |` with `---` / `:---` /
+ * one-line setext heading too); rules `---` (`***` right under a line of
+ * text, where `---` would make a heading); bullets `-`; ordered markers
+ * `1.`; emphasis `*a*` and `**a**` (never inside a reference label or a
+ * footnote reference); tables `| a | b |` with `---` / `:---` /
  * `---:` / `:---:` delimiters; one final line break. Code, math, raw HTML and
  * directive blocks keep their bytes, and so do the lines the renderer does
  * not show (reference and footnote definitions). A change that would alter
  * the rendered HTML is not made, so
  * `render(body(canonicalize(x))) === render(body(x))`, and
  * `canonicalize(canonicalize(x)) === canonicalize(x)`. Time and memory are
- * linear in the text.
+ * linear in the text: at most 1 + 2 × MAX_PASSES + RETRY_RENDER_LIMIT = 81
+ * whole-body renders per call.
  */
 function canonicalize(text, opts) {
     const o = typeof opts === 'string' ? { kind: opts } : (opts ?? {});
     const kind = resolveKind(text, o);
-    const render = blockRenderer();
+    const state = { budget: RETRY_RENDER_LIMIT, failed: new Set(), target: null, cache: new Map(), cacheKey: '' };
     let cur = text;
     // Each pass keeps the render; repeat until nothing changes, so the result is a fixed point (idempotence).
-    for (let i = 0; i < 8; i++) {
-        const next = canonicalOnce(cur, kind, render);
+    for (let i = 0; i < MAX_PASSES; i++) {
+        const next = canonicalOnce(cur, kind, state);
         if (next === cur)
             return cur;
         cur = next;

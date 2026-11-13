@@ -283,9 +283,12 @@ canonicalize(text, 'md'); // same rendered HTML, header bytes kept, idempotent
   constructs: joining two blocks (deleting the blank line between them,
   breaking a heading, a slide marker or the header), or opening a fence,
   `$$`, `:::` or HTML comment that is never closed, which swallows every
-  block after it. A block merge then sees every block after the edit as
-  changed (one big edited block instead of the ones it swallowed), and
-  should treat it as a conflict rather than merge into it.
+  block after it. Deleting a block can also join its neighbours into one
+  (two lists, two indented code blocks, a footnote definition and the
+  indented code after it). A block merge then sees every block after the
+  edit as changed (one big edited block instead of the ones it swallowed or
+  joined): re-split the merged text, and treat any change of block
+  boundaries as a conflict rather than merge into it.
 - **Ids** come only from an explicit `{{attrs[#blk-…]}}` (or
   `{{attrs[id="blk-…"]}}`) on a top-level heading, or a slide marker's
   `id=blk-…` — never from a slug, never from a heading nested in a list,
@@ -298,12 +301,17 @@ canonicalize(text, 'md'); // same rendered HTML, header bytes kept, idempotent
   padding, split the canonical forms.
 - **`canonicalize`** writes LF, one blank line where there were blank lines
   (blocks written next to each other stay so), no trailing spaces except a
-  two-space hard break, `# Title` headings, `---` rules, `-` bullets, `1.`
+  two-space hard break, `# Title` headings, `---` rules (`***` right under
+  a line of text, where `---` would make a heading), `-` bullets, `1.`
   ordered markers, `*`/`**` emphasis and `| a | b |` tables; code, math, raw
-  HTML, directives, the header, a leading BOM and the lines the renderer
-  does not show (reference and footnote definitions) keep their bytes.
-  Every change is checked by rendering; a change that would alter the HTML
-  is not made. Linear in the text.
+  HTML, directives, the header (blank lines inside a legacy pair included),
+  a leading BOM, reference labels and footnote references (`[_x_]`,
+  `[a][_x_]`, `[^_n_]`: a label matches its definition by its bytes) and
+  the lines the renderer does not show (reference and footnote definitions)
+  keep their bytes. Every change is checked by rendering — each block with
+  the text's reference definitions, then the whole body; a change that would
+  alter the HTML is not made. Linear in the text: at most 81 whole-body
+  renders per call.
 
 ### Security notes
 

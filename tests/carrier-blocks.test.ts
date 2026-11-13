@@ -1,7 +1,7 @@
 /**
  * Blocks of a text and its canonical form (2.8.0, family module K3):
  * `splitBlocks`, `canonicalize` and `blockFingerprint` in `orz-markdown/carrier`.
- * Claims B.1–B.10 in notes/CLAIMS.md (audit round 1: M1–M3, L1–L8). Oracles: every Markdown file of this
+ * Claims B.1–B.10 in notes/CLAIMS.md (audit round 1: M1–M3, L1–L8; round 2: M1-b, M3-b, three LOWs). Oracles: every Markdown file of this
  * repository (git ls-files, the carrier corpus, the starters, specs and docs)
  * and seeded random texts.
  */
@@ -141,6 +141,16 @@ describe('splitBlocks', () => {
     expect(splitBlocks(t).map((b) => [b.type, t.slice(b.start, b.end)])).toEqual([['container', '::: info\nx\n:::\n'], ['definition', '[r]: /u\n']]);
   });
 
+  it('[B.2] audit round 2: a slide id given twice — the last valid `id=` counts, as orz-slides\' readMarkerArgs (an invalid one is dropped; a last valid non-block id gives none)', () => {
+    const id = (args: string) => splitBlocks(`<!-- slide ${args} -->\nA\n`, 'slides')[0].id;
+    expect(id('id=blk-aaaaaaaa id=blk-bbbbbbbb')).toBe('blk-bbbbbbbb');
+    expect(id('id="blk-aaaaaaaa" bg=x id=\'blk-bbbbbbbb\'')).toBe('blk-bbbbbbbb');
+    expect(id('id=blk-aaaaaaaa id=9bad')).toBe('blk-aaaaaaaa');
+    expect(id('id=blk-aaaaaaaa id=other')).toBe(null);
+    expect(id('class="a id=blk-aaaaaaaa"')).toBe(null);
+    expect(splitBlocks('<!-- slide id=blk-aaaaaaaa id=blk-bbbbbbbb -->\nA\n\n<!-- slide id=blk-bbbbbbbb -->\nB\n', 'slides').map((b) => [b.id, b.duplicate ?? false])).toEqual([['blk-bbbbbbbb', true], ['blk-bbbbbbbb', true]]);
+  });
+
   it('[B.10] a block whose id the text carries more than once (another heading at any depth, another slide marker) is marked `duplicate`; other blocks carry no `duplicate` key', () => {
     const dup = (t: string, k: Kind = 'md', unit: 'block' | 'section' = k === 'slides' ? 'section' : 'block') => splitBlocks(t, { kind: k, unit }).map((b) => [b.id, b.duplicate ?? false]);
     expect(dup('## A{{attrs[#blk-abcdefgh]}}\n\n## B{{attrs[#blk-abcdefgh]}}\n\n## C{{attrs[#blk-bcdefghi]}}\n')).toEqual([['blk-abcdefgh', true], ['blk-abcdefgh', true], ['blk-bcdefghi', false]]);
@@ -200,6 +210,18 @@ describe('splitBlocks', () => {
       const bs = splitBlocks(edited);
       expect(bs.length, opener).toBe(2);
       expect(bs[1].end, opener).toBe(edited.length);
+    }
+  });
+
+  it('[B.3] audit round 2: deleting a block can join its neighbours (two lists, two indented code blocks, a footnote definition and indented code) — the documented exception; the host re-splits the merged text and sees the change of boundaries', () => {
+    for (const t of ['- a\n\n# H\n\n- b\n', '    a\n\n# H\n\n    b\n', '1. a\n\npara\n\n2. b\n', '[^1]: a\n\n# H\n\n    b\n']) {
+      const bs = splitBlocks(t);
+      expect(bs.length, t).toBe(3);
+      const without = t.slice(0, bs[1].start) + t.slice(bs[1].end);
+      const after = splitBlocks(without);
+      expect(after.length, t).toBe(1);
+      expect(after[0].type, t).toBe(bs[0].type);
+      expect(after[0].fingerprint, t).not.toBe(bs[0].fingerprint);
     }
   });
 
@@ -313,6 +335,42 @@ describe('canonicalize', () => {
     }
   });
 
+  it('[B.7] audit round 2 (M1-b): reference labels and footnote references keep their bytes (whether a label is a link depends on definitions another version may add); link text and the rest of the line are still normalised', () => {
+    for (const t of ['see [_x_] here\n', '[a][_x_]\n', '[_x_][]\n', 'x[^_n_]\n', '[^_n_] y\n', '[_x_] [[_y_]]\n']) {
+      expect(canonicalize(t), t).toBe(t);
+      // The same text with the definitions added renders as the canonical form with them.
+      const defs = '\n[_x_]: /u\n\n[^_n_]: n\n';
+      expect(render(canonicalize(t) + defs), t).toBe(render(t + defs));
+    }
+    expect(canonicalize('[_a_](http://x/_y_) [_b_] _c_\n')).toBe('[*a*](http://x/_y_) [_b_] *c*\n');
+    // Brackets nested 20k deep stay linear.
+    const t0 = performance.now();
+    canonicalize('['.repeat(20_000) + '_a_' + ']'.repeat(20_000) + '\n');
+    expect(performance.now() - t0).toBeLessThan(3000);
+  });
+
+  it('[B.7] audit round 2 (M3-b): many blocks whose render depends on a definition (the auditor\'s k = 100: `_x [f_]` + `[f_]: /u`, interleaved with ordinary changes) — every ordinary change is still made; a rule right under a line of text is `***` (`---` would make it a heading); the header\'s own bytes, blank lines between a legacy pair included, are kept', () => {
+    const make = (n: number, us: boolean) => {
+      const parts: string[] = [];
+      for (let i = 0; i < n; i++) { parts.push(`_x [f${i}_]`); parts.push(`[g${i}] ${us ? '_e_' : '*e*'}`); }
+      for (let i = 0; i < n; i++) { parts.push(`[f${i}_]: /u${i}`); parts.push(`[g${i}]: /v${i}`); }
+      return parts.join('\n\n') + '\n';
+    };
+    const a = make(100, true);
+    const ca = canonicalize(a);
+    expect(ca).toBe(canonicalize(make(100, false)));
+    expect(ca.match(/_e_/g)).toBe(null);
+    expect(render(ca)).toBe(render(a));
+    expect(canonicalize(ca)).toBe(ca);
+    // A rule under a paragraph line.
+    for (const r of ['***', '* * *', '- - -', '___']) expect(canonicalize(`para\n${r}\n`), r).toBe('para\n***\n');
+    expect(canonicalize('para\n\n* * *\n')).toBe('para\n\n---\n');
+    // B.7's stated exception: the header is kept byte for byte, so blank lines inside a legacy pair stay.
+    const pair = '{{nyml\nkind: meta\ntitle: T\n}}\n\n\n\n{{nyml\nkind: document\n}}\n\n# A\n';
+    expect(canonicalize(pair)).toBe(pair);
+    expect(canonicalize(pair.replace('\n\n\n\n', '\n\n'))).toBe(pair.replace('\n\n\n\n', '\n\n'));
+  });
+
   it('[B.8] splitBlocks and canonicalize run in time linear in the text on crafted input (20k emphasis openers on one line, 20k unclosed backticks, `<`, `$`, `{{`, 5000 blocks)', () => {
     const time = (f: () => unknown) => { const t0 = performance.now(); f(); return performance.now() - t0; };
     const lines = ['_a '.repeat(20_000), '`'.repeat(1) + ' x`` '.repeat(20_000), '< a '.repeat(20_000), '$ a '.repeat(20_000), '{{ a '.repeat(20_000), '](x '.repeat(20_000)];
@@ -345,4 +403,30 @@ describe('canonicalize', () => {
     expect(out.includes('\nParagraph 196 with *emphasis* text  \n')).toBe(true);
     expect(tPoison).toBeLessThan(2 * tClean + 1000);
   }, 60_000);
+
+  it('[B.8] audit round 2 (M3-b): the auditor\'s ~1 MB text with 100 definition-dependent blocks costs about what it costs without them (277 s before), and a call makes at most 1 + 2 × 8 + 64 = 81 whole-body renders', () => {
+    const time = (f: () => unknown) => { const t0 = performance.now(); f(); return performance.now() - t0; };
+    const make = (n: number) => {
+      const parts: string[] = [];
+      for (let i = 0; i < n; i++) { parts.push(`_x [f${i}_]`); parts.push(`[g${i}] _e_`); }
+      const filler = 'word _e_ '.repeat(330).trim();
+      for (let i = 0; i < 1000 / 3; i++) parts.push(filler);
+      for (let i = 0; i < n; i++) { parts.push(`[f${i}_]: /u${i}`); parts.push(`[g${i}]: /v${i}`); }
+      return parts.join('\n\n') + '\n';
+    };
+    const clean = make(0);
+    const poison = make(100);
+    expect(poison.length).toBeGreaterThan(900_000);
+    const tClean = time(() => canonicalize(clean));
+    const p = kitParser();
+    const real = p.render.bind(p);
+    let whole = 0;
+    let out = '';
+    p.render = ((src: string, env?: object) => { if (src.length > 100_000) whole++; return real(src, env); }) as typeof p.render;
+    let tPoison: number;
+    try { tPoison = time(() => { out = canonicalize(poison); }); } finally { p.render = real as typeof p.render; }
+    expect(out.match(/_e_/g)).toBe(null);
+    expect(whole).toBeLessThanOrEqual(81);
+    expect(tPoison).toBeLessThan(2 * tClean + 2000);
+  }, 120_000);
 });

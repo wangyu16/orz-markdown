@@ -59,8 +59,8 @@ A host reads block ids with the parser, never by string search:
 text's blocks — `{ type, name?, id, start, end, line, fingerprint }`, tiling
 the text exactly — where `id` is the well-formed `blk-…` id of a heading
 (`unit: 'block'`), of a section's heading (`unit: 'section'`, cut at headings
-of level ≤ `depth`, default 2) or of a slide (`id=blk-…` on the slide marker,
-else its first heading's), and `null` otherwise. Only an explicit
+of level ≤ `depth`, default 2) or of a slide (`id=blk-…` on the slide marker — given
+twice, the last valid one, as orz-slides reads it — else its first heading's), and `null` otherwise. Only an explicit
 `{{attrs[#blk-…]}}` / `{{attrs[id="blk-…"]}}` on a top-level heading counts:
 a slug that looks like an id (`# blk-abcdefgh1`) is not one, and a heading
 nested in a list, quote or container gives no block id. A malformed marker

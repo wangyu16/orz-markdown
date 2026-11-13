@@ -1167,3 +1167,51 @@ perf1–5, mem). Each finding is a test of the correct behaviour in
   the container. Fixed: the closer is covered with its container. **B.2**.
 
 Fuzz (3 × 3000 seeds) 0 bad; stab: only the documented structural class.
+
+## K3 blocks audit round 2 (2026-11-13): `canonicalize` labels, the group search's budget, three LOWs
+
+Independent audit of `5a7ed9c` (probes t1–t12, fuzz2, corpus, perf). Each
+finding is a test in `tests/carrier-blocks.test.ts` ("audit round 2"); the
+four code findings are red on `5a7ed9c` (the 1 MB one by timeout).
+
+- **M1-b** emphasis rewritten inside reference labels and footnote
+  references (`see [_x_]`, `[a][_x_]`, `[_x_][]`, `x[^_n_]` → `*`): the
+  render check passes while the label is undefined, but a label matches its
+  definition by its bytes, so a definition in another version stops
+  matching. Fixed: `maskedLine` masks the inside of `[…]` not followed by
+  `(`, the label of `][…]` and `[^…]` (pairs from one stack, blanked through a
+  difference array: linear, 20k nested brackets 0.7 s). Link text `[_a_](u)`
+  is still normalised. **B.7**.
+- **M3-b** the 64-render budget was per pass (up to 8 passes) and failing
+  leaves were searched again each pass: 1 MB with 100 definition-dependent
+  blocks took 277 s and left changes undone (B.7 broken). Fixed: each block
+  is rendered with the body's reference definitions (an object inheriting
+  them, so no copy per block), so a label-dependent change is judged where
+  it stands and never reaches the group search; the search's budget is the
+  call's, shared by its passes; a leaf found to alter the render is
+  remembered and not tried again; the body's target render is computed once
+  per call. A rule right under a line of text canonicalizes to `***` (`---`
+  would make it a setext heading; it went to the group search before). The
+  auditor's input: 277 s → 4.8 s (the same text without the trigger 4.5 s),
+  3 whole-body renders, no `_e_` left; bound per call 1 + 2 × 8 + 64 = 81
+  whole-body renders. The repository corpus, the auditor's 506-file family
+  corpus and fuzz2 (3000 seeds) reach the group search 0 times now. Hard
+  cap kept and stated: a change still unchecked when the 64 are spent is
+  not made; B.6/B.7 may not hold for it (**B.6**, **B.7**, **B.8**, FC-02).
+- **LOW B.3** deleting a block can join its neighbours (list/heading/list,
+  indented code around a heading, a footnote definition and indented code).
+  Documented in B.3, the README and FC-02 "Stability limits": a host
+  re-splits the merged text and treats any change of block boundaries as a
+  conflict; test of the documented behaviour (green before: doc finding).
+- **LOW** a slide `id=` given twice took the first; orz-slides'
+  `readMarkerArgs` takes the last valid one. Fixed (an invalid last `id=` is
+  dropped, as there; a valid non-block last id gives none). **B.2**.
+- **LOW** blank lines inside a legacy `kind: meta` + `kind: document` pair
+  are header bytes and stay (by design, the header is kept byte for byte):
+  stated as B.7's exception; test of the stated behaviour.
+
+Probes after the fix: fuzz2 (3000 seeds) 0 bad, 58 B.7 differences (65
+before), all two adjacent lists with different bullets (B.7's stated "not
+joined" case); corpus 506 files: tile 0, render 0, idempotence 0, slow 0,
+20 stab reports of the documented structural class (lists joined by a
+deletion, an append that changes a front-matter setext line).
