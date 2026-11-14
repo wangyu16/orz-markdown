@@ -52,7 +52,7 @@ The ID overrides the auto-generated `markdown-it-anchor` slug, so the anchor sta
 
 ---
 
-## For hosts: reading blocks and their ids (orz-markdown/carrier, unreleased)
+## For hosts: reading blocks and their ids (orz-markdown/carrier, since 2.8.0)
 
 A host reads block ids with the parser, never by string search:
 `splitBlocks(text, { kind, unit })` from `orz-markdown/carrier` returns the

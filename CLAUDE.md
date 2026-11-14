@@ -83,7 +83,7 @@ npm run build:codemirror # vendor/codemirror6.js (the editor's pinned CodeMirror
   `md.set()` cannot change assembled bytes; K.19). The parser entry must
   never import `src/carrier/` (claim K.8); envelope code stays deterministic
   (K.2). `src/nyml-body.ts` is the flat nyml reader shared by the scanner and
-  the header tools. `blocks.ts` (2.8.0, unreleased; B.1–B.10): `splitBlocks` /
+  the header tools. `blocks.ts` (2.8.0; B.1–B.10): `splitBlocks` /
   `canonicalize` / `blockFingerprint` — top-level blocks from the kit's
   tokens, tiling the text exactly; every canonical change is checked by
   rendering (never let it change the HTML or the header's bytes), only

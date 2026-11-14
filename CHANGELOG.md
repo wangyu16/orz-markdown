@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-14
+
 ### Added
 
 - **Blocks of a text and its canonical form** (`orz-markdown/carrier`,

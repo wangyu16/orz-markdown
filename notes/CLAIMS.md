@@ -416,7 +416,7 @@ without git.
 
 ## B — blocks of a text and its canonical form (`orz-markdown/carrier`)
 
-`splitBlocks`, `canonicalize` and `blockFingerprint` (2.8.0, unreleased;
+`splitBlocks`, `canonicalize` and `blockFingerprint` (2.8.0;
 family module K3, Alembic's request `notes/REQUEST-orz-markdown-blocks.md` in
 the family root): what a host needs to combine two concurrent edits of one
 document block by block. `src/carrier/blocks.ts`; tests in
