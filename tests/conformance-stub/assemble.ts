@@ -58,6 +58,8 @@ export interface StubAssembleOptions {
   includes?: Record<string, string>;
   /** (2.5.0) The twin-link naming, stored in `#orz-shell` when it is not the family's (FC-18 §8.2). */
   twinLinks?: TwinNaming;
+  /** (2.9.0) A reader copy (FC-18 §8.2 `readerCopy`), stored in `#orz-shell`. */
+  readerCopy?: boolean | { notice?: string };
 }
 
 const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}#orz-app{min-height:60vh;padding:24px}</style>';
@@ -82,6 +84,7 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
     delivery,
     ...(o.includes && Object.keys(o.includes).length > 0 ? { includes: o.includes } : {}),
     ...(o.twinLinks ? { twinLinks: o.twinLinks } : {}),
+    ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}),
     headHtml: HEAD,
     bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `${STUB_BODY}\n${engine}`, // BUG (mutation) date-stamp
   });

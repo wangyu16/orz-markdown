@@ -554,6 +554,93 @@ describe('saving from the page', () => {
     d.app.dispose();
   });
 
+  it('[A.34] (2.9.0, FC-18 §8.2) a reader copy (#orz-shell "readerCopy") on a served page with no host: readOpenedFile reads it; Edit opens the editor with the file\'s notice (else the kit\'s words) and Save reading "Download a copy"; every save of the page and its editors downloads (never the file saver\'s save, no served-page warning) and no download, save or copy carries readerCopy; the handle\'s list has "Download a copy" in place of Save; on a file: page, in a frame or without the setting nothing changes', async () => {
+    const shellParts = (readerCopy?: boolean | { notice?: string }) => ({
+      kind: 'md' as const, shellVersion: '1.0.0', delivery: 'inline' as const, ...(readerCopy ? { readerCopy } : {}),
+      headHtml: '', bodyHtml: `<main id="orz-app"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`,
+    });
+    const html = assembleEnvelope(TEXT, shellParts({ notice: 'Your own copy: download it to keep it.' }));
+    const URL_ = 'https://site.test/course/notes.md.html';
+    expect(readOpenedFile(filePage(html, URL_).doc as unknown as AppDocument, 'md')!.readerCopy).toEqual({ notice: 'Your own copy: download it to keep it.' });
+    const noteOf = (ed: EditorShell) => (ed.root as unknown as ShadowRoot).querySelector('#orz-host-note .orz-editor__notice-text')?.textContent ?? null;
+    const saveOf = (ed: EditorShell) => (ed.root as unknown as ShadowRoot).querySelector('.orz-editor__save')!.getAttribute('aria-label');
+
+    const b = boot(html, { url: URL_ });
+    await b.app.ready;
+    expect(b.items()).toContain('Download a copy');
+    expect(b.items()).not.toContain('Save');
+    b.app.menu.close();
+    const ed = b.app.edit();
+    expect(noteOf(ed)).toBe('Your own copy: download it to keep it.');
+    expect(saveOf(ed)).toBe('Download a copy');
+    const edited = `${TEXT}More.\r\n`;
+    ed.setText(edited);
+    expect(await ed.save()).toMatchObject({ ok: true, via: 'download' });
+    expect(b.rec.saves).toEqual([]);
+    expect(b.rec.downloads.length).toBe(1);
+    const got = extract(b.rec.downloads[0].html)!;
+    expect(got.text === edited).toBe(true);
+    expect(got.readerCopy).toBeUndefined();
+    const edToasts = [...(ed.root as unknown as ShadowRoot).querySelectorAll('.orz-toast__message')].map((n) => n.textContent ?? '').join(' ');
+    expect(edToasts).toContain('Download started.');
+    expect(`${edToasts} ${b.toasts().join(' ')}`).not.toContain('cannot be saved over');
+    expect((ed.root as unknown as ShadowRoot).querySelector('#orz-served-note')).toBeNull();
+    expect(b.app.isDirty()).toBe(false);
+    await b.app.leave();
+    // the page's own save (Cmd/Ctrl+S in the read view) is a download too
+    b.app.setSetting({ theme: 'beige-decent-1' });
+    expect(await b.app.save()).toMatchObject({ ok: true, via: 'download' });
+    expect(b.rec.saves).toEqual([]);
+    expect(b.rec.downloads.length).toBe(2);
+    expect(extract(b.rec.downloads[1].html)!.readerCopy).toBeUndefined();
+    // the handle's "Download a copy" is the page's save: it downloads and the text is saved
+    b.app.setSetting({ theme: 'light-academic-1' });
+    expect(b.app.isDirty()).toBe(true);
+    b.click('Download a copy');
+    await tick(20);
+    expect(b.rec.downloads.length).toBe(3);
+    expect(b.app.isDirty()).toBe(false);
+    expect(b.rec.saves).toEqual([]);
+    // an editor attached through OrzCarrier.mountEditor gets the same words
+    const holder = b.doc.createElement('div');
+    b.doc.body.append(holder);
+    const ctx = b.app.editorContext();
+    const attached = createEditorShell(holder as never, { text: TEXT, render: (t) => renderMarkdownPreview(t), adapter: textareaAdapter(), preview: { assets: false }, assemble: ctx.assemble, saver: ctx.saver, standalone: ctx.standalone });
+    const detach = b.app.attach(attached);
+    expect([noteOf(attached), saveOf(attached)]).toEqual(['Your own copy: download it to keep it.', 'Download a copy']);
+    detach();
+    attached.destroy();
+    // Download a copy and Save as new copy carry no readerCopy either
+    await b.app.download();
+    expect(extract(b.rec.downloads.at(-1)!.html)!.readerCopy).toBeUndefined();
+    await b.app.saveAsCopy();
+    expect(b.rec.saves.at(-1) && extract(b.rec.saves.at(-1)!.html)!.readerCopy).toBeUndefined();
+    b.app.dispose();
+
+    // the kit's words when the file gives none
+    const d = boot(assembleEnvelope(TEXT, shellParts(true)), { url: URL_ });
+    expect(noteOf(d.app.edit())).toBe('You’re editing your own copy. Changes can’t be saved to this website — use “Download a copy” to keep them.');
+    d.app.dispose();
+
+    // nothing changes: a file: page, a framed page, a served page without the setting
+    for (const [label, h, o] of [
+      ['file:', html, {}],
+      ['framed', html, { url: URL_, framed: true }],
+      ['no setting', assembleEnvelope(TEXT, shellParts()), { url: URL_ }],
+    ] as const) {
+      const x = boot(h, o);
+      await x.app.ready;
+      expect(x.items(), label).toContain('Save');
+      x.app.menu.close();
+      const e = x.app.edit();
+      expect([noteOf(e), saveOf(e)], label).toEqual([null, 'Save']);
+      e.setText(`${TEXT}x\r\n`);
+      await e.save();
+      expect([x.rec.saves.length, x.rec.downloads.length], label).toEqual([1, 0]);
+      x.app.dispose();
+    }
+  });
+
   it('[A.5] New document saves the kind\'s new text as a new file (its own uid, Untitled + the extension, the file\'s delivery, no includes) and Save as new copy the current text with a NEW uid (copy name, the file\'s includes) — each through a saver of its own (never the file\'s handle, never the host: a served page or a host gets a download) — leaving the document as it is', async () => {
     const b = boot();
     await b.app.ready;

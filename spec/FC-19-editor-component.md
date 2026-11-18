@@ -17,6 +17,14 @@ header shows folded in the source view. A carrier adopts them by rebuilding
 on the kit (its `mountEditor` returns the shell and passes `hooks` through);
 an existing host changes nothing.
 
+**Minor revision, orz-markdown 2.9.0 (additive; owner decision of
+2026-11-17, STATUS D-144, D-149):** the host's words — the shell option
+`words` and `Editor.setWords(words)` (§3, §4): the Save button's label, the
+toast after a save, and a notice above the panes. A carrier adopts it by
+rebuilding on the kit (its `mountEditor` returns the shell). The carrier
+app uses it for a reader copy (FC-18 §8.2 `readerCopy`,
+spec/carrier-app.md §4.5a).
+
 ## 1. One editor, two kinds of host
 
 Each `orz-<x>-browser` package exports the editor for its kind. The assembled
@@ -139,6 +147,22 @@ host saves anyway; the button sends at once). Only words change: `isDirty()`,
 the `dirty` event and `markSaved()` keep their meaning, and a host still calls
 `markSaved()` when its save is done.
 
+**The host's words** (2.9.0, additive; STATUS D-144, D-149; owner
+2026-11-17). The editor shell's option `words` and `Editor.setWords(words)`
+(any time after mount; a carrier's `mountEditor` returns the shell, so every
+host has it) take `{ save?, saved?, notice? }`, each plain text (runs of
+spaces collapsed and trimmed; never markup): `save` names the Save button
+(label, accessible name, title with the shortcut; empty or null: "Save", or
+"Save now" with `hooks.saveStatus`); `saved` is the toast after a save that
+worked (`''`: no toast, the save status says it; null: "Saved." /
+"Download started."); `notice` is a notice above the panes (role `status`,
+with Dismiss, which hides it until it changes; empty or null removes it).
+In `setWords` a key left out keeps its word; nothing happens after
+`destroy()`. Without words nothing changes. A host that downloads instead of
+saving (a try mode) names the button "Download a copy"; the carrier app
+does so for a reader copy (FC-18 §8.2 `readerCopy`, spec/carrier-app.md
+§4.5a).
+
 **`foldHeader`** (2.7.0, additive; STATUS D-130). The source view shows the
 document header (`{{nyml …}}`, FC-18 §5 — with its `uid` and every other
 key) as one closed line, "Document settings · <title> ▸". A click opens it
@@ -187,6 +211,7 @@ interface Editor {
   // added 2.7.0 (additive; STATUS D-131, D-134)
   reveal(target: { from: number; to?: number } | string | { heading: string }, options?: { select?: boolean }): { from: number; to: number } | null;
   refreshSaveStatus(): void;                                                   // ask hooks.saveStatus again (§3)
+  setWords(words: { save?: string | null; saved?: string | null; notice?: string | null }): void; // (2.9.0) the host's words (below)
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };

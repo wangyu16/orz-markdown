@@ -62,6 +62,7 @@ import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import { copyName, readOpenedFile } from './file.js';
 import { extract } from '../read.js';
 import { sameTwinNaming, type TwinNaming } from '../naming.js';
+import { readerCopyNotice } from '../reader-copy.js';
 import { attachAiMenu, button, hiddenFor, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
 import { HANDLE_CSS, mountHandle, type HandleEntry, type HandleRowButton, type HandleSubItem } from './handle.js';
 import type {
@@ -270,6 +271,16 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     ? (url: string): Promise<string | null> => (host.protocols().include && /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? host.requestInclude(url) : Promise.resolve(null))
     : undefined;
 
+  /**
+   * (2.9.0, spec/carrier-app.md §4.5a) A reader copy: the file says it is published for readers
+   * (`#orz-shell` `"readerCopy"`) and this page is that publication — served (http/https), top-level,
+   * with no host. Its edits cannot go back to the address, so every save is a download, the editor says
+   * so when it opens and its Save reads "Download a copy". A `file:` page or a framed one ignores it.
+   */
+  let served = false;
+  try { served = /^https?:$/.test(String(win.location.protocol)); } catch { served = false; }
+  const readerMode = !!file.readerCopy && served && !framed && !host;
+  const readerWords = readerMode ? { save: 'Download a copy', notice: readerCopyNotice(file.readerCopy) } : null;
   // the file on disk's uid is read as the page reads its own (a quoted or block uid is one: S.14)
   const fileSaver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml, readUid: (t) => headerFacts(t).uid });
   /** What the page itself saves (its own save and its own question's input): a write of one of them is the page's text. */
@@ -282,7 +293,8 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
    * destroyed (Done, Cmd/Ctrl+E) — tells the page which text the file holds.
    */
   const saver: Saver = {
-    save: (input, o) => fileSaver.save(input, o).then((r) => { if ('ok' in r && r.ok) wrote(input); return r; }),
+    // a reader copy saves by downloading (its address cannot take the edits): never a picker, never the served notice
+    save: (input, o) => (readerMode ? fileSaver.download(input) : fileSaver.save(input, o)).then((r) => { if ('ok' in r && r.ok) wrote(input); return r; }),
     download: (input) => fileSaver.download(input),
     handleKey: () => fileSaver.handleKey(),
   };
@@ -606,8 +618,13 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     };
     for (const a of actions.filter((x) => x.placement === 'bar' && offered(x, t))) e.push(actionEntry(a, false));
     e.push(
-      { type: 'item', id: 'save', label: 'Save', icon: 'save', hint: `${modKey}S`, dot: isDirty(), run: () => { void save(); } },
-      { type: 'item', id: 'download', label: 'Download a copy', icon: 'download', run: () => { void download(); } },
+      // a reader copy has no Save of its own: its saves are downloads (Cmd/Ctrl+S too)
+      ...(readerMode
+        ? [{ type: 'item', id: 'download', label: 'Download a copy', icon: 'download', hint: `${modKey}S`, dot: isDirty(), run: () => { void save(); } } as HandleEntry]
+        : [
+          { type: 'item', id: 'save', label: 'Save', icon: 'save', hint: `${modKey}S`, dot: isDirty(), run: () => { void save(); } } as HandleEntry,
+          { type: 'item', id: 'download', label: 'Download a copy', icon: 'download', run: () => { void download(); } } as HandleEntry,
+        ]),
       { type: 'item', id: 'new', label: 'New document', icon: 'new', separator: true, run: () => { void newDocument(); } },
       { type: 'item', id: 'copy', label: 'Save as new copy', icon: 'copy', run: () => { void saveAsCopy(); } },
     );
@@ -950,6 +967,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     editorSlot.append(container);
     // mounted with the saved text, then the current one: the editor's dirty state and undo know both
     const ed = k.mountEditor(container, { text: saved }, editorContext());
+    if (readerWords) ed.setWords?.(readerWords);
     if (text !== saved) ed.setText(text);
     lockForUpdate(ed);
     editor = ed;
@@ -996,6 +1014,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
 
   function attach(ed: EditorShell): () => void {
     attached.push(ed);
+    if (readerWords) ed.setWords?.(readerWords);
     lockForUpdate(ed);
     /** The file holds `t` now (this editor's save): the page's copy follows, so it never writes an older text over it (B3). */
     const adopt = (t: string): void => {

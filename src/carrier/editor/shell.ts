@@ -352,6 +352,26 @@ export interface EditorShellOptions {
    * textarea engine shows the header as text.
    */
   foldHeader?: boolean;
+  /**
+   * (2.9.0, FC-19 §3, STATUS D-144, D-149) The host's words for the save
+   * button, the save toast and a notice above the panes (`setWords` changes
+   * them later). Default: none (the shell's own words, no notice).
+   */
+  words?: EditorWords;
+}
+
+/**
+ * (2.9.0, FC-19 §3) Host words of the editor shell. Each is plain text
+ * (spaces collapsed, trimmed; never markup). In `setWords`, `null` puts that
+ * word back to the default and a key left out keeps the current one.
+ */
+export interface EditorWords {
+  /** The Save button's label, title and accessible name (default "Save", or "Save now" with `hooks.saveStatus`). An empty string is the default. */
+  save?: string | null;
+  /** The toast after a save that worked (default "Saved." / "Download started."); `''`: no toast (the save status says it). */
+  saved?: string | null;
+  /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
+  notice?: string | null;
 }
 
 /** How an AI request went. Never rejects. */
@@ -441,6 +461,12 @@ export interface EditorShell {
   reveal(target: RevealTarget, options?: { select?: boolean }): TextRange | null;
   /** (2.7.0, FC-19 §4, STATUS D-131) Ask `hooks.saveStatus` again (the host's own save state changed). */
   refreshSaveStatus(): void;
+  /**
+   * (2.9.0, FC-19 §4, STATUS D-144, D-149) Change the host's words (see
+   * {@link EditorWords}): a key given replaces that word (`null`: back to the
+   * default), a key left out keeps it. Nothing after `destroy`.
+   */
+  setWords(words: EditorWords): void;
   isDirty(): boolean;
   /** The current text is the saved one. */
   markSaved(): void;
@@ -672,12 +698,14 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
 
   const isMac = /Mac|iPhone|iPad/.test(String(win.navigator?.platform ?? win.navigator?.userAgent ?? ''));
   const mod = isMac ? '⌘' : 'Ctrl+';
-  const button = (className: string, label: string, icon?: IconName): EdElement => {
+  const button = (className: string, label: string, icon?: IconName, onLabel?: (node: { data: string }) => void): EdElement => {
     const b = el('button', className);
     b.setAttribute('type', 'button');
     if (icon) b.append(iconElement(doc as unknown as UiDocument, icon));
     const span = el('span', 'orz-editor__label');
-    span.append(doc.createTextNode(label));
+    const node = doc.createTextNode(label);
+    onLabel?.(node);
+    span.append(node);
     b.append(span);
     b.setAttribute('aria-label', label);
     return b;
@@ -688,12 +716,28 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   let statusText: { data: string } | null = null;
   let syncButton: EdElement | null = null;
   let saveButton: EdElement | null = null;
+  /** (2.9.0) The Save button's label text (host words, `setWords`). */
+  let saveLabel: { data: string } | null = null;
   /** (2.7.0, D-132) The More button: on a narrow shell whose bar would wrap, the carrier's tools open under it. */
   let moreButton: EdElement | null = null;
   /** The bar, its view buttons (always on its first row), the carrier's slot and the status, for {@link fitBar}. */
   let barParts: { bar: EdElement; modes: EdElement; tools: EdElement; status: EdElement; label: EdElement } | null = null;
   /** (2.7.0, D-131) A host that supplies the save status words saves on its own rhythm: Save reads "Save now". */
-  const saveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
+  const defaultSaveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
+  /** (2.9.0, D-144, D-149) The host's words now (normalized; see EditorWords). */
+  const words: { save: string | null; saved: string | null; notice: string | null } = { save: null, saved: null, notice: null };
+  const plainWords = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : null);
+  {
+    const w = options.words;
+    if (w && typeof w === 'object') {
+      const save = plainWords(w.save);
+      if (save) words.save = save;
+      if (typeof w.saved === 'string') words.saved = plainWords(w.saved);
+      const notice = plainWords(w.notice);
+      if (notice) words.notice = notice;
+    }
+  }
+  const saveWord = words.save ?? defaultSaveWord;
   if (chromeLevel !== 'none') {
     const bar = el('div', 'orz-editor__bar');
     bar.setAttribute('role', 'toolbar');
@@ -724,7 +768,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     listen(syncButton, 'click', () => setScrollSync(!prefs.get('scrollSync')));
     bar.append(modes, toolbar, status, syncButton);
     // hidden while read-only (setReadOnly shows it again)
-    saveButton = button('orz-btn orz-btn--primary orz-editor__save', saveWord, 'save');
+    saveButton = button('orz-btn orz-btn--primary orz-editor__save', saveWord, 'save', (n) => { saveLabel = n; });
     saveButton.title = `${saveWord} (${mod}S)`;
     saveButton.hidden = readOnly;
     listen(saveButton, 'click', () => { void api.save(); });
@@ -796,6 +840,10 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     note.append(doc.createTextNode(`A newer version of orz wrote this document (text format ${newerFormat}; this editor knows ${maxFormat}). It is shown read-only and will not be saved here — update to edit it.`));
     container.append(note);
   }
+  // (2.9.0) the host's notice (`words.notice`), above the shell's own notices
+  const hostNoticeSlot = el('div');
+  hostNoticeSlot.hidden = true;
+  container.append(hostNoticeSlot);
   const noticeSlot = el('div');
   noticeSlot.hidden = true;
   container.append(noticeSlot);
@@ -1471,6 +1519,34 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   }
   listen(win, 'resize', () => { measure(); fitBar(); });
   measure();
+  /** (2.9.0, D-149) The Save button reads the host's word, else the shell's. */
+  const applySaveWord = (): void => {
+    const w = words.save ?? defaultSaveWord;
+    if (!saveButton || !saveLabel || saveLabel.data === w) return;
+    saveLabel.data = w;
+    saveButton.setAttribute('aria-label', w);
+    saveButton.title = `${w} (${mod}S)`;
+    fitBar();
+  };
+  /** (2.9.0) The host's notice (`words.notice`): shown, replaced or removed; Dismiss hides it until it changes. */
+  let hostNotice: EdElement | null = null;
+  const dropHostNotice = (): void => { hostNotice?.remove(); hostNotice = null; hostNoticeSlot.hidden = true; };
+  const showHostNotice = (): void => {
+    dropHostNotice();
+    if (!words.notice) return;
+    const n = el('div', 'orz-editor__notice orz-editor__notice--host');
+    n.setAttribute('id', 'orz-host-note');
+    n.setAttribute('role', 'status');
+    const text = el('span', 'orz-editor__notice-text');
+    text.append(doc.createTextNode(words.notice));
+    const close = button('orz-btn orz-btn--ghost', 'Dismiss');
+    listen(close, 'click', dropHostNotice);
+    n.append(text, close);
+    hostNoticeSlot.append(n);
+    hostNoticeSlot.hidden = false;
+    hostNotice = n;
+  };
+  if (words.notice) showHostNotice();
   fitBar();
   applyMode();
 
@@ -1529,7 +1605,9 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     updateDirty();
     if (!destroyed) emit('save', { text, via });
     // a download is handed to the browser: it has started, not necessarily finished (B-3)
-    toast(via === 'download' ? 'Download started.' : 'Saved.', 'success');
+    // (2.9.0, D-144) the host's words for it, or none ('')
+    const said = words.saved ?? (via === 'download' ? 'Download started.' : 'Saved.');
+    if (said) toast(said, 'success');
     return { ok: true, via };
   };
   const fail = (error: unknown, via?: SaveVia): SaveOutcome => {
@@ -1801,6 +1879,16 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       return { from: model.toExactOffset(d, sel.from), to: model.toExactOffset(d, sel.to) };
     },
     refreshSaveStatus() { applyStatus(); },
+    setWords(w) {
+      if (destroyed || !w || typeof w !== 'object') return;
+      if ('save' in w) words.save = plainWords(w.save) || null;
+      if ('saved' in w) words.saved = typeof w.saved === 'string' ? plainWords(w.saved) : null;
+      if ('notice' in w) {
+        const n = plainWords(w.notice) || null;
+        if (n !== words.notice) { words.notice = n; showHostNotice(); }
+      }
+      applySaveWord();
+    },
     isDirty() { updateDirty(); return dirty; },
     markSaved() { if (!destroyed) { adoptBaseline(getText()); updateDirty(); } },
     save: () => save(false),

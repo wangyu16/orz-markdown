@@ -12,6 +12,9 @@ export { twinHref, registerTwinLinks, envTwinNaming, TWIN_LINKS_RULE } from './l
 // 2.5.0: twin-link naming (FC-18 §8.2 `twinLinks`, K1) and the parser-based targets of a text (K2)
 export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
 export type { TwinNaming, TwinKind } from './naming.js';
+// 2.9.0: a reader copy (FC-18 §8.2 `readerCopy`): a file published for readers says edits stay theirs
+export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
+export type { ReaderCopy } from './reader-copy.js';
 export { includeTargets, linkTargets } from './targets.js';
 export type { LinkTarget } from './targets.js';
 export { decodeText } from './text.js';

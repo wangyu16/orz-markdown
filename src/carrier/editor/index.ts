@@ -15,7 +15,7 @@ export { createEditorShell } from './shell.js';
 export type {
   EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext,
   EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, TextEdit, EditorPreviewChannel,
-  SaveStatus, SaveStatusState, SaveTone, RevealTarget,
+  SaveStatus, SaveStatusState, SaveTone, RevealTarget, EditorWords,
 } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
 export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition, TextChange, FocusMode, HeaderFoldInfo } from './adapter.js';

@@ -54,6 +54,7 @@ markup, FC-18 §8.1):
 | `delivery` | `#orz-shell` (`inline` unless it says `cdn`) — kept by every save (B#7) |
 | `includes` | `#orz-includes` (own string values) — a page cannot resolve them again (D4) |
 | `twinLinks` | (2.5.0) `#orz-shell` `"links"`, read as `extract` reads it (normalized; absent for the family naming or an invalid value) — kept by every save, Download a copy, Save as new copy and the quiet update; New document has none (FC-18 §8.2) |
+| `readerCopy` | (2.9.0) `#orz-shell` `"readerCopy"`, read as `extract` reads it (`{}` or `{ notice }`; absent when missing or invalid) — never kept: no save, download, copy or update writes it (§4.5a, FC-18 §8.2) |
 | `engine` | `#orz-engine` without `src`: the inline bundle's exact text (null for `cdn`) |
 | `fileName` | the page path's last segment when it ends in the kind's extension, decoded; (2.5.0) else, for a page published under the file's naming (`week1.html` with `{ md: "{stem}.html" }`), its dual name (`week1.md.html`) — a saved or downloaded copy keeps a name that says its kind; else `document` + the extension |
 
@@ -392,6 +393,7 @@ read view's keys — slides' Space — then work at once).
   or no uid on either side, is still this document (shell-runtime §1 step
   3.4).
 - **Download a copy:** the current text's file through `saver.download`.
+- **A reader copy (2.9.0, §4.5a below).**
 - **New document:** `kind.newDocument()` saved as a new file
   (`Untitled<ext>`). 2.3.0: `app.newDocument({ text?, name? })` saves a
   given text instead (a kind's action — paged's "New document from
@@ -403,6 +405,33 @@ read view's keys — slides' Space — then work at once).
   `uid` (`<name> copy<ext>`, the file's includes) — each through a saver
   of its own (no remembered handle, no opened bytes, never the file's
   handle, never the host: a served page or a host gets a download).
+
+### 4.5a A reader copy (2.9.0; owner decision 2026-11-17)
+
+A file whose `#orz-shell` holds `"readerCopy"` (FC-18 §8.2: a host — a
+website builder — published it for readers) runs as a **reader copy** when
+the page is that publication: served (`http:`/`https:`), top-level, with no
+host connection. Its edits cannot go back to the page's address, so:
+
+- **Edit** opens the editor with a notice above its panes (`setWords({
+  notice })`, FC-19 §4): the file's `notice`, else the kit's words
+  (`READER_COPY_NOTICE`: "You’re editing your own copy. Changes can’t be
+  saved to this website — use “Download a copy” to keep them."). Dismiss
+  hides it. Every editor attached to the file gets the same words.
+- The editor's **Save reads "Download a copy"** (`setWords({ save })`) and
+  every save — the editor's button and Cmd/Ctrl+S, the page's save in the
+  read view — **downloads** the current text's file through the one saver
+  (its `save` is a `download`; never a picker, never the served-page
+  notice). A download marks its text saved, as any write does.
+- The handle's list has **Download a copy** (with the Cmd/Ctrl+S hint and
+  the unsaved dot) in place of Save.
+- **Nothing carries it over:** the app never passes `readerCopy` to the
+  kind's `assemble` — a downloaded file, a new copy, a new document and an
+  update are the reader's ordinary files (opened from disk they save
+  normally).
+
+A `file:` page, a framed or hosted page, or a file without the setting run
+as before.
 
 ### 4.6 Leaving with unsaved changes
 

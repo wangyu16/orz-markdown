@@ -369,6 +369,25 @@ export interface EditorShellOptions {
      * textarea engine shows the header as text.
      */
     foldHeader?: boolean;
+    /**
+     * (2.9.0, FC-19 §3, STATUS D-144, D-149) The host's words for the save
+     * button, the save toast and a notice above the panes (`setWords` changes
+     * them later). Default: none (the shell's own words, no notice).
+     */
+    words?: EditorWords;
+}
+/**
+ * (2.9.0, FC-19 §3) Host words of the editor shell. Each is plain text
+ * (spaces collapsed, trimmed; never markup). In `setWords`, `null` puts that
+ * word back to the default and a key left out keeps the current one.
+ */
+export interface EditorWords {
+    /** The Save button's label, title and accessible name (default "Save", or "Save now" with `hooks.saveStatus`). An empty string is the default. */
+    save?: string | null;
+    /** The toast after a save that worked (default "Saved." / "Download started."); `''`: no toast (the save status says it). */
+    saved?: string | null;
+    /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
+    notice?: string | null;
 }
 /** How an AI request went. Never rejects. */
 export type AiOutcome = {
@@ -493,6 +512,12 @@ export interface EditorShell {
     }): TextRange | null;
     /** (2.7.0, FC-19 §4, STATUS D-131) Ask `hooks.saveStatus` again (the host's own save state changed). */
     refreshSaveStatus(): void;
+    /**
+     * (2.9.0, FC-19 §4, STATUS D-144, D-149) Change the host's words (see
+     * {@link EditorWords}): a key given replaces that word (`null`: back to the
+     * default), a key left out keeps it. Nothing after `destroy`.
+     */
+    setWords(words: EditorWords): void;
     isDirty(): boolean;
     /** The current text is the saved one. */
     markSaved(): void;

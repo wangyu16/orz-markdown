@@ -1,4 +1,5 @@
 import { type TwinNaming } from '../naming.js';
+import { type ReaderCopy } from '../reader-copy.js';
 import type { AppDocument, AppElement, CarrierKindName, OpenedFile } from './types.js';
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */
 export declare function sourceIsland(doc: AppDocument): AppElement | null;
@@ -6,6 +7,8 @@ export declare function sourceIsland(doc: AppDocument): AppElement | null;
 export declare function shellDelivery(doc: AppDocument): 'inline' | 'cdn';
 /** (2.5.0) The file's twin-link naming (`#orz-shell` `"links"`), as `extract` reads it: undefined for the family naming or an invalid value. */
 export declare function shellTwinLinks(doc: AppDocument): TwinNaming | undefined;
+/** (2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`), as `extract` reads it: undefined when absent or invalid. */
+export declare function shellReaderCopy(doc: AppDocument): ReaderCopy | undefined;
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
 export declare function shellIncludes(doc: AppDocument): Record<string, string> | undefined;
 /**

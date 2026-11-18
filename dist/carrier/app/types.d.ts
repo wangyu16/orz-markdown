@@ -12,6 +12,7 @@
  */
 import type { HeaderChange } from '../header.js';
 import type { TwinNaming } from '../naming.js';
+import type { ReaderCopy } from '../reader-copy.js';
 import type { Extracted } from '../envelope.js';
 import type { DocumentInfo } from '../document.js';
 import type { EditorHooks, EditorShell } from '../editor/shell.js';
@@ -199,6 +200,12 @@ export interface OpenedFile {
     fileName: string;
     /** (2.5.0) The file's twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2), kept by every save; absent = the family's. */
     twinLinks?: TwinNaming;
+    /**
+     * (2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18
+     * §8.2): on a served page with no host the app runs as a reader copy
+     * (spec/carrier-app.md §2.4). Never kept by a save, a download or a copy.
+     */
+    readerCopy?: ReaderCopy;
 }
 /** Options of a kind's `assemble` (FC-19 §2). */
 export interface AppAssembleOptions {

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sourceIsland = sourceIsland;
 exports.shellDelivery = shellDelivery;
 exports.shellTwinLinks = shellTwinLinks;
+exports.shellReaderCopy = shellReaderCopy;
 exports.shellIncludes = shellIncludes;
 exports.openedFileName = openedFileName;
 exports.copyName = copyName;
@@ -19,6 +20,7 @@ exports.readOpenedFile = readOpenedFile;
  * - the resolved includes (`#orz-includes`, D4: a page cannot resolve them again);
  * - the engine (`#orz-engine` without `src`: the inline bundle's exact text);
  * - the twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2; 2.5.0);
+ * - the reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18 §8.2; 2.9.0);
  * - the file name (the page's last path segment when it names a file of this
  *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
  *   dual name back).
@@ -27,6 +29,7 @@ const read_js_1 = require("../read.js");
 const header_js_1 = require("../header.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const naming_js_1 = require("../naming.js");
+const reader_copy_js_1 = require("../reader-copy.js");
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */
 function sourceIsland(doc) {
     const el = doc.getElementById('orz-src');
@@ -52,6 +55,11 @@ function shellDelivery(doc) {
 function shellTwinLinks(doc) {
     const shell = islandJson(doc, 'orz-shell');
     return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, naming_js_1.readTwinNaming)(shell.links) : null) ?? undefined;
+}
+/** (2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`), as `extract` reads it: undefined when absent or invalid. */
+function shellReaderCopy(doc) {
+    const shell = islandJson(doc, 'orz-shell');
+    return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, reader_copy_js_1.readReaderCopy)(shell.readerCopy) : null) ?? undefined;
 }
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
 function shellIncludes(doc) {
@@ -105,6 +113,7 @@ function readOpenedFile(doc, kind) {
     const engine = engineEl && String(engineEl.tagName).toUpperCase() === 'SCRIPT' && !engineEl.hasAttribute('src') ? engineEl.textContent : null;
     const includes = shellIncludes(doc);
     const twinLinks = shellTwinLinks(doc);
+    const readerCopy = shellReaderCopy(doc);
     return {
         text,
         ...(uid && header_js_1.UID_PATTERN.test(uid) ? { uid } : {}),
@@ -114,6 +123,7 @@ function readOpenedFile(doc, kind) {
         engine: engine || null,
         fileName: openedFileName(doc.defaultView?.location, kind, twinLinks),
         ...(twinLinks ? { twinLinks } : {}),
+        ...(readerCopy ? { readerCopy } : {}),
     };
 }
 //# sourceMappingURL=file.js.map

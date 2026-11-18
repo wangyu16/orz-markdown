@@ -10,6 +10,12 @@ family naming (§8.1, §8.2, §8.3). A file assembled without it — every file
 made before — is byte-identical to before; a shell that does not know it reads
 such a file as the family naming.
 
+**Minor revision, orz-markdown 2.9.0 (additive; owner decision of
+2026-11-17):** the assembly option `readerCopy`, stored in `#orz-shell` as
+`"readerCopy"` only when given (§8.1, §8.2): the file is published for
+readers, so its editor says edits cannot be saved back to its address. A
+file assembled without it is byte-identical to before.
+
 **Owner decisions are collected in §12 (all taken 2026-10-05).**
 
 ## 1. Purpose
@@ -298,6 +304,7 @@ FC-01 unchanged.
   <script type="application/orz-meta+json" id="orz-meta">…</script>
   <script type="application/json" id="orz-shell">{"kind":"…","format":1,"shell":"…","delivery":"inline"}</script>
   <!-- 2.5.0: with a naming other than the family's, #orz-shell ends …,"delivery":"…","links":{"md":"{stem}.html"}} -->
+  <!-- 2.9.0: a reader copy ends it …,"readerCopy":{} or …,"readerCopy":{"notice":"…"}} (after "links") -->
   … shell assets …
 </head>
 <body>
@@ -387,6 +394,21 @@ not a valid naming). Every re-assembly in the browser carries the file's
 naming over exactly, as it carries `includes` (§8.3): the in-file save, the
 quiet update (spec/shell-runtime.md §7.2, which refuses a new file that does
 not hold it exactly) and the website's verify.html.
+
+`readerCopy` (orz-markdown 2.9.0, additive; owner decision 2026-11-17) says
+the file is **published for readers** (a website's page): `true` (the kit's
+words) or `{ notice }` — the host's words, plain text (never markup), runs
+of spaces and line breaks collapsed and trimmed, 1–300 characters, no
+control character. Absent, `false` or `null`: nothing is written (a file
+without it is byte for byte what 2.8 writes); anything else is refused
+(`assemble` throws). It is written into `#orz-shell` as `"readerCopy"`
+(after `delivery` and `links`): `{}` or `{"notice":"…"}`. It is part of the
+options `o` of the laws (§2). `extract` returns it as `readerCopy` (absent
+when missing or invalid). Unlike `twinLinks` it is **never carried over**:
+the in-file runtime honours it only on a served, top-level page with no
+host (spec/carrier-app.md §4.5a: the editor's notice, Save as "Download a
+copy") and none of its saves, downloads, copies or updates writes it — the
+reader's downloaded copy is an ordinary file.
 
 ### 8.3 Links, assets, includes
 

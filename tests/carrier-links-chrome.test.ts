@@ -1,6 +1,7 @@
 /**
  * Twin-link naming in real Chrome (orz-markdown 2.5.0, K1 of the orz-site
- * design; FC-18 §8.2/§8.3): claims A.33 and M.44 in notes/CLAIMS.md. The stub
+ * design; FC-18 §8.2/§8.3): claims A.33 and M.44 in notes/CLAIMS.md; and
+ * (2.9.0) a reader copy served over http, A.35. The stub
  * carrier (tests/conformance-stub/, built here from this checkout's kit) is the
  * carrier: a file it assembled with a naming, opened under the name the naming
  * gives it, renders its links — in the read view and in the editor's preview —
@@ -92,6 +93,61 @@ describe('a file with a twin-link naming, in Chrome', () => {
       expect((await pageRecords(page, 'picker')).map((r) => (r.data as { suggestedName: string }).suggestedName)).toEqual(['week1.md.html']);
     } finally {
       await ctx.close();
+    }
+  }, 120_000);
+});
+
+// ── a reader copy on a website (2.9.0) ───────────────────────────────────
+
+describe('a reader copy served over http, in Chrome', () => {
+  it('[A.35] the stub\'s file assembled with readerCopy and served over http: the pencil\'s list offers "Download a copy" and no Save; Edit shows the notice above the panes and Save reading "Download a copy"; Save downloads the edited file (no picker, no served-page warning) whose text is the edited text and which carries no readerCopy; the same file opened from disk is an ordinary file (no notice, Save)', async () => {
+    if (!browser) return;
+    const http = await import('node:http');
+    const NOTE = 'You’re editing your own copy. Changes can’t be saved to this website — use “Download a copy” to keep them.';
+    const html = stubAssemble(TEXT, { version: '1.1.0', variant: 'good', delivery: 'inline', engineSource: stub.code, readerCopy: true });
+    expect(extract(html)!.readerCopy).toEqual({});
+    const server = http.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html); });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const port = (server.address() as { port: number }).port;
+    const ctx = await browser.newContext({ acceptDownloads: true });
+    await ctx.addInitScript({ content: initScript('stub') });
+    const page: Page = await ctx.newPage();
+    const editorState = `(function () { var ed = globalThis.OrzCarrier.standalone.editor(); var r = ed.root; var n = r.querySelector('#orz-host-note'); var s = r.querySelector('.orz-editor__save'); var panes = r.querySelector('.orz-editor__panes'); return { note: n ? n.textContent : null, above: !!(n && panes && (n.compareDocumentPosition(panes) & 4)), visible: !!(n && n.getBoundingClientRect().height > 0), save: s.getAttribute('aria-label'), label: s.textContent }; })()`;
+    try {
+      await page.goto(`http://127.0.0.1:${port}/course/week1.md.html`);
+      await page.waitForFunction('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)', undefined, { timeout: 20_000 });
+      const items = await page.evaluate(`(function () { var a = globalThis.OrzCarrier.standalone; a.menu.open(); var out = Array.from(a.root.querySelectorAll('.orz-handle__list > .orz-handle__item .orz-handle__label')).map(function (x) { return x.textContent; }); a.menu.close(); return out; })()`) as string[];
+      expect(items).toContain('Download a copy');
+      expect(items).not.toContain('Save');
+      await page.evaluate('globalThis.OrzCarrier.standalone.edit().ready');
+      const st = await page.evaluate(editorState) as { note: string; above: boolean; visible: boolean; save: string; label: string };
+      expect(st.note).toContain(NOTE);
+      expect([st.above, st.visible, st.save]).toEqual([true, true, 'Download a copy']);
+      expect(st.label).toContain('Download a copy');
+      const edited = `${TEXT}\nMy notes.\n`;
+      await page.evaluate(`globalThis.OrzCarrier.standalone.editor().setText(${JSON.stringify(edited)})`);
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 20_000 }),
+        page.evaluate(`globalThis.OrzCarrier.standalone.editor().root.querySelector('.orz-editor__save').click()`),
+      ]);
+      const path = await download.path();
+      const saved = readFileSync(path, 'utf8');
+      expect(download.suggestedFilename()).toBe('week1.md.html');
+      expect(extract(saved)!.text === edited).toBe(true);
+      expect(extract(saved)!.readerCopy).toBeUndefined();
+      expect(saved === stubAssemble(edited, { version: '1.1.0', variant: 'good', delivery: 'inline', engineSource: stub.code })).toBe(true);
+      expect(await pageRecords(page, 'picker')).toEqual([]);
+      const toasts = await page.evaluate(`Array.from(globalThis.OrzCarrier.standalone.root.querySelectorAll('.orz-toast__message')).concat(Array.from(globalThis.OrzCarrier.standalone.editor().root.querySelectorAll('.orz-toast__message'))).map(function (n) { return n.textContent; }).join(' | ')`) as string;
+      expect(toasts).not.toContain('cannot be saved over');
+      // the same bytes opened from disk: an ordinary file
+      await page.goto(write('week1.md.html', html));
+      await page.waitForFunction('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)', undefined, { timeout: 20_000 });
+      await page.evaluate('globalThis.OrzCarrier.standalone.edit().ready');
+      const local = await page.evaluate(editorState) as { note: string | null; save: string };
+      expect([local.note, local.save]).toEqual([null, 'Save']);
+    } finally {
+      await ctx.close();
+      await new Promise<void>((r) => server.close(() => r()));
     }
   }, 120_000);
 });

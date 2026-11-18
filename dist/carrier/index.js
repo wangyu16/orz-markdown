@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.linkTargets = exports.includeTargets = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.TWIN_LINKS_RULE = exports.envTwinNaming = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
-exports.blockFingerprint = exports.canonicalize = exports.splitBlocks = exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = void 0;
+exports.hasRawAttr = exports.rawAttr = exports.rawElements = exports.sha256 = exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.skillUrl = exports.readIslandFromDom = exports.extract = exports.assembleEnvelope = exports.decodeText = exports.linkTargets = exports.includeTargets = exports.READER_COPY_NOTICE_MAX = exports.READER_COPY_NOTICE = exports.readerCopyNotice = exports.readReaderCopy = exports.readerCopy = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.TWIN_LINKS_RULE = exports.envTwinNaming = exports.registerTwinLinks = exports.twinHref = exports.SETTING_DEFAULTS = exports.mintUid = exports.twinName = exports.kindFromFilename = exports.readDocument = exports.UID_PATTERN = exports.WRITER_KEY = exports.KIND_HEADER_KEYS = exports.COMMON_HEADER_KEYS = exports.lintHeader = exports.removeHeaderKey = exports.setHeaderValue = exports.normalizeHeader = exports.editHeader = exports.withoutHeader = exports.readHeader = void 0;
+exports.blockFingerprint = exports.canonicalize = exports.splitBlocks = exports.twinCheck = exports.heldText = exports.storedText = exports.assembledStructure = exports.scriptElement = exports.shellWord = exports.looksHtml = exports.kitParser = exports.readLegacyIsland = exports.generatorOf = exports.decodeEntities = void 0;
 /**
  * The orz carrier kit core (FC-18 text format 1): the document header, the
  * document facts, twin links and the assembled-file envelope. Exported to
@@ -40,6 +40,13 @@ Object.defineProperty(exports, "isTwinTemplate", { enumerable: true, get: functi
 Object.defineProperty(exports, "twinFileName", { enumerable: true, get: function () { return naming_js_1.twinFileName; } });
 Object.defineProperty(exports, "textNameOf", { enumerable: true, get: function () { return naming_js_1.textNameOf; } });
 Object.defineProperty(exports, "FAMILY_NAMING", { enumerable: true, get: function () { return naming_js_1.FAMILY_NAMING; } });
+// 2.9.0: a reader copy (FC-18 §8.2 `readerCopy`): a file published for readers says edits stay theirs
+var reader_copy_js_1 = require("./reader-copy.js");
+Object.defineProperty(exports, "readerCopy", { enumerable: true, get: function () { return reader_copy_js_1.readerCopy; } });
+Object.defineProperty(exports, "readReaderCopy", { enumerable: true, get: function () { return reader_copy_js_1.readReaderCopy; } });
+Object.defineProperty(exports, "readerCopyNotice", { enumerable: true, get: function () { return reader_copy_js_1.readerCopyNotice; } });
+Object.defineProperty(exports, "READER_COPY_NOTICE", { enumerable: true, get: function () { return reader_copy_js_1.READER_COPY_NOTICE; } });
+Object.defineProperty(exports, "READER_COPY_NOTICE_MAX", { enumerable: true, get: function () { return reader_copy_js_1.READER_COPY_NOTICE_MAX; } });
 var targets_js_1 = require("./targets.js");
 Object.defineProperty(exports, "includeTargets", { enumerable: true, get: function () { return targets_js_1.includeTargets; } });
 Object.defineProperty(exports, "linkTargets", { enumerable: true, get: function () { return targets_js_1.linkTargets; } });

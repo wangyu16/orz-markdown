@@ -11,12 +11,15 @@ import { asciiLower } from '../ascii.js';
 import { unescapeScriptText } from '../html.js';
 import type { Kind } from './document.js';
 import { readTwinNaming, type TwinNaming } from './naming.js';
+import { readReaderCopy, type ReaderCopy } from './reader-copy.js';
 
 export { escapeHtml, escapeAttr, jsonForScript, escapeScriptText, unescapeScriptText } from '../html.js';
 export { decodeText, eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
 export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinHref, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
 export type { TwinNaming, TwinKind } from './naming.js';
+export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
+export type { ReaderCopy } from './reader-copy.js';
 
 /** What {@link extract} reads back. */
 export interface Extracted {
@@ -36,6 +39,12 @@ export interface Extracted {
    * or one that is not a valid naming).
    */
   twinLinks?: TwinNaming;
+  /**
+   * (2.9.0) The reader-copy setting stored in `#orz-shell` as `"readerCopy"`
+   * (FC-18 §8.2), normalized (`{}` or `{ notice }`); absent when the file has
+   * none or an invalid one.
+   */
+  readerCopy?: ReaderCopy;
 }
 
 /**
@@ -236,7 +245,8 @@ function isKind(v: unknown): v is Kind {
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
  * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
  * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
- * other than the family's.
+ * other than the family's; (2.9.0) `readerCopy` from `#orz-shell`
+ * `"readerCopy"` when it is valid.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -271,6 +281,8 @@ export function extract(html: string): Extracted | null {
   };
   const links = readTwinNaming(shellData['links']);
   if (links) result.twinLinks = links;
+  const reader = readReaderCopy(shellData['readerCopy']);
+  if (reader) result.readerCopy = reader;
   // The includes island follows the source island (shell markup before it is not consulted).
   const inc = findScript(html, INCLUDES_ISLAND_ID, Infinity, island.content[1]);
   if (inc) {

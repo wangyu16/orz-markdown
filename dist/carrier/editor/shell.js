@@ -209,13 +209,15 @@ function createEditorShell(element, options) {
     root.append(container);
     const isMac = /Mac|iPhone|iPad/.test(String(win.navigator?.platform ?? win.navigator?.userAgent ?? ''));
     const mod = isMac ? '⌘' : 'Ctrl+';
-    const button = (className, label, icon) => {
+    const button = (className, label, icon, onLabel) => {
         const b = el('button', className);
         b.setAttribute('type', 'button');
         if (icon)
             b.append((0, chrome_js_1.iconElement)(doc, icon));
         const span = el('span', 'orz-editor__label');
-        span.append(doc.createTextNode(label));
+        const node = doc.createTextNode(label);
+        onLabel?.(node);
+        span.append(node);
         b.append(span);
         b.setAttribute('aria-label', label);
         return b;
@@ -225,12 +227,31 @@ function createEditorShell(element, options) {
     let statusText = null;
     let syncButton = null;
     let saveButton = null;
+    /** (2.9.0) The Save button's label text (host words, `setWords`). */
+    let saveLabel = null;
     /** (2.7.0, D-132) The More button: on a narrow shell whose bar would wrap, the carrier's tools open under it. */
     let moreButton = null;
     /** The bar, its view buttons (always on its first row), the carrier's slot and the status, for {@link fitBar}. */
     let barParts = null;
     /** (2.7.0, D-131) A host that supplies the save status words saves on its own rhythm: Save reads "Save now". */
-    const saveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
+    const defaultSaveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
+    /** (2.9.0, D-144, D-149) The host's words now (normalized; see EditorWords). */
+    const words = { save: null, saved: null, notice: null };
+    const plainWords = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : null);
+    {
+        const w = options.words;
+        if (w && typeof w === 'object') {
+            const save = plainWords(w.save);
+            if (save)
+                words.save = save;
+            if (typeof w.saved === 'string')
+                words.saved = plainWords(w.saved);
+            const notice = plainWords(w.notice);
+            if (notice)
+                words.notice = notice;
+        }
+    }
+    const saveWord = words.save ?? defaultSaveWord;
     if (chromeLevel !== 'none') {
         const bar = el('div', 'orz-editor__bar');
         bar.setAttribute('role', 'toolbar');
@@ -261,7 +282,7 @@ function createEditorShell(element, options) {
         listen(syncButton, 'click', () => setScrollSync(!prefs.get('scrollSync')));
         bar.append(modes, toolbar, status, syncButton);
         // hidden while read-only (setReadOnly shows it again)
-        saveButton = button('orz-btn orz-btn--primary orz-editor__save', saveWord, 'save');
+        saveButton = button('orz-btn orz-btn--primary orz-editor__save', saveWord, 'save', (n) => { saveLabel = n; });
         saveButton.title = `${saveWord} (${mod}S)`;
         saveButton.hidden = readOnly;
         listen(saveButton, 'click', () => { void api.save(); });
@@ -346,6 +367,10 @@ function createEditorShell(element, options) {
         note.append(doc.createTextNode(`A newer version of orz wrote this document (text format ${newerFormat}; this editor knows ${maxFormat}). It is shown read-only and will not be saved here — update to edit it.`));
         container.append(note);
     }
+    // (2.9.0) the host's notice (`words.notice`), above the shell's own notices
+    const hostNoticeSlot = el('div');
+    hostNoticeSlot.hidden = true;
+    container.append(hostNoticeSlot);
     const noticeSlot = el('div');
     noticeSlot.hidden = true;
     container.append(noticeSlot);
@@ -1232,6 +1257,37 @@ function createEditorShell(element, options) {
     }
     listen(win, 'resize', () => { measure(); fitBar(); });
     measure();
+    /** (2.9.0, D-149) The Save button reads the host's word, else the shell's. */
+    const applySaveWord = () => {
+        const w = words.save ?? defaultSaveWord;
+        if (!saveButton || !saveLabel || saveLabel.data === w)
+            return;
+        saveLabel.data = w;
+        saveButton.setAttribute('aria-label', w);
+        saveButton.title = `${w} (${mod}S)`;
+        fitBar();
+    };
+    /** (2.9.0) The host's notice (`words.notice`): shown, replaced or removed; Dismiss hides it until it changes. */
+    let hostNotice = null;
+    const dropHostNotice = () => { hostNotice?.remove(); hostNotice = null; hostNoticeSlot.hidden = true; };
+    const showHostNotice = () => {
+        dropHostNotice();
+        if (!words.notice)
+            return;
+        const n = el('div', 'orz-editor__notice orz-editor__notice--host');
+        n.setAttribute('id', 'orz-host-note');
+        n.setAttribute('role', 'status');
+        const text = el('span', 'orz-editor__notice-text');
+        text.append(doc.createTextNode(words.notice));
+        const close = button('orz-btn orz-btn--ghost', 'Dismiss');
+        listen(close, 'click', dropHostNotice);
+        n.append(text, close);
+        hostNoticeSlot.append(n);
+        hostNoticeSlot.hidden = false;
+        hostNotice = n;
+    };
+    if (words.notice)
+        showHostNotice();
     fitBar();
     applyMode();
     // ── save ──
@@ -1301,7 +1357,10 @@ function createEditorShell(element, options) {
         if (!destroyed)
             emit('save', { text, via });
         // a download is handed to the browser: it has started, not necessarily finished (B-3)
-        toast(via === 'download' ? 'Download started.' : 'Saved.', 'success');
+        // (2.9.0, D-144) the host's words for it, or none ('')
+        const said = words.saved ?? (via === 'download' ? 'Download started.' : 'Saved.');
+        if (said)
+            toast(said, 'success');
         return { ok: true, via };
     };
     const fail = (error, via) => {
@@ -1662,6 +1721,22 @@ function createEditorShell(element, options) {
             return { from: model.toExactOffset(d, sel.from), to: model.toExactOffset(d, sel.to) };
         },
         refreshSaveStatus() { applyStatus(); },
+        setWords(w) {
+            if (destroyed || !w || typeof w !== 'object')
+                return;
+            if ('save' in w)
+                words.save = plainWords(w.save) || null;
+            if ('saved' in w)
+                words.saved = typeof w.saved === 'string' ? plainWords(w.saved) : null;
+            if ('notice' in w) {
+                const n = plainWords(w.notice) || null;
+                if (n !== words.notice) {
+                    words.notice = n;
+                    showHostNotice();
+                }
+            }
+            applySaveWord();
+        },
         isDirty() { updateDirty(); return dirty; },
         markSaved() { if (!destroyed) {
             adoptBaseline(getText());

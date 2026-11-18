@@ -11,6 +11,8 @@ export type { Kind, DocumentInfo, ReadDocumentOptions, KitToken } from './docume
 export { twinHref, registerTwinLinks, envTwinNaming, TWIN_LINKS_RULE } from './links.js';
 export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
 export type { TwinNaming, TwinKind } from './naming.js';
+export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
+export type { ReaderCopy } from './reader-copy.js';
 export { includeTargets, linkTargets } from './targets.js';
 export type { LinkTarget } from './targets.js';
 export { decodeText } from './text.js';

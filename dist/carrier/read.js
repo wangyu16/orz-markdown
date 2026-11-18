@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.READER_COPY_NOTICE_MAX = exports.READER_COPY_NOTICE = exports.readerCopyNotice = exports.readReaderCopy = exports.readerCopy = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
 exports.readIslandFromDom = readIslandFromDom;
 exports.reservedIdIn = reservedIdIn;
 exports.extract = extract;
@@ -16,6 +16,7 @@ exports.extract = extract;
 const ascii_js_1 = require("../ascii.js");
 const html_js_1 = require("../html.js");
 const naming_js_1 = require("./naming.js");
+const reader_copy_js_1 = require("./reader-copy.js");
 var html_js_2 = require("../html.js");
 Object.defineProperty(exports, "escapeHtml", { enumerable: true, get: function () { return html_js_2.escapeHtml; } });
 Object.defineProperty(exports, "escapeAttr", { enumerable: true, get: function () { return html_js_2.escapeAttr; } });
@@ -36,6 +37,12 @@ Object.defineProperty(exports, "twinHref", { enumerable: true, get: function () 
 Object.defineProperty(exports, "twinFileName", { enumerable: true, get: function () { return naming_js_2.twinFileName; } });
 Object.defineProperty(exports, "textNameOf", { enumerable: true, get: function () { return naming_js_2.textNameOf; } });
 Object.defineProperty(exports, "FAMILY_NAMING", { enumerable: true, get: function () { return naming_js_2.FAMILY_NAMING; } });
+var reader_copy_js_2 = require("./reader-copy.js");
+Object.defineProperty(exports, "readerCopy", { enumerable: true, get: function () { return reader_copy_js_2.readerCopy; } });
+Object.defineProperty(exports, "readReaderCopy", { enumerable: true, get: function () { return reader_copy_js_2.readReaderCopy; } });
+Object.defineProperty(exports, "readerCopyNotice", { enumerable: true, get: function () { return reader_copy_js_2.readerCopyNotice; } });
+Object.defineProperty(exports, "READER_COPY_NOTICE", { enumerable: true, get: function () { return reader_copy_js_2.READER_COPY_NOTICE; } });
+Object.defineProperty(exports, "READER_COPY_NOTICE_MAX", { enumerable: true, get: function () { return reader_copy_js_2.READER_COPY_NOTICE_MAX; } });
 /**
  * The npm package of each kind's carrier (its agent skill ships there; its
  * browser bundle and release manifest are `<package>-browser`). Hard-coded:
@@ -231,7 +238,8 @@ function isKind(v) {
  * and delivery from `#orz-shell` (falling back to `data-orz-kind`,
  * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
  * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
- * other than the family's.
+ * other than the family's; (2.9.0) `readerCopy` from `#orz-shell`
+ * `"readerCopy"` when it is valid.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -269,6 +277,9 @@ function extract(html) {
     const links = (0, naming_js_1.readTwinNaming)(shellData['links']);
     if (links)
         result.twinLinks = links;
+    const reader = (0, reader_copy_js_1.readReaderCopy)(shellData['readerCopy']);
+    if (reader)
+        result.readerCopy = reader;
     // The includes island follows the source island (shell markup before it is not consulted).
     const inc = findScript(html, exports.INCLUDES_ISLAND_ID, Infinity, island.content[1]);
     if (inc) {

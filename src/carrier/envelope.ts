@@ -25,10 +25,12 @@ import { renderDocMetaHead, renderDocMetaIsland } from '../doc-meta.js';
 import { readDocument, type Kind } from './document.js';
 import { eolStyle, hasLoneSurrogate } from './text.js';
 import { twinNaming, type TwinNaming } from './naming.js';
+import { readerCopy, type ReaderCopy } from './reader-copy.js';
 import { reservedIdIn, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 
 export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
+export type { ReaderCopy } from './reader-copy.js';
 
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
@@ -54,6 +56,17 @@ export interface ShellParts {
    * 2.5.0. An invalid naming throws.
    */
   twinLinks?: TwinNaming | 'family' | null;
+  /**
+   * (2.9.0) A reader copy (FC-18 §8.2): the file is published for readers (a
+   * website's page), so its in-file editor says at once that edits cannot be
+   * saved back to the page's address and offers "Download a copy"
+   * (spec/carrier-app.md §4.5a). `true` (the kit's words) or `{ notice }` (the
+   * host's words, plain text), normalized with `readerCopy` and stored in
+   * `#orz-shell` as `"readerCopy"`; absent, `false` or `null` write nothing,
+   * so a file without it is byte-identical to one assembled before 2.9.0.
+   * An invalid value throws.
+   */
+  readerCopy?: ReaderCopy | boolean | null;
 }
 
 
@@ -88,7 +101,8 @@ function sortedJson(record: Record<string, string>): string {
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
  * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
- * twin-link naming, when it is not the family's; 2.5.0); the shell's head;
+ * twin-link naming, when it is not the family's; 2.5.0; and `readerCopy`,
+ * 2.9.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.
@@ -107,13 +121,14 @@ export function assembleEnvelope(text: string, parts: ShellParts): string {
     if (bad) throw new Error(`orz carrier: parts.${name} holds an element with id "${bad}", which the envelope reserves`);
   }
   const links = twinNaming(parts.twinLinks ?? null);
+  const reader = readerCopy(parts.readerCopy ?? null);
   const doc = readDocument(text, { kind: parts.kind });
   if (doc.format > 1) throw new Error(`orz carrier: the header says format ${doc.format}, a newer format than this release can save — update to the release that wrote it`);
   const kind = parts.kind;
   const bom = text.charCodeAt(0) === 0xfeff;
   const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
   const eol = eolStyle(bom ? text.slice(1) : text);
-  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}) });
+  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}), ...(reader ? { readerCopy: reader } : {}) });
   const out: string[] = [
     '<!doctype html>',
     `<html lang="${escapeAttr(doc.lang)}" data-orz-kind="${escapeAttr(kind)}">`,
