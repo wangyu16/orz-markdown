@@ -7,28 +7,26 @@
  *
  * The value is DATA the file carries: `{}` (the kit's words) or
  * `{ "notice": "…" }` (the host's words — plain text, never markup).
- * Parser-free and import-free: `extract`, the envelope and the carrier app
- * use it without loading the Markdown parser.
+ * The rule itself is `readReaderCopy` in `read.ts` (small and message-free,
+ * so the parser-free reader, the update and the shell carry only it); this
+ * module adds the assembly side — `readerCopy`, which throws with a reason —
+ * and the kit's words. Parser-free.
  */
-/** A file's reader-copy setting: `notice` is the host's words, else the kit's default. */
-export interface ReaderCopy {
-    notice?: string;
-}
-/** Longest notice accepted (a sentence or two, not a document). */
-export declare const READER_COPY_NOTICE_MAX = 300;
+import { readReaderCopy, READER_COPY_NOTICE_MAX, type ReaderCopy } from './read.js';
+export { readReaderCopy, READER_COPY_NOTICE_MAX };
+export type { ReaderCopy };
 /** The kit's words when a file has no notice of its own. */
 export declare const READER_COPY_NOTICE = "You\u2019re editing your own copy. Changes can\u2019t be saved to this website \u2014 use \u201CDownload a copy\u201D to keep them.";
 /**
- * Validate and normalize a reader-copy setting: `null` for none (`undefined`,
- * `null`, `false`); `{}` for `true` or `{}` (the kit's words); `{ notice }`
- * for an object with a notice — its runs of spaces, tabs and line breaks
- * collapsed to one space and trimmed, 1 to {@link READER_COPY_NOTICE_MAX}
- * characters, no other control character. Throws a `TypeError` for anything
- * else (an unknown key, a notice that is not such a string, another type).
+ * Validate and normalize a reader-copy setting for assembly: `null` for none
+ * (`undefined`, `null`, `false`); otherwise exactly what `readReaderCopy`
+ * reads (`{}` for `true` or `{}`; `{ notice }` with its runs of spaces, tabs
+ * and line breaks collapsed and trimmed, 1 to {@link READER_COPY_NOTICE_MAX}
+ * UTF-16 code units, at least one visible character, no control, format —
+ * but the zero-width (non-)joiner — or unpaired surrogate character). Throws
+ * a `TypeError` with the reason for anything else.
  */
 export declare function readerCopy(value: unknown): ReaderCopy | null;
-/** Like {@link readerCopy}, but `null` for an invalid value instead of throwing: for values read from a file. */
-export declare function readReaderCopy(value: unknown): ReaderCopy | null;
 /** The words a reader sees for a (normalized or raw) setting: its notice, else the kit's. */
 export declare function readerCopyNotice(value: ReaderCopy | null | undefined): string;
 //# sourceMappingURL=reader-copy.d.ts.map

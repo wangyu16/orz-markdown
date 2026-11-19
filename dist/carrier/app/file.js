@@ -29,7 +29,6 @@ const read_js_1 = require("../read.js");
 const header_js_1 = require("../header.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const naming_js_1 = require("../naming.js");
-const reader_copy_js_1 = require("../reader-copy.js");
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */
 function sourceIsland(doc) {
     const el = doc.getElementById('orz-src');
@@ -59,7 +58,7 @@ function shellTwinLinks(doc) {
 /** (2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`), as `extract` reads it: undefined when absent or invalid. */
 function shellReaderCopy(doc) {
     const shell = islandJson(doc, 'orz-shell');
-    return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, reader_copy_js_1.readReaderCopy)(shell.readerCopy) : null) ?? undefined;
+    return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, read_js_1.readReaderCopy)(shell.readerCopy) : null) ?? undefined;
 }
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
 function shellIncludes(doc) {

@@ -379,12 +379,17 @@ export interface EditorShellOptions {
 /**
  * (2.9.0, FC-19 §3) Host words of the editor shell. Each is plain text
  * (spaces collapsed, trimmed; never markup). In `setWords`, `null` puts that
- * word back to the default and a key left out keeps the current one.
+ * word back to the default and a key left out (or `undefined`) keeps the
+ * current one.
  */
 export interface EditorWords {
     /** The Save button's label, title and accessible name (default "Save", or "Save now" with `hooks.saveStatus`). An empty string is the default. */
     save?: string | null;
-    /** The toast after a save that worked (default "Saved." / "Download started."); `''`: no toast (the save status says it). */
+    /**
+     * The toast after a save that went through the host — its `hooks.save` or the
+     * host protocol — (default "Saved."); `''`: no toast (the save status says it).
+     * A save that went elsewhere (a file, a download) keeps the shell's words.
+     */
     saved?: string | null;
     /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
     notice?: string | null;
@@ -515,7 +520,7 @@ export interface EditorShell {
     /**
      * (2.9.0, FC-19 §4, STATUS D-144, D-149) Change the host's words (see
      * {@link EditorWords}): a key given replaces that word (`null`: back to the
-     * default), a key left out keeps it. Nothing after `destroy`.
+     * default), a key left out or `undefined` keeps it. Nothing after `destroy`.
      */
     setWords(words: EditorWords): void;
     isDirty(): boolean;

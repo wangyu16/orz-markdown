@@ -363,12 +363,17 @@ export interface EditorShellOptions {
 /**
  * (2.9.0, FC-19 §3) Host words of the editor shell. Each is plain text
  * (spaces collapsed, trimmed; never markup). In `setWords`, `null` puts that
- * word back to the default and a key left out keeps the current one.
+ * word back to the default and a key left out (or `undefined`) keeps the
+ * current one.
  */
 export interface EditorWords {
   /** The Save button's label, title and accessible name (default "Save", or "Save now" with `hooks.saveStatus`). An empty string is the default. */
   save?: string | null;
-  /** The toast after a save that worked (default "Saved." / "Download started."); `''`: no toast (the save status says it). */
+  /**
+   * The toast after a save that went through the host — its `hooks.save` or the
+   * host protocol — (default "Saved."); `''`: no toast (the save status says it).
+   * A save that went elsewhere (a file, a download) keeps the shell's words.
+   */
   saved?: string | null;
   /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
   notice?: string | null;
@@ -464,7 +469,7 @@ export interface EditorShell {
   /**
    * (2.9.0, FC-19 §4, STATUS D-144, D-149) Change the host's words (see
    * {@link EditorWords}): a key given replaces that word (`null`: back to the
-   * default), a key left out keeps it. Nothing after `destroy`.
+   * default), a key left out or `undefined` keeps it. Nothing after `destroy`.
    */
   setWords(words: EditorWords): void;
   isDirty(): boolean;
@@ -1605,8 +1610,10 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     updateDirty();
     if (!destroyed) emit('save', { text, via });
     // a download is handed to the browser: it has started, not necessarily finished (B-3)
-    // (2.9.0, D-144) the host's words for it, or none ('')
-    const said = words.saved ?? (via === 'download' ? 'Download started.' : 'Saved.');
+    // (2.9.0, D-144) the host's words for a save that went through the host (its hook or the host
+    // protocol), or none (''); any other save — a download fallback above all — keeps the shell's words
+    const hosted = via === 'hook' || via === 'host';
+    const said = (hosted ? words.saved : null) ?? (via === 'download' ? 'Download started.' : 'Saved.');
     if (said) toast(said, 'success');
     return { ok: true, via };
   };
@@ -1881,9 +1888,10 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     refreshSaveStatus() { applyStatus(); },
     setWords(w) {
       if (destroyed || !w || typeof w !== 'object') return;
-      if ('save' in w) words.save = plainWords(w.save) || null;
-      if ('saved' in w) words.saved = typeof w.saved === 'string' ? plainWords(w.saved) : null;
-      if ('notice' in w) {
+      // a key left out — or given as undefined — keeps its word; null (or empty) puts it back
+      if (w.save !== undefined) words.save = plainWords(w.save) || null;
+      if (w.saved !== undefined) words.saved = typeof w.saved === 'string' ? plainWords(w.saved) : null;
+      if (w.notice !== undefined) {
         const n = plainWords(w.notice) || null;
         if (n !== words.notice) { words.notice = n; showHostNotice(); }
       }

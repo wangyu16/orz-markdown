@@ -15,11 +15,10 @@
  *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
  *   dual name back).
  */
-import { readIslandFromDom } from '../read.js';
+import { readIslandFromDom, readReaderCopy, type ReaderCopy } from '../read.js';
 import { readHeader, UID_PATTERN } from '../header.js';
 import { KIND_EXTENSIONS } from '../shell/protocol.js';
 import { readTwinNaming, textNameOf, twinFileName, type TwinNaming } from '../naming.js';
-import { readReaderCopy, type ReaderCopy } from '../reader-copy.js';
 import type { AppDocument, AppElement, CarrierKindName, OpenedFile } from './types.js';
 
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */

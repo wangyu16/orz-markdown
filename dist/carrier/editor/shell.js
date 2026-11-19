@@ -1357,8 +1357,10 @@ function createEditorShell(element, options) {
         if (!destroyed)
             emit('save', { text, via });
         // a download is handed to the browser: it has started, not necessarily finished (B-3)
-        // (2.9.0, D-144) the host's words for it, or none ('')
-        const said = words.saved ?? (via === 'download' ? 'Download started.' : 'Saved.');
+        // (2.9.0, D-144) the host's words for a save that went through the host (its hook or the host
+        // protocol), or none (''); any other save — a download fallback above all — keeps the shell's words
+        const hosted = via === 'hook' || via === 'host';
+        const said = (hosted ? words.saved : null) ?? (via === 'download' ? 'Download started.' : 'Saved.');
         if (said)
             toast(said, 'success');
         return { ok: true, via };
@@ -1724,11 +1726,12 @@ function createEditorShell(element, options) {
         setWords(w) {
             if (destroyed || !w || typeof w !== 'object')
                 return;
-            if ('save' in w)
+            // a key left out — or given as undefined — keeps its word; null (or empty) puts it back
+            if (w.save !== undefined)
                 words.save = plainWords(w.save) || null;
-            if ('saved' in w)
+            if (w.saved !== undefined)
                 words.saved = typeof w.saved === 'string' ? plainWords(w.saved) : null;
-            if ('notice' in w) {
+            if (w.notice !== undefined) {
                 const n = plainWords(w.notice) || null;
                 if (n !== words.notice) {
                     words.notice = n;

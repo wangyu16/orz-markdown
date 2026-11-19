@@ -39,7 +39,33 @@ describe('readerCopy (FC-18 §8.2)', () => {
     expect(readerCopyNotice({})).toBe(NOTICE);
     expect(readerCopyNotice(null)).toBe(NOTICE);
     expect(readerCopyNotice({ notice: 'Mine.' })).toBe('Mine.');
-    for (const name of ['readerCopy', 'readReaderCopy', 'readerCopyNotice', 'READER_COPY_NOTICE', 'READER_COPY_NOTICE_MAX']) expect(name in read, name).toBe(true);
+    // the parser-free entry carries only the rule (audit MEDIUM-1: reader-copy.ts stays out of it)
+    for (const name of ['readReaderCopy', 'READER_COPY_NOTICE_MAX']) expect(name in read, name).toBe(true);
+    for (const name of ['readerCopy', 'readerCopyNotice', 'READER_COPY_NOTICE']) expect(name in read, name).toBe(false);
+    expect(read.readReaderCopy).toBe(readReaderCopy);
+  });
+
+  it('[K.37] (audit LOW-2) a notice must show something: format characters (bidi overrides, zero-width spaces, BOM, soft hyphen), unpaired surrogates and text with nothing visible (no-break or ideographic spaces, a lone joiner or combining mark) are refused — readerCopy throws, readReaderCopy and extract read none — while the zero-width joiner and non-joiner inside real text (an emoji sequence, Persian) are kept; the length is counted in UTF-16 code units; readerCopy and readReaderCopy always agree', () => {
+    const refused = ['abc\u202edef', 'a\u200bb', 'No\ufeffte', 'soft\u00adhyphen', 'a\u2066b\u2069', 'lone \ud800 half', 'x\udc00', '\u00a0', '\u3000\u3000', '\u200d', '\u200c', '\u0301', ' \u00a0\u200d '];
+    for (const notice of refused) {
+      expect(() => readerCopy({ notice }), JSON.stringify(notice)).toThrow(TypeError);
+      expect(readReaderCopy({ notice }), JSON.stringify(notice)).toBeNull();
+    }
+    for (const notice of ['Edits stay yours 👩\u200d💻.', 'می\u200cخواهم', 'Café — naïve “quotes”.', '日本語のコピーです。']) {
+      expect(readerCopy({ notice }), notice).toEqual({ notice });
+      expect(readReaderCopy({ notice })).toEqual({ notice });
+    }
+    // UTF-16 code units: 150 astral characters are 300 units (accepted), 151 are 302 (refused)
+    expect(readerCopy({ notice: '😀'.repeat(150) })!.notice!.length).toBe(300);
+    expect(() => readerCopy({ notice: '😀'.repeat(151) })).toThrow(/UTF-16/);
+    const forged = assembleEnvelope(corpus[0].text, parts('md', { readerCopy: true })).replace('"readerCopy":{}', '"readerCopy":{"notice":"\\u202e"}');
+    expect(extract(forged)!.readerCopy).toBeUndefined();
+    for (const v of [true, {}, { notice: 'x' }, { notice: ' \u00a0 ' }, { notice: 'a\u200bb' }, { notice: 3 }, { other: 1 }, [], 'x', 0, NaN, { notice: undefined }]) {
+      let thrown = false;
+      let got: unknown = null;
+      try { got = readerCopy(v); } catch { thrown = true; }
+      expect(thrown ? null : got, JSON.stringify(v)).toEqual(readReaderCopy(v));
+    }
   });
 
   it('[K.37] without readerCopy (absent, false, null) every corpus file is byte for byte what the kit assembled before, with no "readerCopy" in #orz-shell; with it the setting is stored normalized as #orz-shell "readerCopy" (after delivery and links), extract gives it back, and assemble → extract → assemble with it is byte-identical (FC-18 laws 1–3); the notice is JSON-escaped in the island; a file whose "readerCopy" is invalid extracts without it; an invalid setting throws', () => {
@@ -146,6 +172,15 @@ describe('the host\'s words (FC-19 §3/§4, D-144, D-149)', () => {
     m.shell.setWords({ save: 'After' }); // nothing after destroy
     expect(saveOf(m).label).toBe('Save');
 
+    // (audit LOW-4) a key given as undefined is a key left out: it keeps its word
+    const u = mount({ hooks: { save: async () => undefined }, words: { save: 'Keep me', saved: 'Kept.', notice: 'Stays.' } });
+    u.shell.setWords({ save: undefined, saved: undefined, notice: undefined });
+    expect([saveOf(u).label, noteOf(u)?.text]).toEqual(['Keep me', 'Stays.']);
+    edit(u);
+    await u.shell.save();
+    expect(toasts(u)).toEqual(['Kept.']);
+    u.shell.destroy();
+
     const s = mount({ hooks: { save: async () => undefined, saveStatus: () => null } });
     expect(saveOf(s).label).toBe('Save now');
     s.shell.setWords({ save: 'Download a copy' });
@@ -153,6 +188,25 @@ describe('the host\'s words (FC-19 §3/§4, D-144, D-149)', () => {
     s.shell.setWords({ save: null });
     expect(saveOf(s).label).toBe('Save now');
     s.shell.destroy();
+  });
+
+  it('[E.56] (audit LOW-5) words.saved is the toast only for a save that went through the host (hooks.save or the host protocol): a save that fell back to a download keeps "Download started." and a file save "Saved."', async () => {
+    const assemble = (t: string) => `<!doctype html><script id="orz-src">${t}</script>`;
+    const withSaver = (via: 'host' | 'file' | 'download') => mount({
+      assemble, standalone: true, words: { saved: 'Saved to your workspace.' },
+      saver: {
+        save: async () => (via === 'download' ? { via, ok: true, confirmed: false } : via === 'file' ? { via, ok: true, picked: false, opened: true } : { via, ok: true }),
+        download: async () => ({ via: 'download', ok: true, confirmed: false }),
+        handleKey: () => null,
+      } as never,
+    });
+    for (const [via, said] of [['host', 'Saved to your workspace.'], ['download', 'Download started.'], ['file', 'Saved.']] as const) {
+      const m = withSaver(via);
+      edit(m);
+      expect(await m.shell.save(), via).toMatchObject({ ok: true, via });
+      expect(toasts(m), via).toEqual([said]);
+      m.shell.destroy();
+    }
   });
 
   it('[E.56] words.notice shows a notice above the panes (role status, plain text — never markup — with Dismiss); Dismiss hides it until it changes; setWords replaces it or (null, empty) removes it; the same notice again stays dismissed', async () => {

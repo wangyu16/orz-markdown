@@ -1213,6 +1213,8 @@ function valueImports(entry: string): Set<string> {
  * fits, a real jump in size fails.
  */
 // 2.5.0: 23,944 B — the reader carries the twin-link naming (naming.ts) the update verifies; bound ~9 % above.
+// 2.9.0: the reader reads readerCopy with a small rule of its own (read.ts); reader-copy.ts (messages, the
+// kit's words) stays out of the graph (audit MEDIUM-1: importing it had made 26,151 B); the bound stands.
 const UPDATE_LIMIT = 26_000;
 // 2026-10-08 (round 1 of the carrier-app loop: syntax tokens, three icons, kind icons, toast actions,
 // the save-conflict question): update 20,377 B; update + indicator + chrome 40,852 B; chrome 16,871 B.
@@ -1233,6 +1235,7 @@ async function shippedSize(contents: string): Promise<{ bytes: number; inputs: s
 
 describe('module boundaries', () => {
   it('[U.10] the update is parser-free and size-bounded: its graph is update.ts, types.ts and the parser-free reader; what ships (the CommonJS dist) bundles under 26 KB (with indicator and chrome under 50 KB)', async () => {
+    // 2.9.0: no src/carrier/reader-copy.ts (read.ts holds the readReaderCopy rule)
     expect([...valueImports('src/carrier/shell/update.ts')].sort()).toEqual(['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/shell/types.ts', 'src/carrier/shell/update.ts', 'src/carrier/text.ts', 'src/html.ts']);
     expect([...valueImports('src/carrier/shell/indicator.ts')].sort()).toEqual(['src/carrier/shell/chrome.ts', 'src/carrier/shell/indicator.ts']);
     const u = await shippedSize("export * from './dist/carrier/shell/update.js';");

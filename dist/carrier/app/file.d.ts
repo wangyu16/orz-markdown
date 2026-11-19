@@ -1,5 +1,22 @@
+/**
+ * The opened file (spec/carrier-app.md §2): what the page knows about the
+ * assembled file it was opened from — read from its own DOM at boot, never
+ * from anything the document's content could forge after load (the
+ * envelope's islands are written before any shell markup, FC-18 §8.1):
+ *
+ * - the text (`readIslandFromDom(#orz-src)`: exact, line endings and BOM
+ *   restored) and its header facts (uid, format);
+ * - the shell (`#orz-shell`): its delivery (kept by every save, B#7);
+ * - the resolved includes (`#orz-includes`, D4: a page cannot resolve them again);
+ * - the engine (`#orz-engine` without `src`: the inline bundle's exact text);
+ * - the twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2; 2.5.0);
+ * - the reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18 §8.2; 2.9.0);
+ * - the file name (the page's last path segment when it names a file of this
+ *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
+ *   dual name back).
+ */
+import { type ReaderCopy } from '../read.js';
 import { type TwinNaming } from '../naming.js';
-import { type ReaderCopy } from '../reader-copy.js';
 import type { AppDocument, AppElement, CarrierKindName, OpenedFile } from './types.js';
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */
 export declare function sourceIsland(doc: AppDocument): AppElement | null;

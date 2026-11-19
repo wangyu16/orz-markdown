@@ -426,9 +426,11 @@ host connection. Its edits cannot go back to the page's address, so:
 - The handle's list has **Download a copy** (with the Cmd/Ctrl+S hint and
   the unsaved dot) in place of Save.
 - **Nothing carries it over:** the app never passes `readerCopy` to the
-  kind's `assemble` — a downloaded file, a new copy, a new document and an
-  update are the reader's ordinary files (opened from disk they save
-  normally).
+  kind's `assemble` for a file it writes — a downloaded file, a new copy, a
+  new document and an update are the reader's ordinary files (opened from
+  disk they save normally). It passes it only to assemble the opened bytes
+  again (the content proof a file on disk is compared with), so the
+  published file itself opened from `file:` is recognised as the opened file.
 
 A `file:` page, a framed or hosted page, or a file without the setting run
 as before.

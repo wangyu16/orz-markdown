@@ -208,7 +208,10 @@ const EDITOR_AND_APP_LIMIT = 1_200_000;
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
     const app = valueImports('src/carrier/app/index.ts');
-    const allowed = new Set([...valueImports('src/carrier/editor/index.ts'), ...valueImports('src/carrier/shell/index.ts'), ...valueImports('src/carrier/read.ts')]);
+    // 2.9.0: reader-copy.ts (the kit's words for a reader copy; parser-free, imports only read.ts) — kept out
+    // of carrier/read so the reader, update and shell bundles stay their size (audit MEDIUM-1)
+    const allowed = new Set([...valueImports('src/carrier/editor/index.ts'), ...valueImports('src/carrier/shell/index.ts'), ...valueImports('src/carrier/read.ts'), 'src/carrier/reader-copy.ts']);
+    expect([...valueImports('src/carrier/reader-copy.ts')].sort()).toEqual([...valueImports('src/carrier/read.ts'), 'src/carrier/reader-copy.ts'].sort());
     expect([...app].filter((f) => !f.startsWith('src/carrier/app/') && !allowed.has(f))).toEqual([]);
     expect([...app].filter((f) => f.startsWith('src/carrier/app/')).sort()).toEqual(['app.ts', 'engine-source.ts', 'file.ts', 'handle.ts', 'index.ts', 'start.ts', 'widgets.ts'].map((f) => `src/carrier/app/${f}`));
     for (const entry of ['src/index.ts', 'src/carrier.ts', 'src/carrier/read.ts', 'src/carrier/shell/index.ts', 'src/carrier/editor/index.ts', 'src/carrier/conformance/index.ts']) {
@@ -638,6 +641,25 @@ describe('saving from the page', () => {
       await e.save();
       expect([x.rec.saves.length, x.rec.downloads.length], label).toEqual([1, 0]);
       x.app.dispose();
+    }
+  });
+
+  it('[A.34] (audit LOW-1) the published file of a reader copy opened from file: is the opened file: the opened bytes the saver compares a file on disk with are assembled with its readerCopy (and are exactly its bytes), while every file the app writes is assembled without it', async () => {
+    const BODY = `<main id="orz-app"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`;
+    const parts = (o: { delivery?: 'inline' | 'cdn'; readerCopy?: { notice?: string } } = {}) => ({ kind: 'md' as const, shellVersion: '1.0.0', delivery: o.delivery ?? 'inline', headHtml: '', bodyHtml: BODY, ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}) });
+    // a kind whose assemble honours readerCopy (the carriers 1.3.0)
+    const kind: Partial<StandaloneKind> = { assemble: (t, o = {}) => assembleEnvelope(t, parts({ ...(o.delivery ? { delivery: o.delivery } : {}), ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}) })) };
+    for (const reader of [{}, { notice: 'Your own copy.' }]) {
+      const html = assembleEnvelope(TEXT, parts({ readerCopy: reader }));
+      const b = boot(html, { kind });
+      await b.app.ready;
+      expect(await b.rec.savers[0].openedHtml!() === html, JSON.stringify(reader)).toBe(true);
+      b.app.setSetting({ theme: 'beige-decent-1' });
+      expect(await b.app.save()).toMatchObject({ ok: true, via: 'file' });
+      expect(extract(b.rec.saves.at(-1)!.html)!.readerCopy).toBeUndefined();
+      await b.app.download();
+      expect(extract(b.rec.downloads.at(-1)!.html)!.readerCopy).toBeUndefined();
+      b.app.dispose();
     }
   });
 

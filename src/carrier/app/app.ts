@@ -62,7 +62,7 @@ import type { StorageLike, UiDocument, UiElement } from '../shell/types.js';
 import { copyName, readOpenedFile } from './file.js';
 import { extract } from '../read.js';
 import { sameTwinNaming, type TwinNaming } from '../naming.js';
-import { readerCopyNotice } from '../reader-copy.js';
+import { readerCopyNotice, type ReaderCopy } from '../reader-copy.js';
 import { attachAiMenu, button, hiddenFor, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
 import { HANDLE_CSS, mountHandle, type HandleEntry, type HandleRowButton, type HandleSubItem } from './handle.js';
 import type {
@@ -223,8 +223,8 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
    * before it took `twinLinks`) is refused rather than silently writing the
    * family names into a page published under other names.
    */
-  const assembleWith = (t: string, includes: Record<string, string> | undefined, links: TwinNaming | null = file.twinLinks ?? null): Promise<string> =>
-    Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}), ...(links ? { twinLinks: { ...links } } : {}) })).then(String).then((html) => {
+  const assembleWith = (t: string, includes: Record<string, string> | undefined, links: TwinNaming | null = file.twinLinks ?? null, reader?: ReaderCopy): Promise<string> =>
+    Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}), ...(links ? { twinLinks: { ...links } } : {}), ...(reader ? { readerCopy: { ...reader } } : {}) })).then(String).then((html) => {
       if (links && !sameTwinNaming(extract(html)?.twinLinks, links)) throw new Error('this version of the carrier cannot keep the page\'s link names (#orz-shell "links"); nothing was written');
       return html;
     });
@@ -233,7 +233,9 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
   /** The opened bytes, once they are assembled (a failure is not kept: tried again at the next save, never disabling the conflict check). */
   const openedHtml = (): Promise<string> => {
     if (openedBytes) return openedBytes;
-    const run = assembleWith(file.text, file.includes);
+    // (2.9.0) with the file's readerCopy — for this comparison only (no write carries it): a reader
+    // copy's published file opened from disk (file:) is still recognised as the opened file
+    const run = assembleWith(file.text, file.includes, file.twinLinks ?? null, file.readerCopy);
     openedBytes = run;
     run.catch(() => { if (openedBytes === run) openedBytes = null; });
     return run;

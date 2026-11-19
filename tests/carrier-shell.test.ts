@@ -1247,7 +1247,8 @@ const SHELL_BUNDLE_LIMIT = 82_000; // 74,775 B on 2026-10-09 with the brand mark
 /** K.20 on what ships: `dist/carrier/read.js` bundled the same way (6,984 bytes on 2026-10-06). */
 const READ_BUNDLE_LIMIT = 30_000;
 /** The parser-free reader the update verifies with (K.20's graph). */
-// naming.ts (2.5.0): the twin-link naming the reader reads from #orz-shell; it imports nothing
+// naming.ts (2.5.0): the twin-link naming the reader reads from #orz-shell; it imports nothing.
+// 2.9.0: never reader-copy.ts — read.ts holds the small readReaderCopy rule (audit MEDIUM-1)
 const READER_GRAPH = ['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts'];
 
 describe('module boundaries', () => {

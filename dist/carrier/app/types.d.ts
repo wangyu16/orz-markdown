@@ -214,6 +214,12 @@ export interface AppAssembleOptions {
     includes?: Record<string, string>;
     /** (2.5.0) The twin-link naming (FC-18 §8.2): stored in `#orz-shell` when it is not the family's. */
     twinLinks?: TwinNaming;
+    /**
+     * (2.9.0) The reader-copy setting (FC-18 §8.2). The app passes it only to
+     * assemble the opened bytes again — the file it compares a file on disk
+     * with — never for a file it writes.
+     */
+    readerCopy?: ReaderCopy;
 }
 /** FC-19 §3 `EditorOptions`, as a kind's `mountEditor` takes them. */
 export interface KindEditorOptions {

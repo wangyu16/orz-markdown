@@ -628,7 +628,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'blocks.ts', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'naming.ts', 'node', 'parser.ts', 'read.ts', 'sha256.ts', 'shell', 'targets.ts', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'blocks.ts', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'naming.ts', 'node', 'parser.ts', 'read.ts', 'reader-copy.ts', 'sha256.ts', 'shell', 'targets.ts', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {
@@ -1170,7 +1170,9 @@ describe('round 2: reading files', () => {
   it('[K.20] orz-markdown/carrier/read is parser-free: its import graph has no parser module, it bundles under 30 KB minified, and the package exports it', async () => {
     // Value imports only (`import type` is erased at build time).
     const graph = importGraph('src/carrier/read.ts', (f, spec) => resolveRelative(f, spec, ['.ts']), /^\s*(?:import|export)\s+(?!type\b)[^'";]*?from\s*['"]([^'"]+)['"]/gm);
-    // naming.ts (2.5.0): the twin-link naming `extract` reads from #orz-shell; it imports nothing
+    // naming.ts (2.5.0): the twin-link naming `extract` reads from #orz-shell; it imports nothing.
+    // 2.9.0: reader-copy.ts (the assembly side: messages, the kit's words) is NOT here — read.ts holds
+    // the small readReaderCopy rule itself (audit MEDIUM-1: the update bundle's size, U.10)
     expect([...graph].sort()).toEqual(['src/ascii.ts', 'src/carrier/naming.ts', 'src/carrier/read.ts', 'src/carrier/text.ts', 'src/html.ts']);
     const { build } = await import('esbuild');
     const out = await build({ stdin: { contents: "export * from './src/carrier/read';", resolveDir: '.', loader: 'ts' }, bundle: true, minify: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent', metafile: true });
@@ -1181,8 +1183,8 @@ describe('round 2: reading files', () => {
     expect(pkg.exports['./carrier/read']).toBe('./dist/carrier/read.js');
     expect(pkg.dependencies['@types/markdown-it']).toBeDefined(); // the .d.ts files expose markdown-it types
     const read = await import('../src/carrier/read');
-    // 2.5.0: the twin-link naming helpers (FAMILY_NAMING … twinNaming)
-    expect(Object.keys(read).sort()).toEqual(['FAMILY_NAMING', 'INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'isTwinTemplate', 'jsonForScript', 'readIslandFromDom', 'readTwinNaming', 'reservedIdIn', 'sameTwinNaming', 'textNameOf', 'twinFileName', 'twinHref', 'twinNaming', 'unescapeScriptText'].sort());
+    // 2.5.0: the twin-link naming helpers (FAMILY_NAMING … twinNaming); 2.9.0: readReaderCopy, READER_COPY_NOTICE_MAX
+    expect(Object.keys(read).sort()).toEqual(['FAMILY_NAMING', 'INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'READER_COPY_NOTICE_MAX', 'readReaderCopy', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'isTwinTemplate', 'jsonForScript', 'readIslandFromDom', 'readTwinNaming', 'reservedIdIn', 'sameTwinNaming', 'textNameOf', 'twinFileName', 'twinHref', 'twinNaming', 'unescapeScriptText'].sort());
   });
 });
 

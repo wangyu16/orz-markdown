@@ -398,8 +398,9 @@ not hold it exactly) and the website's verify.html.
 `readerCopy` (orz-markdown 2.9.0, additive; owner decision 2026-11-17) says
 the file is **published for readers** (a website's page): `true` (the kit's
 words) or `{ notice }` — the host's words, plain text (never markup), runs
-of spaces and line breaks collapsed and trimmed, 1–300 characters, no
-control character. Absent, `false` or `null`: nothing is written (a file
+of spaces and line breaks collapsed and trimmed, 1–300 UTF-16 code units,
+at least one visible character, no control, format (`\p{Cf}`, but the
+zero-width joiner and non-joiner) or unpaired surrogate character. Absent, `false` or `null`: nothing is written (a file
 without it is byte for byte what 2.8 writes); anything else is refused
 (`assemble` throws). It is written into `#orz-shell` as `"readerCopy"`
 (after `delivery` and `links`): `{}` or `{"notice":"…"}`. It is part of the

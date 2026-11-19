@@ -154,10 +154,12 @@ host has it) take `{ save?, saved?, notice? }`, each plain text (runs of
 spaces collapsed and trimmed; never markup): `save` names the Save button
 (label, accessible name, title with the shortcut; empty or null: "Save", or
 "Save now" with `hooks.saveStatus`); `saved` is the toast after a save that
-worked (`''`: no toast, the save status says it; null: "Saved." /
+worked through the host — its `hooks.save` or the host protocol (`''`: no
+toast, the save status says it; null: "Saved."); a save that went elsewhere
+(a file, a download fallback) keeps the shell's words ("Saved." /
 "Download started."); `notice` is a notice above the panes (role `status`,
 with Dismiss, which hides it until it changes; empty or null removes it).
-In `setWords` a key left out keeps its word; nothing happens after
+In `setWords` a key left out — or given as `undefined` — keeps its word; nothing happens after
 `destroy()`. Without words nothing changes. A host that downloads instead of
 saving (a try mode) names the button "Download a copy"; the carrier app
 does so for a reader copy (FC-18 §8.2 `readerCopy`, spec/carrier-app.md

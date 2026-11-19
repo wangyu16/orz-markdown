@@ -11,15 +11,55 @@ import { asciiLower } from '../ascii.js';
 import { unescapeScriptText } from '../html.js';
 import type { Kind } from './document.js';
 import { readTwinNaming, type TwinNaming } from './naming.js';
-import { readReaderCopy, type ReaderCopy } from './reader-copy.js';
 
 export { escapeHtml, escapeAttr, jsonForScript, escapeScriptText, unescapeScriptText } from '../html.js';
 export { decodeText, eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
 export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinHref, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
 export type { TwinNaming, TwinKind } from './naming.js';
-export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
-export type { ReaderCopy } from './reader-copy.js';
+
+// ── reader copy (FC-18 §8.2 `readerCopy`, 2.9.0) ────────────────────────────
+// The rule lives here, small and message-free, so `extract` (and the update and
+// shell bundles that load this module) need no more; `reader-copy.ts` adds the
+// throwing `readerCopy` with its messages and the kit's words.
+
+/** A file's reader-copy setting: `notice` is the host's words, else the kit's default. */
+export interface ReaderCopy {
+  notice?: string;
+}
+
+/** Longest notice accepted, in UTF-16 code units (a sentence or two, not a document). */
+export const READER_COPY_NOTICE_MAX = 300;
+
+/**
+ * What a notice may not hold: control characters (C0, DEL, C1), the line and
+ * paragraph separators, unpaired surrogates and format characters (`\p{Cf}`:
+ * bidi overrides, zero-width spaces, BOM, soft hyphen) — except the
+ * zero-width (non-)joiner, which some scripts and emoji need.
+ */
+const REFUSED = /[\p{Cc}\p{Cs}\u2028\u2029]|(?![\u200c\u200d])\p{Cf}/u;
+/** A visible character: anything but a separator, control, format, unassigned or combining mark. */
+const VISIBLE = /[^\p{Z}\p{C}\p{M}]/u;
+
+/**
+ * Read a reader-copy setting without throwing: `{}` for `true` or `{}` (the
+ * kit's words); `{ notice }` for an object whose only key is `notice`, a
+ * string — runs of spaces, tabs and line breaks collapsed to one space and
+ * trimmed, 1 to {@link READER_COPY_NOTICE_MAX} UTF-16 code units, at least
+ * one visible character, no character {@link REFUSED} refuses; `null`
+ * for none (`undefined`, `null`, `false`) and for anything invalid.
+ */
+export function readReaderCopy(value: unknown): ReaderCopy | null {
+  if (value === true) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.some((k) => k !== 'notice')) return null;
+  const raw = (value as { notice?: unknown }).notice;
+  if (raw === undefined) return {};
+  if (typeof raw !== 'string') return null;
+  const notice = raw.replace(/[\t\n\r ]+/g, ' ').trim();
+  return notice.length <= READER_COPY_NOTICE_MAX && VISIBLE.test(notice) && !REFUSED.test(notice) ? { notice } : null;
+}
 
 /** What {@link extract} reads back. */
 export interface Extracted {

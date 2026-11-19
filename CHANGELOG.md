@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Reader copies** (FC-18 §8.2 minor revision; owner decision 2026-11-17):
   `assembleEnvelope(text, { readerCopy })` / a carrier's `assemble(text, {
-  readerCopy })` — `true` or `{ notice }` (plain text, 1–300 characters) —
-  stores `"readerCopy"` in `#orz-shell`; `extract(html).readerCopy` reads it
-  back; `readerCopy`, `readReaderCopy`, `readerCopyNotice`,
-  `READER_COPY_NOTICE` in `orz-markdown/carrier` and `/carrier/read`. A file
+  readerCopy })` — `true` or `{ notice }` (plain text, 1–300 UTF-16 code
+  units, a visible character, no control or format character but the
+  zero-width joiner and non-joiner) — stores `"readerCopy"` in `#orz-shell`;
+  `extract(html).readerCopy` reads it back; `readerCopy`, `readReaderCopy`,
+  `readerCopyNotice`, `READER_COPY_NOTICE`, `READER_COPY_NOTICE_MAX` in
+  `orz-markdown/carrier` (`/carrier/read` has only `readReaderCopy` and
+  `READER_COPY_NOTICE_MAX`, so the reader, update and shell bundles stay
+  their size). A file
   without it is byte for byte as before. On a served page (http/https),
   top-level and with no host, the carrier app runs such a file as a reader
   copy (spec/carrier-app.md §4.5a): Edit shows the notice above the editor
@@ -22,12 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saved to this website — use “Download a copy” to keep them."), Save reads
   "Download a copy" and downloads, the pencil's list has Download a copy in
   place of Save, and no download or copy carries the setting. A `file:` or
-  framed page ignores it.
+  framed page ignores it (and recognises the published file as the opened
+  one).
 - **The host's editor words** (FC-19 §3/§4 minor revision; STATUS D-144,
   D-149): the editor shell's option `words` and `Editor.setWords({ save,
   saved, notice })` — the Save button's label, the toast after a save
-  (`''`: none) and a dismissible notice above the panes. No change without
-  them.
+  through the host (`''`: none; a file save or a download fallback keeps
+  the shell's words) and a dismissible notice above the panes. In
+  `setWords` a key left out or `undefined` keeps its word, `null` resets
+  it. No change without them.
 
 ## [2.8.0] - 2026-11-14
 

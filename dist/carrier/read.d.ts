@@ -1,13 +1,25 @@
 import type { Kind } from './document.js';
 import { type TwinNaming } from './naming.js';
-import { type ReaderCopy } from './reader-copy.js';
 export { escapeHtml, escapeAttr, jsonForScript, escapeScriptText, unescapeScriptText } from '../html.js';
 export { decodeText, eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
 export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinHref, twinFileName, textNameOf, FAMILY_NAMING } from './naming.js';
 export type { TwinNaming, TwinKind } from './naming.js';
-export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
-export type { ReaderCopy } from './reader-copy.js';
+/** A file's reader-copy setting: `notice` is the host's words, else the kit's default. */
+export interface ReaderCopy {
+    notice?: string;
+}
+/** Longest notice accepted, in UTF-16 code units (a sentence or two, not a document). */
+export declare const READER_COPY_NOTICE_MAX = 300;
+/**
+ * Read a reader-copy setting without throwing: `{}` for `true` or `{}` (the
+ * kit's words); `{ notice }` for an object whose only key is `notice`, a
+ * string — runs of spaces, tabs and line breaks collapsed to one space and
+ * trimmed, 1 to {@link READER_COPY_NOTICE_MAX} UTF-16 code units, at least
+ * one visible character, no character {@link REFUSED} refuses; `null`
+ * for none (`undefined`, `null`, `false`) and for anything invalid.
+ */
+export declare function readReaderCopy(value: unknown): ReaderCopy | null;
 /** What {@link extract} reads back. */
 export interface Extracted {
     /** The text, exactly as it was assembled. */

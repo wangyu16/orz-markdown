@@ -1,4 +1,8 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.READER_COPY_NOTICE = exports.READER_COPY_NOTICE_MAX = exports.readReaderCopy = void 0;
+exports.readerCopy = readerCopy;
+exports.readerCopyNotice = readerCopyNotice;
 /**
  * Reader copy (FC-18 §8.2 `readerCopy`, orz-markdown 2.9.0): an assembled
  * file published for readers (a website's page) says so in `#orz-shell` as
@@ -8,64 +12,46 @@
  *
  * The value is DATA the file carries: `{}` (the kit's words) or
  * `{ "notice": "…" }` (the host's words — plain text, never markup).
- * Parser-free and import-free: `extract`, the envelope and the carrier app
- * use it without loading the Markdown parser.
+ * The rule itself is `readReaderCopy` in `read.ts` (small and message-free,
+ * so the parser-free reader, the update and the shell carry only it); this
+ * module adds the assembly side — `readerCopy`, which throws with a reason —
+ * and the kit's words. Parser-free.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.READER_COPY_NOTICE = exports.READER_COPY_NOTICE_MAX = void 0;
-exports.readerCopy = readerCopy;
-exports.readReaderCopy = readReaderCopy;
-exports.readerCopyNotice = readerCopyNotice;
-/** Longest notice accepted (a sentence or two, not a document). */
-exports.READER_COPY_NOTICE_MAX = 300;
+const read_js_1 = require("./read.js");
+Object.defineProperty(exports, "readReaderCopy", { enumerable: true, get: function () { return read_js_1.readReaderCopy; } });
+Object.defineProperty(exports, "READER_COPY_NOTICE_MAX", { enumerable: true, get: function () { return read_js_1.READER_COPY_NOTICE_MAX; } });
 /** The kit's words when a file has no notice of its own. */
 exports.READER_COPY_NOTICE = 'You’re editing your own copy. Changes can’t be saved to this website — use “Download a copy” to keep them.';
-// C0 and C1 controls, DEL, and the line / paragraph separators: a notice is one line of text
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/;
 /**
- * Validate and normalize a reader-copy setting: `null` for none (`undefined`,
- * `null`, `false`); `{}` for `true` or `{}` (the kit's words); `{ notice }`
- * for an object with a notice — its runs of spaces, tabs and line breaks
- * collapsed to one space and trimmed, 1 to {@link READER_COPY_NOTICE_MAX}
- * characters, no other control character. Throws a `TypeError` for anything
- * else (an unknown key, a notice that is not such a string, another type).
+ * Validate and normalize a reader-copy setting for assembly: `null` for none
+ * (`undefined`, `null`, `false`); otherwise exactly what `readReaderCopy`
+ * reads (`{}` for `true` or `{}`; `{ notice }` with its runs of spaces, tabs
+ * and line breaks collapsed and trimmed, 1 to {@link READER_COPY_NOTICE_MAX}
+ * UTF-16 code units, at least one visible character, no control, format —
+ * but the zero-width (non-)joiner — or unpaired surrogate character). Throws
+ * a `TypeError` with the reason for anything else.
  */
 function readerCopy(value) {
     if (value === undefined || value === null || value === false)
         return null;
-    if (value === true)
-        return {};
+    const ok = (0, read_js_1.readReaderCopy)(value);
+    if (ok)
+        return ok;
     if (typeof value !== 'object' || Array.isArray(value)) {
         throw new TypeError(`orz carrier: readerCopy is true, false or { notice }, not ${Array.isArray(value) ? 'an array' : typeof value}`);
     }
-    const src = value;
-    for (const key of Object.keys(src)) {
-        if (key !== 'notice')
-            throw new TypeError(`orz carrier: unknown key "${key}" in readerCopy (only "notice")`);
-    }
-    if (!Object.prototype.hasOwnProperty.call(src, 'notice') || src['notice'] === undefined)
-        return {};
-    const raw = src['notice'];
+    const key = Object.keys(value).find((k) => k !== 'notice');
+    if (key !== undefined)
+        throw new TypeError(`orz carrier: unknown key "${key}" in readerCopy (only "notice")`);
+    const raw = value.notice;
     if (typeof raw !== 'string')
         throw new TypeError('orz carrier: readerCopy.notice must be a string');
     const notice = raw.replace(/[\t\n\r ]+/g, ' ').trim();
     if (notice === '')
         throw new TypeError('orz carrier: readerCopy.notice is empty (leave it out for the default words)');
-    if (notice.length > exports.READER_COPY_NOTICE_MAX)
-        throw new TypeError(`orz carrier: readerCopy.notice is longer than ${exports.READER_COPY_NOTICE_MAX} characters`);
-    if (CONTROL.test(notice))
-        throw new TypeError('orz carrier: readerCopy.notice holds a control character');
-    return { notice };
-}
-/** Like {@link readerCopy}, but `null` for an invalid value instead of throwing: for values read from a file. */
-function readReaderCopy(value) {
-    try {
-        return readerCopy(value);
-    }
-    catch {
-        return null;
-    }
+    if (notice.length > read_js_1.READER_COPY_NOTICE_MAX)
+        throw new TypeError(`orz carrier: readerCopy.notice is longer than ${read_js_1.READER_COPY_NOTICE_MAX} characters (UTF-16 code units)`);
+    throw new TypeError('orz carrier: readerCopy.notice holds a control or format character, or nothing visible');
 }
 /** The words a reader sees for a (normalized or raw) setting: its notice, else the kit's. */
 function readerCopyNotice(value) {

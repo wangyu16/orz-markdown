@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.READER_COPY_NOTICE_MAX = exports.READER_COPY_NOTICE = exports.readerCopyNotice = exports.readReaderCopy = exports.readerCopy = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.READER_COPY_NOTICE_MAX = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.readReaderCopy = readReaderCopy;
 exports.readIslandFromDom = readIslandFromDom;
 exports.reservedIdIn = reservedIdIn;
 exports.extract = extract;
@@ -16,7 +17,6 @@ exports.extract = extract;
 const ascii_js_1 = require("../ascii.js");
 const html_js_1 = require("../html.js");
 const naming_js_1 = require("./naming.js");
-const reader_copy_js_1 = require("./reader-copy.js");
 var html_js_2 = require("../html.js");
 Object.defineProperty(exports, "escapeHtml", { enumerable: true, get: function () { return html_js_2.escapeHtml; } });
 Object.defineProperty(exports, "escapeAttr", { enumerable: true, get: function () { return html_js_2.escapeAttr; } });
@@ -37,12 +37,41 @@ Object.defineProperty(exports, "twinHref", { enumerable: true, get: function () 
 Object.defineProperty(exports, "twinFileName", { enumerable: true, get: function () { return naming_js_2.twinFileName; } });
 Object.defineProperty(exports, "textNameOf", { enumerable: true, get: function () { return naming_js_2.textNameOf; } });
 Object.defineProperty(exports, "FAMILY_NAMING", { enumerable: true, get: function () { return naming_js_2.FAMILY_NAMING; } });
-var reader_copy_js_2 = require("./reader-copy.js");
-Object.defineProperty(exports, "readerCopy", { enumerable: true, get: function () { return reader_copy_js_2.readerCopy; } });
-Object.defineProperty(exports, "readReaderCopy", { enumerable: true, get: function () { return reader_copy_js_2.readReaderCopy; } });
-Object.defineProperty(exports, "readerCopyNotice", { enumerable: true, get: function () { return reader_copy_js_2.readerCopyNotice; } });
-Object.defineProperty(exports, "READER_COPY_NOTICE", { enumerable: true, get: function () { return reader_copy_js_2.READER_COPY_NOTICE; } });
-Object.defineProperty(exports, "READER_COPY_NOTICE_MAX", { enumerable: true, get: function () { return reader_copy_js_2.READER_COPY_NOTICE_MAX; } });
+/** Longest notice accepted, in UTF-16 code units (a sentence or two, not a document). */
+exports.READER_COPY_NOTICE_MAX = 300;
+/**
+ * What a notice may not hold: control characters (C0, DEL, C1), the line and
+ * paragraph separators, unpaired surrogates and format characters (`\p{Cf}`:
+ * bidi overrides, zero-width spaces, BOM, soft hyphen) — except the
+ * zero-width (non-)joiner, which some scripts and emoji need.
+ */
+const REFUSED = /[\p{Cc}\p{Cs}\u2028\u2029]|(?![\u200c\u200d])\p{Cf}/u;
+/** A visible character: anything but a separator, control, format, unassigned or combining mark. */
+const VISIBLE = /[^\p{Z}\p{C}\p{M}]/u;
+/**
+ * Read a reader-copy setting without throwing: `{}` for `true` or `{}` (the
+ * kit's words); `{ notice }` for an object whose only key is `notice`, a
+ * string — runs of spaces, tabs and line breaks collapsed to one space and
+ * trimmed, 1 to {@link READER_COPY_NOTICE_MAX} UTF-16 code units, at least
+ * one visible character, no character {@link REFUSED} refuses; `null`
+ * for none (`undefined`, `null`, `false`) and for anything invalid.
+ */
+function readReaderCopy(value) {
+    if (value === true)
+        return {};
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return null;
+    const keys = Object.keys(value);
+    if (keys.some((k) => k !== 'notice'))
+        return null;
+    const raw = value.notice;
+    if (raw === undefined)
+        return {};
+    if (typeof raw !== 'string')
+        return null;
+    const notice = raw.replace(/[\t\n\r ]+/g, ' ').trim();
+    return notice.length <= exports.READER_COPY_NOTICE_MAX && VISIBLE.test(notice) && !REFUSED.test(notice) ? { notice } : null;
+}
 /**
  * The npm package of each kind's carrier (its agent skill ships there; its
  * browser bundle and release manifest are `<package>-browser`). Hard-coded:
@@ -277,7 +306,7 @@ function extract(html) {
     const links = (0, naming_js_1.readTwinNaming)(shellData['links']);
     if (links)
         result.twinLinks = links;
-    const reader = (0, reader_copy_js_1.readReaderCopy)(shellData['readerCopy']);
+    const reader = readReaderCopy(shellData['readerCopy']);
     if (reader)
         result.readerCopy = reader;
     // The includes island follows the source island (shell markup before it is not consulted).
