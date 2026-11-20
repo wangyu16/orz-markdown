@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-20
+
 ### Added
 
 - **Reader copies** (FC-18 §8.2 minor revision; owner decision 2026-11-17):
