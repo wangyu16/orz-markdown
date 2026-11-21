@@ -25,6 +25,12 @@ rebuilding on the kit (its `mountEditor` returns the shell). The carrier
 app uses it for a reader copy (FC-18 §8.2 `readerCopy`,
 spec/carrier-app.md §4.5a).
 
+**Minor revision, orz-markdown 2.10.0 (additive; owner decision of
+2026-11-21):** the site navigation `siteNav` (FC-18 §8.2) on `assemble` and
+`extract` (§2). A carrier adopts it in a minor release (its `assemble`
+passes the option to the kit's envelope; its bundle, rebuilt on the kit,
+draws the bar, spec/carrier-app.md §4.5b).
+
 ## 1. One editor, two kinds of host
 
 Each `orz-<x>-browser` package exports the editor for its kind. The assembled
@@ -37,8 +43,8 @@ wants (FD-06).
 
 ```ts
 mountEditor(element: HTMLElement, options: EditorOptions): Editor
-assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string; includes?: Record<string, string>; twinLinks?: TwinNaming }): Promise<string>
-extract(html: string): { text: string; kind: Kind; format: number; shell: string; delivery: string; includes?: Record<string, string>; twinLinks?: TwinNaming } | null
+assemble(text: string, options?: { delivery?: "inline" | "cdn"; engineSource?: string; includes?: Record<string, string>; twinLinks?: TwinNaming; readerCopy?: ReaderCopy | boolean; siteNav?: SiteNav }): Promise<string>
+extract(html: string): { text: string; kind: Kind; format: number; shell: string; delivery: string; includes?: Record<string, string>; twinLinks?: TwinNaming; readerCopy?: ReaderCopy; siteNav?: SiteNav } | null
 readDocument(text: string): DocumentInfo        // header + derived facts, no rendering
 renderPreview(text: string, options?): Promise<string>  // sandboxable HTML for thumbnails / read-only views
 version: string                                  // the shell version
@@ -73,6 +79,17 @@ quiet update, which refuses a new file that does not hold it exactly
 with it. A carrier from before 2.5.0 ignores the option (its files never
 carry a naming), so a host that publishes under other names needs a carrier
 that takes it.
+
+`siteNav` (optional; orz-markdown 2.10.0, additive, a minor release of each
+carrier) is a page's place in a set of pages (FC-18 §8.2: `{ title, home,
+previous?, next? }`): stored in `#orz-shell` as `"siteNav"`, returned by
+`extract` as `siteNav`, drawn by the file's runtime as a bar outside the
+text (spec/carrier-app.md §4.5b). Like `twinLinks`, every browser
+re-assembly passes the opened file's — the standalone save and the quiet
+update, which refuses a new file that does not hold it exactly
+(spec/shell-runtime.md §7.2, code `site-nav`). A carrier from before 2.10.0
+ignores the option, so a host that sets it needs a carrier that takes it
+(check `extract(assemble(t, { siteNav })).siteNav`).
 
 **The standard bundle global** (binding addition, 2026-10-05). Every carrier
 browser bundle (`orz-<x>.browser.js`, the file named by `bundle.path` in its

@@ -628,7 +628,7 @@ describe('module boundaries', () => {
       expect(dist.size).toBeGreaterThan(10);
       expect([...dist].filter((f) => f.startsWith('dist/carrier'))).toEqual([]);
     }
-    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'blocks.ts', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'naming.ts', 'node', 'parser.ts', 'read.ts', 'reader-copy.ts', 'sha256.ts', 'shell', 'targets.ts', 'text.ts', 'uid.ts']);
+    expect(readdirSync('src/carrier').sort()).toEqual(['app', 'blocks.ts', 'conformance', 'document.ts', 'editor', 'envelope.ts', 'header.ts', 'index.ts', 'inspect.ts', 'legacy.ts', 'links.ts', 'naming.ts', 'node', 'parser.ts', 'read.ts', 'reader-copy.ts', 'sha256.ts', 'shell', 'site-nav.ts', 'targets.ts', 'text.ts', 'uid.ts']);
   });
 
   it('[K.9] the carrier entry bundles for the browser without Node shims and assembles the same bytes there', async () => {
@@ -1183,8 +1183,9 @@ describe('round 2: reading files', () => {
     expect(pkg.exports['./carrier/read']).toBe('./dist/carrier/read.js');
     expect(pkg.dependencies['@types/markdown-it']).toBeDefined(); // the .d.ts files expose markdown-it types
     const read = await import('../src/carrier/read');
-    // 2.5.0: the twin-link naming helpers (FAMILY_NAMING … twinNaming); 2.9.0: readReaderCopy, READER_COPY_NOTICE_MAX
-    expect(Object.keys(read).sort()).toEqual(['FAMILY_NAMING', 'INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'READER_COPY_NOTICE_MAX', 'readReaderCopy', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'isTwinTemplate', 'jsonForScript', 'readIslandFromDom', 'readTwinNaming', 'reservedIdIn', 'sameTwinNaming', 'textNameOf', 'twinFileName', 'twinHref', 'twinNaming', 'unescapeScriptText'].sort());
+    // 2.5.0: the twin-link naming helpers (FAMILY_NAMING … twinNaming); 2.9.0: readReaderCopy, READER_COPY_NOTICE_MAX;
+    // 2.10.0: the site-navigation rule (readSiteNav, readSiteNavHref, readSiteNavText, sameSiteNav, the limits)
+    expect(Object.keys(read).sort()).toEqual(['FAMILY_NAMING', 'INCLUDES_ISLAND_ID', 'KIND_PACKAGE', 'READER_COPY_NOTICE_MAX', 'readReaderCopy', 'SITE_NAV_HREF_MAX', 'SITE_NAV_TEXT_MAX', 'readSiteNav', 'readSiteNavHref', 'readSiteNavText', 'sameSiteNav', 'SHELL_ISLAND_ID', 'SOURCE_ISLAND_ID', 'decodeText', 'eolStyle', 'escapeAttr', 'escapeHtml', 'escapeScriptText', 'extract', 'hasLoneSurrogate', 'hasMixedEol', 'isTwinTemplate', 'jsonForScript', 'readIslandFromDom', 'readTwinNaming', 'reservedIdIn', 'sameTwinNaming', 'textNameOf', 'twinFileName', 'twinHref', 'twinNaming', 'unescapeScriptText'].sort());
   });
 });
 

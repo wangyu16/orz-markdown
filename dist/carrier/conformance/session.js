@@ -187,7 +187,7 @@ class Session {
     /** The target's Node `assemble`, memoised per text and options. */
     assemble(text, o = {}) {
         const engine = o.engineSource === undefined ? '-' : o.engineSource === this.releases.target.code ? 'own' : `sha256:${(0, node_js_1.sha256hex)(o.engineSource)}`;
-        const key = `${o.delivery ?? ''}|${engine}|${o.includes ? JSON.stringify(Object.entries(o.includes).sort()) : '-'}|${o.twinLinks ? JSON.stringify(o.twinLinks) : '-'}|${text}`;
+        const key = `${o.delivery ?? ''}|${engine}|${o.includes ? JSON.stringify(Object.entries(o.includes).sort()) : '-'}|${o.twinLinks ? JSON.stringify(o.twinLinks) : '-'}|${o.siteNav ? JSON.stringify(o.siteNav) : '-'}|${text}`;
         let p = this.memo.get(key);
         if (!p) {
             p = (0, node_js_1.callAssemble)((t, x) => this.target.assemble(t, x), text, o);
@@ -370,7 +370,7 @@ class Session {
         return p;
     }
     /** `assemble` of a release's bundle, run in Chrome (inline: with its own text as engineSource); `hash`: `sha256:<hex>` of each file instead of the file. */
-    async chromeAssemble(r, texts, delivery, hash = false, includes, twinLinks) {
+    async chromeAssemble(r, texts, delivery, hash = false, includes, twinLinks, siteNav) {
         const page = await this.bundlePage(r);
         return call(page, `async function (a) {
       var C = globalThis.OrzCarrier;
@@ -385,11 +385,12 @@ class Session {
         var o = a.inline ? { delivery: 'inline', engineSource: src } : { delivery: 'cdn' };
         if (a.includes) o.includes = a.includes;
         if (a.twinLinks) o.twinLinks = a.twinLinks;
+        if (a.siteNav) o.siteNav = a.siteNav;
         var html = await C.assemble(a.texts[i], o);
         out.push(a.hash && typeof html === 'string' ? 'sha256:' + await hex(html) : html);
       }
       return out;
-    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash, ...(includes ? { includes } : {}), ...(twinLinks ? { twinLinks } : {}) });
+    }`, { texts, inline: delivery === 'inline', src: `/bundle/${r.label}.js`, hash, ...(includes ? { includes } : {}), ...(twinLinks ? { twinLinks } : {}), ...(siteNav ? { siteNav } : {}) });
     }
     async close() {
         await this.closeContexts();

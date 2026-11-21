@@ -26,11 +26,13 @@ import { readDocument, type Kind } from './document.js';
 import { eolStyle, hasLoneSurrogate } from './text.js';
 import { twinNaming, type TwinNaming } from './naming.js';
 import { readerCopy, type ReaderCopy } from './reader-copy.js';
+import { siteNav, type SiteNav } from './site-nav.js';
 import { reservedIdIn, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 
 export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
 export type { ReaderCopy } from './reader-copy.js';
+export type { SiteNav, SiteNavLink } from './site-nav.js';
 
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
@@ -67,6 +69,16 @@ export interface ShellParts {
    * An invalid value throws.
    */
   readerCopy?: ReaderCopy | boolean | null;
+  /**
+   * (2.10.0) Site navigation (FC-18 §8.2): the file is one page of a set of
+   * pages, and this is its place in it — `{ title, home, previous?, next? }`
+   * (plain-text title and labels; relative or absolute http(s) hrefs). The
+   * file's runtime draws it as a bar outside the text (spec/carrier-app.md
+   * §4.5b). Normalized with `siteNav` and stored in `#orz-shell` as
+   * `"siteNav"`; absent, `false` or `null` write nothing, so a file without it
+   * is byte-identical to one assembled before 2.10.0. An invalid value throws.
+   */
+  siteNav?: SiteNav | false | null;
 }
 
 
@@ -101,8 +113,8 @@ function sortedJson(record: Record<string, string>): string {
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
  * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
- * twin-link naming, when it is not the family's; 2.5.0; and `readerCopy`,
- * 2.9.0); the shell's head;
+ * twin-link naming, when it is not the family's; 2.5.0; `readerCopy`,
+ * 2.9.0; and `siteNav`, 2.10.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.
@@ -122,13 +134,14 @@ export function assembleEnvelope(text: string, parts: ShellParts): string {
   }
   const links = twinNaming(parts.twinLinks ?? null);
   const reader = readerCopy(parts.readerCopy ?? null);
+  const nav = siteNav(parts.siteNav ?? null);
   const doc = readDocument(text, { kind: parts.kind });
   if (doc.format > 1) throw new Error(`orz carrier: the header says format ${doc.format}, a newer format than this release can save — update to the release that wrote it`);
   const kind = parts.kind;
   const bom = text.charCodeAt(0) === 0xfeff;
   const body = (bom ? text.slice(1) : text).replace(/\r\n?/g, '\n');
   const eol = eolStyle(bom ? text.slice(1) : text);
-  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}), ...(reader ? { readerCopy: reader } : {}) });
+  const shell = jsonForScript({ kind, format: doc.format, shell: parts.shellVersion, delivery: parts.delivery ?? 'inline', ...(links ? { links } : {}), ...(reader ? { readerCopy: reader } : {}), ...(nav ? { siteNav: nav } : {}) });
   const out: string[] = [
     '<!doctype html>',
     `<html lang="${escapeAttr(doc.lang)}" data-orz-kind="${escapeAttr(kind)}">`,

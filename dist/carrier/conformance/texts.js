@@ -6,7 +6,7 @@
  * checks open.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LINKS_HREFS = exports.LINKS_TEXT = exports.LINKS_NAMING = exports.INCLUDES = exports.INCLUDE_TEXT = exports.GRAB_PAGE = exports.GRAB_SCRIPT = exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
+exports.LINKS_HREFS = exports.NAV_TEXT = exports.NAV = exports.LINKS_TEXT = exports.LINKS_NAMING = exports.INCLUDES = exports.INCLUDE_TEXT = exports.GRAB_PAGE = exports.GRAB_SCRIPT = exports.THEFT_TEXT = exports.THEFT_SCRIPT = exports.LONG_TEXT = exports.NEWER_TEXT = exports.LIVE_DOM_MARKER = exports.OTHER_TEXT = exports.EDIT_TEXT = exports.REFUSED_TEXTS = exports.HAZARD_TEXTS = exports.UID_B = exports.UID_A = void 0;
 exports.replacedTexts = replacedTexts;
 /** Uids used by the browser checks (well-formed, FC-18 §5.1). */
 exports.UID_A = 'doc-conformance0a1b2c';
@@ -99,6 +99,15 @@ exports.INCLUDES = {
 exports.LINKS_NAMING = { md: '{stem}.html', slides: '{stem}.deck.html' };
 /** (2.5.0) A text whose links the naming renames (and some it must leave alone). */
 exports.LINKS_TEXT = `{{nyml\nkind: document\ntitle: Twin links\nuid: doc-conformance4l5n6k\n}}\n\n# Twin links\n\nSee [week two](week2.slides.md#s3), [the notes](../notes.md?v=1), [the handout](handout.paged.md), [elsewhere](https://example.org/x.md), [the data](data.csv) and [the top](#twin-links).\n`;
+/** (2.10.0) A page's place in a set of pages (FC-18 §8.2 `siteNav`) for the `C.nav.*` checks. */
+exports.NAV = Object.freeze({
+    title: 'Gases & <Solutions> — 漢字',
+    home: '../index.html',
+    previous: Object.freeze({ href: 'week1.md.html', label: '1 · Introduction: a long label that a phone shortens' }),
+    next: Object.freeze({ href: '../unit2/week3.slides.html#s2', label: '3 · Gases' }),
+});
+/** (2.10.0) The text the `C.nav.*` checks assemble with {@link NAV}. */
+exports.NAV_TEXT = `{{nyml\nkind: document\ntitle: Site navigation\nuid: doc-conformance7s8n9v\n}}\n\n# Site navigation\n\nA page of a set of pages.\n`;
 /** (2.5.0) The hrefs LINKS_TEXT's links render with under LINKS_NAMING, in order. */
 exports.LINKS_HREFS = ['week2.deck.html#s3', '../notes.html?v=1', 'handout.paged.html', 'https://example.org/x.md', 'data.csv', '#twin-links'];
 //# sourceMappingURL=texts.js.map

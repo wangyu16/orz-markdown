@@ -11,11 +11,12 @@
  * - the engine (`#orz-engine` without `src`: the inline bundle's exact text);
  * - the twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2; 2.5.0);
  * - the reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18 §8.2; 2.9.0);
+ * - the site navigation (`#orz-shell` `"siteNav"`, FC-18 §8.2; 2.10.0);
  * - the file name (the page's last path segment when it names a file of this
  *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
  *   dual name back).
  */
-import { readIslandFromDom, readReaderCopy, type ReaderCopy } from '../read.js';
+import { readIslandFromDom, readReaderCopy, readSiteNav, type ReaderCopy, type SiteNav } from '../read.js';
 import { readHeader, UID_PATTERN } from '../header.js';
 import { KIND_EXTENSIONS } from '../shell/protocol.js';
 import { readTwinNaming, textNameOf, twinFileName, type TwinNaming } from '../naming.js';
@@ -49,6 +50,12 @@ export function shellTwinLinks(doc: AppDocument): TwinNaming | undefined {
 export function shellReaderCopy(doc: AppDocument): ReaderCopy | undefined {
   const shell = islandJson(doc, 'orz-shell') as { readerCopy?: unknown } | undefined;
   return (shell && typeof shell === 'object' && !Array.isArray(shell) ? readReaderCopy(shell.readerCopy) : null) ?? undefined;
+}
+
+/** (2.10.0) The file's site navigation (`#orz-shell` `"siteNav"`), as `extract` reads it: undefined when absent or invalid. */
+export function shellSiteNav(doc: AppDocument): SiteNav | undefined {
+  const shell = islandJson(doc, 'orz-shell') as { siteNav?: unknown } | undefined;
+  return (shell && typeof shell === 'object' && !Array.isArray(shell) ? readSiteNav(shell.siteNav) : null) ?? undefined;
 }
 
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
@@ -101,6 +108,7 @@ export function readOpenedFile(doc: AppDocument, kind: CarrierKindName): OpenedF
   const includes = shellIncludes(doc);
   const twinLinks = shellTwinLinks(doc);
   const readerCopy = shellReaderCopy(doc);
+  const siteNav = shellSiteNav(doc);
   return {
     text,
     ...(uid && UID_PATTERN.test(uid) ? { uid } : {}),
@@ -111,5 +119,6 @@ export function readOpenedFile(doc: AppDocument, kind: CarrierKindName): OpenedF
     fileName: openedFileName(doc.defaultView?.location, kind, twinLinks),
     ...(twinLinks ? { twinLinks } : {}),
     ...(readerCopy ? { readerCopy } : {}),
+    ...(siteNav ? { siteNav } : {}),
   };
 }

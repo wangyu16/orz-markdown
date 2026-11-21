@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.prefChecks = exports.hostChecks = exports.linkChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.NotApplicable = exports.Skip = void 0;
+exports.prefChecks = exports.hostChecks = exports.navChecks = exports.linkChecks = exports.updateChecks = exports.saveChecks = exports.editChecks = exports.createChecks = exports.bundleChecks = exports.lawChecks = exports.Probe = exports.NotApplicable = exports.Skip = void 0;
 exports.firstDiff = firstDiff;
 exports.sameIncludes = sameIncludes;
 exports.derivedParts = derivedParts;
@@ -17,6 +17,8 @@ const document_js_1 = require("../document.js");
 const envelope_js_1 = require("../envelope.js");
 const read_js_1 = require("../read.js");
 const naming_js_1 = require("../naming.js");
+const read_js_2 = require("../read.js");
+const site_nav_js_1 = require("../site-nav.js");
 const protocol_js_1 = require("../shell/protocol.js");
 const update_js_1 = require("../shell/update.js");
 const node_js_1 = require("./node.js");
@@ -2007,6 +2009,186 @@ exports.linkChecks = {
         p.eq(x && [x.text === texts_js_1.LINKS_TEXT, x.shell], [true, next.version], 'the updated file\'s text exact, shell');
         p.check((0, naming_js_1.sameTwinNaming)(x?.twinLinks, texts_js_1.LINKS_NAMING), `the updated file lost or changed the file's twin-link naming (#orz-shell "links"): ${clip(JSON.stringify(x?.twinLinks ?? null))}`);
         p.check(saved === expected, `the updated file is not the new release's assemble(text, { twinLinks }) — ${firstDiff(saved, expected)}`);
+    },
+};
+// ── site navigation (2.10.0, FC-18 §8.2, carrier-app §4.5b) ──────────────
+const navOf = () => JSON.parse(JSON.stringify(texts_js_1.NAV));
+/**
+ * The target's Node file of NAV_TEXT with NAV, when its `assemble` takes `siteNav`; else
+ * `not-applicable` (a carrier built before kit 2.10.0), unless the target declares
+ * `siteNav: true` — then the missing setting is the failure.
+ */
+async function needNav(s, delivery = 'cdn') {
+    const html = await s.assemble(texts_js_1.NAV_TEXT, { delivery, siteNav: navOf() });
+    if ((0, read_js_2.sameSiteNav)((0, read_js_1.extract)(html)?.siteNav, texts_js_1.NAV))
+        return html;
+    if (s.target.siteNav)
+        throw new Error(`the target declares siteNav: true, but assemble(text, { siteNav }) does not store it in #orz-shell "siteNav" (extract gives ${clip(JSON.stringify((0, read_js_1.extract)(html)?.siteNav ?? null))})`);
+    throw new NotApplicable('the carrier\'s assemble does not take siteNav (FC-18 §8.2, kit 2.10.0): a release built before it');
+}
+/** Page-side: the site-navigation bar as a reader meets it (null when there is none). */
+const NAV_STATE = `function () {
+  var nav = document.querySelector('nav.orz-site-nav');
+  if (!nav) return null;
+  var root = nav.shadowRoot || nav;
+  var links = Array.prototype.map.call(root.querySelectorAll('a'), function (a) {
+    var b = a.getBoundingClientRect();
+    return { href: a.getAttribute('href'), rel: a.getAttribute('rel'), name: a.getAttribute('aria-label') || a.textContent, text: a.textContent, shown: a.innerText, left: b.left, right: b.right, height: b.height };
+  });
+  var nb = nav.getBoundingClientRect();
+  var view = document.getElementById('orz-view');
+  var chrome = document.getElementById('orz-chrome');
+  var cs = getComputedStyle(nav);
+  return {
+    label: nav.getAttribute('aria-label'), links: links, top: nb.top, bottom: nb.bottom, right: nb.right, display: cs.display,
+    height: document.documentElement.style.getPropertyValue('--orz-site-nav-height'),
+    viewTop: view && !view.hidden ? view.getBoundingClientRect().top : null,
+    beforeView: view ? !!(nav.compareDocumentPosition(view) & 4) : null,
+    beforeChrome: chrome ? !!(nav.compareDocumentPosition(chrome) & 4) : null,
+    width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth + 1
+  };
+}`;
+exports.navChecks = {
+    async 'C.nav.assemble'(s, p) {
+        const file = await needNav(s);
+        const x = (0, read_js_1.extract)(file);
+        p.eq(x?.siteNav, navOf(), 'extract(assemble(text, { siteNav })).siteNav');
+        p.check(x?.text === texts_js_1.NAV_TEXT, `extract(assemble(text, { siteNav })).text !== text — ${firstDiff(x?.text ?? '', texts_js_1.NAV_TEXT)}`);
+        const shell = /<script type="application\/json" id="orz-shell">([^<]*)<\/script>/.exec(file)?.[1] ?? '';
+        p.check(/"siteNav":\{/.test(shell), `#orz-shell holds no "siteNav": ${clip(shell)}`);
+        p.check(!file.includes('<Solutions>'), 'the title reached the file unescaped (<Solutions>)');
+        // no setting is no setting: the bytes of every file assembled without it stay as they are
+        const plain = await s.assemble(texts_js_1.NAV_TEXT, { delivery: 'cdn' });
+        for (const none of [false, null]) {
+            try {
+                const same = await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), texts_js_1.NAV_TEXT, { delivery: 'cdn', siteNav: none });
+                p.check(same === plain, `assemble(text, { siteNav: ${none} }) is not assemble(text) — ${firstDiff(same, plain)}`);
+            }
+            catch (e) {
+                p.fail(`assemble(text, { siteNav: ${none} }) threw: ${msg(e)}`);
+            }
+        }
+        p.check(!/"siteNav"/.test(/<script type="application\/json" id="orz-shell">([^<]*)<\/script>/.exec(plain)?.[1] ?? ''), 'assemble(text) without siteNav writes "siteNav" into #orz-shell');
+        // law 3 with the option, and key order does not matter (normalized)
+        const n = navOf();
+        const shuffled = { next: { label: n.next.label, href: n.next.href }, home: n.home, previous: n.previous, title: n.title };
+        const again = await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), x?.text ?? '', { delivery: 'cdn', siteNav: shuffled });
+        p.check(again === file, `assemble(extract(F).text, { siteNav: extract(F).siteNav }) !== F — ${firstDiff(again, file)}`);
+        // an invalid one is refused, never stored
+        for (const bad of [{ ...n, home: 'javascript:alert(1)' }, { ...n, home: '//evil.example/' }, { ...n, previous: { href: 'data:text/html,x', label: 'x' } }, { ...n, extra: 1 }, { ...n, title: ' ' }, { title: 'x' }]) {
+            let refused = false;
+            try {
+                await (0, node_js_1.callAssemble)((t, o) => s.target.assemble(t, o), texts_js_1.NAV_TEXT, { delivery: 'cdn', siteNav: bad });
+            }
+            catch {
+                refused = true;
+            }
+            p.check(refused, `assemble(text, { siteNav: ${clip(JSON.stringify(bad))} }) did not refuse an invalid site navigation`);
+        }
+        // the browser bundle writes the Node bytes
+        needBrowser(s);
+        const [chrome] = await s.chromeAssemble(s.releases.target, [texts_js_1.NAV_TEXT], 'cdn', false, undefined, undefined, navOf());
+        p.check(chrome === file, `the browser bundle's assemble(text, { siteNav }) differs from Node's — ${firstDiff(chrome ?? '', file)}`);
+    },
+    async 'C.nav.read-view'(s, p) {
+        const file = await needNav(s, 'inline');
+        needBrowser(s);
+        const ctx = await s.context({ picker: 'none' });
+        const page = await ctx.newPage();
+        await page.goto(s.serve(fileName(s, 'nav'), file));
+        let st = null;
+        await until(async () => { st = await (0, session_js_1.call)(page, NAV_STATE); return !!st && !!(await page.evaluate('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)')); }, 20000);
+        if (!p.check(st !== null, 'the read view of a file with site navigation shows no nav.orz-site-nav'))
+            return;
+        const a = st;
+        const n = navOf();
+        p.eq(a.label, n.title, 'the nav landmark\'s name (aria-label)');
+        p.eq(a.links.map((l) => [l.href, l.rel]), [[n.home, null], [n.previous.href, 'prev'], [n.next.href, 'next']], 'the bar\'s links (href, rel) in order: home, previous, next');
+        p.eq(a.links[0]?.text, n.title, 'the home link\'s text (the title, as text)');
+        p.eq(a.links.slice(1).map((l) => l.name), [`Previous: ${n.previous.label}`, `Next: ${n.next.label}`], 'the neighbours\' accessible names');
+        p.check(a.beforeView !== false && a.beforeChrome !== false, 'the bar is not before the read view and the chrome in the page\'s order (the keyboard reaches it first)');
+        p.eq(a.height, '40px', '--orz-site-nav-height on the root element while the bar shows');
+        if (a.viewTop !== null)
+            p.check(a.viewTop >= a.bottom - 1, `the bar covers the read view (bar bottom ${a.bottom}, view top ${a.viewTop})`);
+        p.check(a.top >= -1 && a.top <= 1, `the bar is not at the top of the page (top ${a.top})`);
+        p.check(a.links.every((l) => l.height >= 24), `a bar link is under 24 px tall: ${clip(JSON.stringify(a.links.map((l) => l.height)))}`);
+        // a phone: everything inside 390 px, the neighbours read Previous / Next
+        await page.setViewportSize({ width: 390, height: 844 });
+        await new Promise((r) => setTimeout(r, 150));
+        const ph = (await (0, session_js_1.call)(page, NAV_STATE));
+        p.check(ph.links.every((l) => l.left >= 0 && l.right <= 390.5), `a bar link leaves a 390 px screen: ${clip(JSON.stringify(ph.links.map((l) => [l.left, l.right])))}`);
+        p.check(ph.right <= 390.5, `the bar is wider than a 390 px screen (${ph.right})`);
+        p.eq(ph.links.slice(1).map((l) => l.shown.replace(/[←→]/g, '').trim()), ['Previous', 'Next'], 'the neighbours\' words on a 390 px screen');
+        await page.setViewportSize({ width: 1280, height: 900 });
+        // edit mode hides it; leaving shows it again
+        await page.evaluate('void globalThis.OrzCarrier.standalone.edit()');
+        p.eq((await (0, session_js_1.call)(page, NAV_STATE)).display, 'none', 'the bar\'s display in edit mode');
+        await page.evaluate('Promise.resolve(globalThis.OrzCarrier.standalone.leave()).then(function () {})');
+        await until(async () => (await (0, session_js_1.call)(page, NAV_STATE)).display !== 'none', 5000);
+        p.check((await (0, session_js_1.call)(page, NAV_STATE)).display !== 'none', 'the bar did not come back after edit mode');
+        // never printed
+        await page.emulateMedia({ media: 'print' });
+        p.eq((await (0, session_js_1.call)(page, NAV_STATE)).display, 'none', 'the bar\'s display in print');
+        await page.emulateMedia({ media: 'screen' });
+    },
+    async 'C.save.keeps-nav'(s, p) {
+        const file = await needNav(s, 'inline');
+        needBrowser(s);
+        // from disk: kept as it is
+        {
+            const ctx = await s.context({ picker: 'stub' });
+            const page = await ctx.newPage();
+            await openEditor(s, page, s.writeFile(fileName(s, 'nav'), file));
+            const edited = `${texts_js_1.NAV_TEXT}\nEdited.\n`;
+            await ed(page, `window.__orzEditor.setText(${JSON.stringify(edited)})`);
+            await ed(page, 'window.__orzEditor.save()');
+            await until(() => ctx.of('write').length > 0 || ctx.downloads.length > 0, 10000);
+            const saved = firstSaved(ctx);
+            if (p.check(saved !== undefined, 'the save of a file with site navigation wrote nothing')) {
+                const x = (0, read_js_1.extract)(saved);
+                p.check(x?.text === edited, `the saved file does not give back the edited text — ${firstDiff(x?.text ?? '', edited)}`);
+                p.check((0, read_js_2.sameSiteNav)(x?.siteNav, texts_js_1.NAV), `the saved file lost or changed the file's site navigation (#orz-shell "siteNav"): ${clip(JSON.stringify(x?.siteNav ?? null))}`);
+                const expected = await s.assemble(edited, { delivery: 'inline', siteNav: navOf() });
+                p.check(saved === expected, `the saved bytes are not assemble(text, { siteNav }) — ${firstDiff(saved, expected)}`);
+            }
+        }
+        // from a served page: Download a copy keeps it, its hrefs resolved against the page's address
+        {
+            const ctx = await s.context({ picker: 'stub' });
+            const page = await ctx.newPage();
+            const url = s.serve(fileName(s, 'nav-served'), file);
+            await page.goto(url);
+            await until(async () => !!(await page.evaluate('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)')), 20000);
+            await page.evaluate('Promise.resolve(globalThis.OrzCarrier.standalone.download()).then(function () {})');
+            await until(() => ctx.downloads.length > 0, 15000);
+            const got = ctx.downloads[0]?.data;
+            if (p.check(got !== undefined, 'Download a copy of a served file with site navigation downloaded nothing')) {
+                const want = (0, site_nav_js_1.siteNavFrom)(navOf(), url);
+                const x = (0, read_js_1.extract)(got);
+                p.eq(x?.siteNav, want, 'the downloaded copy\'s site navigation (hrefs resolved against the page\'s address)');
+                p.check(want.home.startsWith('http://') && want.next.href.endsWith('/unit2/week3.slides.html#s2'), `resolved hrefs: ${clip(JSON.stringify(want))}`);
+                const expected = await s.assemble(texts_js_1.NAV_TEXT, { delivery: 'inline', siteNav: want });
+                p.check(got === expected, `the downloaded bytes are not assemble(text, { siteNav: resolved }) — ${firstDiff(got, expected)}`);
+            }
+        }
+    },
+    async 'C.update.keeps-nav'(s, p) {
+        const next = needNext(s);
+        const file = await needNav(s, 'inline');
+        const [expected] = await s.chromeAssemble(next, [texts_js_1.NAV_TEXT], 'inline', false, undefined, undefined, navOf());
+        const ctx = await s.context({ picker: 'stub', cdn: { latest: next } });
+        const page = await ctx.newPage();
+        await page.goto(s.writeFile(fileName(s, 'update-nav'), file));
+        if (!p.check(await until(async () => (await page.getByRole('button', { name: chipName(next.version), includeHidden: true }).count()) > 0, 20000), 'a file with site navigation shows no update indicator'))
+            return;
+        const r = await runUpdate(page, ctx, next.version);
+        if (!p.check(r === 'saved', `Update now saved nothing (${r})`))
+            return;
+        const saved = firstSaved(ctx);
+        const x = (0, read_js_1.extract)(saved);
+        p.eq(x && [x.text === texts_js_1.NAV_TEXT, x.shell], [true, next.version], 'the updated file\'s text exact, shell');
+        p.check((0, read_js_2.sameSiteNav)(x?.siteNav, texts_js_1.NAV), `the updated file lost or changed the file's site navigation (#orz-shell "siteNav"): ${clip(JSON.stringify(x?.siteNav ?? null))}`);
+        p.check(saved === expected, `the updated file is not the new release's assemble(text, { siteNav }) — ${firstDiff(saved, expected)}`);
     },
 };
 async function hostPage(s, ctx, name, cfg) {

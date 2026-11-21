@@ -63,6 +63,8 @@ const file_js_1 = require("./file.js");
 const read_js_1 = require("../read.js");
 const naming_js_1 = require("../naming.js");
 const reader_copy_js_1 = require("../reader-copy.js");
+const site_nav_js_1 = require("../site-nav.js");
+const site_nav_js_2 = require("./site-nav.js");
 const widgets_js_1 = require("./widgets.js");
 const handle_js_1 = require("./handle.js");
 /**
@@ -168,6 +170,10 @@ function headerFacts(text) {
  * when the page is not an assembled file of this kind (an app page, the
  * update sandbox) — nothing is touched then.
  */
+/** A copy of a site-navigation record (a kind's assemble never holds the file's own object). */
+function cloneNav(n) {
+    return { title: n.title, home: n.home, ...(n.previous ? { previous: { ...n.previous } } : {}), ...(n.next ? { next: { ...n.next } } : {}) };
+}
 function bootCarrierApp(k, options = {}) {
     const maybeWin = (options.window ?? globalThis.window);
     if (!maybeWin || !maybeWin.document)
@@ -212,9 +218,28 @@ function bootCarrierApp(k, options = {}) {
      * before it took `twinLinks`) is refused rather than silently writing the
      * family names into a page published under other names.
      */
-    const assembleWith = (t, includes, links = file.twinLinks ?? null, reader) => Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}), ...(links ? { twinLinks: { ...links } } : {}), ...(reader ? { readerCopy: { ...reader } } : {}) })).then(String).then((html) => {
+    /**
+     * (2.10.0) The site navigation a file this page writes carries (FC-18 §8.2 `siteNav`, carrier-app §4.5b):
+     * the file's own — on a served page with no host its hrefs resolved against the page's address, so a
+     * downloaded or saved copy's bar still leads to the website (a `file:` page or a host keeps them as they are).
+     */
+    const navToWrite = () => {
+        if (!file.siteNav)
+            return null;
+        if (!served || host)
+            return file.siteNav;
+        try {
+            return (0, site_nav_js_1.siteNavFrom)(file.siteNav, String(win.location.href));
+        }
+        catch {
+            return file.siteNav;
+        }
+    };
+    const assembleWith = (t, includes, links = file.twinLinks ?? null, reader, nav = navToWrite()) => Promise.resolve().then(() => k.assemble(t, { delivery: file.delivery, ...(engineSource ? { engineSource } : {}), ...(includes ? { includes } : {}), ...(links ? { twinLinks: { ...links } } : {}), ...(reader ? { readerCopy: { ...reader } } : {}), ...(nav ? { siteNav: cloneNav(nav) } : {}) })).then(String).then((html) => {
         if (links && !(0, naming_js_1.sameTwinNaming)((0, read_js_1.extract)(html)?.twinLinks, links))
             throw new Error('this version of the carrier cannot keep the page\'s link names (#orz-shell "links"); nothing was written');
+        if (nav && !(0, site_nav_js_1.sameSiteNav)((0, read_js_1.extract)(html)?.siteNav, nav))
+            throw new Error('this version of the carrier cannot keep the page\'s site navigation (#orz-shell "siteNav"); nothing was written');
         return html;
     });
     const assembleFile = (t, o) => assembleWith(t, o?.includes);
@@ -225,7 +250,8 @@ function bootCarrierApp(k, options = {}) {
             return openedBytes;
         // (2.9.0) with the file's readerCopy — for this comparison only (no write carries it): a reader
         // copy's published file opened from disk (file:) is still recognised as the opened file
-        const run = assembleWith(file.text, file.includes, file.twinLinks ?? null, file.readerCopy);
+        // (2.10.0) and with its site navigation as stored (hrefs not resolved): the opened file's own bytes
+        const run = assembleWith(file.text, file.includes, file.twinLinks ?? null, file.readerCopy, file.siteNav ?? null);
         openedBytes = run;
         run.catch(() => { if (openedBytes === run)
             openedBytes = null; });
@@ -338,7 +364,10 @@ function bootCarrierApp(k, options = {}) {
     };
     // ── read view ──
     const view = k.createReadView(doc);
+    /** (2.10.0) The site-navigation bar (§4.5b), drawn with the chrome below; it shows and hides with the read view. */
+    let siteBar = null;
     const setViewVisible = (visible) => {
+        siteBar?.setVisible(visible);
         if (view.setVisible)
             view.setVisible(visible);
         else if (view.element)
@@ -381,6 +410,18 @@ function bootCarrierApp(k, options = {}) {
             doc.body.append(mount);
     }
     const chromeHost = mount;
+    // (2.10.0, §4.5b) the file's site navigation: a bar before the chrome (first in the page's order), outside the text
+    if (file.siteNav) {
+        try {
+            siteBar = (0, site_nav_js_2.mountSiteNav)(doc, file.siteNav, { before: chromeHost });
+        }
+        catch (e) {
+            try {
+                console.error('orz carrier: the site navigation could not be drawn', e);
+            }
+            catch { /* no console */ }
+        }
+    }
     chromeHost.setAttribute('data-orz-chrome', 'app');
     const root = chromeHost.shadowRoot ?? (0, chrome_js_1.createShadowRoot)(chromeHost);
     (0, widgets_js_1.installCss)(root, widgets_js_1.WIDGET_CSS);
@@ -395,7 +436,9 @@ function bootCarrierApp(k, options = {}) {
     };
     const present = () => {
         try {
-            setScheme(view.present(currentText()).scheme);
+            const { scheme } = view.present(currentText());
+            setScheme(scheme);
+            siteBar?.setScheme(scheme);
         }
         catch { /* the view's own error */ }
     };
@@ -979,7 +1022,7 @@ function bootCarrierApp(k, options = {}) {
     async function saveNewFile(t, name, what) {
         let html;
         try {
-            html = await (what === 'copy' ? assembleWith(t, file.includes) : assembleWith(t, undefined, null));
+            html = await (what === 'copy' ? assembleWith(t, file.includes) : assembleWith(t, undefined, null, undefined, null));
         }
         catch (e) {
             toast(`Could not create the file: ${errorText(e)}`, 'error');
@@ -1300,6 +1343,7 @@ function bootCarrierApp(k, options = {}) {
                 info, kind: k.kind, current: k.version, getText: currentText, saver: updateSaver, delivery: file.delivery,
                 ...(file.includes ? { includes: file.includes } : {}),
                 ...(file.twinLinks ? { twinLinks: file.twinLinks } : {}),
+                ...(file.siteNav ? { siteNav: file.siteNav } : {}),
             });
             if (r.status === 'up-to-date')
                 return;
@@ -1387,6 +1431,9 @@ function bootCarrierApp(k, options = {}) {
         readerChoice: (key) => choiceNow.get(key) ?? null,
         setReaderChoice,
         setChromeVisible(visible) {
+            // (2.10.0) the site navigation goes with the chrome (slides' Present in the page); edit mode keeps it hidden
+            if (!editor)
+                siteBar?.setVisible(visible);
             if (visible)
                 chromeHost.removeAttribute('data-hidden');
             else {
@@ -1434,6 +1481,8 @@ function bootCarrierApp(k, options = {}) {
                 view.destroy?.();
             }
             catch { /* the view's own */ }
+            siteBar?.destroy();
+            siteBar = null;
             try {
                 host?.dispose();
             }

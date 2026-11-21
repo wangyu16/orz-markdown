@@ -127,7 +127,7 @@ describe('the harness API', () => {
   it('[H.1] check ids are stable, unique C.<area>.<name> ids, each implemented, with a title and a spec reference; spec/conformance.md lists every one', () => {
     expect(new Set(CHECK_IDS).size).toBe(CHECK_IDS.length);
     for (const c of CHECKS) {
-      expect(c.id).toMatch(/^C\.(law|bundle|create|edit|save|update|links|host|prefs)\.[a-z]+(-[a-z]+)*$/);
+      expect(c.id).toMatch(/^C\.(law|bundle|create|edit|save|update|links|nav|host|prefs)\.[a-z]+(-[a-z]+)*$/);
       expect(c.title.length).toBeGreaterThan(20);
       expect(c.spec).toMatch(/FC-1[89]|shell-runtime|host-protocols|FD-0/);
     }
@@ -417,9 +417,13 @@ chrome('mutants the harness must catch in Chrome', () => {
     ['save-drops-links', 'C.links.assemble', /the browser bundle's assemble\(text, \{ twinLinks \}\) differs from Node's/],
     ['save-drops-links', 'C.save.keeps-links', /the save of a file with a twin-link naming wrote nothing/],
     ['update-drops-links', 'C.update.keeps-links', /lost or changed the file's twin-link naming/],
+    // 2.10.0: a bundle whose assemble drops the site navigation, an update that does
+    ['save-drops-nav', 'C.nav.assemble', /the browser bundle's assemble\(text, \{ siteNav \}\) differs from Node's/],
+    ['save-drops-nav', 'C.save.keeps-nav', /the save of a file with site navigation wrote nothing|Download a copy of a served file with site navigation downloaded nothing/],
+    ['update-drops-nav', 'C.update.keeps-nav', /lost or changed the file's site navigation/],
   ];
   for (const [variant, id, why] of caught) {
-    it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''}${variant.endsWith('-links') ? ' [H.10]' : ''} the ${variant} mutant fails ${id}`, async () => {
+    it(`[H.5]${variant === 'prefetch-bundle' ? ' [H.7]' : ''}${variant.endsWith('-links') ? ' [H.10]' : ''}${variant.endsWith('-nav') ? ' [H.11]' : ''} the ${variant} mutant fails ${id}`, async () => {
       const r = await mutant(variant, [id]);
       expect(result(r, id).status).toBe('failed');
       expect(result(r, id).message).toMatch(why);
@@ -447,6 +451,29 @@ describe('the twin-link checks (2.5.0)', () => {
       expect(result(declared, id).message).toMatch(/declares twinLinks: true/);
     }
     expect(CHECK_IDS).toEqual(expect.arrayContaining(LINK_CHECKS));
+  }, 240_000);
+});
+
+// ── 2.10.0: the site-navigation checks ───────────────────────────────────
+
+describe('the site-navigation checks (2.10.0)', () => {
+  const NAV_CHECKS = ['C.nav.assemble', 'C.nav.read-view', 'C.save.keeps-nav', 'C.update.keeps-nav'];
+  it('[H.11] the C.nav.* checks (and C.save.keeps-nav, C.update.keeps-nav) are not applicable to a carrier whose assemble does not take siteNav (a release built before kit 2.10.0), but fail one that declares siteNav: true and drops it; the stub, which takes it, passes them (H.2) and its mutants that drop it fail them (H.5)', async () => {
+    const [previous, current, next] = await Promise.all([buildStub('1.0.0'), buildStub('1.1.0'), buildStub('1.2.0')]);
+    const base = stubTarget(current, { previous, next });
+    const ignoring = { ...base, assemble: (t: string, o?: Parameters<typeof base.assemble>[1]) => { const { siteNav: _n, ...rest } = o ?? {}; void _n; return base.assemble(t, rest); } };
+    const opts = { only: NAV_CHECKS, ...(browser ? { browser } : { channel: 'no-chrome-installed' }) };
+    const na = await runConformance(ignoring, opts);
+    for (const id of NAV_CHECKS) {
+      expect(result(na, id).status, id).toBe('not-applicable');
+      expect(result(na, id).message).toMatch(/does not take siteNav/);
+    }
+    const declared = await runConformance({ ...ignoring, siteNav: true }, opts);
+    for (const id of NAV_CHECKS) {
+      expect(result(declared, id).status, id).toBe('failed');
+      expect(result(declared, id).message).toMatch(/declares siteNav: true/);
+    }
+    expect(CHECK_IDS).toEqual(expect.arrayContaining(NAV_CHECKS));
   }, 240_000);
 });
 

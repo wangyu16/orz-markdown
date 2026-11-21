@@ -13,7 +13,7 @@
  * `no-generator`, `no-eol-attr` and `meta-from-body` are assembly bugs
  * too; the other variants are bugs of the bundle (carrier.ts).
  */
-import { assembleEnvelope, type TwinNaming } from '../../src/carrier';
+import { assembleEnvelope, type SiteNav, type TwinNaming } from '../../src/carrier';
 import { bundleUrl } from '../../src/carrier/shell/update';
 
 export type StubVariant =
@@ -44,7 +44,9 @@ export type StubVariant =
   // 2.4.0 (STATUS D-60): NOT a bug — a release whose parser renders the same text differently (as a previous release)
   | 'render-changed'
   // 2.5.0 (K1): a bundle whose assemble drops the twin-link naming, and an update that does
-  | 'save-drops-links' | 'update-drops-links';
+  | 'save-drops-links' | 'update-drops-links'
+  // 2.10.0: a bundle whose assemble drops the site navigation, and an update that does
+  | 'save-drops-nav' | 'update-drops-nav';
 
 export const STUB_BUNDLE_PATH = 'orz-stub.browser.js';
 
@@ -60,6 +62,8 @@ export interface StubAssembleOptions {
   twinLinks?: TwinNaming;
   /** (2.9.0) A reader copy (FC-18 §8.2 `readerCopy`), stored in `#orz-shell`. */
   readerCopy?: boolean | { notice?: string };
+  /** (2.10.0) Site navigation (FC-18 §8.2 `siteNav`), stored in `#orz-shell`. */
+  siteNav?: SiteNav;
 }
 
 const HEAD = '<style>body{margin:0;font:16px/1.5 system-ui,sans-serif}#orz-app{min-height:60vh;padding:24px}</style>';
@@ -85,6 +89,7 @@ export function stubAssemble(text: string, o: StubAssembleOptions): string {
     ...(o.includes && Object.keys(o.includes).length > 0 ? { includes: o.includes } : {}),
     ...(o.twinLinks ? { twinLinks: o.twinLinks } : {}),
     ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}),
+    ...(o.siteNav ? { siteNav: o.siteNav } : {}),
     headHtml: HEAD,
     bodyHtml: (o.variant === 'date-stamp' ? `<!-- assembled ${new Date().toISOString().slice(0, 10)} -->\n` : '') + `${STUB_BODY}\n${engine}`, // BUG (mutation) date-stamp
   });

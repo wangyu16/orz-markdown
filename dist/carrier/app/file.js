@@ -4,6 +4,7 @@ exports.sourceIsland = sourceIsland;
 exports.shellDelivery = shellDelivery;
 exports.shellTwinLinks = shellTwinLinks;
 exports.shellReaderCopy = shellReaderCopy;
+exports.shellSiteNav = shellSiteNav;
 exports.shellIncludes = shellIncludes;
 exports.openedFileName = openedFileName;
 exports.copyName = copyName;
@@ -21,6 +22,7 @@ exports.readOpenedFile = readOpenedFile;
  * - the engine (`#orz-engine` without `src`: the inline bundle's exact text);
  * - the twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2; 2.5.0);
  * - the reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18 §8.2; 2.9.0);
+ * - the site navigation (`#orz-shell` `"siteNav"`, FC-18 §8.2; 2.10.0);
  * - the file name (the page's last path segment when it names a file of this
  *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
  *   dual name back).
@@ -59,6 +61,11 @@ function shellTwinLinks(doc) {
 function shellReaderCopy(doc) {
     const shell = islandJson(doc, 'orz-shell');
     return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, read_js_1.readReaderCopy)(shell.readerCopy) : null) ?? undefined;
+}
+/** (2.10.0) The file's site navigation (`#orz-shell` `"siteNav"`), as `extract` reads it: undefined when absent or invalid. */
+function shellSiteNav(doc) {
+    const shell = islandJson(doc, 'orz-shell');
+    return (shell && typeof shell === 'object' && !Array.isArray(shell) ? (0, read_js_1.readSiteNav)(shell.siteNav) : null) ?? undefined;
 }
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
 function shellIncludes(doc) {
@@ -113,6 +120,7 @@ function readOpenedFile(doc, kind) {
     const includes = shellIncludes(doc);
     const twinLinks = shellTwinLinks(doc);
     const readerCopy = shellReaderCopy(doc);
+    const siteNav = shellSiteNav(doc);
     return {
         text,
         ...(uid && header_js_1.UID_PATTERN.test(uid) ? { uid } : {}),
@@ -123,6 +131,7 @@ function readOpenedFile(doc, kind) {
         fileName: openedFileName(doc.defaultView?.location, kind, twinLinks),
         ...(twinLinks ? { twinLinks } : {}),
         ...(readerCopy ? { readerCopy } : {}),
+        ...(siteNav ? { siteNav } : {}),
     };
 }
 //# sourceMappingURL=file.js.map

@@ -3,6 +3,7 @@
  */
 import type { Kind } from '../document.js';
 import type { TwinNaming } from '../naming.js';
+import type { SiteNav } from '../read.js';
 /** A carrier release on disk: its browser bundle and its `release.json` (spec/shell-runtime.md §6). */
 export interface BundleSource {
     /** Path of the browser bundle file (`orz-<x>.browser.js`). */
@@ -26,6 +27,11 @@ export interface AssembleOptions {
      * not the family's, carried by every save and the quiet update (`C.links.*`).
      */
     twinLinks?: TwinNaming;
+    /**
+     * (2.10.0) The site navigation (FC-18 §8.2): stored in `#orz-shell` as `"siteNav"`, drawn
+     * outside the text, carried by every save and the quiet update (`C.nav.*`).
+     */
+    siteNav?: SiteNav;
 }
 /** The carrier under test. */
 export interface CarrierTarget extends BundleSource {
@@ -71,6 +77,13 @@ export interface CarrierTarget extends BundleSource {
      * when ignoring it fails.
      */
     twinLinks?: boolean;
+    /**
+     * (2.10.0) The carrier takes `assemble(text, { siteNav })` (FC-18 §8.2). The `C.nav.*` checks
+     * run when its Node `assemble` stores it; a carrier that ignores the option (built before
+     * kit 2.10.0) gets them `not-applicable` — unless it declares `siteNav: true`, when ignoring
+     * it fails.
+     */
+    siteNav?: boolean;
 }
 /** A Playwright browser (playwright-core), structurally. */
 export type BrowserLike = import('playwright-core').Browser;

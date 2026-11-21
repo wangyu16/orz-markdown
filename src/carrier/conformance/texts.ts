@@ -113,5 +113,16 @@ export const LINKS_NAMING: Readonly<Record<string, string>> = { md: '{stem}.html
 /** (2.5.0) A text whose links the naming renames (and some it must leave alone). */
 export const LINKS_TEXT = `{{nyml\nkind: document\ntitle: Twin links\nuid: doc-conformance4l5n6k\n}}\n\n# Twin links\n\nSee [week two](week2.slides.md#s3), [the notes](../notes.md?v=1), [the handout](handout.paged.md), [elsewhere](https://example.org/x.md), [the data](data.csv) and [the top](#twin-links).\n`;
 
+/** (2.10.0) A page's place in a set of pages (FC-18 §8.2 `siteNav`) for the `C.nav.*` checks. */
+export const NAV: Readonly<{ title: string; home: string; previous: { href: string; label: string }; next: { href: string; label: string } }> = Object.freeze({
+  title: 'Gases & <Solutions> — 漢字',
+  home: '../index.html',
+  previous: Object.freeze({ href: 'week1.md.html', label: '1 · Introduction: a long label that a phone shortens' }),
+  next: Object.freeze({ href: '../unit2/week3.slides.html#s2', label: '3 · Gases' }),
+});
+
+/** (2.10.0) The text the `C.nav.*` checks assemble with {@link NAV}. */
+export const NAV_TEXT = `{{nyml\nkind: document\ntitle: Site navigation\nuid: doc-conformance7s8n9v\n}}\n\n# Site navigation\n\nA page of a set of pages.\n`;
+
 /** (2.5.0) The hrefs LINKS_TEXT's links render with under LINKS_NAMING, in order. */
 export const LINKS_HREFS: readonly string[] = ['week2.deck.html#s3', '../notes.html?v=1', 'handout.paged.html', 'https://example.org/x.md', 'data.csv', '#twin-links'];

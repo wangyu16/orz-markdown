@@ -458,7 +458,7 @@ skipVersion(kind, version, storage?): boolean
 ### 7.2 Re-assembly (transactional)
 
 ```ts
-reassemble({ text, kind, release, delivery?, includes?, twinLinks?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
+reassemble({ text, kind, release, delivery?, includes?, twinLinks?, siteNav?, fetch?, document?, window?, cdnBase?, timeoutMs? }): Promise<string>
 ```
 
 1. **Download and verify.** Fetch the bundle URL (§6; `credentials: omit`),
@@ -475,10 +475,10 @@ reassemble({ text, kind, release, delivery?, includes?, twinLinks?, fetch?, docu
    fixed listener. When the
    iframe's own window posts `orz-reassemble-ready`, the page posts
    `{ type: 'orz-reassemble', id, text, delivery, engineSource: bundle,
-   includes?, twinLinks? }`; the listener calls `OrzCarrier.assemble(text, {
-   delivery, engineSource, includes?, twinLinks? })` (`includes` and
-   `twinLinks` only when given; 2.5.0: `twinLinks` only when it is not the
-   family naming)
+   includes?, twinLinks?, siteNav? }`; the listener calls `OrzCarrier.assemble(text, {
+   delivery, engineSource, includes?, twinLinks?, siteNav? })` (`includes`,
+   `twinLinks` and `siteNav` only when given; 2.5.0: `twinLinks` only when it
+   is not the family naming; `siteNav` 2.10.0)
    and posts back `orz-reassembled` with the html. The page reads **only
    messages whose `source` is that iframe's `contentWindow`**. Default timeout
    30 s.
@@ -493,7 +493,9 @@ reassemble({ text, kind, release, delivery?, includes?, twinLinks?, fetch?, docu
    (2.5.0) `extract(html).twinLinks` is exactly the `twinLinks` given (keep
    the file's own, `extract(currentHtml).twinLinks`, FC-18 §8.2; absent or
    the family naming = none: a release that drops, changes or adds a naming
-   is refused, code `links`). Anything else rejects with a clear message
+   is refused, code `links`), and (2.10.0) `extract(html).siteNav` is
+   exactly the `siteNav` given (the file's own, FC-18 §8.2; absent = none:
+   code `site-nav`). Anything else rejects with a clear message
    ("…nothing was changed").
 4. **Clean up.** The iframe and the message listener are removed in every
    outcome. Nothing else in the page is touched.

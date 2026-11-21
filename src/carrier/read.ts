@@ -61,6 +61,90 @@ export function readReaderCopy(value: unknown): ReaderCopy | null {
   return notice.length <= READER_COPY_NOTICE_MAX && VISIBLE.test(notice) && !REFUSED.test(notice) ? { notice } : null;
 }
 
+// ── site navigation (FC-18 §8.2 `siteNav`, 2.10.0) ─────────────────────────
+// A page's place in a set of pages (a website's): the set's title, its home
+// page and the previous / next page. The rule lives here, small and
+// message-free, as the reader copy's does; `site-nav.ts` adds the throwing
+// `siteNav` with its messages and `siteNavFrom` (links made absolute).
+
+/** One neighbour of a page: where it is and what a reader reads. */
+export interface SiteNavLink {
+  href: string;
+  label: string;
+}
+
+/** A page's place in a set of pages: the set's title, its home page, the page before and after it. */
+export interface SiteNav {
+  title: string;
+  home: string;
+  previous?: SiteNavLink;
+  next?: SiteNavLink;
+}
+
+/** Longest title or label accepted, in UTF-16 code units. */
+export const SITE_NAV_TEXT_MAX = 200;
+/** Longest href accepted, in UTF-16 code units. */
+export const SITE_NAV_HREF_MAX = 2048;
+
+/** What an href may not hold: whitespace, a backslash (browsers read it as `/`), control, format or separator characters. */
+const HREF_REFUSED = /[\s\\\p{Cc}\p{Cf}\p{Cs}\p{Z}]/u;
+/** A URL scheme at the start. */
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+/** A title or label, normalized (spaces collapsed, trimmed), or null when it breaks the rule. */
+export function readSiteNavText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const t = value.replace(/[\t\n\r ]+/g, ' ').trim();
+  return t.length <= SITE_NAV_TEXT_MAX && VISIBLE.test(t) && !REFUSED.test(t) ? t : null;
+}
+
+/**
+ * An href, or null when it breaks the rule: 1 to {@link SITE_NAV_HREF_MAX}
+ * code units, nothing {@link HREF_REFUSED} refuses, not network-path (`//…`);
+ * either relative (no scheme) or an absolute `http:` / `https:` URL. Never
+ * normalized: what is stored is what the host gave.
+ */
+export function readSiteNavHref(value: unknown): string | null {
+  if (typeof value !== 'string' || value === '' || value.length > SITE_NAV_HREF_MAX) return null;
+  if (HREF_REFUSED.test(value) || value.startsWith('//')) return null;
+  if (SCHEME.test(value) && !/^https?:\/\/[^/?#]/i.test(value)) return null;
+  return value;
+}
+
+/** An object whose keys are all in `keys`, else null. */
+const only = (value: unknown, keys: readonly string[]): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((k) => keys.includes(k)) ? (value as Record<string, unknown>) : null;
+
+/**
+ * Read a site-navigation setting without throwing: the normalized record
+ * (keys in the order `title`, `home`, `previous`, `next`; a link as `href`,
+ * `label`) for an object with a valid `title` and `home` and, when present,
+ * valid `previous` / `next` links and no other key; `null` for anything else.
+ */
+export function readSiteNav(value: unknown): SiteNav | null {
+  const v = only(value, ['title', 'home', 'previous', 'next']);
+  const title = v && readSiteNavText(v.title);
+  const home = v && readSiteNavHref(v.home);
+  if (!v || title === null || home === null) return null;
+  const out: SiteNav = { title, home };
+  for (const key of ['previous', 'next'] as const) {
+    if (v[key] === undefined) continue;
+    const l = only(v[key], ['href', 'label']);
+    const href = l && readSiteNavHref(l.href);
+    const label = l && readSiteNavText(l.label);
+    if (href === null || label === null) return null;
+    out[key] = { href, label };
+  }
+  return out;
+}
+
+/** Two site-navigation settings say the same (both absent, or equal once read). */
+export function sameSiteNav(a: unknown, b: unknown): boolean {
+  const x = a === undefined || a === null ? null : readSiteNav(a);
+  const y = b === undefined || b === null ? null : readSiteNav(b);
+  return JSON.stringify(x) === JSON.stringify(y);
+}
+
 /** What {@link extract} reads back. */
 export interface Extracted {
   /** The text, exactly as it was assembled. */
@@ -85,6 +169,11 @@ export interface Extracted {
    * none or an invalid one.
    */
   readerCopy?: ReaderCopy;
+  /**
+   * (2.10.0) The site navigation stored in `#orz-shell` as `"siteNav"`
+   * (FC-18 §8.2), normalized; absent when the file has none or an invalid one.
+   */
+  siteNav?: SiteNav;
 }
 
 /**
@@ -286,7 +375,8 @@ function isKind(v: unknown): v is Kind {
  * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
  * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
  * other than the family's; (2.9.0) `readerCopy` from `#orz-shell`
- * `"readerCopy"` when it is valid.
+ * `"readerCopy"` when it is valid; (2.10.0) `siteNav` from `#orz-shell`
+ * `"siteNav"` when it is valid.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -323,6 +413,8 @@ export function extract(html: string): Extracted | null {
   if (links) result.twinLinks = links;
   const reader = readReaderCopy(shellData['readerCopy']);
   if (reader) result.readerCopy = reader;
+  const nav = readSiteNav(shellData['siteNav']);
+  if (nav) result.siteNav = nav;
   // The includes island follows the source island (shell markup before it is not consulted).
   const inc = findScript(html, INCLUDES_ISLAND_ID, Infinity, island.content[1]);
   if (inc) {

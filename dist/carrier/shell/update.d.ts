@@ -18,7 +18,7 @@
  *
  * Parser-free and Node-safe: no browser global is touched at module load.
  */
-import { type TwinNaming } from '../read.js';
+import { type SiteNav, type TwinNaming } from '../read.js';
 import type { SaveResult, Saver } from './save.js';
 import { type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
 /** The kinds that publish releases (FC-17 minus poster, which never self-updates: RULES §9). */
@@ -163,6 +163,8 @@ export type UpdateErrorCode = 'manifest' | 'download' | 'too-large' | 'integrity
  | 'includes'
 /** (2.5.0) The new file does not carry exactly the given twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2). */
  | 'links'
+/** (2.10.0) The new file does not carry exactly the given site navigation (`#orz-shell` `"siteNav"`, FC-18 §8.2). */
+ | 'site-nav'
 /** performUpdate: the text changed while the update ran (nothing was saved). */
  | 'changed'
 /** performUpdate: the page is framed or has a connected host, which owns the version. */
@@ -212,6 +214,12 @@ export interface ReassembleOptions {
      * or the family's): a release that drops it is refused (code `links`).
      */
     twinLinks?: TwinNaming;
+    /**
+     * (2.10.0) FC-18 §8.2: keep the file's site navigation — `extract(currentHtml).siteNav`
+     * (`#orz-shell` `"siteNav"`). The new file must hold exactly this (none when absent):
+     * a release that drops it is refused (code `site-nav`).
+     */
+    siteNav?: SiteNav;
     fetch?: FetchLike;
     /** The document the hidden iframe is created in (default: the global document). */
     document?: UiDocument;
@@ -228,11 +236,11 @@ export interface ReassembleOptions {
  *   1. download the bundle from the hard-coded CDN URL; its SHA-384 must
  *      equal `release.bundle.integrity`, it must be UTF-8 and script-safe;
  *   2. in a hidden `sandbox="allow-scripts"` iframe (opaque origin), call the
- *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes?, twinLinks? })`;
+ *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes?, twinLinks?, siteNav? })`;
  *      only messages from that iframe's window are read;
  *   3. accept the html only if `extract(html)` gives exactly `text`, the
  *      kind, the release's version, the delivery, the `includes` and (2.5.0)
- *      the `twinLinks` naming;
+ *      the `twinLinks` naming and (2.10.0) the `siteNav`;
  *   4. remove the iframe in every outcome.
  *
  * Resolves the new file's html; rejects with an {@link UpdateError}. The

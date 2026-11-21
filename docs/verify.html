@@ -151,7 +151,8 @@ function around(s, i){ return s.slice(Math.max(0, i - 40), i + 40); }
 // Runs inside the sandbox after the published bundle: extract the file's text with the package's own extract,
 // assemble it again with the file's delivery, includes and link naming (#orz-shell "links", orz-markdown 2.5.0:
 // the package's extract gives it as twinLinks; a release from before it gives none and writes none, so a file
-// with "links" is then reported as not that release's), post the html back. ES5; answers only its parent.
+// with "links" is then reported as not that release's; likewise readerCopy, orz-markdown 2.9.0, and siteNav,
+// 2.10.0), post the html back. ES5; answers only its parent.
 var REPRO_BOOT = [
   '(function(){var P=parent;addEventListener("message",function(e){if(e.source!==P)return;var d=e.data;',
   'if(!d||d.type!=="orz-verify")return;var C=self.OrzCarrier;',
@@ -160,6 +161,7 @@ var REPRO_BOOT = [
   'var x=C.extract(d.html);if(!x)throw new Error("the package found no text in the file");',
   'var o={delivery:x.delivery,engineSource:d.engineSource};if(x.includes)o.includes=x.includes;',
   'if(x.twinLinks)o.twinLinks=x.twinLinks;',
+  'if(x.readerCopy)o.readerCopy=x.readerCopy;if(x.siteNav)o.siteNav=x.siteNav;',
   'ok(Promise.resolve(C.assemble(x.text,o)).then(function(h){return{html:h,kind:String(C.kind),version:String(C.version)};}));',
   '}).then(function(r){reply({ok:typeof r.html==="string",html:r.html,kind:r.kind,version:r.version});},',
   'function(err){reply({ok:false,error:String(err&&err.message||err)});});});',

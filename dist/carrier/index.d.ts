@@ -13,6 +13,8 @@ export { twinNaming, readTwinNaming, sameTwinNaming, isTwinTemplate, twinFileNam
 export type { TwinNaming, TwinKind } from './naming.js';
 export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
 export type { ReaderCopy } from './reader-copy.js';
+export { siteNav, readSiteNav, sameSiteNav, siteNavFrom, SITE_NAV_TEXT_MAX, SITE_NAV_HREF_MAX } from './site-nav.js';
+export type { SiteNav, SiteNavLink } from './site-nav.js';
 export { includeTargets, linkTargets } from './targets.js';
 export type { LinkTarget } from './targets.js';
 export { decodeText } from './text.js';

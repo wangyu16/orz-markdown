@@ -11,11 +11,12 @@
  * - the engine (`#orz-engine` without `src`: the inline bundle's exact text);
  * - the twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2; 2.5.0);
  * - the reader-copy setting (`#orz-shell` `"readerCopy"`, FC-18 §8.2; 2.9.0);
+ * - the site navigation (`#orz-shell` `"siteNav"`, FC-18 §8.2; 2.10.0);
  * - the file name (the page's last path segment when it names a file of this
  *   kind — or, 2.5.0, a page of this kind under the file's naming, given its
  *   dual name back).
  */
-import { type ReaderCopy } from '../read.js';
+import { type ReaderCopy, type SiteNav } from '../read.js';
 import { type TwinNaming } from '../naming.js';
 import type { AppDocument, AppElement, CarrierKindName, OpenedFile } from './types.js';
 /** The source island, or null when the page is not an assembled file (an app page, the update sandbox). */
@@ -26,6 +27,8 @@ export declare function shellDelivery(doc: AppDocument): 'inline' | 'cdn';
 export declare function shellTwinLinks(doc: AppDocument): TwinNaming | undefined;
 /** (2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`), as `extract` reads it: undefined when absent or invalid. */
 export declare function shellReaderCopy(doc: AppDocument): ReaderCopy | undefined;
+/** (2.10.0) The file's site navigation (`#orz-shell` `"siteNav"`), as `extract` reads it: undefined when absent or invalid. */
+export declare function shellSiteNav(doc: AppDocument): SiteNav | undefined;
 /** `#orz-includes` read as `extract` reads it (string values of own keys only); undefined when empty or absent. */
 export declare function shellIncludes(doc: AppDocument): Record<string, string> | undefined;
 /**

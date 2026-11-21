@@ -18,7 +18,7 @@
  *
  * Parser-free and Node-safe: no browser global is touched at module load.
  */
-import { escapeScriptText, extract, KIND_PACKAGE, readTwinNaming, sameTwinNaming, type TwinNaming } from '../read.js';
+import { escapeScriptText, extract, KIND_PACKAGE, readSiteNav, readTwinNaming, sameSiteNav, sameTwinNaming, type SiteNav, type TwinNaming } from '../read.js';
 import type { SaveResult, Saver } from './save.js';
 import { globalWindow, type MessageEventLike, type MessageWindow, type PostTarget, type StorageLike, type UiDocument, type UiElement } from './types.js';
 
@@ -388,6 +388,8 @@ export type UpdateErrorCode =
   | 'includes'
   /** (2.5.0) The new file does not carry exactly the given twin-link naming (`#orz-shell` `"links"`, FC-18 §8.2). */
   | 'links'
+  /** (2.10.0) The new file does not carry exactly the given site navigation (`#orz-shell` `"siteNav"`, FC-18 §8.2). */
+  | 'site-nav'
   /** performUpdate: the text changed while the update ran (nothing was saved). */
   | 'changed'
   /** performUpdate: the page is framed or has a connected host, which owns the version. */
@@ -452,8 +454,8 @@ const BOOT_RESULT = 'orz-reassembled';
 /**
  * The listener that runs inside the sandbox after the bundle: it answers only
  * its parent, calls `OrzCarrier.assemble(text, { delivery, engineSource,
- * includes?, twinLinks? })` (`includes` and `twinLinks` only when the request
- * carries them) and posts the html back. ES5, no backticks, no `</script`.
+ * includes?, twinLinks?, siteNav? })` (`includes`, `twinLinks` and `siteNav`
+ * only when the request carries them) and posts the html back. ES5, no backticks, no `</script`.
  */
 const BOOTSTRAP = [
   '(function () {',
@@ -469,6 +471,7 @@ const BOOTSTRAP = [
   '      var o = { delivery: d.delivery, engineSource: d.engineSource };',
   '      if (d.includes) o.includes = d.includes;',
   '      if (d.twinLinks) o.twinLinks = d.twinLinks;',
+  '      if (d.siteNav) o.siteNav = d.siteNav;',
   '      ok(C.assemble(d.text, o));',
   '    }).then(function (html) {',
   "      reply({ ok: typeof html === 'string', html: html, kind: String(C.kind), version: String(C.version), error: typeof html === 'string' ? '' : 'assemble returned no string' });",
@@ -511,6 +514,12 @@ export interface ReassembleOptions {
    * or the family's): a release that drops it is refused (code `links`).
    */
   twinLinks?: TwinNaming;
+  /**
+   * (2.10.0) FC-18 §8.2: keep the file's site navigation — `extract(currentHtml).siteNav`
+   * (`#orz-shell` `"siteNav"`). The new file must hold exactly this (none when absent):
+   * a release that drops it is refused (code `site-nav`).
+   */
+  siteNav?: SiteNav;
   fetch?: FetchLike;
   /** The document the hidden iframe is created in (default: the global document). */
   document?: UiDocument;
@@ -562,6 +571,7 @@ function runInSandbox(bundle: string, opts: ReassembleOptions, delivery: string)
   frame.srcdoc = sandboxDocument(bundle);
   const id = `u${++requestCounter}`;
   const links = readTwinNaming(opts.twinLinks);
+  const nav = opts.siteNav ? readSiteNav(opts.siteNav) : null;
   const timeoutMs = typeof opts.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : REASSEMBLE_TIMEOUT_MS;
   const w = win;
   return new Promise<{ html: string }>((resolve, reject) => {
@@ -582,7 +592,7 @@ function runInSandbox(bundle: string, opts: ReassembleOptions, delivery: string)
       if (typeof d !== 'object' || d === null) return;
       if (d.type === BOOT_READY) {
         try {
-          frame.contentWindow!.postMessage({ type: BOOT_REQUEST, id, text: opts.text, delivery, engineSource: bundle, ...(hasIncludes(opts.includes) ? { includes: { ...opts.includes } } : {}), ...(links ? { twinLinks: { ...links } } : {}) }, '*');
+          frame.contentWindow!.postMessage({ type: BOOT_REQUEST, id, text: opts.text, delivery, engineSource: bundle, ...(hasIncludes(opts.includes) ? { includes: { ...opts.includes } } : {}), ...(links ? { twinLinks: { ...links } } : {}), ...(nav ? { siteNav: nav } : {}) }, '*');
         } catch (err) {
           finish(new UpdateError('bundle', `The update could not start: ${String((err as Error)?.message ?? err)}`));
         }
@@ -609,11 +619,11 @@ function runInSandbox(bundle: string, opts: ReassembleOptions, delivery: string)
  *   1. download the bundle from the hard-coded CDN URL; its SHA-384 must
  *      equal `release.bundle.integrity`, it must be UTF-8 and script-safe;
  *   2. in a hidden `sandbox="allow-scripts"` iframe (opaque origin), call the
- *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes?, twinLinks? })`;
+ *      bundle's `OrzCarrier.assemble(text, { delivery, engineSource, includes?, twinLinks?, siteNav? })`;
  *      only messages from that iframe's window are read;
  *   3. accept the html only if `extract(html)` gives exactly `text`, the
  *      kind, the release's version, the delivery, the `includes` and (2.5.0)
- *      the `twinLinks` naming;
+ *      the `twinLinks` naming and (2.10.0) the `siteNav`;
  *   4. remove the iframe in every outcome.
  *
  * Resolves the new file's html; rejects with an {@link UpdateError}. The
@@ -662,6 +672,7 @@ export async function reassemble(opts: ReassembleOptions): Promise<string> {
   if (back.delivery !== delivery) throw new UpdateError('delivery', `The new version wrote delivery "${back.delivery}" instead of "${delivery}"; nothing was changed.`);
   if (!sameIncludes(back.includes, opts.includes)) throw new UpdateError('includes', 'The new version would not keep the document\'s resolved includes exactly; nothing was changed.');
   if (!sameTwinNaming(back.twinLinks, opts.twinLinks)) throw new UpdateError('links', 'The new version would not keep the names this page gives its links to other documents; nothing was changed.');
+  if (!sameSiteNav(back.siteNav, opts.siteNav)) throw new UpdateError('site-nav', 'The new version would not keep this page\'s site navigation (its title, home, previous and next links); nothing was changed.');
   return html;
 }
 

@@ -1,7 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.READER_COPY_NOTICE_MAX = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
+exports.INCLUDES_ISLAND_ID = exports.SHELL_ISLAND_ID = exports.SOURCE_ISLAND_ID = exports.KIND_PACKAGE = exports.SITE_NAV_HREF_MAX = exports.SITE_NAV_TEXT_MAX = exports.READER_COPY_NOTICE_MAX = exports.FAMILY_NAMING = exports.textNameOf = exports.twinFileName = exports.twinHref = exports.isTwinTemplate = exports.sameTwinNaming = exports.readTwinNaming = exports.twinNaming = exports.hasLoneSurrogate = exports.hasMixedEol = exports.eolStyle = exports.decodeText = exports.unescapeScriptText = exports.escapeScriptText = exports.jsonForScript = exports.escapeAttr = exports.escapeHtml = void 0;
 exports.readReaderCopy = readReaderCopy;
+exports.readSiteNavText = readSiteNavText;
+exports.readSiteNavHref = readSiteNavHref;
+exports.readSiteNav = readSiteNav;
+exports.sameSiteNav = sameSiteNav;
 exports.readIslandFromDom = readIslandFromDom;
 exports.reservedIdIn = reservedIdIn;
 exports.extract = extract;
@@ -71,6 +75,69 @@ function readReaderCopy(value) {
         return null;
     const notice = raw.replace(/[\t\n\r ]+/g, ' ').trim();
     return notice.length <= exports.READER_COPY_NOTICE_MAX && VISIBLE.test(notice) && !REFUSED.test(notice) ? { notice } : null;
+}
+/** Longest title or label accepted, in UTF-16 code units. */
+exports.SITE_NAV_TEXT_MAX = 200;
+/** Longest href accepted, in UTF-16 code units. */
+exports.SITE_NAV_HREF_MAX = 2048;
+/** What an href may not hold: whitespace, a backslash (browsers read it as `/`), control, format or separator characters. */
+const HREF_REFUSED = /[\s\\\p{Cc}\p{Cf}\p{Cs}\p{Z}]/u;
+/** A URL scheme at the start. */
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+/** A title or label, normalized (spaces collapsed, trimmed), or null when it breaks the rule. */
+function readSiteNavText(value) {
+    if (typeof value !== 'string')
+        return null;
+    const t = value.replace(/[\t\n\r ]+/g, ' ').trim();
+    return t.length <= exports.SITE_NAV_TEXT_MAX && VISIBLE.test(t) && !REFUSED.test(t) ? t : null;
+}
+/**
+ * An href, or null when it breaks the rule: 1 to {@link SITE_NAV_HREF_MAX}
+ * code units, nothing {@link HREF_REFUSED} refuses, not network-path (`//…`);
+ * either relative (no scheme) or an absolute `http:` / `https:` URL. Never
+ * normalized: what is stored is what the host gave.
+ */
+function readSiteNavHref(value) {
+    if (typeof value !== 'string' || value === '' || value.length > exports.SITE_NAV_HREF_MAX)
+        return null;
+    if (HREF_REFUSED.test(value) || value.startsWith('//'))
+        return null;
+    if (SCHEME.test(value) && !/^https?:\/\/[^/?#]/i.test(value))
+        return null;
+    return value;
+}
+/** An object whose keys are all in `keys`, else null. */
+const only = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((k) => keys.includes(k)) ? value : null;
+/**
+ * Read a site-navigation setting without throwing: the normalized record
+ * (keys in the order `title`, `home`, `previous`, `next`; a link as `href`,
+ * `label`) for an object with a valid `title` and `home` and, when present,
+ * valid `previous` / `next` links and no other key; `null` for anything else.
+ */
+function readSiteNav(value) {
+    const v = only(value, ['title', 'home', 'previous', 'next']);
+    const title = v && readSiteNavText(v.title);
+    const home = v && readSiteNavHref(v.home);
+    if (!v || title === null || home === null)
+        return null;
+    const out = { title, home };
+    for (const key of ['previous', 'next']) {
+        if (v[key] === undefined)
+            continue;
+        const l = only(v[key], ['href', 'label']);
+        const href = l && readSiteNavHref(l.href);
+        const label = l && readSiteNavText(l.label);
+        if (href === null || label === null)
+            return null;
+        out[key] = { href, label };
+    }
+    return out;
+}
+/** Two site-navigation settings say the same (both absent, or equal once read). */
+function sameSiteNav(a, b) {
+    const x = a === undefined || a === null ? null : readSiteNav(a);
+    const y = b === undefined || b === null ? null : readSiteNav(b);
+    return JSON.stringify(x) === JSON.stringify(y);
 }
 /**
  * The npm package of each kind's carrier (its agent skill ships there; its
@@ -268,7 +335,8 @@ function isKind(v) {
  * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
  * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
  * other than the family's; (2.9.0) `readerCopy` from `#orz-shell`
- * `"readerCopy"` when it is valid.
+ * `"readerCopy"` when it is valid; (2.10.0) `siteNav` from `#orz-shell`
+ * `"siteNav"` when it is valid.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */
@@ -309,6 +377,9 @@ function extract(html) {
     const reader = readReaderCopy(shellData['readerCopy']);
     if (reader)
         result.readerCopy = reader;
+    const nav = readSiteNav(shellData['siteNav']);
+    if (nav)
+        result.siteNav = nav;
     // The includes island follows the source island (shell markup before it is not consulted).
     const inc = findScript(html, exports.INCLUDES_ISLAND_ID, Infinity, island.content[1]);
     if (inc) {

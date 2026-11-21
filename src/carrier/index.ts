@@ -15,6 +15,9 @@ export type { TwinNaming, TwinKind } from './naming.js';
 // 2.9.0: a reader copy (FC-18 §8.2 `readerCopy`): a file published for readers says edits stay theirs
 export { readerCopy, readReaderCopy, readerCopyNotice, READER_COPY_NOTICE, READER_COPY_NOTICE_MAX } from './reader-copy.js';
 export type { ReaderCopy } from './reader-copy.js';
+// 2.10.0: site navigation (FC-18 §8.2 `siteNav`): a page's place in a set of pages, drawn outside the text
+export { siteNav, readSiteNav, sameSiteNav, siteNavFrom, SITE_NAV_TEXT_MAX, SITE_NAV_HREF_MAX } from './site-nav.js';
+export type { SiteNav, SiteNavLink } from './site-nav.js';
 export { includeTargets, linkTargets } from './targets.js';
 export type { LinkTarget } from './targets.js';
 export { decodeText } from './text.js';

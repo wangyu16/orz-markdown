@@ -37,6 +37,7 @@ export declare const editChecks: Record<string, CheckFn>;
 export declare const saveChecks: Record<string, CheckFn>;
 export declare const updateChecks: Record<string, CheckFn>;
 export declare const linkChecks: Record<string, CheckFn>;
+export declare const navChecks: Record<string, CheckFn>;
 export declare const hostChecks: Record<string, CheckFn>;
 export declare const prefChecks: Record<string, CheckFn>;
 //# sourceMappingURL=checks.d.ts.map

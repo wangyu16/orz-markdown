@@ -10,10 +10,5 @@ export declare const APP_CSS = "\n:host {\n  position: fixed; z-index: 214748100
 export declare const UPDATE_CONFLICT_MESSAGE = "The file changed on disk since you opened it (another program or an agent edited it), so the update wrote nothing. Reload the page to open its version, then update.";
 /** Update now while the file's save-conflict question is open (S.14): refused, the question focused (round 5 of the carrier-app loop, B4). */
 export declare const UPDATE_QUESTION_OPEN = "The file changed on disk and the question about it is still open, so the update wrote nothing. Answer it first (Replace it, or Download a copy instead), then update.";
-/**
- * Boot the standalone file in `window` (default: the global window): null
- * when the page is not an assembled file of this kind (an app page, the
- * update sandbox) — nothing is touched then.
- */
 export declare function bootCarrierApp(k: StandaloneKind, options?: CarrierAppOptions): CarrierApp | null;
 //# sourceMappingURL=app.d.ts.map

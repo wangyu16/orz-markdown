@@ -37,7 +37,7 @@ const engine = captureEngineSource();
 
 function assemble(text: string, o: AppAssembleOptions = {}): Promise<string> {
   try {
-    return Promise.resolve(stubAssemble(text, { version: bugs.shellVersion(VERSION), variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? engine.inline, ...(o.includes ? { includes: o.includes } : {}), ...(o.twinLinks && VARIANT !== 'save-drops-links' ? { twinLinks: o.twinLinks } : {}) })); // BUG (mutation) save-drops-links
+    return Promise.resolve(stubAssemble(text, { version: bugs.shellVersion(VERSION), variant: VARIANT, delivery: o.delivery ?? 'inline', engineSource: o.engineSource ?? engine.inline, ...(o.includes ? { includes: o.includes } : {}), ...(o.twinLinks && VARIANT !== 'save-drops-links' ? { twinLinks: o.twinLinks } : {}), ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}), ...(o.siteNav && VARIANT !== 'save-drops-nav' ? { siteNav: o.siteNav } : {}) })); // BUG (mutation) save-drops-links, save-drops-nav
   } catch (e) {
     return bugs.refused(text, e, VERSION);
   }

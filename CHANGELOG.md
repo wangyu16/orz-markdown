@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Site navigation** (FC-18 §8.2 and FC-19 §2 minor revision; owner
+  decision 2026-11-21): `assembleEnvelope(text, { siteNav })` / a carrier's
+  `assemble(text, { siteNav })` — `{ title, home, previous?, next? }`, a
+  neighbour `{ href, label }`; plain-text title and labels (1–200 UTF-16
+  code units, a visible character, no control or format character); hrefs
+  relative or absolute `http(s)` (no whitespace, backslash or control
+  character, not `//…`) — stores `"siteNav"` in `#orz-shell` (normalized);
+  `extract(html).siteNav` reads it back. `siteNav`, `siteNavFrom`,
+  `readSiteNav`, `sameSiteNav`, `SITE_NAV_TEXT_MAX`, `SITE_NAV_HREF_MAX` in
+  `orz-markdown/carrier` (`/carrier/read` has `readSiteNav`, `sameSiteNav`
+  and the limits). A file without it is byte for byte as before. The carrier
+  app draws it as a bar above the read view (spec/carrier-app.md §4.5b): a
+  `<nav>` landmark named by the title, first in the page; the title links
+  home, Previous / Next link the neighbours (`rel` prev/next); 40 px, its
+  height in `--orz-site-nav-height` on the root (a fixed read view starts
+  below it); the page's scheme; "Previous" / "Next" on narrow screens;
+  hidden in edit mode, with the chrome and in print. Every save, Download a
+  copy, Save as new copy and the quiet update keep it (refusal code
+  `site-nav`); on a served page with no host its hrefs are resolved against
+  the page's address, so a downloaded copy's links lead back to the
+  website. New document has none. Conformance checks `C.nav.assemble`,
+  `C.nav.read-view`, `C.save.keeps-nav`, `C.update.keeps-nav` (target
+  option `siteNav`; not applicable to a carrier whose `assemble` ignores
+  the option).
+
+### Fixed
+
+- verify.html re-assembles a file with its `readerCopy` (2.9.0) and
+  `siteNav`, so a published reader copy is no longer reported as not the
+  release's.
+
 ## [2.9.0] - 2026-11-20
 
 ### Added

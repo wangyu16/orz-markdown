@@ -13,6 +13,7 @@
 import type { HeaderChange } from '../header.js';
 import type { TwinNaming } from '../naming.js';
 import type { ReaderCopy } from '../reader-copy.js';
+import type { SiteNav } from '../read.js';
 import type { Extracted } from '../envelope.js';
 import type { DocumentInfo } from '../document.js';
 import type { EditorHooks, EditorShell } from '../editor/shell.js';
@@ -178,6 +179,14 @@ export interface OpenedFile {
    * (spec/carrier-app.md §2.4). Never kept by a save, a download or a copy.
    */
   readerCopy?: ReaderCopy;
+  /**
+   * (2.10.0) The file's site navigation (`#orz-shell` `"siteNav"`, FC-18
+   * §8.2): drawn as a bar above the read view (spec/carrier-app.md §4.5b) and
+   * kept by every save, download, copy and update — on a served page with no
+   * host with its hrefs resolved against the page's address. New document
+   * has none.
+   */
+  siteNav?: SiteNav;
 }
 
 // ── the seam ───────────────────────────────────────────────────────────────
@@ -195,6 +204,8 @@ export interface AppAssembleOptions {
    * with — never for a file it writes.
    */
   readerCopy?: ReaderCopy;
+  /** (2.10.0) The site navigation (FC-18 §8.2): stored in `#orz-shell` as `"siteNav"`; the app passes the file's to every file it writes but a new document. */
+  siteNav?: SiteNav;
 }
 
 /** FC-19 §3 `EditorOptions`, as a kind's `mountEditor` takes them. */

@@ -1,9 +1,11 @@
 import { type Kind } from './document.js';
 import { type TwinNaming } from './naming.js';
 import { type ReaderCopy } from './reader-copy.js';
+import { type SiteNav } from './site-nav.js';
 export { extract, readIslandFromDom, KIND_PACKAGE, SOURCE_ISLAND_ID, SHELL_ISLAND_ID, INCLUDES_ISLAND_ID } from './read.js';
 export type { Extracted, IslandElement } from './read.js';
 export type { ReaderCopy } from './reader-copy.js';
+export type { SiteNav, SiteNavLink } from './site-nav.js';
 export { eolStyle, hasMixedEol, hasLoneSurrogate } from './text.js';
 export type { EolStyle } from './text.js';
 /** The shell's contribution to an assembled file. */
@@ -38,6 +40,16 @@ export interface ShellParts {
      * An invalid value throws.
      */
     readerCopy?: ReaderCopy | boolean | null;
+    /**
+     * (2.10.0) Site navigation (FC-18 §8.2): the file is one page of a set of
+     * pages, and this is its place in it — `{ title, home, previous?, next? }`
+     * (plain-text title and labels; relative or absolute http(s) hrefs). The
+     * file's runtime draws it as a bar outside the text (spec/carrier-app.md
+     * §4.5b). Normalized with `siteNav` and stored in `#orz-shell` as
+     * `"siteNav"`; absent, `false` or `null` write nothing, so a file without it
+     * is byte-identical to one assembled before 2.10.0. An invalid value throws.
+     */
+    siteNav?: SiteNav | false | null;
 }
 /** The agent skill URL of a kind's carrier. */
 export declare function skillUrl(kind: Kind): string;
@@ -46,8 +58,8 @@ export declare function skillUrl(kind: Kind): string;
  * data-orz-kind>`; charset; generator `orz-<kind> <shellVersion>`; `<title>`
  * (derived, FC-18 §8.1); head metadata and `#orz-meta` from the header's
  * DocMeta; `#orz-shell` `{kind, format, shell, delivery}` (plus `links`, the
- * twin-link naming, when it is not the family's; 2.5.0; and `readerCopy`,
- * 2.9.0); the shell's head;
+ * twin-link naming, when it is not the family's; 2.5.0; `readerCopy`,
+ * 2.9.0; and `siteNav`, 2.10.0); the shell's head;
  * then in `<body>` the agent banner, the source island (`data-orz-format`,
  * `data-orz-eol`, `data-orz-bom` when the text starts with U+FEFF), `#orz-includes`
  * when there are includes, and the shell's body. Deterministic.

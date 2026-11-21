@@ -153,7 +153,14 @@ its saves, quiet update and verify.html keep it. A website that publishes pages 
 readers passes `assemble(text, { readerCopy: true })` (≥ 2.9.0; or `{
 notice: '…' }` with its own words): opened from that site, the page's editor
 says at once that edits can't be saved to the website, and its Save reads
-"Download a copy" (the downloaded copy is an ordinary file).
+"Download a copy" (the downloaded copy is an ordinary file). A page that is
+one of a set of pages gets its place in the set with `assemble(text, {
+siteNav: { title, home, previous?: { href, label }, next?: { href, label } }
+})` (≥ 2.10.0; plain-text title and labels, relative or `http(s)` hrefs): the
+file draws a slim bar above the document — the title linking home,
+Previous / Next — outside the text, never printed; saves, the quiet update
+and verify.html keep it, and a copy downloaded from the website keeps it with
+its links pointing back to the website.
 
 Host applications that read or write metadata use one model,
 `orz-markdown/doc-meta` (`DocMeta`; `extractDocMeta`, `mergeDocMeta` — host

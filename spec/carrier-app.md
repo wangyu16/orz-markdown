@@ -55,6 +55,7 @@ markup, FC-18 §8.1):
 | `includes` | `#orz-includes` (own string values) — a page cannot resolve them again (D4) |
 | `twinLinks` | (2.5.0) `#orz-shell` `"links"`, read as `extract` reads it (normalized; absent for the family naming or an invalid value) — kept by every save, Download a copy, Save as new copy and the quiet update; New document has none (FC-18 §8.2) |
 | `readerCopy` | (2.9.0) `#orz-shell` `"readerCopy"`, read as `extract` reads it (`{}` or `{ notice }`; absent when missing or invalid) — never kept: no save, download, copy or update writes it (§4.5a, FC-18 §8.2) |
+| `siteNav` | (2.10.0) `#orz-shell` `"siteNav"`, read as `extract` reads it (absent when missing or invalid) — drawn as the bar of §4.5b; kept by every save, Download a copy, Save as new copy and the quiet update (on a served page with no host with its hrefs resolved against the page's address, `siteNavFrom`); New document has none (FC-18 §8.2) |
 | `engine` | `#orz-engine` without `src`: the inline bundle's exact text (null for `cdn`) |
 | `fileName` | the page path's last segment when it ends in the kind's extension, decoded; (2.5.0) else, for a page published under the file's naming (`week1.html` with `{ md: "{stem}.html" }`), its dual name (`week1.md.html`) — a saved or downloaded copy keeps a name that says its kind; else `document` + the extension |
 
@@ -434,6 +435,40 @@ host connection. Its edits cannot go back to the page's address, so:
 
 A `file:` page, a framed or hosted page, or a file without the setting run
 as before.
+
+### 4.5b Site navigation (2.10.0; owner decision 2026-11-21)
+
+A file whose `#orz-shell` holds `"siteNav"` (FC-18 §8.2: a host — a website
+builder — gave it its place in a set of pages) shows a slim **bar above the
+read view**, outside the document text (the text, its island and the read
+view's content are as without it):
+
+- **A landmark.** A `<nav class="orz-site-nav">` whose accessible name is the
+  set's title, inserted first in `<body>` — before the chrome's mount and the
+  read view, so the keyboard reaches it first. Its look lives in its own
+  shadow root (the page's CSS does not reach it; it does not reach the page).
+- **Plain links** (they work without the editor and without script once
+  drawn): the title, linking `home`; then `previous` (`rel="prev"`, accessible
+  name "Previous: <label>") and `next` (`rel="next"`, "Next: <label>"), each
+  only when given. Texts are set as text, never markup; hrefs are the
+  file's own (relative ones resolve against the page).
+- **One fixed height** (40 px), published on the root element as
+  `--orz-site-nav-height` while the bar shows (removed while it is hidden),
+  so a read view drawn fixed over the viewport (slides) starts below it.
+- **The page's scheme** (light / dark, from the read view's `present`).
+- **Narrow screens** (≤ 600 px wide): the neighbours read "Previous" / "Next"
+  (their accessible names keep the labels); the title is cut with an
+  ellipsis; nothing leaves a 390 px screen. Links are at least 32 px tall.
+- **Hidden** in edit mode (with the read view), while the chrome is hidden
+  (`setChromeVisible(false)`: slides' Present in the page), and in print
+  (`@media print`): it is never printed, which keeps paged's print-first
+  output as it is (RULES §9).
+- **Kept by writes** (§2 table): every file the app writes but a new document
+  carries it; on a served (`http:`/`https:`), top-level page with no host the
+  hrefs are resolved against the page's address, so a downloaded copy's bar
+  leads back to the website. The opened bytes (the content proof) are
+  assembled with the setting as stored. A kind whose `assemble` drops it is
+  refused (nothing written), as for `links`.
 
 ### 4.6 Leaving with unsaved changes
 

@@ -16,6 +16,14 @@ such a file as the family naming.
 readers, so its editor says edits cannot be saved back to its address. A
 file assembled without it is byte-identical to before.
 
+**Minor revision, orz-markdown 2.10.0 (additive; owner decision of
+2026-11-21, notes/REQUEST-orz-site-nav.md in the family root):** the
+assembly option `siteNav`, stored in `#orz-shell` as `"siteNav"` only when
+given (§8.1, §8.2): the file is one page of a set of pages, and this is its
+place in it (the set's title, its home page, the previous and next page),
+drawn by the file's runtime outside the text. A file assembled without it is
+byte-identical to before.
+
 **Owner decisions are collected in §12 (all taken 2026-10-05).**
 
 ## 1. Purpose
@@ -305,6 +313,7 @@ FC-01 unchanged.
   <script type="application/json" id="orz-shell">{"kind":"…","format":1,"shell":"…","delivery":"inline"}</script>
   <!-- 2.5.0: with a naming other than the family's, #orz-shell ends …,"delivery":"…","links":{"md":"{stem}.html"}} -->
   <!-- 2.9.0: a reader copy ends it …,"readerCopy":{} or …,"readerCopy":{"notice":"…"}} (after "links") -->
+  <!-- 2.10.0: site navigation ends it …,"siteNav":{"title":"…","home":"…","previous":{"href":"…","label":"…"},"next":{…}}} (after "readerCopy") -->
   … shell assets …
 </head>
 <body>
@@ -410,6 +419,33 @@ the in-file runtime honours it only on a served, top-level page with no
 host (spec/carrier-app.md §4.5a: the editor's notice, Save as "Download a
 copy") and none of its saves, downloads, copies or updates writes it — the
 reader's downloaded copy is an ordinary file.
+
+`siteNav` (orz-markdown 2.10.0, additive; owner decision 2026-11-21) is the
+file's **place in a set of pages** (a website's): `{ title, home, previous?,
+next? }`, a neighbour `{ href, label }`. The title and labels are plain text
+(never markup; runs of spaces and line breaks collapsed and trimmed, 1–200
+UTF-16 code units, at least one visible character, no control or format
+character but the zero-width joiner and non-joiner); `home` and the hrefs are
+URL references, relative (no scheme) or absolute `http:`/`https:` with a
+host, 1–2048 code units, with no whitespace, backslash or control character
+and not network-path (`//…`) — so never `javascript:`, `data:` or `file:`.
+The option names no kind of set: a host decides what the set is, its order
+and its words. Absent, `false` or `null`: nothing is written (a file without
+it is byte for byte what 2.9 writes); anything else is refused (`assemble`
+throws). It is **normalized** (keys in the order `title`, `home`,
+`previous`, `next`; a link `href`, `label`) and written into `#orz-shell` as
+`"siteNav"` (after `delivery`, `links` and `readerCopy`). It is part of the
+options `o` of the laws (§2). `extract` returns it as `siteNav` (absent when
+missing or invalid). It is **outside the text**: the text, the island and
+`extract().text` do not change; the file's runtime draws it as a bar above
+the read view (spec/carrier-app.md §4.5b). Like `twinLinks` it is **carried
+over** by every re-assembly in the browser — the in-file save, Download a
+copy, Save as new copy (not New document), the quiet update (refused
+otherwise, code `site-nav`) and the website's verify.html — exactly as
+stored, except that a file written from a **served** page with no host gets
+the hrefs **resolved against the page's address** (`siteNavFrom`): a reader's
+downloaded copy keeps the bar, and its links lead back to the website
+instead of to files that are not next to the copy.
 
 ### 8.3 Links, assets, includes
 

@@ -20,6 +20,40 @@ export declare const READER_COPY_NOTICE_MAX = 300;
  * for none (`undefined`, `null`, `false`) and for anything invalid.
  */
 export declare function readReaderCopy(value: unknown): ReaderCopy | null;
+/** One neighbour of a page: where it is and what a reader reads. */
+export interface SiteNavLink {
+    href: string;
+    label: string;
+}
+/** A page's place in a set of pages: the set's title, its home page, the page before and after it. */
+export interface SiteNav {
+    title: string;
+    home: string;
+    previous?: SiteNavLink;
+    next?: SiteNavLink;
+}
+/** Longest title or label accepted, in UTF-16 code units. */
+export declare const SITE_NAV_TEXT_MAX = 200;
+/** Longest href accepted, in UTF-16 code units. */
+export declare const SITE_NAV_HREF_MAX = 2048;
+/** A title or label, normalized (spaces collapsed, trimmed), or null when it breaks the rule. */
+export declare function readSiteNavText(value: unknown): string | null;
+/**
+ * An href, or null when it breaks the rule: 1 to {@link SITE_NAV_HREF_MAX}
+ * code units, nothing {@link HREF_REFUSED} refuses, not network-path (`//…`);
+ * either relative (no scheme) or an absolute `http:` / `https:` URL. Never
+ * normalized: what is stored is what the host gave.
+ */
+export declare function readSiteNavHref(value: unknown): string | null;
+/**
+ * Read a site-navigation setting without throwing: the normalized record
+ * (keys in the order `title`, `home`, `previous`, `next`; a link as `href`,
+ * `label`) for an object with a valid `title` and `home` and, when present,
+ * valid `previous` / `next` links and no other key; `null` for anything else.
+ */
+export declare function readSiteNav(value: unknown): SiteNav | null;
+/** Two site-navigation settings say the same (both absent, or equal once read). */
+export declare function sameSiteNav(a: unknown, b: unknown): boolean;
 /** What {@link extract} reads back. */
 export interface Extracted {
     /** The text, exactly as it was assembled. */
@@ -44,6 +78,11 @@ export interface Extracted {
      * none or an invalid one.
      */
     readerCopy?: ReaderCopy;
+    /**
+     * (2.10.0) The site navigation stored in `#orz-shell` as `"siteNav"`
+     * (FC-18 §8.2), normalized; absent when the file has none or an invalid one.
+     */
+    siteNav?: SiteNav;
 }
 /**
  * The npm package of each kind's carrier (its agent skill ships there; its
@@ -81,7 +120,8 @@ export declare function reservedIdIn(html: string): string | null;
  * `data-orz-format`, `md`, `1`, `''`); `includes` from `#orz-includes`;
  * (2.5.0) `twinLinks` from `#orz-shell` `"links"` when it is a valid naming
  * other than the family's; (2.9.0) `readerCopy` from `#orz-shell`
- * `"readerCopy"` when it is valid.
+ * `"readerCopy"` when it is valid; (2.10.0) `siteNav` from `#orz-shell`
+ * `"siteNav"` when it is valid.
  * `null` when there is no source island.
  * Experimental files (slides' `#orz-deck`) are not read.
  */

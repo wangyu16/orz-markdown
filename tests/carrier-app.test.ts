@@ -194,8 +194,10 @@ function valueImports(entry: string): Set<string> {
 // 2026-10-09 (2.2.0, the handle and the brand of edit mode): own 52,682 B, delta 66,877 B, both 1,089,611 B; bounds ~10 % above.
 // 2026-10-09 (2.3.0, the kit gaps of orz-paged 1.0: action submenus, conditional actions and settings, block-valued
 // settings, reader choices, menuButton submenus): own 60,146 B, delta 74,515 B, both 1,098,908 B; bounds ~10 % above.
-const APP_OWN_LIMIT = 66_000;
-const APP_DELTA_LIMIT = 82_000;
+// 2026-11-21 (2.10.0, the site-navigation bar and its carry-over, carrier-app §4.5b): own 68,122 B; the own bound
+// raised to 75 KB, delta 86,915 B (the bar, site-nav.ts and the reader's site-navigation rule), raised to 92 KB.
+const APP_OWN_LIMIT = 75_000;
+const APP_DELTA_LIMIT = 92_000;
 // 2026-10-14 (2.4.0, orz-slides closed-loop round A2: the chart palette past its end and the span-aware gantt axis in
 // the content-theme script, +4.3 KB): both 1,150,373 B; the total bound raised to 1.16 MB (own and delta unchanged).
 // 2.4.0 confirming round (E.46 shared blob assets, E.47 asset paths, E.48 the render context on the channel, +1.6 KB): 1,161,571 B; bound 1.17 MB
@@ -203,17 +205,20 @@ const APP_DELTA_LIMIT = 82_000;
 // D-101 the toolbar fit, D-91 messages in user words): 1,170,756 B; bound 1.18 MB
 // 2.7.0 (D-129…D-135: reveal, the save-status hook, the folded header, the toolbar's More, the menu kept on screen):
 // 1,185,845 B; bound 1.19 MB. Audit rounds 1–4 of 2.7.0 (the header guard, focus-fold refusals, announcements): 1,190,719 B; bound 1.20 MB
-const EDITOR_AND_APP_LIMIT = 1_200_000;
+// 2.10.0 (the site-navigation bar): 1,206,197 B; bound 1.21 MB.
+const EDITOR_AND_APP_LIMIT = 1_210_000;
 
 describe('module boundaries, load-time safety and size', () => {
   it('[A.1] carrier/app may import carrier/shell, carrier/editor and carrier/read (and the core modules the editor already loads): its value-import graph is that; carrier, carrier/read, carrier/shell, carrier/editor, carrier/conformance and the parser entry never import it; the package exports ./carrier/app', () => {
     const app = valueImports('src/carrier/app/index.ts');
     // 2.9.0: reader-copy.ts (the kit's words for a reader copy; parser-free, imports only read.ts) — kept out
     // of carrier/read so the reader, update and shell bundles stay their size (audit MEDIUM-1)
-    const allowed = new Set([...valueImports('src/carrier/editor/index.ts'), ...valueImports('src/carrier/shell/index.ts'), ...valueImports('src/carrier/read.ts'), 'src/carrier/reader-copy.ts']);
+    const allowed = new Set([...valueImports('src/carrier/editor/index.ts'), ...valueImports('src/carrier/shell/index.ts'), ...valueImports('src/carrier/read.ts'), 'src/carrier/reader-copy.ts', 'src/carrier/site-nav.ts']);
+    // 2.10.0: site-nav.ts (siteNavFrom, sameSiteNav for the carry-over; parser-free, imports only read.ts)
+    expect([...valueImports('src/carrier/site-nav.ts')].sort()).toEqual([...valueImports('src/carrier/read.ts'), 'src/carrier/site-nav.ts'].sort());
     expect([...valueImports('src/carrier/reader-copy.ts')].sort()).toEqual([...valueImports('src/carrier/read.ts'), 'src/carrier/reader-copy.ts'].sort());
     expect([...app].filter((f) => !f.startsWith('src/carrier/app/') && !allowed.has(f))).toEqual([]);
-    expect([...app].filter((f) => f.startsWith('src/carrier/app/')).sort()).toEqual(['app.ts', 'engine-source.ts', 'file.ts', 'handle.ts', 'index.ts', 'start.ts', 'widgets.ts'].map((f) => `src/carrier/app/${f}`));
+    expect([...app].filter((f) => f.startsWith('src/carrier/app/')).sort()).toEqual(['app.ts', 'engine-source.ts', 'file.ts', 'handle.ts', 'index.ts', 'site-nav.ts', 'start.ts', 'widgets.ts'].map((f) => `src/carrier/app/${f}`));
     for (const entry of ['src/index.ts', 'src/carrier.ts', 'src/carrier/read.ts', 'src/carrier/shell/index.ts', 'src/carrier/editor/index.ts', 'src/carrier/conformance/index.ts']) {
       expect([...valueImports(entry)].filter((f) => f.includes('carrier/app/')), entry).toEqual([]);
     }
@@ -221,7 +226,7 @@ describe('module boundaries, load-time safety and size', () => {
     expect(pkg.exports['./carrier/app']).toBe('./dist/carrier/app/index.js');
   });
 
-  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 66 KB and adds under 82 KB to a carrier bundle that already holds the editor (the whole under 1.20 MB)', async () => {
+  it('[A.2] carrier/app touches no browser global at load (a context where window, document, storage, navigator, location, fetch and the rest throw loads it; the parser\'s own feature detection aside), and what ships — the CommonJS dist bundled — holds the app\'s own modules under 75 KB and adds under 92 KB to a carrier bundle that already holds the editor (the whole under 1.21 MB)', async () => {
     const { build } = await import('esbuild');
     const load = async (entry: string) => {
       const out = await build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'cjs', write: false, logLevel: 'silent' });

@@ -15,7 +15,9 @@
 export { bootCarrierApp, APP_CSS, UPDATE_CONFLICT_MESSAGE, UPDATE_QUESTION_OPEN } from './app.js';
 export { startCarrier, carrierGlobal } from './start.js';
 export type { StartOptions } from './start.js';
-export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, shellTwinLinks, openedFileName, copyName } from './file.js';
+export { readOpenedFile, sourceIsland, shellDelivery, shellIncludes, shellTwinLinks, shellSiteNav, openedFileName, copyName } from './file.js';
+export { mountSiteNav, SITE_NAV_CSS, SITE_NAV_HEIGHT, SITE_NAV_HEIGHT_PROPERTY } from './site-nav.js';
+export type { SiteNavBar } from './site-nav.js';
 export { captureEngineSource } from './engine-source.js';
 export type { EngineSource, CaptureOptions } from './engine-source.js';
 export {
