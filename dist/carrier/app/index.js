@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingChanges = exports.hiddenFor = exports.settingOffered = exports.settingChoices = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.SITE_NAV_HEIGHT_PROPERTY = exports.SITE_NAV_HEIGHT = exports.SITE_NAV_CSS = exports.mountSiteNav = exports.copyName = exports.openedFileName = exports.shellSiteNav = exports.shellTwinLinks = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.UPDATE_QUESTION_OPEN = exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = exports.bootCarrierApp = void 0;
+exports.followPresentation = exports.attachAiMenu = exports.reviewProposal = exports.attachSettings = exports.settingChanges = exports.hiddenFor = exports.settingOffered = exports.settingChoices = exports.settingPicker = exports.menuButton = exports.button = exports.installCss = exports.WIDGET_CSS = exports.captureEngineSource = exports.SITE_NAV_HEIGHT_PROPERTY = exports.SITE_NAV_HEIGHT = exports.SITE_NAV_PAGE_CSS = exports.SITE_NAV_CSS = exports.mountSiteNav = exports.copyName = exports.openedFileName = exports.shellSiteNav = exports.shellTwinLinks = exports.shellIncludes = exports.shellDelivery = exports.sourceIsland = exports.readOpenedFile = exports.carrierGlobal = exports.startCarrier = exports.UPDATE_QUESTION_OPEN = exports.UPDATE_CONFLICT_MESSAGE = exports.APP_CSS = exports.bootCarrierApp = void 0;
 /**
  * `orz-markdown/carrier/app` — the standalone assembled file's runtime
  * (spec/carrier-app.md): kind-independent, used by every carrier's browser
@@ -35,6 +35,7 @@ Object.defineProperty(exports, "copyName", { enumerable: true, get: function () 
 var site_nav_js_1 = require("./site-nav.js");
 Object.defineProperty(exports, "mountSiteNav", { enumerable: true, get: function () { return site_nav_js_1.mountSiteNav; } });
 Object.defineProperty(exports, "SITE_NAV_CSS", { enumerable: true, get: function () { return site_nav_js_1.SITE_NAV_CSS; } });
+Object.defineProperty(exports, "SITE_NAV_PAGE_CSS", { enumerable: true, get: function () { return site_nav_js_1.SITE_NAV_PAGE_CSS; } });
 Object.defineProperty(exports, "SITE_NAV_HEIGHT", { enumerable: true, get: function () { return site_nav_js_1.SITE_NAV_HEIGHT; } });
 Object.defineProperty(exports, "SITE_NAV_HEIGHT_PROPERTY", { enumerable: true, get: function () { return site_nav_js_1.SITE_NAV_HEIGHT_PROPERTY; } });
 var engine_source_js_1 = require("./engine-source.js");

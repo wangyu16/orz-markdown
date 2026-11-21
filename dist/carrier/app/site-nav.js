@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SITE_NAV_CSS = exports.SITE_NAV_HEIGHT_PROPERTY = exports.SITE_NAV_HEIGHT = void 0;
+exports.SITE_NAV_PAGE_CSS = exports.SITE_NAV_CSS = exports.SITE_NAV_HEIGHT_PROPERTY = exports.SITE_NAV_HEIGHT = void 0;
 exports.mountSiteNav = mountSiteNav;
 const widgets_js_1 = require("./widgets.js");
 /** The bar's height in CSS px (fixed, so a fixed read view can make room for it before it renders). */
@@ -8,7 +8,7 @@ exports.SITE_NAV_HEIGHT = 40;
 /** The root element's custom property holding the bar's height while it shows. */
 exports.SITE_NAV_HEIGHT_PROPERTY = '--orz-site-nav-height';
 exports.SITE_NAV_CSS = `
-:host { display: block; box-sizing: border-box; height: ${exports.SITE_NAV_HEIGHT}px; position: relative; z-index: 3;
+:host { display: block; box-sizing: border-box; height: ${exports.SITE_NAV_HEIGHT}px; position: absolute; top: 0; left: 0; right: 0; margin: 0; z-index: 3;
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --nav-bg: rgba(255,255,255,.96); --nav-fg: #1f2328; --nav-muted: #59606b; --nav-line: rgba(0,0,0,.12); --nav-hover: rgba(0,0,0,.06); --nav-focus: #2f6fde;
   background: var(--nav-bg); color: var(--nav-fg); border-bottom: 1px solid var(--nav-line); }
@@ -34,6 +34,28 @@ a:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 1px; }
   .steps { max-width: none; flex: none; }
 }
 `;
+/** The page's side (screen only): the root element's top padding is the bar's room while it shows. */
+exports.SITE_NAV_PAGE_CSS = `@media screen { html { padding-top: var(${exports.SITE_NAV_HEIGHT_PROPERTY}, 0px); } }`;
+/** Adopt {@link SITE_NAV_PAGE_CSS} into the document once (constructed sheet; a `<style>` where that is missing). */
+function installPageCss(doc) {
+    const d = doc;
+    if (d.__orzSiteNavCss)
+        return;
+    d.__orzSiteNavCss = true;
+    const Sheet = doc.defaultView?.CSSStyleSheet;
+    try {
+        if (Sheet && Array.isArray(d.adoptedStyleSheets)) {
+            const sheet = new Sheet();
+            sheet.replaceSync(exports.SITE_NAV_PAGE_CSS);
+            d.adoptedStyleSheets = [...d.adoptedStyleSheets, sheet];
+            return;
+        }
+    }
+    catch { /* fall back */ }
+    const style = doc.createElement('style');
+    style.textContent = exports.SITE_NAV_PAGE_CSS;
+    doc.head.append(style);
+}
 /**
  * Draw a file's site navigation: a `<nav>` inserted before `before` (or first
  * in `<body>`), labelled by the title. Texts are set as text, never markup;
@@ -88,6 +110,7 @@ function mountSiteNav(doc, nav, o = {}) {
         before.before(host);
     else
         doc.body.prepend(host);
+    installPageCss(doc);
     const rootStyle = doc.documentElement.style;
     const setVisible = (visible) => {
         host.hidden = !visible;

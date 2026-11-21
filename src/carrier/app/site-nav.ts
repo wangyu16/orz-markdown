@@ -15,6 +15,12 @@
  * - The page's colour scheme (light / dark, the read view's `present`).
  * - Narrow screens (≤ 600 px): the neighbours read "Previous" / "Next" (their
  *   accessible names keep the labels); the title is cut with an ellipsis.
+ * - Edge to edge at the top of the page whatever the page's CSS: drawn
+ *   `position: absolute` at the top of the document, the room for it made by
+ *   the root element's top padding on screen (`PAGE_CSS`, a constructed
+ *   sheet adopted by the document: no inline style, nothing in print). A
+ *   kind whose view is fixed over the viewport sets that padding back to 0
+ *   and starts its view at `--orz-site-nav-height` instead (slides).
  * - Never printed (`@media print`).
  */
 import type { SiteNav } from '../read.js';
@@ -28,7 +34,7 @@ export const SITE_NAV_HEIGHT = 40;
 export const SITE_NAV_HEIGHT_PROPERTY = '--orz-site-nav-height';
 
 export const SITE_NAV_CSS = `
-:host { display: block; box-sizing: border-box; height: ${SITE_NAV_HEIGHT}px; position: relative; z-index: 3;
+:host { display: block; box-sizing: border-box; height: ${SITE_NAV_HEIGHT}px; position: absolute; top: 0; left: 0; right: 0; margin: 0; z-index: 3;
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --nav-bg: rgba(255,255,255,.96); --nav-fg: #1f2328; --nav-muted: #59606b; --nav-line: rgba(0,0,0,.12); --nav-hover: rgba(0,0,0,.06); --nav-focus: #2f6fde;
   background: var(--nav-bg); color: var(--nav-fg); border-bottom: 1px solid var(--nav-line); }
@@ -54,6 +60,28 @@ a:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 1px; }
   .steps { max-width: none; flex: none; }
 }
 `;
+
+/** The page's side (screen only): the root element's top padding is the bar's room while it shows. */
+export const SITE_NAV_PAGE_CSS = `@media screen { html { padding-top: var(${SITE_NAV_HEIGHT_PROPERTY}, 0px); } }`;
+
+/** Adopt {@link SITE_NAV_PAGE_CSS} into the document once (constructed sheet; a `<style>` where that is missing). */
+function installPageCss(doc: AppDocument): void {
+  const d = doc as AppDocument & { adoptedStyleSheets?: unknown[]; __orzSiteNavCss?: boolean };
+  if (d.__orzSiteNavCss) return;
+  d.__orzSiteNavCss = true;
+  const Sheet = doc.defaultView?.CSSStyleSheet;
+  try {
+    if (Sheet && Array.isArray(d.adoptedStyleSheets)) {
+      const sheet = new Sheet();
+      sheet.replaceSync(SITE_NAV_PAGE_CSS);
+      d.adoptedStyleSheets = [...d.adoptedStyleSheets, sheet];
+      return;
+    }
+  } catch { /* fall back */ }
+  const style = doc.createElement('style');
+  style.textContent = SITE_NAV_PAGE_CSS;
+  doc.head.append(style);
+}
 
 /** The bar on the page. */
 export interface SiteNavBar {
@@ -113,6 +141,7 @@ export function mountSiteNav(doc: AppDocument, nav: SiteNav, o: { before?: AppEl
   const before = o.before ?? null;
   if (before?.before) before.before(host);
   else doc.body.prepend(host);
+  installPageCss(doc);
   const rootStyle = doc.documentElement.style as AppElement['style'] & { removeProperty?(name: string): void };
   const setVisible = (visible: boolean): void => {
     host.hidden = !visible;

@@ -452,6 +452,12 @@ view's content are as without it):
   name "Previous: <label>") and `next` (`rel="next"`, "Next: <label>"), each
   only when given. Texts are set as text, never markup; hrefs are the
   file's own (relative ones resolve against the page).
+- **Edge to edge** at the top of the page whatever the page's CSS: drawn
+  `position: absolute` at the document's top; its room is the root
+  element's top padding on screen (`--orz-site-nav-height`, a constructed
+  sheet the document adopts — nothing inline, nothing in print). A kind
+  whose read view is fixed over the viewport (slides) sets that padding back
+  to 0 and starts the view at `--orz-site-nav-height`.
 - **One fixed height** (40 px), published on the root element as
   `--orz-site-nav-height` while the bar shows (removed while it is hidden),
   so a read view drawn fixed over the viewport (slides) starts below it.
