@@ -1,7 +1,7 @@
 /**
  * Twin-link naming in real Chrome (orz-markdown 2.5.0, K1 of the orz-site
  * design; FC-18 §8.2/§8.3): claims A.33 and M.44 in notes/CLAIMS.md; and
- * (2.9.0) a reader copy served over http, A.35. The stub
+ * (2.9.0) a reader copy served over http, A.35, and (2.10.0) its save status, A.37. The stub
  * carrier (tests/conformance-stub/, built here from this checkout's kit) is the
  * carrier: a file it assembled with a naming, opened under the name the naming
  * gives it, renders its links — in the read view and in the editor's preview —
@@ -145,6 +145,56 @@ describe('a reader copy served over http, in Chrome', () => {
       await page.evaluate('globalThis.OrzCarrier.standalone.edit().ready');
       const local = await page.evaluate(editorState) as { note: string | null; save: string };
       expect([local.note, local.save]).toEqual([null, 'Save']);
+    } finally {
+      await ctx.close();
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  }, 120_000);
+});
+
+describe('a reader copy\'s save status, in Chrome (2.10.0, D-154)', () => {
+  it('[A.37] served over http, the reader copy\'s editor status reads "Not saved: download to keep" with a grey (muted) dot — never the green saved one — and amber once edited; after Download a copy the toast is "Download started." and the status "Copy downloaded" with the grey dot; opened from disk the same bytes say "Saved" with the green dot', async () => {
+    if (!browser) return;
+    const http = await import('node:http');
+    const html = stubAssemble(TEXT, { version: '1.1.0', variant: 'good', delivery: 'inline', engineSource: stub.code, readerCopy: true });
+    const server = http.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html); });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const port = (server.address() as { port: number }).port;
+    const ctx = await browser.newContext({ acceptDownloads: true });
+    await ctx.addInitScript({ content: initScript('stub') });
+    const page: Page = await ctx.newPage();
+    // the status words as shown, the tone, the dot's colour and the chrome's success/muted/warning colours resolved the same way
+    const status = `(function () { var r = globalThis.OrzCarrier.standalone.editor().root; var e = r.querySelector('.orz-editor'); var s = r.querySelector('.orz-editor__status'); var t = r.querySelector('.orz-editor__status-text'); var probe = function (v) { var d = document.createElement('span'); d.style.color = 'var(' + v + ')'; s.appendChild(d); var c = getComputedStyle(d).color; d.remove(); return c; }; return { text: t ? t.textContent : null, shown: !!(t && t.getBoundingClientRect().width > 0) || !!(s && s.getBoundingClientRect().width > 0), tone: e.getAttribute('data-save-tone'), dot: getComputedStyle(s, '::before').backgroundColor, success: probe('--orz-chrome-success'), muted: probe('--orz-chrome-muted'), warning: probe('--orz-chrome-warning') }; })()`;
+    type St = { text: string; shown: boolean; tone: string; dot: string; success: string; muted: string; warning: string };
+    try {
+      await page.goto(`http://127.0.0.1:${port}/course/week1.md.html`);
+      await page.waitForFunction('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)', undefined, { timeout: 20_000 });
+      await page.evaluate('globalThis.OrzCarrier.standalone.edit().ready');
+      let st = await page.evaluate(status) as St;
+      expect([st.text, st.tone, st.shown]).toEqual(['Not saved: download to keep', 'pending', true]);
+      expect(st.success).not.toBe(st.muted);
+      expect(st.dot).toBe(st.muted);
+      expect(st.dot).not.toBe(st.success);
+      const edited = `${TEXT}\nMy notes.\n`;
+      await page.evaluate(`globalThis.OrzCarrier.standalone.editor().setText(${JSON.stringify(edited)})`);
+      st = await page.evaluate(status) as St;
+      expect([st.text, st.tone, st.dot]).toEqual(['Not saved: download to keep', 'unsaved', st.warning]);
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 20_000 }),
+        page.evaluate(`globalThis.OrzCarrier.standalone.editor().root.querySelector('.orz-editor__save').click()`),
+      ]);
+      expect(extract(readFileSync(await download.path(), 'utf8'))!.text === edited).toBe(true);
+      await page.waitForFunction(`globalThis.OrzCarrier.standalone.editor().root.querySelector('.orz-editor').getAttribute('data-dirty') === 'false'`, undefined, { timeout: 10_000 });
+      st = await page.evaluate(status) as St;
+      expect([st.text, st.tone, st.dot]).toEqual(['Copy downloaded', 'pending', st.muted]);
+      const toasts = await page.evaluate(`Array.from(globalThis.OrzCarrier.standalone.editor().root.querySelectorAll('.orz-toast__message')).map(function (n) { return n.textContent; })`) as string[];
+      expect(toasts).toEqual(['Download started.']);
+      // the same bytes opened from disk: the shell's own status
+      await page.goto(write('week1-status.md.html', html));
+      await page.waitForFunction('!!(globalThis.OrzCarrier && globalThis.OrzCarrier.standalone)', undefined, { timeout: 20_000 });
+      await page.evaluate('globalThis.OrzCarrier.standalone.edit().ready');
+      st = await page.evaluate(status) as St;
+      expect([st.text, st.tone, st.dot]).toEqual(['Saved', 'saved', st.success]);
     } finally {
       await ctx.close();
       await new Promise<void>((r) => server.close(() => r()));

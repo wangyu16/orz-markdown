@@ -12,7 +12,7 @@
  * an editor mounts.
  */
 export { createEditorShell } from './shell.js';
-export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext, EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, TextEdit, EditorPreviewChannel, SaveStatus, SaveStatusState, SaveTone, RevealTarget, EditorWords, } from './shell.js';
+export type { EditorShell, EditorShellOptions, EditorMode, EditorEventName, EditorEvents, SaveOutcome, SaveVia, EditorHooks, RenderContext, EditorPreviewOptions, PreviewMapContext, AiOutcome, AiProposal, AiProposalOutcome, UploadOutcome, TextRange, TextEdit, EditorPreviewChannel, SaveStatus, SaveStatusState, SaveTone, RevealTarget, EditorWords, EditorStatusWords, } from './shell.js';
 export { textareaAdapter, undoSteps } from './adapter.js';
 export type { TextEditorAdapter, AdapterMountOptions, Selection, ScrollPosition, TextChange, FocusMode, HeaderFoldInfo } from './adapter.js';
 export { codemirror6Adapter, loadCodeMirror6, isCodeMirror6Modules, ORZ_HIGHLIGHTER, CODEMIRROR6_URL, CODEMIRROR6_TIMEOUT_MS, CODEMIRROR6_HISTORY_STEPS } from './codemirror6.js';

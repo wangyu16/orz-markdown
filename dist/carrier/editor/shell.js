@@ -236,8 +236,25 @@ function createEditorShell(element, options) {
     /** (2.7.0, D-131) A host that supplies the save status words saves on its own rhythm: Save reads "Save now". */
     const defaultSaveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
     /** (2.9.0, D-144, D-149) The host's words now (normalized; see EditorWords). */
-    const words = { save: null, saved: null, notice: null };
+    const words = { save: null, saved: null, notice: null, clean: null, dirty: null };
     const plainWords = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : null);
+    /** (2.10.0, D-154) `words.status` → the clean/dirty status words (empty: the default). */
+    const takeStatusWords = (st) => {
+        let clean = null;
+        let dirty = null;
+        try {
+            if (st && typeof st === 'object') {
+                clean = st.clean;
+                dirty = st.dirty;
+            }
+        }
+        catch {
+            clean = null;
+            dirty = null;
+        }
+        words.clean = plainWords(clean) || null;
+        words.dirty = plainWords(dirty) || null;
+    };
     {
         const w = options.words;
         if (w && typeof w === 'object') {
@@ -249,6 +266,8 @@ function createEditorShell(element, options) {
             const notice = plainWords(w.notice);
             if (notice)
                 words.notice = notice;
+            if (w.status !== undefined)
+                takeStatusWords(w.status);
         }
     }
     const saveWord = words.save ?? defaultSaveWord;
@@ -510,6 +529,12 @@ function createEditorShell(element, options) {
             return;
         let text = dirty ? 'Unsaved changes' : 'Saved';
         let tone = dirty ? 'unsaved' : 'saved';
+        // (2.10.0, D-154) the host's own status words: a clean text it names is never "saved" (green)
+        const own = dirty ? words.dirty : words.clean;
+        if (own) {
+            text = own;
+            tone = dirty ? 'unsaved' : 'pending';
+        }
         if (typeof hooks.saveStatus === 'function') {
             // (audit 1, M3) the result is read inside the guard too: a throwing getter or a revoked Proxy keeps the
             // defaults and never breaks mount, the dirty event, the host's setDirty or save()
@@ -529,8 +554,8 @@ function createEditorShell(element, options) {
                 }
             }
             catch {
-                text = dirty ? 'Unsaved changes' : 'Saved';
-                tone = dirty ? 'unsaved' : 'saved';
+                text = own ?? (dirty ? 'Unsaved changes' : 'Saved');
+                tone = dirty ? 'unsaved' : own ? 'pending' : 'saved';
             }
         }
         container.setAttribute('data-save-tone', tone);
@@ -1737,6 +1762,10 @@ function createEditorShell(element, options) {
                     words.notice = n;
                     showHostNotice();
                 }
+            }
+            if (w.status !== undefined) {
+                takeStatusWords(w.status);
+                applyStatus();
             }
             applySaveWord();
         },

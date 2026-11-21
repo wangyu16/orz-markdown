@@ -393,6 +393,20 @@ export interface EditorWords {
     saved?: string | null;
     /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
     notice?: string | null;
+    /**
+     * (2.10.0, STATUS D-154) The save status's words when the shell says them
+     * itself (no `hooks.saveStatus`), for a host whose saves do not reach the
+     * place the text came from (a reader copy downloads): `clean` replaces
+     * "Saved" with a neutral dot (`pending` tone — never the green "saved"),
+     * `dirty` replaces "Unsaved changes" (amber, as before). A key empty, null
+     * or left out keeps that state's default; `status: null` puts both back.
+     */
+    status?: EditorStatusWords | null;
+}
+/** (2.10.0, STATUS D-154) The save status's own words (see `EditorWords.status`). */
+export interface EditorStatusWords {
+    clean?: string | null;
+    dirty?: string | null;
 }
 /** How an AI request went. Never rejects. */
 export type AiOutcome = {

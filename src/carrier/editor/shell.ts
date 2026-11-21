@@ -377,6 +377,21 @@ export interface EditorWords {
   saved?: string | null;
   /** A notice above the panes (role `status`, with Dismiss); empty or null: none. Shown again when it changes. */
   notice?: string | null;
+  /**
+   * (2.10.0, STATUS D-154) The save status's words when the shell says them
+   * itself (no `hooks.saveStatus`), for a host whose saves do not reach the
+   * place the text came from (a reader copy downloads): `clean` replaces
+   * "Saved" with a neutral dot (`pending` tone — never the green "saved"),
+   * `dirty` replaces "Unsaved changes" (amber, as before). A key empty, null
+   * or left out keeps that state's default; `status: null` puts both back.
+   */
+  status?: EditorStatusWords | null;
+}
+
+/** (2.10.0, STATUS D-154) The save status's own words (see `EditorWords.status`). */
+export interface EditorStatusWords {
+  clean?: string | null;
+  dirty?: string | null;
 }
 
 /** How an AI request went. Never rejects. */
@@ -730,8 +745,18 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
   /** (2.7.0, D-131) A host that supplies the save status words saves on its own rhythm: Save reads "Save now". */
   const defaultSaveWord = typeof hooks.saveStatus === 'function' ? 'Save now' : 'Save';
   /** (2.9.0, D-144, D-149) The host's words now (normalized; see EditorWords). */
-  const words: { save: string | null; saved: string | null; notice: string | null } = { save: null, saved: null, notice: null };
+  const words: { save: string | null; saved: string | null; notice: string | null; clean: string | null; dirty: string | null } = { save: null, saved: null, notice: null, clean: null, dirty: null };
   const plainWords = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : null);
+  /** (2.10.0, D-154) `words.status` → the clean/dirty status words (empty: the default). */
+  const takeStatusWords = (st: unknown): void => {
+    let clean: unknown = null;
+    let dirty: unknown = null;
+    try {
+      if (st && typeof st === 'object') { clean = (st as EditorStatusWords).clean; dirty = (st as EditorStatusWords).dirty; }
+    } catch { clean = null; dirty = null; }
+    words.clean = plainWords(clean) || null;
+    words.dirty = plainWords(dirty) || null;
+  };
   {
     const w = options.words;
     if (w && typeof w === 'object') {
@@ -740,6 +765,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
       if (typeof w.saved === 'string') words.saved = plainWords(w.saved);
       const notice = plainWords(w.notice);
       if (notice) words.notice = notice;
+      if (w.status !== undefined) takeStatusWords(w.status);
     }
   }
   const saveWord = words.save ?? defaultSaveWord;
@@ -963,6 +989,9 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
     if (destroyed) return;
     let text = dirty ? 'Unsaved changes' : 'Saved';
     let tone: SaveTone = dirty ? 'unsaved' : 'saved';
+    // (2.10.0, D-154) the host's own status words: a clean text it names is never "saved" (green)
+    const own = dirty ? words.dirty : words.clean;
+    if (own) { text = own; tone = dirty ? 'unsaved' : 'pending'; }
     if (typeof hooks.saveStatus === 'function') {
       // (audit 1, M3) the result is read inside the guard too: a throwing getter or a revoked Proxy keeps the
       // defaults and never breaks mount, the dirty event, the host's setDirty or save()
@@ -977,8 +1006,8 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
           tone = t === 'saved' || t === 'pending' || t === 'unsaved' || t === 'error' ? t : dirty ? 'pending' : 'saved';
         }
       } catch {
-        text = dirty ? 'Unsaved changes' : 'Saved';
-        tone = dirty ? 'unsaved' : 'saved';
+        text = own ?? (dirty ? 'Unsaved changes' : 'Saved');
+        tone = dirty ? 'unsaved' : own ? 'pending' : 'saved';
       }
     }
     container.setAttribute('data-save-tone', tone);
@@ -1895,6 +1924,7 @@ export function createEditorShell(element: EdElement, options: EditorShellOption
         const n = plainWords(w.notice) || null;
         if (n !== words.notice) { words.notice = n; showHostNotice(); }
       }
+      if (w.status !== undefined) { takeStatusWords(w.status); applyStatus(); }
       applySaveWord();
     },
     isDirty() { updateDirty(); return dirty; },

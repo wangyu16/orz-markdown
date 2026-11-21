@@ -63,6 +63,11 @@ import { copyName, readOpenedFile } from './file.js';
 import { extract } from '../read.js';
 import { sameTwinNaming, type TwinNaming } from '../naming.js';
 import { readerCopyNotice, type ReaderCopy } from '../reader-copy.js';
+
+/** (2.10.0, STATUS D-154) A reader copy's save status: nothing is kept until a download. */
+const READER_STATUS_NOT_SAVED = 'Not saved: download to keep';
+/** (2.10.0, D-154) A reader copy's clean status after a download (neutral: the website's copy is not saved). */
+const READER_STATUS_DOWNLOADED = 'Copy downloaded';
 import { sameSiteNav, siteNavFrom, type SiteNav } from '../site-nav.js';
 import { mountSiteNav, type SiteNavBar } from './site-nav.js';
 import { attachAiMenu, button, hiddenFor, installCss, menuButton, settingChanges, settingChoices, settingOffered, WIDGET_CSS, type AiMenu, type MenuButton, type MenuItem } from './widgets.js';
@@ -301,7 +306,14 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
   let served = false;
   try { served = /^https?:$/.test(String(win.location.protocol)); } catch { served = false; }
   const readerMode = !!file.readerCopy && served && !framed && !host;
-  const readerWords = readerMode ? { save: 'Download a copy', notice: readerCopyNotice(file.readerCopy) } : null;
+  /**
+   * (2.10.0, STATUS D-154) A reader copy's save status never says "Saved" (green): the website's copy
+   * takes no edits. Until a download it reads "Not saved: download to keep"; after one, a clean text
+   * reads "Copy downloaded" (neutral) and new edits "Not saved: download to keep" again.
+   */
+  let readerDownloaded = false;
+  const readerStatus = (): { clean: string; dirty: string } => ({ clean: readerDownloaded ? READER_STATUS_DOWNLOADED : READER_STATUS_NOT_SAVED, dirty: READER_STATUS_NOT_SAVED });
+  const readerWords = readerMode ? { save: 'Download a copy', notice: readerCopyNotice(file.readerCopy), status: readerStatus() } : null;
   // the file on disk's uid is read as the page reads its own (a quoted or block uid is one: S.14)
   const fileSaver = services.createSaver({ ...(file.uid ? { uid: file.uid } : {}), suggestedName: file.fileName, kind: k.kind, ...(host ? { host } : {}), openedHtml, readUid: (t) => headerFacts(t).uid });
   /** What the page itself saves (its own save and its own question's input): a write of one of them is the page's text. */
@@ -315,7 +327,10 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
    */
   const saver: Saver = {
     // a reader copy saves by downloading (its address cannot take the edits): never a picker, never the served notice
-    save: (input, o) => (readerMode ? fileSaver.download(input) : fileSaver.save(input, o)).then((r) => { if ('ok' in r && r.ok) wrote(input); return r; }),
+    save: (input, o) => (readerMode ? fileSaver.download(input) : fileSaver.save(input, o)).then((r) => {
+      if ('ok' in r && r.ok) { wrote(input); if (readerMode) readerCopyDownloaded(); }
+      return r;
+    }),
     download: (input) => fileSaver.download(input),
     handleKey: () => fileSaver.handleKey(),
   };
@@ -768,6 +783,16 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
    * (its text becomes the written one), so it never writes an older text over
    * it later; one with unsaved changes keeps them (and stays unsaved).
    */
+  /** (2.10.0, D-154) A reader copy's first download: every editor's clean status says "Copy downloaded". */
+  function readerCopyDownloaded(): void {
+    if (disposed || readerDownloaded) return;
+    readerDownloaded = true;
+    const status = readerStatus();
+    for (const ed of [...(editor ? [editor] : []), ...attached]) {
+      try { ed.setWords?.({ status }); } catch { /* an editor gone */ }
+    }
+  }
+
   function wrote(input: SaveInput): void {
     if (disposed) return;
     const before = saved;
@@ -995,7 +1020,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
     editorSlot.append(container);
     // mounted with the saved text, then the current one: the editor's dirty state and undo know both
     const ed = k.mountEditor(container, { text: saved }, editorContext());
-    if (readerWords) ed.setWords?.(readerWords);
+    if (readerWords) ed.setWords?.({ ...readerWords, status: readerStatus() });
     if (text !== saved) ed.setText(text);
     lockForUpdate(ed);
     editor = ed;
@@ -1042,7 +1067,7 @@ export function bootCarrierApp(k: StandaloneKind, options: CarrierAppOptions = {
 
   function attach(ed: EditorShell): () => void {
     attached.push(ed);
-    if (readerWords) ed.setWords?.(readerWords);
+    if (readerWords) ed.setWords?.({ ...readerWords, status: readerStatus() });
     lockForUpdate(ed);
     /** The file holds `t` now (this editor's save): the page's copy follows, so it never writes an older text over it (B3). */
     const adopt = (t: string): void => {

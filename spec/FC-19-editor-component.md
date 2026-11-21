@@ -180,7 +180,13 @@ In `setWords` a key left out — or given as `undefined` — keeps its word; not
 `destroy()`. Without words nothing changes. A host that downloads instead of
 saving (a try mode) names the button "Download a copy"; the carrier app
 does so for a reader copy (FC-18 §8.2 `readerCopy`, spec/carrier-app.md
-§4.5a).
+§4.5a). (2.10.0, additive; STATUS D-154) `status: { clean?, dirty? }`
+names the save status the shell says itself: clean words replace "Saved"
+with a neutral dot (`pending` tone — never the green `saved`, for a host
+whose saves do not reach the place the text came from), dirty words
+replace "Unsaved changes" (amber); a key empty, null or left out keeps that
+state's default and `status: null` puts both back. `hooks.saveStatus`, when
+it gives words, still wins.
 
 **`foldHeader`** (2.7.0, additive; STATUS D-130). The source view shows the
 document header (`{{nyml …}}`, FC-18 §5 — with its `uid` and every other
@@ -230,7 +236,7 @@ interface Editor {
   // added 2.7.0 (additive; STATUS D-131, D-134)
   reveal(target: { from: number; to?: number } | string | { heading: string }, options?: { select?: boolean }): { from: number; to: number } | null;
   refreshSaveStatus(): void;                                                   // ask hooks.saveStatus again (§3)
-  setWords(words: { save?: string | null; saved?: string | null; notice?: string | null }): void; // (2.9.0) the host's words (below)
+  setWords(words: { save?: string | null; saved?: string | null; notice?: string | null; status?: { clean?: string | null; dirty?: string | null } | null }): void; // (2.9.0) the host's words (below); status 2.10.0
 }
 
 type AiOutcome = { ok: true; op: string } | { ok: false; error: string };

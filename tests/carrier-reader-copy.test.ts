@@ -134,6 +134,7 @@ const noteOf = (m: Mounted) => {
   const n = m.root.querySelector('#orz-host-note');
   return n ? { text: n.querySelector('.orz-editor__notice-text')!.textContent, role: n.getAttribute('role'), html: n.querySelector('.orz-editor__notice-text')!.innerHTML } : null;
 };
+const statusOf = (m: Mounted) => ({ text: m.root.querySelector('.orz-editor__status-text')?.textContent ?? null, tone: m.root.querySelector('.orz-editor')?.getAttribute('data-save-tone') ?? null });
 const toasts = (m: Mounted) => [...m.root.querySelectorAll('.orz-toast__message')].map((n) => n.textContent ?? '');
 const edit = (m: Mounted) => {
   const ta = m.root.querySelector('textarea')!;
@@ -207,6 +208,40 @@ describe('the host\'s words (FC-19 §3/§4, D-144, D-149)', () => {
       expect(toasts(m), via).toEqual([said]);
       m.shell.destroy();
     }
+  });
+
+  it('[E.57] (2.10.0, D-154) words.status names the save status the shell says itself: clean words replace "Saved" with a neutral dot (pending, never the green saved), dirty words replace "Unsaved changes" (amber); a key empty, null or left out keeps that state\'s default; setWords changes them at once (null: both defaults; undefined: kept); hooks.saveStatus still wins; without them nothing changes', async () => {
+    const plain = mount({ hooks: { save: async () => undefined } });
+    expect(statusOf(plain)).toEqual({ text: 'Saved', tone: 'saved' });
+    plain.shell.destroy();
+
+    const m = mount({ hooks: { save: async () => undefined }, words: { status: { clean: '  Not saved:\n download to keep ', dirty: 'Not saved: download to keep' } } });
+    expect(statusOf(m)).toEqual({ text: 'Not saved: download to keep', tone: 'pending' });
+    edit(m);
+    expect(statusOf(m)).toEqual({ text: 'Not saved: download to keep', tone: 'unsaved' });
+    await m.shell.save();
+    expect(statusOf(m)).toEqual({ text: 'Not saved: download to keep', tone: 'pending' });
+    m.shell.setWords({ status: { clean: 'Copy downloaded', dirty: 'Not saved: download to keep' } });
+    expect(statusOf(m)).toEqual({ text: 'Copy downloaded', tone: 'pending' });
+    m.shell.setWords({ save: 'Download a copy' }); // status left out: kept
+    expect(statusOf(m).text).toBe('Copy downloaded');
+    m.shell.setWords({ status: undefined });
+    expect(statusOf(m).text).toBe('Copy downloaded');
+    m.shell.setWords({ status: { clean: '  ' } }); // empty clean: the default; dirty left out: the default
+    expect(statusOf(m)).toEqual({ text: 'Saved', tone: 'saved' });
+    m.shell.setWords({ status: { dirty: 'Edits not kept' } });
+    edit(m);
+    expect(statusOf(m)).toEqual({ text: 'Edits not kept', tone: 'unsaved' });
+    m.shell.setWords({ status: null });
+    expect(statusOf(m)).toEqual({ text: 'Unsaved changes', tone: 'unsaved' });
+    m.shell.destroy();
+
+    // the host's hook wins; when it gives nothing, the words are the base
+    const h = mount({ hooks: { save: async () => undefined, saveStatus: ({ dirty }) => (dirty ? 'Saving soon' : null) }, words: { status: { clean: 'Copy downloaded' } } });
+    expect(statusOf(h)).toEqual({ text: 'Copy downloaded', tone: 'pending' });
+    edit(h);
+    expect(statusOf(h)).toEqual({ text: 'Saving soon', tone: 'pending' });
+    h.shell.destroy();
   });
 
   it('[E.56] words.notice shows a notice above the panes (role status, plain text — never markup — with Dismiss); Dismiss hides it until it changes; setWords replaces it or (null, empty) removes it; the same notice again stays dismissed', async () => {

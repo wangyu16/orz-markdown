@@ -424,6 +424,13 @@ host connection. Its edits cannot go back to the page's address, so:
   read view — **downloads** the current text's file through the one saver
   (its `save` is a `download`; never a picker, never the served-page
   notice). A download marks its text saved, as any write does.
+- (2.10.0, STATUS D-154) The editor's **save status never says "Saved"**
+  (the website's copy takes no edits; `setWords({ status })`): until a
+  download it reads "Not saved: download to keep" (a neutral dot; amber
+  once edited); after one the toast is "Download started." and a clean
+  text reads "Copy downloaded" (neutral), edits "Not saved: download to
+  keep" again — in every editor of the file, also one opened or attached
+  later.
 - The handle's list has **Download a copy** (with the Cmd/Ctrl+S hint and
   the unsaved dot) in place of Save.
 - **Nothing carries it over:** the app never passes `readerCopy` to the

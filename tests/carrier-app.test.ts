@@ -649,6 +649,67 @@ describe('saving from the page', () => {
     }
   });
 
+  it('[A.37] (2.10.0, D-154) a reader copy\'s save status never says "Saved": the editor opens reading "Not saved: download to keep" with a neutral dot (amber once edited); after a download "Download started." is the toast and a clean text reads "Copy downloaded" (neutral), edits "Not saved: download to keep" again; an editor opened or attached after the download says so too; on a file: page the status is the shell\'s ("Saved", green)', async () => {
+    const shellParts = (readerCopy?: boolean) => ({
+      kind: 'md' as const, shellVersion: '1.0.0', delivery: 'inline' as const, ...(readerCopy ? { readerCopy } : {}),
+      headHtml: '', bodyHtml: `<main id="orz-app"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`,
+    });
+    const html = assembleEnvelope(TEXT, shellParts(true));
+    const URL_ = 'https://site.test/course/notes.md.html';
+    const statusOf = (ed: EditorShell) => {
+      const r = ed.root as unknown as ShadowRoot;
+      return [r.querySelector('.orz-editor__status-text')?.textContent ?? null, r.querySelector('.orz-editor')?.getAttribute('data-save-tone') ?? null];
+    };
+    const b = boot(html, { url: URL_ });
+    await b.app.ready;
+    let ed = b.app.edit();
+    expect(statusOf(ed)).toEqual(['Not saved: download to keep', 'pending']);
+    ed.setText(`${TEXT}More.\r\n`);
+    expect(statusOf(ed)).toEqual(['Not saved: download to keep', 'unsaved']);
+    expect(await ed.save()).toMatchObject({ ok: true, via: 'download' });
+    expect(statusOf(ed)).toEqual(['Copy downloaded', 'pending']);
+    const edToasts = [...(ed.root as unknown as ShadowRoot).querySelectorAll('.orz-toast__message')].map((n) => n.textContent ?? '');
+    expect(edToasts).toEqual(['Download started.']);
+    ed.setText(`${TEXT}More and more.\r\n`);
+    expect(statusOf(ed)).toEqual(['Not saved: download to keep', 'unsaved']);
+    ed.setText(`${TEXT}More.\r\n`); // back at the downloaded text
+    expect(statusOf(ed)).toEqual(['Copy downloaded', 'pending']);
+    await b.app.leave();
+    ed = b.app.edit(); // opened again after the download
+    expect(statusOf(ed)).toEqual(['Copy downloaded', 'pending']);
+    await b.app.leave();
+    const holder = b.doc.createElement('div');
+    b.doc.body.append(holder);
+    const ctx = b.app.editorContext();
+    const attached = createEditorShell(holder as never, { text: b.app.getText(), render: (t) => renderMarkdownPreview(t), adapter: textareaAdapter(), preview: { assets: false }, assemble: ctx.assemble, saver: ctx.saver, standalone: ctx.standalone });
+    const detach = b.app.attach(attached);
+    expect(statusOf(attached)).toEqual(['Copy downloaded', 'pending']);
+    detach();
+    attached.destroy();
+    b.app.dispose();
+
+    // an editor attached before the first download follows it
+    const c = boot(html, { url: URL_ });
+    await c.app.ready;
+    const holder2 = c.doc.createElement('div');
+    c.doc.body.append(holder2);
+    const ctx2 = c.app.editorContext();
+    const early = createEditorShell(holder2 as never, { text: TEXT, render: (t) => renderMarkdownPreview(t), adapter: textareaAdapter(), preview: { assets: false }, assemble: ctx2.assemble, saver: ctx2.saver, standalone: ctx2.standalone });
+    const off = c.app.attach(early);
+    expect(statusOf(early)).toEqual(['Not saved: download to keep', 'pending']);
+    expect(await c.app.save()).toMatchObject({ ok: true, via: 'download' });
+    expect(statusOf(early)).toEqual(['Copy downloaded', 'pending']);
+    off();
+    early.destroy();
+    c.app.dispose();
+
+    // a file: page: the shell's own status
+    const x = boot(html, {});
+    await x.app.ready;
+    expect(statusOf(x.app.edit())).toEqual(['Saved', 'saved']);
+    x.app.dispose();
+  });
+
   it('[A.34] (audit LOW-1) the published file of a reader copy opened from file: is the opened file: the opened bytes the saver compares a file on disk with are assembled with its readerCopy (and are exactly its bytes), while every file the app writes is assembled without it', async () => {
     const BODY = `<main id="orz-app"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`;
     const parts = (o: { delivery?: 'inline' | 'cdn'; readerCopy?: { notice?: string } } = {}) => ({ kind: 'md' as const, shellVersion: '1.0.0', delivery: o.delivery ?? 'inline', headHtml: '', bodyHtml: BODY, ...(o.readerCopy ? { readerCopy: o.readerCopy } : {}) });

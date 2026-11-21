@@ -33,9 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `C.nav.read-view`, `C.save.keeps-nav`, `C.update.keeps-nav` (target
   option `siteNav`; not applicable to a carrier whose `assemble` ignores
   the option).
+- **`words.status`** (FC-19 §3/§4, additive; STATUS D-154): the editor
+  shell's `words` / `setWords` take `status: { clean?, dirty? }`, the save
+  status's own words: clean words replace "Saved" with a neutral dot (never
+  the green one), dirty words replace "Unsaved changes" (amber); `null` puts
+  both back. Type `EditorStatusWords` in `orz-markdown/carrier/editor`.
 
 ### Fixed
 
+- A reader copy's editor no longer shows the green "Saved" dot beside
+  "Changes can't be saved to this website" (STATUS D-154): until a download
+  its status reads "Not saved: download to keep" (neutral dot; amber once
+  edited); after one the toast stays "Download started." and a clean text
+  reads "Copy downloaded" (neutral), in every editor of the file.
 - verify.html re-assembles a file with its `readerCopy` (2.9.0) and
   `siteNav`, so a published reader copy is no longer reported as not the
   release's.
