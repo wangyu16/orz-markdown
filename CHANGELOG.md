@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<nav>` landmark named by the title, first in the page; the title links
   home, Previous / Next link the neighbours (`rel` prev/next); 40 px, its
   height in `--orz-site-nav-height` on the root (a fixed read view starts
-  below it); the page's scheme; "Previous" / "Next" on narrow screens;
-  hidden in edit mode, with the chrome and in print. Every save, Download a
+  below it); the page's scheme; "Previous" / "Next" on narrow screens; the
+  title and labels in their own direction (`dir="auto"`, a right-to-left one
+  cut by the ellipsis shows its start); hidden in edit mode, with the chrome and in print. Every save, Download a
   copy, Save as new copy and the quiet update keep it (refusal code
   `site-nav`); on a served page with no host its hrefs are resolved against
   the page's address, so a downloaded copy's links lead back to the

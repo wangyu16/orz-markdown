@@ -458,7 +458,9 @@ view's content are as without it):
   drawn): the title, linking `home`; then `previous` (`rel="prev"`, accessible
   name "Previous: <label>") and `next` (`rel="next"`, "Next: <label>"), each
   only when given. Texts are set as text, never markup; hrefs are the
-  file's own (relative ones resolve against the page).
+  file's own (relative ones resolve against the page). The title and each
+  label take their own direction (`dir="auto"`): a right-to-left one cut by
+  the ellipsis shows its start.
 - **Edge to edge** at the top of the page whatever the page's CSS: drawn
   `position: absolute` at the document's top; its room is the root
   element's top padding on screen (`--orz-site-nav-height`, a constructed

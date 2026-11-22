@@ -68,11 +68,14 @@ function mountSiteNav(doc, nav, o = {}) {
     host.setAttribute('aria-label', nav.title);
     const root = (host.attachShadow?.({ mode: 'open' }) ?? host);
     (0, widgets_js_1.installCss)(root, exports.SITE_NAV_CSS);
-    const span = (cls, text, hidden = false) => {
+    // `auto`: a text (the title, a label) takes its own direction, so a right-to-left one cut by the ellipsis shows its start
+    const span = (cls, text, o = {}) => {
         const s = doc.createElement('span');
         s.className = cls;
         s.textContent = text;
-        if (hidden)
+        if (o.auto)
+            s.setAttribute('dir', 'auto');
+        if (o.hidden)
             s.setAttribute('aria-hidden', 'true');
         return s;
     };
@@ -82,7 +85,7 @@ function mountSiteNav(doc, nav, o = {}) {
     home.className = 'home';
     home.setAttribute('href', nav.home);
     home.title = nav.title;
-    home.append(span('', nav.title));
+    home.append(span('', nav.title, { auto: true }));
     bar.append(home);
     const steps = doc.createElement('span');
     steps.className = 'steps';
@@ -96,10 +99,11 @@ function mountSiteNav(doc, nav, o = {}) {
         const word = which === 'prev' ? 'Previous' : 'Next';
         a.setAttribute('aria-label', `${word}: ${link.label}`);
         a.title = link.label;
+        const hidden = { hidden: true };
         if (which === 'prev')
-            a.append(span('arrow', '←', true), span('label', link.label, true), span('short', word, true));
+            a.append(span('arrow', '←', hidden), span('label', link.label, { hidden: true, auto: true }), span('short', word, hidden));
         else
-            a.append(span('label', link.label, true), span('short', word, true), span('arrow', '→', true));
+            a.append(span('label', link.label, { hidden: true, auto: true }), span('short', word, hidden), span('arrow', '→', hidden));
         steps.append(a);
     }
     if (steps.firstElementChild)

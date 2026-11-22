@@ -169,6 +169,10 @@ describe('the site-navigation bar (carrier-app §4.5b)', () => {
       { href: '../unit2/gases.slides.html#s2', rel: 'next', name: 'Next: 2 · Gases </script>', text: '2 · Gases </script>Next→' },
     ]);
     expect(nav.shadowRoot!.querySelector('script')).toBeNull();
+    // the title and the labels take their own direction (a Hebrew or Arabic label shows its start, not its end)
+    expect([...nav.shadowRoot!.querySelectorAll('[dir]')].map((e) => [e.parentElement!.className, e.className, e.getAttribute('dir')])).toEqual([
+      ['home', '', 'auto'], ['step prev', 'label', 'auto'], ['step next', 'label', 'auto'],
+    ]);
     expect(b.doc.documentElement.style.getPropertyValue(SITE_NAV_HEIGHT_PROPERTY)).toBe('40px');
     expect(nav.getAttribute('data-scheme')).toBe('light');
     b.app.edit();

@@ -446,6 +446,11 @@ stored, except that a file written from a **served** page with no host gets
 the hrefs **resolved against the page's address** (`siteNavFrom`): a reader's
 downloaded copy keeps the bar, and its links lead back to the website
 instead of to files that are not next to the copy.
+The rule a stored `siteNav` is read by (the one above; `extract`,
+`readSiteNav`) may in a later kit only **widen**, never tighten: the quiet
+update refuses a new file whose `siteNav` would be dropped, so a value one
+kit wrote and a later kit no longer reads would leave the file unable to
+update.
 
 ### 8.3 Links, assets, includes
 

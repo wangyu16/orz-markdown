@@ -15,6 +15,8 @@
  * - The page's colour scheme (light / dark, the read view's `present`).
  * - Narrow screens (≤ 600 px): the neighbours read "Previous" / "Next" (their
  *   accessible names keep the labels); the title is cut with an ellipsis.
+ * - The title and each label take their own direction (`dir="auto"`), so a
+ *   right-to-left one cut by the ellipsis shows its start.
  * - Edge to edge at the top of the page whatever the page's CSS: drawn
  *   `position: absolute` at the top of the document, the room for it made by
  *   the root element's top padding on screen (`PAGE_CSS`, a constructed
@@ -106,11 +108,13 @@ export function mountSiteNav(doc: AppDocument, nav: SiteNav, o: { before?: AppEl
   host.setAttribute('aria-label', nav.title);
   const root = (host.attachShadow?.({ mode: 'open' }) ?? host) as unknown as AppElement & { ownerDocument: AppDocument; adoptedStyleSheets?: unknown[] };
   installCss(root as never, SITE_NAV_CSS);
-  const span = (cls: string, text: string, hidden = false): AppElement => {
+  // `auto`: a text (the title, a label) takes its own direction, so a right-to-left one cut by the ellipsis shows its start
+  const span = (cls: string, text: string, o: { hidden?: boolean; auto?: boolean } = {}): AppElement => {
     const s = doc.createElement('span');
     s.className = cls;
     s.textContent = text;
-    if (hidden) s.setAttribute('aria-hidden', 'true');
+    if (o.auto) s.setAttribute('dir', 'auto');
+    if (o.hidden) s.setAttribute('aria-hidden', 'true');
     return s;
   };
   const bar = doc.createElement('div');
@@ -119,7 +123,7 @@ export function mountSiteNav(doc: AppDocument, nav: SiteNav, o: { before?: AppEl
   home.className = 'home';
   home.setAttribute('href', nav.home);
   home.title = nav.title;
-  home.append(span('', nav.title));
+  home.append(span('', nav.title, { auto: true }));
   bar.append(home);
   const steps = doc.createElement('span');
   steps.className = 'steps';
@@ -132,8 +136,9 @@ export function mountSiteNav(doc: AppDocument, nav: SiteNav, o: { before?: AppEl
     const word = which === 'prev' ? 'Previous' : 'Next';
     a.setAttribute('aria-label', `${word}: ${link.label}`);
     a.title = link.label;
-    if (which === 'prev') a.append(span('arrow', '←', true), span('label', link.label, true), span('short', word, true));
-    else a.append(span('label', link.label, true), span('short', word, true), span('arrow', '→', true));
+    const hidden = { hidden: true };
+    if (which === 'prev') a.append(span('arrow', '←', hidden), span('label', link.label, { hidden: true, auto: true }), span('short', word, hidden));
+    else a.append(span('label', link.label, { hidden: true, auto: true }), span('short', word, hidden), span('arrow', '→', hidden));
     steps.append(a);
   }
   if (steps.firstElementChild) bar.append(steps);

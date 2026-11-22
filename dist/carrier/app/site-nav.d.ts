@@ -15,6 +15,8 @@
  * - The page's colour scheme (light / dark, the read view's `present`).
  * - Narrow screens (≤ 600 px): the neighbours read "Previous" / "Next" (their
  *   accessible names keep the labels); the title is cut with an ellipsis.
+ * - The title and each label take their own direction (`dir="auto"`), so a
+ *   right-to-left one cut by the ellipsis shows its start.
  * - Edge to edge at the top of the page whatever the page's CSS: drawn
  *   `position: absolute` at the top of the document, the room for it made by
  *   the root element's top padding on screen (`PAGE_CSS`, a constructed
