@@ -15,6 +15,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extract } from '../src/carrier';
+import { CODEMIRROR6_URL } from '../src/carrier/editor';
 import { initScript, pageRecords } from '../src/carrier/conformance';
 import { buildStub, cleanStubs, type BuiltStub } from './conformance-stub/build';
 import { stubAssemble } from './conformance-stub/assemble';
@@ -110,6 +111,8 @@ describe('a reader copy served over http, in Chrome', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     const port = (server.address() as { port: number }).port;
     const ctx = await browser.newContext({ acceptDownloads: true });
+    // the pinned code editor from this checkout: its jsDelivr address names this package's version, which is not on the CDN before its release
+    await ctx.route(CODEMIRROR6_URL, (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync('vendor/codemirror6.js', 'utf8') }));
     await ctx.addInitScript({ content: initScript('stub') });
     const page: Page = await ctx.newPage();
     const editorState = `(function () { var ed = globalThis.OrzCarrier.standalone.editor(); var r = ed.root; var n = r.querySelector('#orz-host-note'); var s = r.querySelector('.orz-editor__save'); var panes = r.querySelector('.orz-editor__panes'); return { note: n ? n.textContent : null, above: !!(n && panes && (n.compareDocumentPosition(panes) & 4)), visible: !!(n && n.getBoundingClientRect().height > 0), save: s.getAttribute('aria-label'), label: s.textContent }; })()`;
@@ -161,6 +164,8 @@ describe('a reader copy\'s save status, in Chrome (2.10.0, D-154)', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     const port = (server.address() as { port: number }).port;
     const ctx = await browser.newContext({ acceptDownloads: true });
+    // the pinned code editor from this checkout: its jsDelivr address names this package's version, which is not on the CDN before its release
+    await ctx.route(CODEMIRROR6_URL, (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync('vendor/codemirror6.js', 'utf8') }));
     await ctx.addInitScript({ content: initScript('stub') });
     const page: Page = await ctx.newPage();
     // the status words as shown, the tone, the dot's colour and the chrome's success/muted/warning colours resolved the same way
